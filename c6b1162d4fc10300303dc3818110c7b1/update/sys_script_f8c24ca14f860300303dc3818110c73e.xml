@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_153465_discovert_route_task_instance</collection>
+        <condition/>
+        <description>2.5 P3&#13;
+STRY0084306 - TUP -  STRETCH - Template form - "Template Subtask Name Setting" - None, Suffix and Prefix&#13;
+STRY0084419 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "None"&#13;
+STRY0084420 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "Suffix"&#13;
+STRY0084424 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "Prefix"&#13;
+STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes&#13;
+STRY0085136 - TUP - Mapping fields - Template Instance fields must map to "Top Task" and "Subtask(s)" created </description>
+        <execute_function>false</execute_function>
+        <filter_condition table="x_153465_discovert_route_task_instance">source_definitionISNOTEMPTY^EQ<item endquery="false" field="source_definition" goto="false" newquery="false" operator="ISNOTEMPTY" or="false" value=""/>
+            <item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
+        </filter_condition>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>Task - onInsert Copy Template Task</name>
+        <order>110</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+(function executeRule(current, previous /*null when async*/) {
+	var alist = ' ';
+	var officeMembersQuery = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+	
+	// STRY0065506 - added  fields added to the Template Task for parity
+	if (!current.source_definition.nil() ) {
+		var grSourceDefinition = new GlideRecordSecure('x_153465_discovert_route_tasks');
+		// STRY0072771 - Debt Certification
+		if(!grSourceDefinition.get(current.getValue("source_definition"))){
+			gs.addErrorMessage('Task - onInsert Copy Template Task: Issue getting the source definition record.  This should not happen.  Please report the issue.  Task Number is: ' + current.number);
+		}
+		   
+		// RJ - STRY0065465 there is no longer an 'Assigne_to_type, just assign user, if assigned, it will just assign null if it wasn't selected in template
+		var grTemplateInstance = new GlideRecordSecure('x_153465_discovert_discover_routing_runtime');
+		if(!current.tasker_process_instance.nil()){
+			// STRY0072771 - Debt Certification
+			if(!grTemplateInstance.get(current.getValue("tasker_process_instance"))){
+				gs.addErrorMessage('Task - onInsert Copy Template Task: Issue getting the process instance record when tasker_process_instance is provided .  This should not happen.  Please report the issue.  Task Number is: ' + current.number);
+			}
+		}
+		
+		// STRY0063859 - if on top task and tasker_process_instance was set, then pull the values passed on the Template Instance into the top task instance
+		if (current.parent.nil() && !current.tasker_process_instance.nil()){
+
+			current.classification = grTemplateInstance.classification;
+			current.instance_notation = grTemplateInstance.instance_notation;
+			// only set on the top, consider setting on child also.  The source definition has a reference to this as well
+			current.u_parent_template = grTemplateInstance.routing_template_ref;
+			current.short_description = grTemplateInstance.short_description;
+			// These are for integration with other apps.  This follows what ServiceNow does for Attachments.
+			current.table_name = grTemplateInstance.table_name;
+			current.table_sys_id = grTemplateInstance.table_sys_id;
+			current.assigned_to = grTemplateInstance.u_assigned_member;
+			current.u_objective = grTemplateInstance.u_objective;
+			current.primary_assignee = grTemplateInstance.u_primary_assignee;
+			current.primary_office = grTemplateInstance.u_primary_office;
+			current.assignment_group = grTemplateInstance.u_restricted_group;
+			current.tasking_authority = grTemplateInstance.u_tasking_authority;
+			// STRY0075858
+			current.u_external_ou = grTemplateInstance.u_external_ou;
+			current.poc_name = grTemplateInstance.poc_name;
+			current.outbound = grTemplateInstance.outbound;
+			current.u_internal_contact = grTemplateInstance.u_internal_contact;
+			current.u_internal_contact_performing_task = grTemplateInstance.u_internal_contact_performing_task;
+			// STRY0085136
+			if(grTemplateInstance.getValue('u_reviewer') + '' != ''){
+				current.u_reviewer = grTemplateInstance.u_reviewer;	
+				current.reviewer_manual_update = true;
+			}
+			
+			current.on_behalf_of = grTemplateInstance.u_on_behalf_of;
+			current.originator = grTemplateInstance.originator;
+			// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+			current = new CustomTaskerFieldHelper().mapFieldDataOnAction('runTemplateTemplateInstanceToTopTask', grTemplateInstance, current);
+		} else {
+			current.classification = grSourceDefinition.classification;
+			current.short_description = grSourceDefinition.short_description;
+			current.assigned_to = grSourceDefinition.assigned_to_individual;
+			current.primary_assignee = grSourceDefinition.primary_assignee;
+
+			// this should never be null, but check to avoid error
+			if(!current.tasker_process_instance.nil()){
+				// if the parent task does not have the same template instance, then this is the top task
+				// of this template instance in the tree.  Copy Template Instance information to it.
+				if( current.parent.tasker_process_instance != grTemplateInstance.getUniqueValue()){
+					// override classification of task template
+					current.classification = grTemplateInstance.classification;
+					// override Primary assigneee
+					current.primary_assignee = grTemplateInstance.u_primary_assignee;
+					// override assigned member of task template
+					current.assigned_to = grTemplateInstance.u_assigned_member;
+					
+				}
+				// STRY0084306, STRY0084419, STRY0084420, STRY0084424 - check to see if need to set prefix or suffix on all sub tasks
+				var taskNameMod = grTemplateInstance.routing_template_ref.u_template_subtask_s_name_setting;
+				if(taskNameMod == 'prefix'){
+					current.short_description = grTemplateInstance.u_subtask_s_name_modifier + ' - ' +  grSourceDefinition.short_description;
+				} else if(taskNameMod == 'suffix'){
+					current.short_description = grSourceDefinition.short_description + ' - ' + grTemplateInstance.u_subtask_s_name_modifier;
+				}
+				current.table_name = grTemplateInstance.table_name;
+				current.table_sys_id = grTemplateInstance.table_sys_id;
+				current.instance_notation = grTemplateInstance.instance_notation;
+				current.u_objective = grTemplateInstance.u_objective;
+				current.u_objective_sub_task = grTemplateInstance.u_objective;
+				// STRY0067125 pass the Template instance information down the tree
+				current.assignment_group = grTemplateInstance.u_restricted_group;
+				current.tasking_authority = grTemplateInstance.u_tasking_authority;
+				current.primary_office = grTemplateInstance.u_primary_office;
+				
+				// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+				current = new CustomTaskerFieldHelper().mapFieldDataOnAction('runTemplateTemplateInstanceToSubTask', grTemplateInstance, current);
+				
+			} else {
+				// this might not ever happen, here just in case
+				// this is restricted group
+				current.assignment_group = grSourceDefinition.assigned_to_group;
+				current.tasking_authority = grSourceDefinition.tasking_authority;
+				current.primary_office = grSourceDefinition.primary_office;
+			}
+			// STRY0075858
+			current.u_external_ou = grSourceDefinition.u_external_ou;
+			current.poc_name = grSourceDefinition.poc_name;
+			current.outbound = grSourceDefinition.outbound;
+			current.u_internal_contact = grSourceDefinition.u_internal_contact;
+			current.u_internal_contact_performing_task = grSourceDefinition.u_internal_contact_performing_task;
+			current.u_reviewer = grSourceDefinition.getValue('u_reviewer');
+			current.on_behalf_of = grSourceDefinition.getValue('u_on_behalf_of');
+			
+			// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+			current = new CustomTaskerFieldHelper().mapFieldDataOnAction('runTemplateTemplateTaskToTopTask', grSourceDefinition, current);
+		}
+		
+		// RJ - STRY0065465 there is no longer an 'Assigne_to_type, just assign group, if assigned, it will just assign null if it wasn't selected in template. The group is now the restricted group in both template and task
+		current.instructions = grSourceDefinition.instructions;
+		
+		current.category = grSourceDefinition.category;
+		current.warning_hours = grSourceDefinition.warning_hours;
+		current.task_order = grSourceDefinition.route_order;
+		current.sub_category = grSourceDefinition.sub_category;
+		current.calendar_duration = grSourceDefinition.duration;
+		// STRY0076928
+		current.u_wait_for_subtasks_to_finish = grSourceDefinition.u_wait_for_subtasks_to_finish;
+		current.tasker_type = grSourceDefinition.tasker_type;
+		current.demo_data = grSourceDefinition.demo_data;
+
+		// STRY0065506 - added  fields added to the Template Task for parity
+		current.priority = grSourceDefinition.u_priority;
+		current.urgency = grSourceDefinition.u_urgency;
+		current.risk_flag = grSourceDefinition.u_risk_flag;
+		current.risk_impact_description = grSourceDefinition.u_risk_impact_description;
+		current.risk_impact_factor = grSourceDefinition.u_risk_impact_factor;
+		current.risk_mitigation_strategy = grSourceDefinition.u_risk_mitigation_strategy;
+		current.risk_probability = grSourceDefinition.u_risk_probability;
+		current.risk_probability_description = grSourceDefinition.u_risk_probability_description;
+		current.risk_reason = grSourceDefinition.u_risk_reason;
+		
+		// STRY0085130
+		current.tasker_type = grSourceDefinition.tasker_type;
+		current.u_signature_instructions = grSourceDefinition.u_signature_instructions;
+		current.provide_response = grSourceDefinition.provide_response;
+		
+		if (!current.parent.nil()){
+			current.originator = current.parent.originator;
+		}
+		
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		current = new CustomTaskerFieldHelper().mapFieldDataOnAction('runTemplateTemplateTaskToSubTask', grSourceDefinition, current);
+
+		// NOTE: we may want to also copy the response documents from source to destination.  Or, the attachments object might be just fine.
+		// RAJ - STRY0011879 - Dot walking reference field to sys_id
+		// RJ - PSD - STRY0063746 - this copy was moved into call built to do all copies.
+		// GlideSysAttachment.copy('x_153465_discovert_route_tasks', current.getValue("source_definition"), 'x_153465_discovert_route_task_instance', current.sys_id);
+	}
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2017-10-26 04:23:29</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>f8c24ca14f860300303dc3818110c73e</sys_id>
+        <sys_mod_count>100</sys_mod_count>
+        <sys_name>Task - onInsert Copy Template Task</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_f8c24ca14f860300303dc3818110c73e</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-20 05:30:32</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+    <sys_translated_text action="delete_multiple" query="documentkey=f8c24ca14f860300303dc3818110c73e"/>
+</record_update>

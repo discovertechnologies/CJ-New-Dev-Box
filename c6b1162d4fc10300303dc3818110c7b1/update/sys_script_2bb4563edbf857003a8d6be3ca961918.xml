@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_153465_discovert_route_task_instance</collection>
+        <condition/>
+        <description>2.5.5: Condition updated:&#13;
+If the task is other than ACK and ITT task type, and any subtasks  are still open (no close complete, no close incomplete, or no cancel), all other subtasks will be close as well&#13;
+STRY0053207: ACK&#13;
+STRY0053216: ITT</description>
+        <execute_function>false</execute_function>
+        <filter_condition table="x_153465_discovert_route_task_instance">stateCHANGESTO7^ORstateCHANGESTO3^ORstateCHANGESTO4^tasker_type!=f6b066b11b1b00104f5221b5ec4bcb92^tasker_type!=b0e0aa711b1b00104f5221b5ec4bcb3d^EQ<item display_value="Cancelled" endquery="false" field="state" goto="false" newquery="false" operator="CHANGESTO" or="false" value="7"/>
+            <item display_value="Completed" endquery="false" field="state" goto="false" newquery="false" operator="CHANGESTO" or="true" value="3"/>
+            <item display_value="Closed Incomplete" endquery="false" field="state" goto="false" newquery="false" operator="CHANGESTO" or="true" value="4"/>
+            <item display_table="x_153465_discovert_tasker_type" display_value="Acknowledgement" endquery="false" field="tasker_type" goto="false" newquery="false" operator="!=" or="false" value="f6b066b11b1b00104f5221b5ec4bcb92"/>
+            <item display_table="x_153465_discovert_tasker_type" display_value="Information Only" endquery="false" field="tasker_type" goto="false" newquery="false" operator="!=" or="false" value="b0e0aa711b1b00104f5221b5ec4bcb3d"/>
+            <item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
+        </filter_condition>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>Tasker - On Cancel or Close</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+(function executeRule(current, previous /*null when async*/) {
+	// STRY0076599
+	// TechDebt the text Rejected should be moved into a "constant" so all places use that constant
+	var sRejected = 'Rejected';
+	var TaskerHelper = new TaskerHelpers();
+	if(current.parent){
+		var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
+		if (grParent.get(current.parent)){
+			if( grParent.u_wait_for_subtasks_to_finish == true){
+				if(grParent.work_item_type == "review_item" && current.decision == sRejected){
+					// Parent task is also a task with an approve reject task type, cancel the parent
+					// pulled this from the Reject UI Action.  
+					// Tech Debt: pull all of the closed sections out of the UI Actions and create a method
+					// *************************************************************************************
+					grParent.work_notes = 'This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by ' + gs.getUserDisplayName() + ' (Reviewer): ' + current.comments;
+					grParent.decision = sRejected;
+					grParent.state = 4; // closed incomplete this should be in an application constant
+					grParent.active = 'false';
+					var gdt = new GlideDateTime();
+					grParent.work_end = gdt.getValue();
+					grParent.update();
+					// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
+					gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
+				} else{
+					// STRY0076597 - a child closed, check to see if all siblings for this task are closed.  If all siblings are closed and parent is in wait state, wake it up
+					grParent.state = TaskerHelper.getUpdatedState(grParent);
+					grParent.update();
+				}
+			}
+		}
+	}
+	
+	// if any subtaskers are still open close complete, close incomplete, or cancel them
+	var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+	grSubTasks.addQuery('parent', current.getUniqueValue());
+	grSubTasks.addQuery('state', '!=', 3);
+	grSubTasks.addQuery('state', '!=', 4);
+	grSubTasks.addQuery('state', '!=', 7);
+	grSubTasks.query();
+	
+	// STRY0076598
+	// set state based on how the task was closed
+	var stateToSetSubtasks = null;
+	if (current.u_wait_for_subtasks_to_finish == true && current.decision == sRejected){   
+		// if this task was waiting for children to finish and this task was rejected and there are subtasks still open...
+		// then this task was rejected b/c a subtask was rejected.  This Tasks subtasks will be closed incomplete.
+		stateToSetSubtasks = 4; // closed incomplete this should be in an application constant
+	} else {
+		// otherwise, pass the state of this task down to its subtasks
+		stateToSetSubtasks = current.state;
+	}
+	
+
+	while (grSubTasks.next()){
+		// STRY0076599
+		grSubTasks.state = stateToSetSubtasks;
+		grSubTasks.active = 'false';
+		var gdt2 = new GlideDateTime();
+		grSubTasks.work_end = gdt2.getValue();
+		
+		// TODO, change text to pull from message for multi language support
+		var msg = 'Parent set to:';
+		// check to see if parent information is already in the close note.
+		// this should only be added at the top level
+		// as it flows down the chain, the top message pushes down
+		if(current.close_notes.toString().indexOf(msg)==0)
+			grSubTasks.close_notes = msg + ' (' + current.state + ') - Organizational Unit: (' + current.primary_assignee + ') - Close Note:'  + current.close_notes;
+		else
+			grSubTasks.close_notes = current.close_notes;
+		grSubTasks.update();
+	}
+	
+	// STRY0076618 - check to see what tasks come out of wait state
+	TaskerHelper.onCloseCheckIfNewOrderStarts(current);
+	
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2018-03-16 05:07:04</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>2bb4563edbf857003a8d6be3ca961918</sys_id>
+        <sys_mod_count>50</sys_mod_count>
+        <sys_name>Tasker - On Cancel or Close</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_2bb4563edbf857003a8d6be3ca961918</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-20 20:18:10</sys_updated_on>
+        <template/>
+        <when>after</when>
+    </sys_script>
+    <sys_translated_text action="delete_multiple" query="documentkey=2bb4563edbf857003a8d6be3ca961918"/>
+</record_update>

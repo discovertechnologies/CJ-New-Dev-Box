@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sc_cat_item_producer">
+    <sc_cat_item_producer action="INSERT_OR_UPDATE">
+        <access_type/>
+        <active>true</active>
+        <availability>on_both</availability>
+        <billable>false</billable>
+        <can_cancel>false</can_cancel>
+        <category display_value="Can We Help You?">e15706fc0a0a0aa7007fc21e1ab70c2f</category>
+        <cost>0</cost>
+        <custom_cart/>
+        <delivery_plan/>
+        <delivery_plan_script/>
+        <delivery_time>1970-01-03 00:00:00</delivery_time>
+        <description><![CDATA[<p><span style="font-size: 14pt;">Create a single task or a Tasker tree.</span></p>]]></description>
+        <display_price_property>non_zero</display_price_property>
+        <entitlement_script/>
+        <flow_designer_flow/>
+        <group/>
+        <hide_sp>false</hide_sp>
+        <icon>68858cc4db1dfb00bb8ee536ca9619b1</icon>
+        <ignore_price>true</ignore_price>
+        <image/>
+        <list_price>0</list_price>
+        <location/>
+        <mandatory_attachment>false</mandatory_attachment>
+        <meta>Quick Task, Quick Task Tree, New Task, New Tasker, Create Tasker, Quick Tasker, Quick Tasker Tree, Create Task</meta>
+        <mobile_hide_price>false</mobile_hide_price>
+        <mobile_picture>d9c54c08db1dfb00bb8ee536ca961942</mobile_picture>
+        <mobile_picture_type>use_mobile_picture</mobile_picture_type>
+        <model/>
+        <name>Quick Tasker</name>
+        <no_attachment_v2>false</no_attachment_v2>
+        <no_cart>false</no_cart>
+        <no_cart_v2>false</no_cart_v2>
+        <no_delivery_time_v2>false</no_delivery_time_v2>
+        <no_order>false</no_order>
+        <no_order_now>false</no_order_now>
+        <no_proceed_checkout>false</no_proceed_checkout>
+        <no_quantity>false</no_quantity>
+        <no_quantity_v2>false</no_quantity_v2>
+        <no_search>false</no_search>
+        <no_wishlist_v2>false</no_wishlist_v2>
+        <omit_price>false</omit_price>
+        <order>0</order>
+        <ordered_item_link/>
+        <picture>68a50808db1dfb00bb8ee536ca96191a</picture>
+        <post_insert_script/>
+        <preview>JavaScript: popupOpenStandard("com.glideapp.servicecatalog_cat_item_view.do?v=1&amp;sysparm_id=c2864f80db942700bb8ee536ca96192a&amp;sysparm_preview=true", "summary");</preview>
+        <price>0</price>
+        <recurring_frequency/>
+        <recurring_price>0</recurring_price>
+        <redirect_url>generated_record</redirect_url>
+        <request_method/>
+        <roles/>
+        <sc_catalogs>d5ce55abdb235700bb8ee536ca961925,742ce428d7211100f2d224837e61036d,e0d08b13c3330100c8b837659bba8fb4</sc_catalogs>
+        <sc_ic_item_staging/>
+        <sc_ic_version/>
+        <script><![CDATA[// RAJ - STRY0032272 - Quick Tasker
+createTaskTree(current, producer);
+
+// this function looks up all selected users and creates a Tasker Tree
+function createTaskTree(current, producer) {
+	//Lookup the assinged to user and find their default OU
+	var OrgScripts = new OrganizationalScripts();
+	
+	// use the Assigned_to user to find the Primary Office, Tasking Authority OU, and Prmiary Assignee of the Top Task
+	var defaultOU = OrgScripts.GetUserDefaultOU(producer.assigned_to);
+	var defaultTA;
+	if((defaultOU == undefined) || (defaultOU.toString() == '')){
+		// this should stop the task creation if an OU not found
+		// TODO, replace with multilingual tagged content
+		gs.addErrorMessage('The Assigned To user, ' + producer.assigned_to.name + ", is not a Tasker user.  The Tasks were not created.");
+		// record was already created.  so, don't create again
+		current.setAbortAction(true);
+		// record was already created.  so, don't create again
+		//		producer.redirect = "../discovertaskerportal";
+		return;
+	}
+	else{
+		defaultTA = OrgScripts.GetUserDefaultTaskingAuthority(defaultOU);
+		
+		//   Make Primary OU of the top task the default ou for this user
+		current.primary_office = defaultOU;
+		//   Make the Primary assignee of the top task the default OU for this user
+		current.primary_assignee = defaultOU;
+		// determine if the default OU is a tasking Authority
+		defaultTA = OrgScripts.GetUserDefaultTaskingAuthority(defaultOU);
+		if(defaultTA != undefined){
+			if(defaultTA.toString() != ''){
+				//   Make Tasking Authority OU of the top task the deault OU if default OU is a tasking authority
+				current.tasking_authority = defaultTA;
+			}
+		}
+	}
+	
+	var modified_suspense_date;
+
+	if(!producer.suspense_date.nil()){
+		// set due date to the end of the day
+		var suspense_date_split = producer.suspense_date.toString().split(" ");
+		modified_suspense_date = suspense_date_split[0].split(",") + ' 23:59:59' ;
+
+		var current_dateTime = new GlideDateTime();
+
+		if (current_dateTime.toString() > modified_suspense_date){
+			// TODO, replace with multilingual tagged content
+			gs.addErrorMessage('The date selected, ' + modified_suspense_date + ', is in the past, the Tasks were created, but they will not be able to be processed without updating the Due/Suspense date(s).');
+
+		}
+		current.suspense_date = modified_suspense_date;
+	}
+	else{
+			// TODO, replace with multilingual tagged content
+			gs.addInfoMessage('A date was not selected the Tasks will be created without Due/Suspense date(s).');
+	}
+	
+	// Create Top Tasker
+	// set the assigned_to of the top task
+	current.assigned_to = producer.assigned_to;
+	// set the process definition for the Tasker Def
+	current.short_description = producer.short_description;
+	current.instructions = producer.instructions;
+	current.u_objective = producer.instructions;
+	current.warning_hours = producer.warning_hours;
+	current.order = 1;
+	current.insert();
+	
+	// TODO, replace with multilingual tagged content
+	gs.addInfoMessage('Top Task Created: "' + current.task_name + '" and assigned to User: ' + producer.assigned_to.name);
+	
+	var bAllSubsAdded = true;
+	// Process sub task assigned to
+	var recSubTask = new GlideRecord('x_153465_discovert_route_task_instance');
+	
+	var sSubTask_assinged_to_ids  = producer.Sub_Task_Assigned_to;
+	// no sub tasks to create
+	if(sSubTask_assinged_to_ids != ''){
+		
+		// this object is used to hold the parent for the next sub tasker.
+		// for serial type it changes with each iteration of the loop, for parallel it is always set to the top task
+		var recSubTaskParent = current.sys_id;
+		var aSubTask_assigned_to_ids = sSubTask_assinged_to_ids.toString().split(',');
+		
+		for(var i = 0; i < aSubTask_assigned_to_ids.length; i++){
+			// split of a blank string is returning an array with one empty element.  so, check empty elements
+			if(aSubTask_assigned_to_ids[i] == ''){
+				continue;
+			}
+			var recUser = new GlideRecord('sys_user');
+			recUser.get(aSubTask_assigned_to_ids[i]);
+			
+			//        NOTE next release should filter to only show users in an OU
+			// Now create the sub taskers
+			recSubTask.initialize();
+			recSubTask.parent = recSubTaskParent;
+			
+			//   Make Primary OU of the sub task = the Primary OU of the Top Task
+			recSubTask.primary_office = current.primary_office;
+			//   Make Tasking Authority OU of the sub task = the Tasking Authority OU of the Top Task
+			if (current.tasking_authority) {
+				recSubTask.tasking_authority = current.tasking_authority;
+			}
+			
+			//Find each sub task user's default OU
+			defaultOU = OrgScripts.GetUserDefaultOU(aSubTask_assigned_to_ids[i]);
+			if((defaultOU != undefined ) && (defaultOU.toString() != '')){
+				//   Make the Primary assignee of the sub task the default OU for this user
+				recSubTask.primary_assignee = defaultOU;
+				// set the Assigned to for the sub task in this if statement.
+			}
+			else {
+				// TODO, replace with multilingual tagged content
+				gs.addErrorMessage('A user selected to receive a sub task is not a Tasker User: ' + recUser.name + '.  The sub task for this user was NOT created.');
+				// a sub failed, so set this flag to false
+				bAllSubsAdded = false;
+				continue;
+			}
+			
+			// set the assigned_to of the child task
+			recSubTask.assigned_to = aSubTask_assigned_to_ids[i];
+			
+			// set the rest of the sub task data
+			recSubTask.short_description = producer.short_description;
+			recSubTask.instructions = producer.instructions;
+			recSubTask.u_objective = producer.instructions;
+			recSubTask.suspense_date = modified_suspense_date;
+			recSubTask.warning_hours = producer.warning_hours;
+			recSubTask.order = 1;
+			recSubTask.insert();
+			
+			// copy the attachment from the top task to the child
+			GlideSysAttachment.copy('x_153465_discovert_route_task_instance', current.sys_id, 'x_153465_discovert_route_task_instance', recSubTask.sys_id);
+			
+			// TODO, replace with multilingual tagged content
+			gs.addInfoMessage('Sub task Created: "' + recSubTask.task_name + '" for User: ' + recUser.name);
+
+			if (producer.serial_or_parrallel == 'serial') {
+				// for a serial quick tasker - set the sub task parent to the last task created
+				recSubTaskParent = recSubTask.sys_id.toString();
+			}
+		}
+	}
+	
+	// record was already created above using .Insert
+	// So, don't create the top task again
+	current.setAbortAction(true);
+	
+	// only redirect to portal if all subs were added.
+	// otherwise stay on native page and show errors
+	//		if (bAllSubsAdded) {
+		producer.redirect = "../discovertaskerportal?id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance&sys_id=" + current.sys_id + "&view=sp";
+		//		}
+		return;
+	}
+	
+	
+	]]></script>
+        <short_description>Create Task</short_description>
+        <show_variable_help_on_load>false</show_variable_help_on_load>
+        <start_closed>false</start_closed>
+        <sys_class_name>sc_cat_item_producer</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-08-28 19:22:56</sys_created_on>
+        <sys_id>c2864f80db942700bb8ee536ca96192a</sys_id>
+        <sys_mod_count>81</sys_mod_count>
+        <sys_name>Quick Tasker</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sc_cat_item_producer_c2864f80db942700bb8ee536ca96192a</sys_update_name>
+        <sys_updated_by>kbaton</sys_updated_by>
+        <sys_updated_on>2019-05-31 14:37:39</sys_updated_on>
+        <table_name>x_153465_discovert_route_task_instance</table_name>
+        <template/>
+        <type>item</type>
+        <use_sc_layout>true</use_sc_layout>
+        <vendor/>
+        <view/>
+        <visible_bundle>true</visible_bundle>
+        <visible_guide>true</visible_guide>
+        <visible_standalone>true</visible_standalone>
+        <workflow/>
+    </sc_cat_item_producer>
+    <sys_translated_text action="delete_multiple" query="documentkey=c2864f80db942700bb8ee536ca96192a"/>
+    <fx_price action="delete_multiple" query="id=c2864f80db942700bb8ee536ca96192a"/>
+    <fx_price action="INSERT_OR_UPDATE">
+        <amount>0</amount>
+        <currency display_value="USD">USD</currency>
+        <field>price</field>
+        <id>c2864f80db942700bb8ee536ca96192a</id>
+        <parent/>
+        <reference_amount>0</reference_amount>
+        <reference_currency display_value="USD">USD</reference_currency>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-08-28 19:22:56</sys_created_on>
+        <sys_id>4867c3c0db942700bb8ee536ca961952</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2018-08-28 19:22:56</sys_updated_on>
+        <table>sc_cat_item_producer</table>
+        <type>calculated</type>
+    </fx_price>
+    <fx_price action="INSERT_OR_UPDATE">
+        <amount>0</amount>
+        <currency display_value="USD">USD</currency>
+        <field>recurring_price</field>
+        <id>c2864f80db942700bb8ee536ca96192a</id>
+        <parent/>
+        <reference_amount>0</reference_amount>
+        <reference_currency display_value="USD">USD</reference_currency>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-08-28 19:22:56</sys_created_on>
+        <sys_id>8c67c3c0db942700bb8ee536ca961953</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2018-08-28 19:22:56</sys_updated_on>
+        <table>sc_cat_item_producer</table>
+        <type>calculated</type>
+    </fx_price>
+</record_update>

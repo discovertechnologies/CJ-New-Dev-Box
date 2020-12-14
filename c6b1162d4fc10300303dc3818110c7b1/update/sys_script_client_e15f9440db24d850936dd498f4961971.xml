@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>true</applies_extended>
+        <condition/>
+        <description>This script will control updating the requested suspense date when suspense dates change.  &#13;
+</description>
+        <field>u_requested_suspense_date</field>
+        <global>true</global>
+        <isolate_script>true</isolate_script>
+        <messages/>
+        <name>Request - onChange Req Suspense Date</name>
+        <order>100</order>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+function onChange(control, oldValue, newValue, isLoading, isTemplate) {
+	if (isLoading || newValue == '') {
+		return;
+	}
+
+	// STRY0071533 -  https://www.servicenowguru.com/scripting/client-scripts-scripting/client-side-dates-in-servicenow/
+	// based on the article referenced above, this should work for the function below.
+	// we can use the user's date and time format instead of forcing one.
+	if(oldValue == newValue){
+		return;
+	}
+
+	// noticed that if you click on the suspense date field and off, then you get a date in the format of the user
+	// but, if you load, you get the format in the format of the server.
+	// when the getDateFromFormat is used with the wrong format it returns zero
+	// so, check for zerio and try just getting a date field to use to compare
+	var get_suspense_date = g_form.getValue('parent.suspense_date');
+	var suspense_date = getDateFromFormat(get_suspense_date, g_user_date_time_format);
+	if(suspense_date==0){
+		suspense_date = new Date(get_suspense_date);
+	}
+
+	//var u_requested_suspense_date = getDateFromFormat(g_form.getValue('u_requested_suspense_date'), g_user_date_time_format);
+	var newValueNumer = getDateFromFormat(newValue, g_user_date_time_format);
+
+	var now = new Date(new Date().getTime());
+	
+	// NOTE: if we add a system setting or a Task setting for no Time, then we would set NOW to be just the date with time 00:00:00.  
+	// The Suspense date would also need to chage to g_user_date_format.  But, it can be handled better using the client capabilities
+
+	// STRY0072379
+	if(g_scratchpad.suspenseDatesAndExpctedStartDatesMustBeInTheFuture == 'true'){
+		if(newValueNumer < now){
+			g_form.clearValue('u_requested_suspense_date');
+			g_form.showErrorBox('u_requested_suspense_date','The Requested Suspense Date must be a date in the future.', true);
+			return;
+		}
+	}
+	if(newValueNumer <= suspense_date ){
+		g_form.clearValue('u_requested_suspense_date');
+		g_form.showErrorBox('u_requested_suspense_date','The Requested Suspense Date must be after the Suspense Date ' + g_form.getValue('parent.suspense_date'), true);
+		return;
+	}
+
+	// Time was added.  but, if we wanted to go back to the logic with time, this should set to the very end of the day.
+	// var new_suspense_date = getDateFromFormat(g_form.getValue('u_requested_suspense_date'), g_user_date_format);
+	// new_suspense_date = new Date(new_suspense_date + ((1000 * 60 * 60 * 23) + (1000 * 60 * 59) + (1000 * 59)  ));
+	// g_form.setValue('u_requested_suspense_date', new_suspense_date);
+	if(g_form.getValue('calchaschildren') > 0){
+		var duration = g_form.getValue('calendar_duration');
+		// if using date only, then uncomment.  Using time, stay with what is here
+		// var extended_change = getDifferenceInDays(suspense_date, newValueNumer);
+		var extended_change = suspense_date - newValueNumer;
+		if (duration > 0){
+			// if using date only, then uncomment.  Using time, stay with what is here
+			//var percent = ((extended_change * 24)/duration)/100;
+			var percent = ((extended_change)/duration)/100;
+			g_form.setValue('suspense_change_type', 'percent');
+			g_form.setValue('suspense_change', percent);
+		}else{
+			// if using days, then get difference in days
+			extended_change = getDifferenceInDays(suspense_date, newValueNumer);
+			g_form.setValue('suspense_change', extended_change);
+			g_form.setValue('suspense_change_type', 'days');
+		}
+		alert("Extending the suspense date will effect all subtasks.");
+	}
+	
+	
+	
+/*	STRY0071533 - comment for now while this is tested
+	var suspense_date = g_form.getValue('parent.suspense_date');
+	var u_requested_suspense_date = g_form.getValue('u_requested_suspense_date');
+	
+	var ajax = new GlideAjax('MyDateTimeAjax');
+	ajax.addParam('sysparm_name', 'compareTwoDates');
+	ajax.addParam('sysparm_dateOne', suspense_date);
+	ajax.addParam('sysparm_dateTwo', u_requested_suspense_date);
+	ajax.getXML(function (){
+		var data = ajax.getAnswer();
+		var newDate = (JSON.parse(data));
+		
+		var dateOne = newDate.olderDate;
+		var dateTwo = newDate.newerDate;
+		var now = newDate.now;
+		
+		var dateOneStr = dateOne.toString().substring(0, 10);
+		var dateTwoStr = dateTwo.toString().substring(0, 10);
+		var nowStr = now.toString().substring(0, 10);
+
+		if(dateTwoStr < nowStr){		
+			g_form.clearValue('u_requested_suspense_date');
+			g_form.showErrorBox('u_requested_suspense_date','The Requested Suspense Date must be a date in the future.', true);
+			return;
+		}else if(dateTwoStr <= dateOneStr ){
+			g_form.clearValue('u_requested_suspense_date');
+			g_form.showErrorBox('u_requested_suspense_date','The Requested Suspense Date must be after the Suspense Date ' + dateOneStr, true);
+			return;
+		}
+		
+		var u_requested_suspense_date_split = u_requested_suspense_date.split(" ");
+		var modified_u_requested_suspense_date = u_requested_suspense_date_split[0];
+		var new_suspense_date = modified_u_requested_suspense_date + ' 23:59:59';
+
+		g_form.setValue('u_requested_suspense_date', new_suspense_date);
+
+		if(g_form.getValue('calchaschildren') > 0){
+			var duration = g_form.getValue('calendar_duration');
+			var extended_change = getDifferenceInDays(g_form.getValue('parent.suspense_date').substring(0,10), newValue.substring(0,10));
+
+			if (duration > 0){
+				var percent = ((extended_change * 24)/duration)/100;
+				g_form.setValue('suspense_change_type', 'percent');
+				g_form.setValue('suspense_change', percent);
+			}else{
+				g_form.setValue('suspense_change', extended_change);
+				g_form.setValue('suspense_change_type', 'days');
+			}
+
+			alert("Extending the suspense date will effect all children tasks.");
+		}
+	
+	});
+*/	
+}
+
+
+function getDifferenceInDays(dt1, dt2){
+	// STRY0071533 -  https://www.servicenowguru.com/scripting/client-scripts-scripting/client-side-dates-in-servicenow/
+	// based on the article referenced above, this should work for the function below.
+	// we can use the user's date and time format instead of forcing one.
+	
+	var dateDiff = new Date();
+	if (dt2 > dt1){
+		return getDifferenceInDays(dt2, dt1);
+	}else if (dt2 < dt1){
+		dateDiff = Math.floor((dt1 - dt2) / (1000 * 60 * 60 * 24));    // get difference in days
+	}
+	return dateDiff;
+	
+/*	STRY0071533 - comment for now while this is tested
+	var date1 = new Date(dt1);
+	var date2 = new Date(dt2);
+	var dateDiff = new Date();
+	
+	if (date2 > date1){
+		return getDifferenceInDays(date2, date1);
+	}else if (date2 < date1){
+		dateDiff = Math.floor((date1 - date2) / (1000 * 60 * 60 * 24));    // get difference in days
+	}
+	return dateDiff;
+*/
+	
+}
+
+]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>KTorres</sys_created_by>
+        <sys_created_on>2020-04-28 05:57:55</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>e15f9440db24d850936dd498f4961971</sys_id>
+        <sys_mod_count>37</sys_mod_count>
+        <sys_name>Request - onChange Req Suspense Date</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_client_e15f9440db24d850936dd498f4961971</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-08-03 01:01:29</sys_updated_on>
+        <table>x_153465_discovert_tasker_requests</table>
+        <type>onChange</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

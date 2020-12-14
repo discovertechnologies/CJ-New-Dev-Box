@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <before>false</before>
+        <description>Flag Org Unit Duplication</description>
+        <flush_cache>false</flush_cache>
+        <name>Flag Org Unit Duplication</name>
+        <record_for_rollback>false</record_for_rollback>
+        <run_once>false</run_once>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var table = "x_153465_discovert_discover_office_hierarchy";
+
+var records = new GlideRecord(table);
+records.addEncodedQuery('active=true'); //KT - STRY0063650
+records.query();
+
+// build organization map
+var orgMap = {};
+var abbrevMap = {};
+var nameIter = {};
+var abbrevIter = {};
+var listOfChangedOrganizations = [];
+var listOfChangedAbbrev = [];
+try {
+	while(records.next()) {
+		// if the office name or abbrev are not valid, skip
+		if(!(records.office_name && records.office_abbreviation)) {
+			gs.info("Tasker - Flag Org Unit Duplication - Skipping non-valid: " + records.sys_id + " name: " + records.office_name + " abrv: " + records.office_abbreviation);
+			continue;
+		}
+		// gather the lowercase representation of the duplication fix script
+		var orgName = records.office_name.toString().toLowerCase();
+		var abbrevName = records.office_abbreviation.toString().toLowerCase();
+		var trackChange = false;
+		//check org name
+		if(orgMap[orgName]) {
+			var num = ++nameIter[orgName];
+			var changedName = records.office_name + "-" + num;
+			var reportLine = "<li>Changed name " + records.office_name + " to " + changedName+". <a href=\""+ records.getLink()+ "\">Link</a></li>";
+			listOfChangedOrganizations.push(reportLine);
+			records.office_name = changedName;
+			trackChange = true;
+		} else {
+			orgMap[orgName] = true;
+			nameIter[orgName] = 0;
+		}
+
+		// -=========================
+
+		//check abbreviation
+		if(abbrevMap[abbrevName]) {
+			var num = ++abbrevIter[abbrevName];
+			var changedAbbrev = records.office_abbreviation + "-" + num;
+			var abbrevReportLine = "<li>Changed abbrev " + records.office_abbreviation + " to " + changedAbbrev+". <a href=\""+ records.getLink()+ "\">Link</a></li>";
+			listOfChangedAbbrev.push(abbrevReportLine);
+			records.office_abbreviation = changedAbbrev;
+			trackChange = true;
+		} else {
+			abbrevMap[abbrevName] = true;
+			abbrevIter[abbrevName] = 0;
+		}
+		//if anything changed, update
+		if(trackChange) {
+			records.update();
+		}
+	}
+
+	var header = "<img src=\"tasker_logo.pngx\" width=\"100\" height=\"20\"/><br/><h2>OU Hierarchy Duplicate Fix Script Report</h2>";
+	//report on name changes
+	if(listOfChangedOrganizations.length > 0 || listOfChangedAbbrev.length > 0) {
+		var finalReport = header + "<h3>Name Changes</h3><ul>";
+		for(var i=0; i < listOfChangedOrganizations.length; i++) {
+			finalReport = [finalReport, listOfChangedOrganizations[i]].join("");
+		}
+		finalReport += "</ul><h3>Abbreviation Changes</h3><ul>";
+		for(var j=0; j < listOfChangedAbbrev.length; j++) {
+			finalReport = [finalReport, listOfChangedAbbrev[j]].join("");
+		}
+		finalReport += "</ul>";
+		gs.eventQueue("x_153465_discovert.GenericFixScriptEmail",null,gs.getUserID(),finalReport);
+	} else {
+		gs.eventQueue("x_153465_discovert.GenericFixScriptEmail",null,gs.getUserID(),header + "<p>All records are unique and no changes were made<p>");
+	}
+		
+} catch(e) {
+	gs.error(e);
+}]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>kbaton</sys_created_by>
+        <sys_created_on>2019-08-29 01:22:28</sys_created_on>
+        <sys_id>5b124071db63b7009a6fabc5ca9619ba</sys_id>
+        <sys_mod_count>26</sys_mod_count>
+        <sys_name>Flag Org Unit Duplication</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_5b124071db63b7009a6fabc5ca9619ba</sys_update_name>
+        <sys_updated_by>KTorres</sys_updated_by>
+        <sys_updated_on>2020-05-05 23:23:45</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>

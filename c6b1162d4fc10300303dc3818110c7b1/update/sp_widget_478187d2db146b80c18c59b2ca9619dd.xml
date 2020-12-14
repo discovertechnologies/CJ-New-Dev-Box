@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function ($scope, $sce, $location, $window, spUtil, $rootScope) {
+	var c = this;
+	
+	//if ($scope.options.table)
+	//	spUtil.recordWatch($scope, $scope.data, "123TEXTQUERY321=" + $scope.data.q);
+	
+	
+	spUtil.setSearchPage($scope.data.t);
+	$scope.showScore = $scope.options.show_score == 'true' || $scope.options.show_score == true;
+
+	$scope.getBGImage = function(item) {
+		return {"background-image": "url('" + item.picture + "')"};
+	}
+
+	$scope.highlight = function(haystack, needle) {
+		if (!haystack)
+			return "";
+
+		if (!needle)
+			return $sce.trustAsHtml(haystack);
+
+		return $sce.trustAsHtml(haystack.replace(new RegExp(needle.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"), "gi"), function(match) {
+			return '<span class="highlight mark">' + match + '</span>';
+		}));
+	}
+	
+	$scope.setPageNum = function(num) {  
+		$scope.data.p = num;
+		//getData(true);
+		var s = {id: $scope.data.page_id, p: $scope.data.p, q: $scope.data.q, table: $scope.data.table, sys_id: $scope.data.sys_id, view: 'sp', show_breadcrumbs: true};
+		var newURL = $location.search(s);
+		spAriaFocusManager.navigateToLink(newURL.url());
+																		 
+			$timeout(function() {
+				this.server.update();
+				$scope.focusOnTableHeader();
+			});
+	}
+
+	$scope.getNumber = function(num) {
+		return new Array(num);
+	}
+
+	$scope.mathMin = function(v1,v2) {
+		return Math.min(v1,v2);
+	}
+
+
+	
+	$scope.setRelateTask = function(task) { 
+			this.server.get({
+					action: 'RelateTask',
+					relateto: task.sys_id
+				}).then(function() { 
+					refreshWidget();
+					//spUtil.recordWatch($scope, "x_153465_discovert_route_task_instance", "123TEXTQUERY321=" + $scope.data.q); 										
+					//$rootScope.$broadcast('related_task.search'); //KTorres
+					//this.server.update();
+				});
+	}
+
+	$scope.setUnRelateTask = function(task) { 
+			this.server.get({
+					action: 'UnRelateTask',
+					relateto: task.sys_id
+				}).then(function() {
+					refreshWidget();
+					//$rootScope.$broadcast('related_task.search'); //KTorres
+					//this.server.update();
+				});
+	}
+	
+	function refreshWidget(evt,arg) {
+		c.server.update(); 
+	}
+
+	
+	
+	//KTorres: ---------------------------------------------------------------------------------------------------------------		
+	/*
+	//KTORRES: FOR THE RELATED LIST TO REFRESH THE URL 
+	$scope.$on('related_task.search', function(){
+		
+			//var s = {id: $scope.data.page_id, table: $scope.data.table, sys_id: $scope.data.sys_id, view: 'sp', show_breadcrumbs: true};
+		
+			var url = window.location.toString();
+			
+			$location.url(url);
+		break;
+			//$location.url(url);
+		//var newURL = $location.search(s);
+		//spAriaFocusManager.navigateToLink(newURL.url());
+	});
+	*/
+	
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------&#13;
+// COMPANY: DISCOVER TECHNOLOGIES&#13;
+// CUSTOMIZED BY: KARINA TORRES &#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// 2.6.0 | 09.28.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description>Last update: Tasker 2.5.8</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tasker_search_page</id>
+        <internal>false</internal>
+        <link><![CDATA[function(scope) {
+	var lazyLoader = $injector.get("lazyLoader");
+	lazyLoader.putTemplates(scope.data.resultTemplates);
+}]]></link>
+        <name>Tasker Search Page</name>
+        <option_schema>[{"hint":"Show search result relative ranking","name":"show_score","label":"Show score","type":"boolean"},{"hint":"Maximum number of search results when not specifying a search group (default 30)","name":"max_all","label":"Max results for All search","type":"integer"},{"hint":"Maximum number of search results when specifying a search group (default 15)","name":"max_group","label":"Max results for single search group","type":"integer"}]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[(function(input, data) {
+	
+// populate the 'data' variable
+//data.showPrices = $sp.showCatalogPrices();
+data.q = $sp.getParameter('q');//KTorres: keyword to search
+data.p = $sp.getParameter('p');//KTorres: paging
+data.t = $sp.getParameter('t');
+data.page_id = $sp.getParameter('id');//KTorres: added
+data.table = $sp.getParameter('table');//KTorres: added
+data.results = [];
+
+if (data.t)
+	data.limit = options.max_group || 15;
+else
+	data.limit = options.max_all || 30;
+
+//Gotta decide if we want to use the portal's sources, or use the defaults declared by
+//the sys property
+var useDefaultPortals;
+
+//KTorres: ---------------------------------------------------------------------------------------------------------------		
+data.sys_id = $sp.getParameter('sys_id');
+if (input) { 
+	
+	if (input.action == 'RelateTask') {
+		var grRelateTask = new GlideRecordSecure('x_153465_discovert_m2m_tasker_instance');
+		grRelateTask.initialize(); 
+		grRelateTask.tasker_instance_from	= data.sys_id;
+		grRelateTask.tasker_instance_to = input.relateto;	
+		grRelateTask.type = "Manual";
+		grRelateTask.insert();		
+	}
+	
+	if (input.action == 'UnRelateTask') {
+		var grUnRelatedTaskManual = new GlideRecordSecure('x_153465_discovert_m2m_tasker_instance');
+		grUnRelatedTaskManual.addQuery('tasker_instance_to', input.relateto); 
+		grUnRelatedTaskManual.query();
+		grUnRelatedTaskManual.next();
+		grUnRelatedTaskManual.deleteRecord();
+		
+		var grUnRelatedTaskSystem = new GlideRecordSecure('x_153465_discovert_m2m_tasker_instance');
+		grUnRelatedTaskSystem.addQuery('tasker_instance_from', input.relateto); 
+		grUnRelatedTaskSystem.query();
+		grUnRelatedTaskSystem.next();
+		grUnRelatedTaskSystem.deleteRecord();
+	}
+}
+
+if (data.q == null) return;
+//------------------------------------------------------------------------------------------------------------------------
+	
+if (!$sp.getPortalRecord()) {
+	useDefaultPortals = true;
+} else {
+	var searchSourcesForPortalGR = new GlideRecord("m2m_sp_portal_search_source");
+	searchSourcesForPortalGR.addQuery("sp_portal", $sp.getPortalRecord().getUniqueValue());
+	searchSourcesForPortalGR.query();
+	useDefaultPortals = searchSourcesForPortalGR.getRowCount() == 0;
+}
+
+data.resultTemplates = {};
+
+if (useDefaultPortals) {
+	var defaultSearchSourceGR = new GlideRecord("sp_search_source");
+	var defaultSearchSourceIDList = gs.getProperty("glide.service_portal.default_search_sources", "");
+	defaultSearchSourceGR.addQuery("sys_id", "IN", defaultSearchSourceIDList);
+	if (data.t)
+		defaultSearchSourceGR.addQuery("id", data.t);
+	defaultSearchSourceGR.query();
+	while(defaultSearchSourceGR.next()) {
+		data.resultTemplates["sp-search-source-" + defaultSearchSourceGR.getValue("id") + ".html"] = $sp.translateTemplate(defaultSearchSourceGR.getValue("search_page_template"));
+		getResults(defaultSearchSourceGR);
+	}
+} else {
+	var m2mSearchSourceGR = new GlideRecord("m2m_sp_portal_search_source");
+	if (data.t)
+		m2mSearchSourceGR.addQuery("sp_search_source.id", data.t);
+	m2mSearchSourceGR.addQuery("sp_portal", $sp.getPortalRecord().getUniqueValue());
+	m2mSearchSourceGR.query();
+	while(m2mSearchSourceGR.next()) {
+		var searchSourceGR = m2mSearchSourceGR.getElement("sp_search_source").getRefRecord();
+		data.resultTemplates["sp-search-source-" + searchSourceGR.getValue("id") + ".html"] = $sp.translateTemplate(searchSourceGR.getValue("search_page_template"));
+		getResults(searchSourceGR);
+	}
+}
+
+function getResults(gr) {
+	//Check if the user is allowed to see this source.
+	//var userCriteria = new GlideSPUserCriteria();
+	/*if (userCriteria.isEnabled()) {
+		if (!userCriteria.userCanSeeSearchSource(gr.getUniqueValue()))
+			return;
+	} else {
+		/var gs = GlideSession.get();
+		var searchSourceRoles = gr.getValue("roles");
+		if (searchSourceRoles && !gs.hasRole(searchSourceRoles))
+			return;
+	}
+*/
+	if (gr.is_scripted_source) {
+		var input = {};
+		input.query = data.q;
+		var evaluator = new GlideScopedEvaluator();
+		var results = evaluator.evaluateScript(gr, "data_fetch_script", input);
+
+		results.forEach(function(item) {
+			item.templateID = "sp-search-source-" + gr.getValue("id") + ".html";
+			data.results.push(item);
+		});
+	} else {
+		var primaryField = gr.getValue("primary_display_field");
+		var displayFields = gr.getValue("display_fields");
+
+		var resultGR = new GlideRecordSecure(gr.getValue("source_table"));
+		var condition = gr.getValue("condition");
+		if (condition)
+			resultGR.addEncodedQuery(condition);
+		if (data.q)
+			resultGR.addQuery('123TEXTQUERY321', data.q);
+		resultGR.query();
+
+		//KTorres: ---------------------------------------------------------------------------------------------------------------
+		data.p = data.p || $sp.getValue('p') || 1;
+		data.p = parseInt(data.p);
+		data.page_index = data.p - 1;
+		var windowSize = data.window_size || data.limit || 20;
+		windowSize = parseInt(windowSize);
+		if (isNaN(windowSize) || windowSize < 1)
+			windowSize = 20;
+		data.window_size = windowSize;
+		data.window_start = data.page_index * data.window_size;
+		data.window_end = (data.page_index + 1) * data.window_size;
+		data.row_count = resultGR.getRowCount();
+		data.num_pages = Math.ceil(data.row_count / data.limit);
+		//------------------------------------------------------------------------------------------------------------------------
+	
+		var searchTableCount = 0;
+		//while (resultGR.next() && searchTableCount < data.limit) { // Commented out by KTorres
+		while (resultGR.next() && searchTableCount < data.limit * data.p) { //Added by KTorres to take into account the page number to display
+			if (!resultGR.canRead())
+				continue;
+
+			var secondaryValues = {};
+
+			if (displayFields)
+				displayFields.split(",").forEach(function(field) {
+					var obj = getField(resultGR, field);
+					secondaryValues[field] = obj;
+				});
+			
+			//KTorres: Check if the Task has already been related ---------------------------
+			var isAlreadyRelated = 0;
+			var grTaskInstance = new GlideRecordSecure('x_153465_discovert_m2m_tasker_instance');
+			grTaskInstance.addQuery("tasker_instance_to", data.sys_id);
+			grTaskInstance.addQuery("tasker_instance_from", resultGR.getUniqueValue());//"ca2cbfe5db76df003a8d6be3ca96198c");// TODO: get dinamycally
+			grTaskInstance.query();
+
+			if(grTaskInstance.getRowCount() > 0){
+				//Do something with the record returned
+				isAlreadyRelated = 1;
+			}
+			//--------------------------------------------------------------------------------
+			
+			data.results.push({
+				primary: (primaryField) ? resultGR.getValue(primaryField) : resultGR.getDisplayValue(),
+				sys_id: resultGR.getUniqueValue(),
+				table: resultGR.getTableName(),
+				templateID: "sp-search-source-" + gr.getValue("id") + ".html",
+				fields: secondaryValues,
+				isAlreadyRelated: isAlreadyRelated
+			});
+			searchTableCount++;
+		}
+	}
+}
+
+function getField(gr, name) {
+	var f = {};
+	f.display_value = gr.getDisplayValue(name);
+	f.value = gr.getValue(name);
+	var ge = gr.getElement(name);
+	if (ge == null)
+		return f;
+
+	f.type = ge.getED().getInternalType()
+	f.label = ge.getLabel();
+	return f;
+}
+
+	})(input, data);
+
+]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-09-04 18:43:48</sys_created_on>
+        <sys_id>478187d2db146b80c18c59b2ca9619dd</sys_id>
+        <sys_mod_count>159</sys_mod_count>
+        <sys_name>Tasker Search Page</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_478187d2db146b80c18c59b2ca9619dd</sys_update_name>
+        <sys_updated_by>KTorres</sys_updated_by>
+        <sys_updated_on>2020-09-29 02:46:02</sys_updated_on>
+        <template><![CDATA[<div>
+  <div class="panel panel-default">
+    <div ng-if="data.results.length==0 && data.q.length>0">
+      <div class="panel-heading"><h4 class="panel-title">${No results}</h4></div>
+      <div class="panel-body wrapper break-word">
+        <p>${Your search - <b>{{data.q}}</b> - did not match any documents}</p>
+        <p>${Suggestions}:</p>
+        <ul>
+          <li>${Make sure all words are spelled correctly}</li>
+          <li>${Try different, more general, or fewer keywords}</li>
+        </ul>
+      </div>
+    </div>
+
+    <div ng-if="data.results.length>0" class="panel-heading break-word">
+      <h2 class="h4 panel-title">${Search results for '{{data.q}}'}</h2>
+    </div>
+
+    <div role="list" >
+      <div role="listitem" ng-repeat="item in data.results | orderBy:'score':true | limitTo:data.limit" class="panel-body b-b ">
+        <div ng-include="item.templateID"></div>
+        <button ng-if="item.isAlreadyRelated == 0" type="button" ng-click="setRelateTask(item)" class="btn btn-primary">Relate</button>
+        <button ng-if="item.isAlreadyRelated == 1" type="button" ng-click="setUnRelateTask(item)" class="btn btn-default">Unrelate</button>
+      </div>
+    </div>
+  </div>
+  <!-- footer -->
+  <div class="panel-footer" ng-hide="options.hide_footer" ng-if="data.row_count">
+      <div class="btn-toolbar m-r pull-left">
+        <div class="btn-group">
+          <a ng-disabled="data.p == 1" href="javascript:void(0)" ng-click="setPageNum(data.p - 1)" class="btn btn-default"  aria-label="${Previous page}"><i class="fa fa-chevron-left"></i></a>
+        </div>
+        <div ng-if="data.num_pages > 1 && data.num_pages < 20" class="btn-group">
+          <a ng-repeat="i in getNumber(data.num_pages) track by $index" ng-click="setPageNum($index + 1)" href="javascript:void(0)" ng-class="{active: ($index + 1) == data.p}" type="button" class="btn btn-default" aria-label="${Page} {{$index + 1}}">{{$index + 1}}</a>
+        </div>
+        <div class="btn-group">
+          <a ng-disabled="data.p == data.num_pages" href="javascript:void(0)" ng-click="setPageNum(data.p + 1)" class="btn btn-default" aria-label="${Next page}"><i class="fa fa-chevron-right"></i></a>
+        </div>
+      </div>
+      <div class="m-t-xs panel-title">${Rows {{data.window_start + 1}} - {{ mathMin(data.window_end,data.row_count) }} of {{data.row_count}}}</div>
+
+      <span class="clearfix"></span>
+    </div>
+  
+</div>]]></template>
+    </sp_widget>
+</record_update>

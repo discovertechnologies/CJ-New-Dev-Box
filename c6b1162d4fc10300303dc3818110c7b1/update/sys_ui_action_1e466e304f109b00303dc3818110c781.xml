@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>Task Member</action_name>
+        <active>true</active>
+        <client>false</client>
+        <client_script_v2><![CDATA[function onClick(g_form) {
+
+}]]></client_script_v2>
+        <comments>Create a subtask for all Sub OUs of the OU selected in the Primary Assignee field&#13;
+2.5 P3 &#13;
+- removed "Show insert" this should not be shown on insert.</comments>
+        <condition>new uiConditionCheck().canCreateTasksForAllSubOU(current);</condition>
+        <form_action>true</form_action>
+        <form_button>false</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>true</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style/>
+        <hint>Create a subtask for each OU Child of the Primary Assignee OU</hint>
+        <isolate_script>false</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <list_style/>
+        <messages/>
+        <name>Create Subtasks for each Sub OUs</name>
+        <onclick/>
+        <order>200</order>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+// RAJ - STRY0011688 - A condition has been added to make sure this is not a new task and the task is still active
+// STRY0078338 - when restricted group is set, do not allow this UI Action.
+if(!current.primary_assignee.nil()){
+	// Get the list of OUs that are direct children of the Primary Assignee OU
+	var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+	grOUs.addQuery('parent', current.primary_assignee);
+	//Only return members in the primary assignee office
+	grOUs.query();
+	// create a subtask with the same information as the parent for each member
+	
+	while(grOUs.next()){
+
+		var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
+		recTaskInst.initialize();
+		recTaskInst.instructions = current.instructions;
+		recTaskInst.category = current.category;
+		recTaskInst.warning_hours = current.warning_hours;
+		recTaskInst.classification = current.classification;
+				
+		// Set the Primary Assignee OU to the Child OU
+		recTaskInst.primary_assignee = grOUs.sys_id;
+		// NOTE: May need to add members to the Additional Assignee list
+		//recTaskInst.assigned_to = grMem.office_member.toString();
+				
+		recTaskInst.primary_office = current.primary_office;
+		recTaskInst.tasking_authority = current.tasking_authority;
+				
+		recTaskInst.short_description = current.short_description;
+		recTaskInst.sub_category = current.sub_category;
+		recTaskInst.parent = current.sys_id;
+		recTaskInst.task_order = 1;
+		// NOTE this should not be necessary, but the business rule that keeps these 2 in sync is not firing on this ui action
+		recTaskInst.order = 1;
+		// STRY0076880
+		recTaskInst.u_wait_for_subtasks_to_finish = current.u_wait_for_subtasks_to_finish;
+
+		// ***************** Start of changes	*****************
+		// STRY0011008 - RAJ 2018-02-23 add logic to set dates while creating sub tasks
+		//               the date logic used to be in a business rule, but that had negative impact on setting dates throughout a process tree
+		var gdt = new GlideDateTime();
+		var durationAdd;
+		
+		// Use parent to set Estimated Start, if child estimated start not set
+		//  STRY0076973 - fix start date copy to subtask issue
+		if(!current.expected_start.nil()){
+			recTaskInst.setValue('expected_start', current.expected_start.dateNumericValue());
+			gdt.setValue(recTaskInst.expected_start.dateNumericValue());
+		}
+		else{
+			recTaskInst.setValue('expected_start', gdt.getNumericValue());
+		}
+		// NOTE: logicall calculating the duration below will overwrite the suspsense date.
+		// if current record has no duration and no supsense date, and the parent has no suspense date, set it to the parent's duration
+		if(!current.calendar_duration.nil()){
+			recTaskInst.calendar_duration = current.calendar_duration;
+			durationAdd=current.calendar_duration.dateNumericValue();
+			gdt.add(durationAdd);
+			recTaskInst.setValue('suspense_date',gdt.getNumericValue());
+			recTaskInst.setValue('due_date',current.suspense_date.dateNumericValue());
+		}
+		//       If use the parent values for suspense date instead of calculating based on duration
+		if(!current.suspense_date.nil()) {
+			recTaskInst.setValue('suspense_date',current.suspense_date.dateNumericValue());
+			recTaskInst.setValue('due_date' ,current.suspense_date.dateNumericValue());
+		}
+		// ***************** End of changes	*****************
+		recTaskInst.originator = gs.getUserID();
+		recTaskInst.insert();
+		
+		// STRY0072379 - this would copy multiple times.  Files get copied on insert.  this is not necessary		
+		//GlideSysAttachment.copy('x_153465_discovert_route_task_instance', current.sys_id, 'x_153465_discovert_route_task_instance', recTaskInst.sys_id);
+	}
+}
+]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2018-02-13 05:03:28</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>1e466e304f109b00303dc3818110c781</sys_id>
+        <sys_mod_count>47</sys_mod_count>
+        <sys_name>Create Subtasks for each Sub OUs</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_action_1e466e304f109b00303dc3818110c781</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-24 19:48:56</sys_updated_on>
+        <table>x_153465_discovert_route_task_instance</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>false</ui16_compatible>
+    </sys_ui_action>
+</record_update>

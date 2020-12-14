@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>true</applies_extended>
+        <condition/>
+        <description>This script will control selecting the suspense date field and validate that the date selected is in the future.&#13;
+&#13;
+v2.5.15:&#13;
+STRY0077855&#13;
+- Information message on Parent Task's Suspense Date Field - Subtask's Suspense Date is after Parent Task's Suspense Date &#13;
+STRY0077847&#13;
+- Information message on Subtask's Suspense Date field - Subtask's Suspense Date is after Parent Task's Suspense Date</description>
+        <field>suspense_date</field>
+        <global>true</global>
+        <isolate_script>true</isolate_script>
+        <messages>Suspense Date AFTER External Due Date&#13;
+Subtask Suspense Date AFTER Parent Task Suspense Date&#13;
+A Subtask has a Suspense Date AFter this Task&#13;
+External Due Date is AFTER the Suspense Date&#13;
+Portal Toast A Subtask has a Suspense Date After the Suspense Date on this Task&#13;
+Platform Toast A Subtask has a Suspense Date After the Suspense Date on this Task</messages>
+        <name>Task - OnChange Suspense Date</name>
+        <order/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+function onChange(control, oldValue, newValue, isLoading, isTemplate) {
+	if (isLoading || newValue === '') {
+		return;
+	}
+	
+	// STRY0071533 -  https://www.servicenowguru.com/scripting/client-scripts-scripting/client-side-dates-in-servicenow/
+	// based on the article referenced above, this should work for the function below.
+	// we can use the user's date and time format instead of forcing one.
+	if(oldValue == newValue){
+		return;
+	}
+
+	// noticed that if you click on the suspense date field and off, then you get a date in the format of the user
+	// but, if you load, you get the format in the format of the server.
+	// when the getDateFromFormat is used with the wrong format it returns zero
+	// so, check for zerio and try just getting a date field to use to compare
+	
+	var newValueNumer = getDateFromFormat(newValue, g_user_date_time_format);
+	// STRY0081525 - now was set as a string before, it may have caused errors in dates in some scenarios before
+	var now = new Date().getTime();
+	
+	// NOTE: if we add a system setting or a Task setting for no Time, then we would set NOW to be just the date with time 00:00:00.  
+	// The Suspense date would also need to chage to g_user_date_format.  But, it can be handled better using the client capabilities
+
+	// STRY0072379
+	if(g_scratchpad.suspenseDatesAndExpctedStartDatesMustBeInTheFuture == 'true'){
+		// STRY0081525 - isReadOnly does not work on platform, isDisabled does not work on portal
+		var suspenseDateReadOnly = ((typeof spModal != 'undefined') 
+									? g_form.isReadOnly('suspense_date') == true 
+									: g_form.isDisabled('suspense_date') == true);
+			
+		if(newValueNumer < now && (suspenseDateReadOnly != true)){
+			g_form.clearValue('suspense_date');
+			g_form.showFieldMsg('suspense_date','The Suspense Date must be a date in the future.', 'error', true);
+			return;
+		}
+	}
+	var toastMsg = '';
+	var strSuspenseDate = g_form.getValue('suspense_date');
+	var dteSuspenseDate = getDateFromFormat(strSuspenseDate, g_user_date_time_format);
+	var strExternalDueDate = g_form.getValue('u_external_due_date');
+	var dteExternalDueDate = getDateFromFormat(strExternalDueDate, g_user_date_time_format);
+
+	g_form.hideFieldMsg('suspense_date', true);
+	g_form.hideFieldMsg('u_external_due_date', true);
+	g_form.clearMessages();
+
+	// STRY0077867
+	if(!g_form.getValue('parent')){
+		if(g_form.getValue('tasking_authority.u_external_flag') == 'true'){
+			if(dteSuspenseDate > dteExternalDueDate){
+				g_form.showFieldMsg('suspense_date', getMessage('Suspense Date AFTER External Due Date'), 'error', true);
+			}
+		} else if(g_form.getValue('outbound') == 'true'){
+			// STRY0077947
+			if(dteExternalDueDate > dteSuspenseDate){
+				g_form.showFieldMsg('u_external_due_date', getMessage('External Due Date is AFTER the Suspense Date'), 'error', true);
+			}
+		}
+	} else if(g_form.getValue('outbound') == 'true'){
+		// STRY0077947
+		if(dteExternalDueDate > dteSuspenseDate){
+			g_form.showFieldMsg('u_external_due_date', getMessage('External Due Date is AFTER the Suspense Date'), 'error', true);
+		}
+	}
+	
+	// v2.5 P2 | 08.24.2020 | STRY0077855 - STRY0077847 : Suspense Date Timing Updates
+	var task_id = g_form.getUniqueValue();
+//	var taskNewSuspenseDate = g_form.getValue("suspense_date");
+	
+	var ajax = new GlideAjax('ClientTaskInfo');
+	ajax.addParam('sysparm_name', 'compareTaskSuspenseDateToParentAndChildDates');
+	ajax.addParam('sysparm_task_id', g_form.getUniqueValue());
+	ajax.addParam('sysparm_parent_task_id', g_form.getValue('parent'));
+	ajax.addParam('sysparm_taskNewSuspenseDate', dteSuspenseDate);
+	ajax.getXML(function(response){
+		try{
+			var data = response.responseXML.documentElement.getAttribute("answer");
+			var checkDates = JSON.parse(data);
+			// STRY0077855
+			if(checkDates.subtaskSuspenseDateOlderThanParent){
+				g_form.showFieldMsg('suspense_date', getMessage('A Subtask has a Suspense Date AFter this Task'), 'error', true);
+				if (typeof spModal != 'undefined' ) {
+					var linkToPlatform = '../x_153465_discovert_route_task_instance.do?sys_id=' + g_form.getUniqueValue();
+					toastMsg = getMessage('Portal Toast A Subtask has a Suspense Date After the Suspense Date on this Task');
+					toastMsg = toastMsg.replace('doNotTranslageLinkToPlatform', linkToPlatform);
+				}else{
+					toastMsg = getMessage('Platform Toast A Subtask has a Suspense Date After the Suspense Date on this Task');
+				}
+				g_form.addErrorMessage(toastMsg);
+			}
+			// STRY0077847
+			if(checkDates.taskSuspenseDateOlderThanParent){
+				g_form.showFieldMsg('suspense_date', getMessage('Subtask Suspense Date AFTER Parent Task Suspense Date'), 'error', true);
+			}
+		}catch(e){		
+			jslog(e);
+		}
+	});
+}
+]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>aalzyoud</sys_created_by>
+        <sys_created_on>2019-01-18 20:37:49</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>1fd3f34edb4be700bb8ee536ca961983</sys_id>
+        <sys_mod_count>195</sys_mod_count>
+        <sys_name>Task - OnChange Suspense Date</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_client_1fd3f34edb4be700bb8ee536ca961983</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-19 10:21:46</sys_updated_on>
+        <table>x_153465_discovert_route_task_instance</table>
+        <type>onChange</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

@@ -1,0 +1,718 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskTemplateHelpers</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.5 P3&#13;
+STRY0084306 - TUP -  STRETCH - Template form - "Template Subtask Name Setting" - None, Suffix and Prefix&#13;
+STRY0084419 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "None"&#13;
+STRY0084420 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "Suffix"&#13;
+STRY0084424 - TUP -  STRETCH - Template Instance -  Template Subtask(s) Name Setting" field on Template form set to "Prefix"&#13;
+STRY0085134 - TUP - Mapping fields - Template form fields must map to "Template Instance" &#13;
+STRY0085139 - TUP - Mapping fields - Run Template UI from Task -  Template Instance fields map from the Template selected to run and the Task selected to run template from&#13;
+STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes&#13;
+&#13;
+v2.5.13&#13;
+STRY0075793 - run templates from task in native&#13;
+// STRY0074135 - the parent task for the grafted in template did not update to set the child template run&#13;
+// See associated fix script Tasker_2_5_13_Set_child_route_template&#13;
+&#13;
+STRY0063867 &amp; STRY0063859 &#13;
+Previously: RunProcessTemplate: Utilized by "discovertasker-widget-modal-prompt" widget to trigger 'x_153465_discovert.Start_Process_Def' event.</description>
+        <name>TaskTemplateHelpers</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var TaskTemplateHelpers = Class.create();
+TaskTemplateHelpers.prototype = {
+    initialize: function() {
+    },
+
+ 	// RETURN - --------------------------------------------------------------------- 
+ 	//   JSON object with the following values
+ 	//                  templateName
+ 	//                  classification
+ 	//                  templateNotation
+ 	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+ 	//                  tableName
+ 	//                  tableSysID
+ 	//                  assignedMember
+ 	//                  objective
+ 	//                  primaryAssignee
+ 	//                  primaryOffice
+ 	//                  restrictedGroup
+ 	//                  taskingAuthority
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	//					u_reviewer
+	//					u_on_behalf_of
+	createEmptyTemplateFieldsJSON: function() {
+		var fields = { routing_template_ref: {value: '', displayValue: ''},
+					  discover_template_name: {value: '', displayValue: ''},
+					  short_description: {value: '', displayValue: ''},
+					  instance_notation: {value: '', displayValue: ''},
+					  parent_task: {value: '', displayValue: ''},
+					  classification: {value: ''},
+					  u_objective: {value: '', displayValue: ''},
+					  u_restricted_group: {value: '', displayValue: ''},
+					  u_tasking_authority: {value: '', displayValue: ''},
+					  u_primary_office: {value: '', displayValue: ''},
+					  u_primary_assignee: {value: '', displayValue: ''},
+					  u_assigned_member: {value: '', displayValue: ''},
+					  // STRY0084306
+					  u_template_subtask_s_name_setting: {value: ''},
+					  // STRY0084419, STRY0084420, STRY0084424
+					  u_subtask_s_name_modifier: {value: '', displayValue: ''},
+					  // STRY0075864
+					  u_external_ou: {value: '', displayValue: ''},
+					  poc_name: {value: '', displayValue: ''},
+					  outbound: {value: '', displayValue: ''},
+					  u_internal_contact: {value: '', displayValue: ''},
+					  u_internal_contact_performing_task: {value: '', displayValue: ''},
+					  // STRY0085134
+					  u_reviewer: {value: '', displayValue: ''},
+					  u_on_behalf_of: {value: '', displayValue: ''},
+					  originator: {value: '', displayValue: ''}
+					 };
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		return new CustomTaskerFieldHelper().addCustomFieldsToTemplateFieldsJSON(fields);;
+	},
+
+	// This function loads the data fields objects with the data from teh template instance provided
+ 	// It returns a data.f._fields object loaded with the default values for a Template
+ 	// inputs ---------------------------------------------------------------------
+ 	// template     -> Template Glide Record
+ 	// RETURN - --------------------------------------------------------------------- 
+ 	//   JSON object with the following values
+ 	//                  templateName
+ 	//                  classification
+ 	//                  templateNotation
+ 	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+ 	//                  tableName
+ 	//                  tableSysID
+ 	//                  assignedMember
+ 	//                  objective
+ 	//                  primaryAssignee
+ 	//                  primaryOffice
+ 	//                  restrictedGroup
+ 	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	//					u_reviewer
+	//					u_on_behalf_of
+	loadTemplateAndTaskIntoInstanceForm: function(data_f_fields, templateID, parentTaskID) {
+		// for each field that can be in the input, check to see if it is provided.
+		// if it is not provided, see if the associated Template field has a value.
+		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+		// check values in input and override values from the Template
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		// STRY0075793 - run templates from task in native
+		if (data_f_fields == '')
+			data_f_fields = this.createEmptyTemplateFieldsJSON();
+		if(grTemp.get(templateID)){
+			data_f_fields.routing_template_ref.value = templateID;
+			data_f_fields.routing_template_ref.displayValue = grTemp.getDisplayValue();
+			data_f_fields.discover_template_name.value = grTemp.template_name + '';
+			data_f_fields.discover_template_name.displayValue = grTemp.getDisplayValue("template_name");
+			
+			data_f_fields.short_description.value = grTemp.getValue("short_description");
+			data_f_fields.short_description.displayValue = grTemp.getDisplayValue("short_description");
+			// STRY0085139 - pull classification from the template instead of Task
+			data_f_fields.classification.value = grTemp.getValue("classification");
+			
+			// STRY0084306
+			data_f_fields.u_template_subtask_s_name_setting.value = grTemp.getValue("u_template_subtask_s_name_setting");
+			// STRY0084419, STRY0084420, STRY0084424
+			data_f_fields.u_subtask_s_name_modifier.value = '';
+			data_f_fields.u_subtask_s_name_modifier.displayValue = '';
+
+			data_f_fields.instance_notation.value = grTemp.getValue("description");
+			data_f_fields.instance_notation.displayValue = grTemp.getDisplayValue("description");
+			
+			// STRY0075864
+			data_f_fields.u_external_ou.value = grTemp.getValue("u_external_ou");
+			data_f_fields.u_external_ou.displayValue = grTemp.getDisplayValue("u_external_ou");
+
+			data_f_fields.poc_name.value = grTemp.getValue("poc_name");
+			data_f_fields.poc_name.displayValue = grTemp.getDisplayValue("poc_name");
+			data_f_fields.outbound.value = (grTemp.outbound == true) ? 'true' : 'false';
+			data_f_fields.u_internal_contact.value = grTemp.getValue("u_internal_contact");
+			data_f_fields.u_internal_contact.displayValue = grTemp.getDisplayValue("u_internal_contact");
+			data_f_fields.u_internal_contact_performing_task.value = (grTemp.u_internal_contact_performing_task == true) ? 'true' : 'false';
+			// STRY0085139 
+			data_f_fields.u_on_behalf_of.value = grTemp.u_on_behalf_of +'';
+			data_f_fields.u_on_behalf_of.displayValue = grTemp.getDisplayValue("u_on_behalf_of");
+			
+		}
+		if(grTask.get(parentTaskID)){
+			// Laod the fields coming from the Parent Task
+			data_f_fields.parent_task.value = parentTaskID;
+			data_f_fields.parent_task.displayValue = grTask.getDisplayValue();
+			// STRY0085139 - pull classification from the template instead of Task
+			//data_f_fields.classification.value = grTask.getValue("classification");
+
+			data_f_fields.u_objective.value = grTask.u_objective + '';
+			data_f_fields.u_objective.displayValue = grTask.getDisplayValue("u_objective");
+
+			data_f_fields.u_restricted_group.value = grTask.assignment_group + '';
+			data_f_fields.u_restricted_group.displayValue = grTask.getDisplayValue("assignment_group");
+
+			data_f_fields.u_tasking_authority.value = grTask.tasking_authority + '';
+			data_f_fields.u_tasking_authority.displayValue = grTask.getDisplayValue("tasking_authority");
+
+			data_f_fields.u_primary_office.value = grTask.primary_office + '';
+			data_f_fields.u_primary_office.displayValue = grTask.getDisplayValue("primary_office");
+
+			data_f_fields.u_primary_assignee.value = grTask.primary_assignee +'';
+			data_f_fields.u_primary_assignee.displayValue = grTask.getDisplayValue("primary_assignee");
+
+			data_f_fields.u_assigned_member.value = grTask.assigned_to +'';
+			data_f_fields.u_assigned_member.displayValue = grTask.getDisplayValue("assigned_to");
+
+			// STRY0085139 
+			data_f_fields.u_reviewer.value = grTask.u_reviewer +'';
+			data_f_fields.u_reviewer.displayValue = grTask.getDisplayValue("u_reviewer");
+			
+			data_f_fields.originator.value = gs.getUserID();
+			data_f_fields.originator.displayValue = gs.getUserDisplayName();
+
+		}
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		return new CustomTaskerFieldHelper().loadCustomFieldsFromTemplateAndTaskIntoInstanceForm(data_f_fields, grTemp, grTask);
+	},
+
+	// This function loads the data fields objects with the data from teh template instance provided
+ 	// It returns a data.f._fields object loaded with the default values for a Template
+ 	// inputs ---------------------------------------------------------------------
+ 	// template     -> Template Glide Record
+ 	// RETURN - --------------------------------------------------------------------- 
+ 	//   JSON object with the following values
+ 	//                  templateName
+ 	//                  classification
+ 	//                  templateNotation
+ 	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+ 	//                  tableName
+ 	//                  tableSysID
+ 	//                  assignedMember
+ 	//                  objective
+ 	//                  primaryAssignee
+ 	//                  primaryOffice
+ 	//                  restrictedGroup
+ 	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	loadTemplateIntoInstanceForm: function(data_f_fields, templateID) {
+		// for each field that can be in the input, check to see if it is provided.
+		// if it is not provided, see if the associated Template field has a value.
+		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+		// check values in input and override values from the Template
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		
+				// STRY0075793 - run templates from task in native
+		if (data_f_fields == '')
+			data_f_fields = this.createEmptyTemplateFieldsJSON();
+		
+		if(grTemp.get(templateID)){
+			data_f_fields.routing_template_ref.value = templateID;
+			data_f_fields.routing_template_ref.displayValue = grTemp.getDisplayValue();
+			
+			data_f_fields.discover_template_name.value = grTemp.template_name + '';
+			data_f_fields.discover_template_name.displayValue = grTemp.getDisplayValue("template_name");
+			
+			data_f_fields.short_description.value = grTemp.getValue("short_description");
+			data_f_fields.short_description.displayValue = grTemp.getDisplayValue("short_description");
+
+			// STRY0084306
+			data_f_fields.u_template_subtask_s_name_setting.value = grTemp.getValue("u_template_subtask_s_name_setting");
+			// STRY0084419, STRY0084420, STRY0084424
+			data_f_fields.u_subtask_s_name_modifier.value = '';
+			data_f_fields.u_subtask_s_name_modifier.displayValue = '';
+			
+			data_f_fields.instance_notation.value = grTemp.getValue("description");
+			data_f_fields.instance_notation.displayValue = grTemp.getDisplayValue("description");
+
+			data_f_fields.classification.value = grTemp.getValue("classification");
+
+			data_f_fields.u_objective.value = grTemp.u_objective + '';
+			data_f_fields.u_objective.displayValue = grTemp.getDisplayValue("u_objective");
+
+			data_f_fields.u_restricted_group.value = grTemp.u_restricted_group + '';
+			data_f_fields.u_restricted_group.displayValue = grTemp.getDisplayValue("u_restricted_group");
+
+			data_f_fields.u_tasking_authority.value = grTemp.u_tasking_authority + '';
+			data_f_fields.u_tasking_authority.displayValue = grTemp.getDisplayValue("u_tasking_authority");
+
+			data_f_fields.u_primary_office.value = grTemp.u_primary_office + '';
+			data_f_fields.u_primary_office.displayValue = grTemp.getDisplayValue("u_primary_office");
+
+			data_f_fields.u_primary_assignee.value = grTemp.u_primary_assignee +'';
+			data_f_fields.u_primary_assignee.displayValue = grTemp.getDisplayValue("u_primary_assignee");
+			
+			data_f_fields.u_assigned_member.value = grTemp.u_assigned_member +'';
+			data_f_fields.u_assigned_member.displayValue = grTemp.getDisplayValue("u_assigned_member");
+			
+			// STRY0075864
+			data_f_fields.u_external_ou.value = grTemp.getValue("u_external_ou");
+			data_f_fields.u_external_ou.displayValue = grTemp.getDisplayValue("u_external_ou");
+
+			data_f_fields.poc_name.value = grTemp.getValue("poc_name");
+			data_f_fields.poc_name.displayValue = grTemp.getDisplayValue("poc_name");
+			data_f_fields.outbound.value = (grTemp.outbound == true) ? 'true' : 'false';
+			data_f_fields.u_internal_contact.value = grTemp.getValue("u_internal_contact");
+			data_f_fields.u_internal_contact.displayValue = grTemp.getDisplayValue("u_internal_contact");
+			data_f_fields.u_internal_contact_performing_task.value = (grTemp.u_internal_contact_performing_task == true) ? 'true' : 'false';
+			// STRY0085134
+			data_f_fields.u_reviewer.value = grTemp.getValue("u_reviewer");
+			data_f_fields.u_reviewer.displayValue = grTemp.getDisplayValue("u_reviewer");
+			data_f_fields.u_on_behalf_of.value = grTemp.getValue("u_on_behalf_of");
+			data_f_fields.u_on_behalf_of.displayValue = grTemp.getDisplayValue("u_on_behalf_of");
+		}
+		data_f_fields.originator.value = gs.getUserID();
+		data_f_fields.originator.displayValue = gs.getUserDisplayName();
+		
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		return new CustomTaskerFieldHelper().loadCustomFieldsFromTemplateIntoInstanceForm(data_f_fields, grTemp);
+	},
+	
+	// This function takes data.f._fields from a widget and loads the values into the Ojbect provided
+ 	// It returns a data.f._fields object loaded with the default values for a Template
+ 	// inputs ---------------------------------------------------------------------
+ 	// template     -> Template Glide Record
+ 	// RETURN - --------------------------------------------------------------------- 
+ 	//   JSON object with the following values
+ 	//                  templateName
+ 	//                  classification
+ 	//                  templateNotation
+ 	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+ 	//                  tableName
+ 	//                  tableSysID
+ 	//                  assignedMember
+ 	//                  objective
+ 	//                  primaryAssignee
+ 	//                  primaryOffice
+ 	//                  restrictedGroup
+ 	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	loadTemplateInputsFromDataFields: function(data_f_fields) {
+		// for each field that can be in the input, check to see if it is provided.
+		// if it is not provided, see if the associated Template field has a value.
+		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+		// check values in input and override values from the Template
+
+		var templateDefaults = {};
+		templateDefaults.parentTask = data_f_fields.parent_task.value;
+		templateDefaults.templateName = data_f_fields.discover_template_name.value;
+		templateDefaults.classification = data_f_fields.classification.value;
+		templateDefaults.templateNotation = data_f_fields.instance_notation.value;
+		templateDefaults.shortDescription = data_f_fields.short_description.value;
+		
+		// STRY0084306
+		templateDefaults.u_template_subtask_s_name_setting = data_f_fields.u_template_subtask_s_name_setting.value;
+		// STRY0084419, STRY0084420, STRY0084424
+		templateDefaults.u_subtask_s_name_modifier = data_f_fields.u_subtask_s_name_modifier.value;
+		
+		templateDefaults.tableName = '';
+		templateDefaults.tableSysID = '';
+		templateDefaults.restrictedGroup = data_f_fields.u_restricted_group.value;
+		templateDefaults.taskingAuthority = data_f_fields.u_tasking_authority.value;
+		templateDefaults.primaryOffice = data_f_fields.u_primary_office.value;
+		templateDefaults.primaryAssignee = data_f_fields.u_primary_assignee.value;
+		templateDefaults.assignedMember = data_f_fields.u_assigned_member.value;
+		// STRY0075858
+		templateDefaults.u_external_ou = data_f_fields.u_external_ou.value;
+		templateDefaults.poc_name = data_f_fields.poc_name.value;
+		templateDefaults.outbound = data_f_fields.outbound.value;
+		templateDefaults.u_internal_contact = data_f_fields.u_internal_contact.value;
+		templateDefaults.u_internal_contact_performing_task = data_f_fields.u_internal_contact_performing_task.value;
+
+		// STRY0085134
+		templateDefaults.u_reviewer = data_f_fields.u_reviewer.value;
+		templateDefaults.u_on_behalf_of = data_f_fields.u_on_behalf_of.value;
+		
+		var strFullObjective = data_f_fields.u_objective.value;
+		if (strFullObjective.length > 2500){
+			strFullObjective =  strFullObjective.substring(0,2500);
+		}
+		templateDefaults.objective = strFullObjective;
+
+		//  STRY0076608
+		templateDefaults.originator = data_f_fields.originator.value;
+
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		return new CustomTaskerFieldHelper().loadCustomFieldsItnoTemplateInputsFromDataFields(templateDefaults, data_f_fields);
+	},
+
+	
+	// This function loads the inputs object using the Template Object provided as defaults
+	// It returns an object loaded with the default values for a Template
+	// inputs ---------------------------------------------------------------------
+	// template     -> Template Glide Record
+	// RETURN - --------------------------------------------------------------------- 
+	//   JSON object with the following values
+	//                  templateName
+	//                  classification
+	//                  templateNotation
+	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+	//                  tableName
+	//                  tableSysID
+	//                  assignedMember
+	//                  objective
+	//                  primaryAssignee
+	//                  primaryOffice
+	//                  restrictedGroup
+	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	loadInputDefaultFromTemplate: function(template) {
+		var templateDefaults = {};
+		// for each field that can be in the input, check to see if it is provided.
+		// if it is not provided, see if the associated Template field has a value.
+		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+		// check values in input and override values from the Template
+		templateDefaults.templateName = template.getValue('template_name');
+		templateDefaults.classification = template.getValue('classification');
+		templateDefaults.templateNotation = template.getValue('description');
+		templateDefaults.shortDescription = template.getValue('short_description');
+		
+		// STRY0084306
+		templateDefaults.u_template_subtask_s_name_setting = template.getValue('u_template_subtask_s_name_setting');
+		// STRY0084419, STRY0084420, STRY0084424
+		templateDefaults.u_subtask_s_name_modifier = template.getValue('u_subtask_s_name_modifier');
+		
+		templateDefaults.tableName = '';
+		templateDefaults.tableSysID = '';
+		templateDefaults.restrictedGroup = template.getValue('u_restricted_group');
+		templateDefaults.taskingAuthority = template.getValue('u_tasking_authority');
+		templateDefaults.primaryOffice = template.getValue('u_primary_office');
+		templateDefaults.primaryAssignee = template.getValue('u_primary_assignee');
+		templateDefaults.assignedMember = template.getValue('u_assigned_member');
+		// STRY0075864
+		templateDefaults.u_external_ou = template.getValue('u_external_ou');
+		templateDefaults.poc_name = template.getValue('poc_name');
+		templateDefaults.outbound = template.getValue('outbound');
+		templateDefaults.u_internal_contact = template.getValue('u_internal_contact');
+		templateDefaults.u_internal_contact_performing_task = template.getValue('u_internal_contact_performing_task');
+		// STRY0085134
+		templateDefaults.u_reviewer = template.getValue('u_reviewer');
+		templateDefaults.u_on_behalf_of = template.getValue('u_on_behalf_of');
+		
+		var strFullObjective = template.getValue('u_objective');
+		if (strFullObjective.length > 2500){
+			 strFullObjective =  strFullObjective.substring(0,2500);
+		}
+		templateDefaults.objective = strFullObjective;
+		
+		// STRY0076608
+		templateDefaults.originator = template.getValue('process_owner');
+		
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		return new CustomTaskerFieldHelper().loadCustomFieldsInputDefaultFromTemplate(templateDefaults, template);
+	},
+
+	
+	
+	// This function starts a template by passing the template name
+	// If async is true, then the event will be called passing in the input JSON
+	// If async is false, then the Template Instance will be created in this call.
+	// Inputs ---------------------------------------------------------------------
+	// templateName -> Name of the Template
+	// async        -> if true, use event to create Template Instance.  If false, create Template Instance in this function
+	// inputs       -> 	JSON object with the following values
+	//                  templateName	
+	//                  classification
+	//                  templateNotation
+	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+	//                  tableName
+	//                  tableSysID
+	//                  assignedMember
+	//                  objective
+	//                  primaryAssignee
+	//                  primaryOffice
+	//                  restrictedGroup
+	//                  taskingAuthority
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	startTemplateWithName: function(templateName, async, inputs) {
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		grTemp.addQuery('template_name', templateName);
+		grTemp.query();
+		if(grTemp.next()){
+			if(inputs.templateName == undefined)
+				inputs.templateName = grTemp.template_name;
+			this.startTemplate(grTemp, async, inputs);
+		} else {
+			gs.addErrorMessage('Template with name: ' + templateName + ' not found. Template not started.');
+		}
+		
+	},
+	// This function starts a template by passing the template id
+	// If async is true, then the event will be called passing in the input JSON
+	// If async is false, then the Template Instance will be created in this call.
+	// Inputs ---------------------------------------------------------------------
+	// templateName -> Name of the Template
+	// async        -> if true, use event to create Template Instance.  If false, create Template Instance in this function
+	// inputs       -> 	JSON object with the following values
+	//                  templateName	
+	//                  classification
+	//                  templateNotation
+	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+	//                  tableName
+	//                  tableSysID
+	//                  assignedMember
+	//                  objective
+	//                  primaryAssignee
+	//                  primaryOffice
+	//                  restrictedGroup
+	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	startTemplateWithID: function(templateID, async, inputs) {
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		if(grTemp.get(templateID)){
+			if(inputs.templateName == undefined)
+				inputs.templateName = grTemp.template_name;			
+			this.startTemplate(grTemp, async, inputs);
+		} else {
+			gs.addErrorMessage('Template with id: ' + templateID + ' not found. Template not started.');
+		}
+	},	
+	
+	startTemplate: function(template, async, inputs) {
+		// if async is set and it is false, then create Template Instance record here
+		if(async == true || async.toString() == ''){
+			// default is true.  So, if true or empty, use Event to launch asynchronously
+			gs.eventQueue('x_153465_discovert.Start_Template', template, JSON.stringify(inputs),  gs.getUserID());
+		} else {
+			// if async is set and it is false, then create Template Instance record here
+			this.createTemplateInstanceToRunTemplate(template, inputs, gs.getUserID());
+		}
+
+	},
+
+	// This is used by the start template in this method when template is run synchronously
+	// This is used by DiscoverTasker_Start_Template_Event to start template asynchronsly
+	// This keeps all of the code to set the Template Instance values in one place.  
+	// This should improve maintenance of using the Inputs
+	// inputs       -> 	JSON object with the following values
+	//                  templateName	
+	//                  classification
+	//                  templateNotation
+	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+	//                  tableName
+	//                  tableSysID
+	//                  assignedMember
+	//                  objective
+	//                  primaryAssignee
+	//                  primaryOffice
+	//                  restrictedGroup
+	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	// RETURN - --------------------------------------------------------------------- 
+	// Sys_id of Template Instance
+	createTemplateInstanceToRunTemplate: function(template, inputs, originator) {
+		// if input is undefined, create a blank object.  the blank object will get populated by the defaults from the template.
+		if(inputs == undefined) {
+			inputs = {};
+		}
+		
+		// for each field that can be in the input, check to see if it is provided.
+		// if it is not provided, see if the associated Template field has a value.
+		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+		// check values in input and override values from the Template
+		if((inputs.templateName == undefined)  && template.getValue('template_name') != ''){
+			inputs.templateName = template.getValue('template_name');
+		}
+		if((inputs.classification == undefined)  && template.getValue('classification') != ''){
+			inputs.classification = template.getValue('classification');
+		}
+		if((inputs.templateNotation == undefined)  && template.getValue('description') != ''){
+			inputs.templateNotation = template.getValue('description');
+		}
+		if((inputs.shortDescription == undefined)  && template.getValue('short_description') != ''){
+			inputs.shortDescription = template.getValue('short_description');
+		}
+		
+		// STRY0084306
+		if((inputs.u_template_subtask_s_name_setting == undefined)  && template.getValue('u_template_subtask_s_name_setting') != ''){
+			inputs.u_template_subtask_s_name_setting = template.getValue('u_template_subtask_s_name_setting');
+		}
+		// STRY0084419, STRY0084420, STRY0084424
+		if((inputs.u_subtask_s_name_modifier == undefined)  && template.getValue('u_subtask_s_name_modifier') != ''){
+			inputs.u_subtask_s_name_modifier = template.getValue('u_subtask_s_name_modifier');
+		}
+
+		// tableName and tableSysID are not in Template table, so ignore the override
+		if((inputs.restrictedGroup == undefined)  && template.getValue('u_restricted_group') != ''){
+			inputs.restrictedGroup = template.getValue('u_restricted_group');
+		}
+		if((inputs.taskingAuthority == undefined)  && template.getValue('u_tasking_authority') != ''){
+			inputs.taskingAuthority = template.getValue('u_tasking_authority');
+		}
+		if((inputs.primaryOffice == undefined)  && template.getValue('u_primary_office') != ''){
+			inputs.primaryOffice = template.getValue('u_primary_office');
+		}
+		if((inputs.primaryAssignee == undefined)  && template.getValue('u_primary_assignee') != ''){
+			inputs.primaryAssignee = template.getValue('u_primary_assignee');
+		}
+		if((inputs.assignedMember == undefined)  && template.getValue('u_assigned_member') != ''){
+			inputs.assignedMember = template.getValue('u_assigned_member');
+		}
+		if((inputs.objective == undefined)  && template.getValue('u_objective') != ''){
+			inputs.objective = template.getValue('u_objective');
+		}
+
+		// STRY0075858
+		if((inputs.u_external_ou == undefined)  && template.getValue('u_external_ou') != ''){
+			inputs.u_external_ou = template.getValue('u_external_ou');
+		}
+		if((inputs.poc_name == undefined)  && template.getValue('poc_name') != ''){
+			inputs.poc_name = template.getValue('poc_name');
+		}
+		// checkbox handled a little differently
+		if(inputs.outbound == undefined){
+			inputs.outbound = template.getValue('outbound');
+		}
+		if((inputs.u_internal_contact == undefined)  && template.getValue('u_internal_contact') != ''){
+			inputs.u_internal_contact = template.getValue('u_internal_contact');
+		}
+		// checkbox handled a little differently
+		if(inputs.u_internal_contact_performing_task == undefined){
+			inputs.u_internal_contact_performing_task = template.getValue('u_internal_contact_performing_task');
+		}
+		
+		// STRY0085134
+		if((inputs.u_reviewer == undefined) && template.getValue('u_reviewer') != ''){
+			inputs.u_reviewer = template.getValue('u_reviewer');
+		}
+		if((inputs.u_on_behalf_of == undefined) && template.getValue('u_on_behalf_of') != ''){
+			inputs.u_on_behalf_of = template.getValue('u_on_behalf_of');
+		}
+		
+		/// create the Template Instance Record
+		var recRunTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_runtime');
+		recRunTemp.initialize();
+
+		// STRY0014064 - set the parent to be passed into the new sub tree being created
+		if(inputs.parentTask + '' != ''){
+		   recRunTemp.parent_task = inputs.parentTask;
+			// STRY0074135 - the parent task for the grafted in template did not update to set the child template run
+			// See associated fix script Tasker_2_5_13_Set_child_route_template
+			var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParentTask.get(recRunTemp.parent_task)){
+				grParentTask.child_route_template = template.sys_id;
+				grParentTask.update();
+			}
+		}
+		
+		// STRY0076608 - if originator was set by the user running te form, then use it
+		// Otherwise use owner as the admin will run in most cases due to the event being called.
+		if((inputs.originator == undefined)  && template.getValue('process_owner') != ''){
+			inputs.originator = template.getValue('process_owner');
+		}
+		recRunTemp.originator = inputs.originator;	
+		// recRunTemp.originator = originator;	
+		
+		recRunTemp.classification = inputs.classification;
+		recRunTemp.discover_template_name = template.template_name;
+		recRunTemp.instance_notation = inputs.templateNotation;
+		recRunTemp.routing_template_ref = template.sys_id;
+		recRunTemp.short_description = inputs.shortDescription;
+		
+		// STRY0084306
+		// inputs.u_template_subtask_s_name_setting - only used in form.  pulled from template during template run
+		// STRY0084419, STRY0084420, STRY0084424
+		recRunTemp.u_subtask_s_name_modifier = inputs.u_subtask_s_name_modifier;
+		
+		if(inputs.table_name != undefined && inputs.table_name != '')
+			recRunTemp.table_name = inputs.table_name;
+		if(inputs.table_sys_id != undefined && inputs.table_sys_id != '')
+			recRunTemp.table_sys_id = inputs.table_sys_id;
+		recRunTemp.u_restricted_group = inputs.restrictedGroup;
+		recRunTemp.u_tasking_authority = inputs.taskingAuthority;
+		recRunTemp.u_primary_office = inputs.primaryOffice;
+		recRunTemp.u_primary_assignee = inputs.primaryAssignee;
+		recRunTemp.u_assigned_member = inputs.assignedMember;
+		recRunTemp.u_objective = inputs.objective;
+		
+		// STRY0075863
+		recRunTemp.u_external_ou = inputs.u_external_ou;
+		recRunTemp.poc_name = inputs.poc_name;
+		recRunTemp.outbound = inputs.outbound;
+		recRunTemp.u_internal_contact = inputs.u_internal_contact;
+		recRunTemp.u_internal_contact_performing_task = inputs.u_internal_contact_performing_task;
+
+		// STRY0085134
+		recRunTemp.u_reviewer = inputs.u_reviewer;
+		recRunTemp.u_on_behalf_of = inputs.u_on_behalf_of;
+		
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		recRunTemp = new CustomTaskerFieldHelper().loadCustomInputsIntoTemplateInstanceObjectToRunTemplate(template, recRunTemp, inputs);
+
+		// create the template instance and run the workflow to build the tasks
+		recRunTemp.insert();
+
+		return recRunTemp.getValue('sys_id');
+	},
+	
+	
+
+    type: 'TaskTemplateHelpers'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>aalzyoud</sys_created_by>
+        <sys_created_on>2019-03-05 20:30:26</sys_created_on>
+        <sys_id>9df9240ddb447b40c18c59b2ca9619f8</sys_id>
+        <sys_mod_count>116</sys_mod_count>
+        <sys_name>TaskTemplateHelpers</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_9df9240ddb447b40c18c59b2ca9619f8</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-08 20:32:12</sys_updated_on>
+    </sys_script_include>
+</record_update>

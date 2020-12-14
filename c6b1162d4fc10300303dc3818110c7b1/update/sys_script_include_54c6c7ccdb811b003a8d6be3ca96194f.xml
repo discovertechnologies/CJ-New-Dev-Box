@@ -1,0 +1,741 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.UserInfoScripts</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+v 2.5 P3&#13;
+STRY0084273 - Restricted Group - Template - OU, Member and Contact Field Filters based on "Restricted Group" selected&#13;
+STRY0084270 - Restricted Group - Task Form - OU, Member and Contact fields should filter based on "Restricted Group" selected&#13;
+STRY0085438 - FIX: Javascript error on new "Modals"&#13;
+&#13;
+v 2.5.16 P2&#13;
+- STRY0078831 - Added getAllMembersSysIdsInGroup: function(groupName) to address issue with Get subtask members for Administrator users&#13;
+- STRY0050440 - 2.5 Roles and Permissions - OU Hierarchy Administrator and Global Hierarchy Administrator - Adding SubOUs &#13;
+- STRY0057846 - FIX:  Roles that can set default OU &#13;
+- STRY0076016 - RLS/PRMS - Adding, Deleting OU Members</description>
+        <name>UserInfoScripts</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//  RAJ new functions called by client and server events.
+// this keeps all of the code and logic in one place
+var UserInfoScripts = Class.create();
+UserInfoScripts.prototype = {
+	initialize: function() {
+	},
+
+	// STRY0085438
+	IsUserOUTA: function(userId, ou){
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ou);
+		grMembers.addQuery('office_member' , userId);
+		grMembers.addQuery('office_task_authority', 'true');	
+		grMembers.query();
+		
+		
+		if(grMembers.next()){
+			return true;
+		}else{
+			return false;
+		}
+		
+		
+	},
+	
+	// STRY0076016
+	UserHasRole: function(roleName)
+	{
+		return gs.getUser().hasRole(roleName);
+	},	
+	
+	// STRY0076016
+	userCanWriteMem_field_office_task_authority: function(ouID){
+		var answer = false;
+		answer =  userInfoScript.UserHasRole('x_153465_discovert.tasker_organizational_admin') || userInfoScript.IsUserOUAdministrator(current.discover_office_hierarchy, gs.getUserID());
+		return answer;
+	},
+	
+	// STRY0076016
+	userCanWriteMem_field_is_office_administrator: function(ouID){
+		var answer = false;
+		answer =  userInfoScript.UserHasRole('x_153465_discovert.tasker_organizational_admin') || userInfoScript.IsUserOUAdministrator(current.discover_office_hierarchy, gs.getUserID());
+		
+		return answer;
+	},
+	
+	// STRY0076016
+	userCanWriteMem_field_can_manage_ou_members: function(ouID){
+		var answer = false;
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin') || this.UserHasRole('x_153465_discovert.tasker_application_admin')){
+			answer = true;
+		} else {
+			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
+		}
+		return answer;
+	},
+	
+	// STRY0076016
+	// this is used to set the row level write
+	userCanWriteMem: function(ouID){
+		var answer = false;
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin') || this.UserHasRole('x_153465_discovert.tasker_application_admin') || this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin') || this.UserHasRole('x_153465_discovert.tasker_process_template_admin')){
+			answer = true;
+		} else {
+			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
+		}
+		return answer;
+	},
+	
+	// STRY0076016
+	// this is used to set the Add and Delete ACLs
+	userCanCreateMem: function(ouID){
+		var answer = false;
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
+			answer = true;
+		} else {
+			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
+		}
+		return answer;
+	},
+	
+	// STRY0050440
+	userCanWriteOU: function(ouID){
+		var answer = false;
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
+			answer = true;
+		} else {
+			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID());		
+		}
+		return answer;
+	},
+	
+	// STRY0050440
+	userCanCreateOU: function(ouID){
+		var answer = false;
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
+			answer = true;
+		} else if (this.IsUserOUAdministrator(ouID, gs.getUserID())){
+			answer = true;
+		}
+		return answer;
+	},
+	
+	// STRY0079396
+	userIsOUTemplateDesigner: function()
+	{
+		var answer = false;
+		var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('office_member', gs.getUserID());
+		grMembers.addQuery('has_ou_process_rights', true);
+		grMembers.addAggregate('COUNT');
+		grMembers.query();
+		
+		if(grMembers.next()){
+			
+			if (grMembers.getAggregate('COUNT') > 0){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+	
+	// STRY0050440
+	IsUserOUAdministrator: function(ouID,userID)
+	{
+		var answer = false;
+		var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('office_member', userID);
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('is_office_administrator', true);
+		grMembers.addAggregate('COUNT');
+		grMembers.query();
+		
+		if(grMembers.next()){
+			if (grMembers.getAggregate('COUNT') > 0){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+	
+	// STRY0057846 
+	canChangeDefaultOU: function(mem_Sys_Id, userID)
+	{
+		var answer = false;
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		// is the user a Global Hierarchy Admin
+		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
+			answer = true;
+		} else if(grMembers.get(mem_Sys_Id)){
+			var OUID = grMembers.discover_office_hierarchy;
+			var MemID = grMembers.office_member;
+			// is this the current user
+			if(userID == MemID){
+				answer = true;
+			}
+			// OU Hierarchy Admin
+			// STRY0050440 - STRY0057846
+			if(this.IsUserOUAdministrator(OUID, userID)){
+				answer = true;
+			}
+			// OU Member Admin 
+			// STRY0057846
+			if(this.IsUserMemberAdministrator(OUID, userID)){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+	
+	// RJ STRY0073150
+	// TemplateInstance needs a special process right check.  
+	// The Instance create needs to be able to receive the ID of the Template being started.
+	userHasProcessRunRights: function(templateId)
+	{
+		if(!templateId) return false;
+		
+		var userHasTemplateRights = false;
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		if(grTemp.get(templateId)){
+			userHasTemplateRights = this.userHasProcessRights(grTemp);
+		}
+		return userHasTemplateRights;
+	},
+	
+
+	
+	// KT - RLS - STRY0065050: 03/20/2020
+	UserHasRoleScoped: function(roleName, userId)
+	{
+		var hasRole = false;
+		// Check if the user has role. The OOTB fuction hasRole() only works for current user and the GetUserId() to try to check the role from a giver user only work for GLOBAL apps and no for SCOPEP apps.
+		var grRole = new GlideRecord('sys_user_has_role');
+		grRole.addQuery('role.name', roleName);
+		grRole.addQuery('user', userId);
+		grRole.query();
+		if (grRole.next()) {
+			hasRole = true;
+		}
+			
+		return hasRole;
+	},
+	
+	// RAJ 2020.03.18  STRY0063747 - 
+	// This method was required to see if the user had rights to the process.
+	// While it was added to see if a user can enable and disable sharing of documents and attachments, it can be used to determine if the user has process rights for any process.
+	userHasGlobalProcessRights: function(){
+		return this.UserHasRole('x_153465_discovert.tasker_process_template_global');
+	},
+
+	userHasPersonalProcessRights: function(){
+		return this.UserHasRole('x_153465_discovert.tasker_process_template_user');
+	},
+
+	userHasProcessTemplateAdminRights: function(){
+		return this.UserHasRole('x_153465_discovert.tasker_process_template_admin');  
+	},
+	
+	// STRY0073150 - to validate for an OU, check the OU
+
+	userHasOUProcessRightsOnAnOU: function(ou){
+		var userHasProcessRights = false;
+		// user needs the OU role. 
+		// technically, the user should not be able to have this role without also being in the table below.
+		// we are going to check both b/c some table acls might be based on this role
+		var currentUser = gs.getUserID();
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('office_member' , currentUser);
+		// STRY0073150 - RAJ TODO - this is temporary, once you get ADMIN permissions to update ACLs, remove the if statement.
+		if(ou){
+			// STRY0073150 the user must have rights in the office provided
+			grMembers.addQuery('discover_office_hierarchy',ou);
+		}
+		// STRY0073150
+		var procQueryCond = grMembers.addQuery('has_ou_process_rights', true);
+		// STRY0073150 - also look to see if the member is a Tasm manager of the OU
+		procQueryCond.addOrCondition('office_task_authority', true);
+
+		grMembers.query();
+
+		if(grMembers.next()){
+			userHasProcessRights = true;
+		}else{
+			userHasProcessRights = false;
+		}
+		return userHasProcessRights;
+	},
+
+	// RAJ 2020.03.18  STRY0063747 - 
+	// This method was required to see if the user had rights to the process.
+	// While it was added to see if a user can enable and disable sharing of documents and attachments, it can be used to determine if the user has process rights for any process.
+	userHasOUProcessRights: function(ouID){
+		var userHasProcessRights = false;
+		// user needs the OU role. 
+		// technically, the user should not be able to have this role without also being in the table below.
+		// we are going to check both b/c some table acls might be based on this role
+		// STRY0076016 - ROLE NOT NEEDED
+		//if (gs.getUser().hasRole('x_153465_discovert.tasker_process_template_ou')){
+		var currentUser = gs.getUserID();
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('office_member' , currentUser);
+		grMembers.addQuery('has_ou_process_rights', true);
+		grMembers.query();
+
+		if(grMembers.next()){
+			userHasProcessRights = true;
+		}else{
+			userHasProcessRights = false;
+		}
+		// STRY0076016 - ROLE NOT NEEDED 
+		//}
+		
+		return userHasProcessRights;
+	},
+
+	// RAJ 2020.03.18  STRY0063747 - 
+	// This method was required to see if the user had rights to the process.
+	// While it was added to see if a user can enable and disable sharing of documents and attachments, it can be used to determine if the user has process rights for any process.
+	userHasPersonalProcessRightsForProcess: function(processOwner, userID){
+		var userHasProcessRights = false;
+		// if user lost porcess rights, they can't edit the process
+		if(this.UserHasRole('x_153465_discovert.tasker_process_template_user')){
+			// And, the user owns this process
+			if(userID == processOwner){
+				userHasProcessRights = true;
+			}
+		}
+		// TODO, RAISE TO PRODUCT OWNERS... CAN ANYONE OTHER THAN THE PROCESS OWNER EDIT A PERSONAL PROCESS?
+		// CAN THE OWNERS ADMIN, THE OU PROCESS ADMIN OF THE USERS DEFAULT OUT?
+		// NEED TO MAKE A DECISION WHO ELSE COULD DO THIS...  OR, WE NEED TO DECIDE WHO CAN CHANGE THE PROCESS OWNER FIELD.
+		return userHasProcessRights;
+	},
+	
+	userHasProcessRights: function(gr)
+	{
+		var recordTable = gr.getTableName();
+		var userHasProcessRights = false;
+		var processLevel;
+		var processOU;
+		var processOwner;
+		var restrictedGroup = '';
+		if (recordTable == 'x_153465_discovert_discover_routing_template'){
+			// get the process owner
+			processOwner = gr.process_owner;
+			// Get the process Level
+			processLevel = gr.process_level;
+			// Get the Process OU
+			processOU = gr.process_ou;
+			// Get the Restricted Group
+			restrictedGroup = gr.getValue('u_restricted_group');
+		} else if(recordTable == 'x_153465_discovert_route_tasks'){
+			// get the process owner
+			processOwner = gr.tasker_process_definition.process_owner;
+			// Get the process Level
+			processLevel = gr.tasker_process_definition.process_level;
+			// Get the Process OU
+			processOU = gr.tasker_process_definition.process_ou;
+			// Get the Restricted Group
+			restrictedGroup = gr.getValue('assigned_to_group'); 
+		} else if (recordTable == 'x_153465_discovert_discover_routing_runtime'){
+			// get the process owner
+			processOwner = gr.routing_template_ref.process_owner;
+			// Get the process Level
+			processLevel = gr.routing_template_ref.process_level;
+			// Get the Process OU
+			processOU = gr.routing_template_ref.process_ou;
+			// Get the Restricted Group
+			restrictedGroup = gr.getValue('u_restricted_group');
+		} else if (recordTable == 'x_153465_discovert_tasker_schedule'){
+			// STRY0079396 - schedule was using Template OU Designer in a call, not the update mechansim
+			// get the process owner
+			processOwner = gr.tasker_process.process_owner;
+			// Get the process Level
+			processLevel = gr.tasker_process.process_level;
+			// Get the Process OU
+			processOU = gr.tasker_process.process_ou;
+		}
+		restrictedGroup = restrictedGroup == null ? '': restrictedGroup;
+		// STRY0074534 - Template Admins can see and change any template, but not run them
+		if(this.userHasProcessTemplateAdminRights()){
+			if(restrictedGroup == ''){
+				return true;
+			} else{
+				return gs.getUser().isMemberOf(restrictedGroup);
+			}
+		}
+		switch (processLevel.toString()){
+			case 'global_process': 
+				userHasProcessRights = this.userHasGlobalProcessRights();
+				break;
+			case 'ou_process':
+				userHasProcessRights = this.userHasOUProcessRights(processOU);
+				break;
+			case 'my_process':
+				var userID = gs.getUserID();
+				userHasProcessRights = this.userHasPersonalProcessRightsForProcess(processOwner, userID);
+				break;
+		}
+		
+		if (userHasProcessRights){
+			if(restrictedGroup != ''){
+				userHasProcessRights = gs.getUser().isMemberOf(restrictedGroup);
+			}
+		}
+		return userHasProcessRights;
+	},
+	
+	//KTORRES: STRY0014160
+	checkMemberinInGroup: function(member, assignment_group) {
+		
+		var userBelongstoGroup = false;
+		var users = new GlideRecord('sys_user_grmember');  
+		users.addQuery('user','=', member);
+		users.addQuery('group','=', assignment_group);
+		users.query();  
+		
+		while (users.next())	{  
+			userBelongstoGroup = true;
+		}
+		
+		return userBelongstoGroup;
+	
+	},
+	
+	// STRY0078831
+	getAllMembersSysIdsInGroup: function(groupName) {
+        var memArr = [];
+        var grUsers = new GlideRecord('sys_user_grmember');
+        grUsers.addQuery('group', '=', groupName);
+        grUsers.query();
+        while (grUsers.next()) {
+			memArr.push(grUsers.getValue('user'));
+        }
+		return memArr;
+	},
+
+	// STRY0078831
+	getOUsForRestrictedGroup: function(restrictedGroup) {
+		var ArrRestrictedOUs = [];
+		var ouMemArr = [];
+		ouMemArr = this.getAllMembersSysIdsInGroup(restrictedGroup);
+		var grMemberOus = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMemberOus.addQuery('office_member', 'IN', ouMemArr.join(','));
+		grMemberOus.query();
+		while(grMemberOus.next()){
+			ArrRestrictedOUs.push(grMemberOus.getValue('discover_office_hierarchy'));
+		}
+		
+		// Get External OUs with contacts
+		var grOus = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		var grContactOus = new GlideRecordSecure('x_153465_discovert_organizational_contacts');
+		grContactOus.addQuery('u_user_information', 'IN', ouMemArr.join(','));
+		grContactOus.query();
+		while(grContactOus.next()){
+			if(grOus.get(grContactOus.getValue('u_contact_ou'))){
+				// only add externals based on conatcts, do not add internal ous based on contacts
+				if(grOus.u_external_flag==true){
+					ArrRestrictedOUs.push(grOus.getUniqueValue());
+				}
+			}
+		}		
+		return ArrRestrictedOUs;
+	},
+
+	IsUserInOU: function(ouID,userID)
+	{
+		var answer = false;
+		//Query organizational unit members to see if the user is a member
+		// RAJ - STRY0011695 - change to use Glide Aggregate
+		var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('office_member', userID);
+		// RAJ - STRY0011695 - change to use Glide Aggregate
+		grMembers.addAggregate('COUNT');
+		grMembers.query();
+		
+		if(grMembers.next()){
+			// RAJ - STRY0011695 - change to use Glide Aggregate
+			if (grMembers.getAggregate('COUNT') > 0){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+
+	// KTORRES
+	IsUserMemberAdministrator: function(ouID,userID)
+	{
+		var answer = false;
+		var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('office_member', userID);
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('can_manage_ou_members', true);
+		grMembers.addAggregate('COUNT');
+		grMembers.query();
+		
+		if(grMembers.next()){
+			if (grMembers.getAggregate('COUNT') > 0){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+	
+	// KB - Check if a user is an OUTA of another user's OU
+	IsUserOUTAOfAnotherUser: function(userAsysId, userBsysId) {
+		var result = false;
+		var ous = [];
+		var ouQuery = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		ouQuery.addQuery("office_member", userAsysId);
+		ouQuery.query();
+		while(ouQuery.next()) {
+			if(this.IsUserTaskingAuthority(ouQuery.discover_office_hierarchy.sys_id, userBsysId)) {
+				result = true;
+				break;
+			}
+		}
+		return result;
+	},
+	//KB - STRY0032629 10/16/2019
+	isGivenUserOUTA: function(userId, ouID) {
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('office_member' , userId);
+		grMembers.addQuery('office_task_authority', true);
+		grMembers.query();
+		
+		if(grMembers.next()){
+			return true;
+		}else{
+			return false;
+		}
+	},
+	isUserOUTA: function(ouID){
+		var currentUser = gs.getUserID();
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ouID);
+		grMembers.addQuery('office_member' , currentUser);
+		grMembers.addQuery('office_task_authority', true);
+		grMembers.query();
+		
+		if(grMembers.next()){
+			return true;
+		}else{
+			return false;
+		}
+		
+	},
+
+	//  STRY0064991 needed a test for user is Admin
+	IsUserTaskAdministrator: function(userID)
+	{
+		var answer = false;
+		if(userID != ''){			
+			answer = this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin');	
+		} else{
+			answer = this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin');	
+		}
+		// 
+		return answer;
+	},
+
+	IsUserTaskingAuthority: function(ouID,userID)
+	{
+		//Query organizational unit members to see if the user is a Tasking Authority for the OU
+		//  RAJ STSK0011104 updated to control whether a user can assign tasks based on Tasking Authority instead of ownership of the task or membership in the OU
+		
+		var answer;
+		//var gsUser = gs.getUser(userID).;answer		
+		if(this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin')){
+			answer = true;	
+		}
+		else{
+			// RAJ - STRY0011695 - change to use Glide Aggregate
+			var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+			grMembers.addQuery('discover_office_hierarchy', ouID);
+			grMembers.addQuery('office_member', userID);
+			grMembers.addQuery('office_task_authority', true);
+			grMembers.addAggregate('COUNT');			
+			grMembers.query();
+			answer = false;
+			if(grMembers.next()){
+				if (grMembers.getAggregate('COUNT') > 0){
+					answer = true;
+				}
+			}
+		}
+		return answer;
+	},
+	
+	//  RAJ STSK0011104 if the user is NOT a TA, but is in the OU, they can assign themselves to the Tasker, so the user needs to be able to see the "assigned members.
+	//  RAJ STSK0011104 - allow changing task assingment based on user being a tasking authority
+	//  changed the script include to add a method to determine if the user is a Tasking Authority
+	CanUserAssignSelfOrOthers: function(ouID,userID)
+	{
+		//Query organizational unit members to see if the user is a Tasking Authority for the OU
+		//  RAJ STSK0011104 updated to control whether a user can assign tasks based on Tasking Authority instead of ownership of the task or membership in the OU
+		if(this.IsUserTaskingAuthority(ouID,userID) || this.IsUserInOU(ouID,userID)){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	// STRY0067125 - Check the users permissions for assigning members in a template
+	CanUserAssignSelfOrOthersInTemplate: function(ouID,userID, template)
+	{
+		var grTemplate = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		// STRY0072771 - Debt Certification
+		if(grTemplate.get(template)){
+			var templateLevel = grTemplate.getValue('process_level');
+			var templateOU = '';
+			// if template at OU level, the Primary Assignee needs to be same as the OU of the template being built to select users
+			if(templateLevel == 'ou_process'){
+				templateOU = grTemplate.getValue('process_ou');
+				if(ouID == templateOU)
+					return true;
+				else
+					return false;
+			}
+		}
+		// if you got here, the template level is global or my.
+		// In both scenarios, the user's permissions for an our drive whether the user is able to select users or not when definint templates.
+		if(this.IsUserTaskingAuthority(ouID,userID) || this.IsUserInOU(ouID,userID)){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	
+	ManageUserRoleCheckAndAdd: function(office_member, role_name, role_id)
+	{
+		var roleAdded = false;
+		// Add role if member does not have it
+		var grRole = new GlideRecord('sys_user_has_role');
+		grRole.addQuery('user', office_member);
+		grRole.addQuery('role.name', role_name);
+		grRole.query();
+		if (!grRole.next()) {
+			grRole.initialize();
+			grRole.user = office_member;
+			grRole.role = role_id;
+			grRole.insert();
+			roleAdded = true;
+		}
+		return roleAdded;
+	},
+	
+	ManageUserRoleCheckAndDelete: function(office_member, office_member_permission_field, role_name)
+	{
+		var roleDeleted = false;
+		// office administrator removed.  If this user is not an administrator of any other offices, the role single_ou_admin should be removed
+		var grMemOUs = new GlideRecordSecure("x_153465_discovert_discover_office_members");
+		grMemOUs.addQuery('office_member', office_member);
+		
+		if(office_member_permission_field != ''){
+			grMemOUs.addQuery(office_member_permission_field,true);
+		}
+		
+		// if no other records found, remove role
+		if (!grMemOUs.next()){
+			var hasRole = new GlideRecord('sys_user_has_role');
+			hasRole.addQuery('user', office_member);
+			hasRole.addQuery('role.name', role_name);
+			hasRole.query();
+			if (hasRole.next()) {
+				hasRole.deleteRecord();
+				roleDeleted = true;
+			}
+		}
+		return roleDeleted;
+	},
+	getRoleIdByName: function(role_name) {
+		var roles = new GlideRecord("sys_user_role");
+		roles.addQuery("name", role_name);
+		roles.query();
+		if(roles.next()) {
+			return roles.sys_id;
+		}
+		return "";
+	},
+	addRole: function(user_id, role_name)
+	{
+		var role_id = this.getRoleIdByName(role_name);
+		if(!role_id || role_id == null || role_id == '')
+			return false;
+		var roleAdded = false;
+		// Add role if member does not have it
+		var grRole = new GlideRecord('sys_user_has_role');
+		grRole.addQuery('user', user_id);
+		grRole.addQuery('role', role_id);
+		grRole.query();
+		if (!grRole.next()) {
+			grRole.initialize();
+			grRole.user = user_id;
+			grRole.role = role_id;
+			grRole.insert();
+			roleAdded = true;
+		}
+		return roleAdded;
+	},
+	removeRole: function(user_id, field, role_name, role_type)
+	{
+		//KT: RoleType = GlobalRole i.e GlobalTasking Authority
+		var role_id = this.getRoleIdByName(role_name);
+		if(!role_id || role_id == null || role_id == '')
+			return false;
+		
+		var roleDeleted = false;
+		var roleShoulbBeDeleted = false;
+		
+		if (role_type == 'GlobalRole') roleShoulbBeDeleted = true;
+			
+		if (role_type == 'OURole') {
+			var grMemOUs = new GlideRecordSecure("x_153465_discovert_discover_office_members");
+			grMemOUs.addQuery('office_member', user_id);
+			if(field != '') grMemOUs.addQuery(field, true);
+			grMemOUs.addAggregate('COUNT');
+			grMemOUs.query();
+			if(grMemOUs.next()){
+				if (grMemOUs.getAggregate('COUNT') > 0){
+					roleShoulbBeDeleted = false;
+				} else
+					roleShoulbBeDeleted = true;
+			}
+		}  
+		
+		// if no other records found, remove role
+		//if (!grMemOUs.next()){
+		if (roleShoulbBeDeleted ){ 
+			var grRole = new GlideRecord('sys_user_has_role');
+			grRole.addQuery('user', user_id);
+			grRole.addQuery('role', role_id);
+			grRole.query();
+			if (grRole.next()) {
+				grRole.deleteRecord();
+				roleDeleted = true;
+			}
+		}
+		return roleDeleted;
+	},
+	
+	type: 'UserInfoScripts'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2018-03-20 05:57:49</sys_created_on>
+        <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
+        <sys_mod_count>269</sys_mod_count>
+        <sys_name>UserInfoScripts</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-13 01:14:28</sys_updated_on>
+    </sys_script_include>
+</record_update>

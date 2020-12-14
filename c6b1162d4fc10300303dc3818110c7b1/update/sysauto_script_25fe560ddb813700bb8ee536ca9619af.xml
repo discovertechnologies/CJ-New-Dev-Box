@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sysauto_script">
+    <sysauto_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <business_calendar/>
+        <condition/>
+        <conditional>false</conditional>
+        <entered_time/>
+        <name>Tasker - Email Notification Digest</name>
+        <offset/>
+        <offset_type/>
+        <run_as/>
+        <run_as_tz>US/Eastern</run_as_tz>
+        <run_dayofmonth>1</run_dayofmonth>
+        <run_dayofweek>1</run_dayofweek>
+        <run_period/>
+        <run_start>2019-04-24 21:58:32</run_start>
+        <run_time>1970-01-01 13:00:00</run_time>
+        <run_type>daily</run_type>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var DEBUG = false;
+var debugUser = "kbaton";
+// Assign script include for tasker common scripting methods
+var tcs = new TaskerCommonScriptingMethods();
+// var edm = new EmailDigestMethodsAndTemplates();
+// define variables to be used throughout the script
+// the following table names will be used by the tcs to query these tables
+var userRoleTableName = "sys_user_has_role";
+var taskTableName = "x_153465_discovert_route_task_instance";
+
+// get the current Date and Time in UTC (system internal)
+var getNow = function() {
+	return new GlideDateTime().getValue();
+};
+
+// get the date/time one minute ago  in UTC (system internal)
+var getOneMinuteAgo = function() {
+	var minutesGlide = new GlideDateTime();
+	minutesGlide.addSeconds(-60);
+	return minutesGlide.getValue();
+};
+
+// get the beginning of this week
+var getBeginningOfThisWeek = function() {
+	return gs.beginningOfThisWeek();
+};
+
+// get the end of this week
+var getEndOfThisWeek = function() {
+	return gs.endOfThisWeek();
+};
+
+// get the date/time one week ago today in UTC (system internal)
+var getOneWeekAgo = function() {
+	var weekAgo = new GlideDateTime();
+	weekAgo.addWeeksUTC(-1);
+	return weekAgo.getValue();
+};
+
+// get the data/time one week into the future from today in UTC (system internal)
+var getNextWeek = function() {
+	var nextWeek = new GlideDateTime();
+	nextWeek.addWeeksUTC(1);
+	return nextWeek.getValue();
+};
+
+// get beginning of next week
+var getBeginningOfNextWeek = function() {
+	return gs.beginningOfWeek(getNextWeek());
+};
+
+// get end of next week
+var getEndOfNextWeek = function() {
+	return gs.endOfWeek(getNextWeek());
+};
+
+// create a basic search digest pattern, this captures all the reused code and conditions
+// that are shared amongst all the queries that we need to perform, these conditions are
+// repeated for the required digests, so it makes more sense to write once and re-use the function
+var searchDigests = function(userId, andQuery) {
+	var firstCount = 0;
+	var secondCount = 0;
+	//at this point, andQuery consists of date lookups for each user
+	// what we want is to generally append additional static queries to return all user states
+	// count the number of times we fired this object and return
+	firstCount = tcs.countRelated(taskTableName, andQuery.concat([{"active":true},{"assigned_to":userId},{"state": ["IN","1,10,11,13,15"]}]));
+		secondCount = tcs.countRelated(taskTableName, andQuery.concat([{"active":true},{"state":14}, {"u_reviewer": userId}]));
+			return firstCount + secondCount;
+		};
+		
+		// this is the final "Task overdue" query, which is slimmed down to just what makes it different
+		// compared to the other three queries. Here you see that the only thing different is the suspense
+		// date timing across all of the queries.
+		var getOverdueVals = function(userId) {
+			var now = getNow();
+			var oneMinuteAgo = getOneMinuteAgo();
+			var andQueries = [
+			{"suspense_date":["<=", oneMinuteAgo]}
+				];
+				return searchDigests(userId, andQueries);
+			};
+			// search for all this weeks values when called
+			var getThisWeekVals = function(userId) {
+				var beginningOfWeek = getBeginningOfThisWeek();
+				var endOfWeek = getEndOfThisWeek();
+				var andQueries = [
+				{"suspense_date":[">=", beginningOfWeek]},
+					{"suspense_date":["<=", endOfWeek]}
+						];
+						return searchDigests(userId, andQueries);
+					};
+					// search for all next weeks values when called
+					var getNextWeekVals = function(userId) {
+						var beginningOfNextWeek = getBeginningOfNextWeek();
+						var endOfNextWeek = getEndOfNextWeek();
+						var andQueries = [
+						{"suspense_date":[">=", beginningOfNextWeek]},
+							{"suspense_date":["<=", endOfNextWeek]}
+								];
+								return searchDigests(userId, andQueries);
+							};
+							// search for all tasks that are upcoming when called
+							var getUpcomingTaskVals = function(userId) {
+								var endOfNextWeek = getEndOfNextWeek();
+								var andQueries = [
+								{"suspense_date":[">=", endOfNextWeek]}
+									];
+									return searchDigests(userId, andQueries);
+								};
+								
+								//calls the previous functions to develop a stateful object containing our filtered results
+								var getTaskDigestValues = function(userId) {
+									var overdueVal = getOverdueVals(userId);
+									var thisWeekVal = getThisWeekVals(userId);
+									var nextWeekVal = getNextWeekVals(userId);
+									var upcomingVal = getUpcomingTaskVals(userId);
+									
+									return {"Overdue":overdueVal, "ThisWeek":thisWeekVal, "NextWeek":nextWeekVal, "Upcoming":upcomingVal};
+									};
+									
+									
+									// Main execution block, this is the main methods that will call all of the above for each user
+									if(DEBUG) {
+										//DEBUG CODE
+										try{
+											var debugUserSysId = "";
+											//get user sys id
+											tcs.queryRelatedShort("sys_user", [{"user_name":debugUser}], function(user){
+												debugUserSysId = user.sys_id;
+												return null;
+											}, true);
+											
+											if(debugUserSysId) {
+												var templateValueMap = getTaskDigestValues(debugUserSysId);
+												gs.eventQueue("x_153465_discovert.Email Digest Event",null,debugUserSysId,JSON.stringify(templateValueMap));
+											} else {
+												gs.warn("User not found.");
+											}
+										}catch(e) {
+											gs.error(e);
+										}
+										//END DEBUG CODE
+									} else {
+										try{
+											//get the sysId for the tasker_user role
+											var roleTableName = "sys_user_role";
+											var roleNametoIdQuery = [{"name":"x_153465_discovert.tasker_user"}];
+												var roleRecords = tcs.queryRelated(roleTableName, roleNametoIdQuery, function(record){
+													return record.sys_id;
+												});
+												//get all users with the tasker_user role and send digest
+												var userQuery = [{"role":roleRecords[0]}];
+													//create a tracker map that will quickly determine if a user has been notified already
+													var trackUser = {};
+														//actually create the digest for each user found
+														tcs.queryRelated(userRoleTableName, userQuery, function(record) {
+															if(!trackUser[record.user.sys_id]) {
+																// generate the values that will go into the template
+																var templateValueMap = getTaskDigestValues(record.user.sys_id);
+																gs.eventQueue("x_153465_discovert.Email Digest Event",null,record.user.sys_id,JSON.stringify(templateValueMap));
+																
+																trackUser[record.user.sys_id] = true;
+															}
+															return null;
+														});
+													}catch(e) {
+														gs.error(e);
+													}
+												}
+												
+												
+												//For UNIT TESTING of single user
+												]]></script>
+        <sys_class_name>sysauto_script</sys_class_name>
+        <sys_created_by>kbaton</sys_created_by>
+        <sys_created_on>2019-04-24 22:30:39</sys_created_on>
+        <sys_id>25fe560ddb813700bb8ee536ca9619af</sys_id>
+        <sys_mod_count>128</sys_mod_count>
+        <sys_name>Tasker - Email Notification Digest</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sysauto_script_25fe560ddb813700bb8ee536ca9619af</sys_update_name>
+        <sys_updated_by>KTorres</sys_updated_by>
+        <sys_updated_on>2019-10-01 19:48:48</sys_updated_on>
+        <time_zone/>
+        <upgrade_safe>false</upgrade_safe>
+    </sysauto_script>
+</record_update>

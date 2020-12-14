@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function ($scope, spUtil) {
+// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// WIDGET BASE: FIELDS
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+//------------------------------------------------------------------------------------------------------------------------			
+	spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id); 
+	var onListClick = $scope.$on('$sp.list.click', refreshWidget);
+	var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+
+	function refreshWidget() { 
+		$scope.server.update();
+	}
+}
+
+]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: AYMAN ALZYOUD &amp;&amp; KARINA TORRES 
+// TASKER SUMMARY CARD
+//------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------
+// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+//------------------------------------------------------------------------------------------------------------------------
+
+.panel-heading {
+  font-size: 16px !important;
+}
+//------------------------------------------------------------------------------------------------------------------------		
+
+.m-n {
+  color: $primary;
+  font-weight: 550!important;
+}
+
+.row {
+  color: $default;
+}
+
+.options-btn {
+    border:none;
+    background-image:none;
+    background-color:transparent;
+    -webkit-box-shadow: none;
+    -moz-box-shadow: none;
+    box-shadow: none;
+}
+
+.glyphicon {
+	padding-right: 5px;
+}
+
+.success {
+    color: $success;
+}
+
+.danger {
+    color: $danger;
+}
+
+.warning {
+    color: $warning;
+}
+
+.primary {
+    color: $primary;
+}
+
+.default {
+    color: $icon-default-bg;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description>Show fields in the "Summary Card"</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>discovertasker-summarycard</id>
+        <internal>false</internal>
+        <link/>
+        <name>Tasker Summary Card</name>
+        <option_schema>[&#13;
+   {&#13;
+      "name": "pickup_msg",&#13;
+      "label": "Pickup message",&#13;
+      "type": "string"&#13;
+   }&#13;
+]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+// WIDGET BASE: FIELDS
+//------------------------------------------------------------------------------------------------------------------------
+(function(data, options) {
+    //2.5.21: 08.26.20 | DTLV | KT | Set up Title
+		if (options.show_systemfields == null)
+			data.show_systemfields = true;
+		else data.show_systemfields = options.show_systemfields;
+
+    data.pickupMsg = gs.getMessage(options.pickup_msg);
+    var gr = $sp.getRecord();
+    if (gr == null)
+        return;
+
+    data.canRead = gr.canRead();
+    if (!data.canRead)
+        return;
+
+    var agent = "";
+    var a = $sp.getField(gr, 'assigned_to');
+    if (a != null)
+        agent = a.display_value;
+
+    // KT - TLV - STRY0057360 - Macro Widget
+    var fields;
+    data.dynamic_tree = $sp.getParameter("dynamic_tree");
+    if (data.dynamic_tree == 'true') {
+        data.filter = options.filter;
+        fields = $sp.getFields(gr, data.filter);
+    } else {
+        fields = $sp.getFields(gr, 'comments,parent,u_task_tree,suggested_task,state,assigned_to,u_reviewer,suspense_date,tasker_type');
+				// STRY0089251 - this is a special case as we want to change the label and always show true
+				var reviewRequiredFieldToUse = {};
+				var reviewRequired = $sp.getField(gr, 'provide_response');
+				if (reviewRequired.display_value == 'true'){
+					reviewRequiredFieldToUse.label = reviewRequired.label;
+					reviewRequiredFieldToUse.type = reviewRequired.type;
+					reviewRequiredFieldToUse.value = reviewRequired.value;
+					reviewRequiredFieldToUse.display_value = reviewRequired.display_value;
+				}else{
+					reviewRequiredFieldToUse.label = gs.getMessage('Tasker - Label Review Optional');
+					reviewRequiredFieldToUse.value = 1;
+					reviewRequiredFieldToUse.display_value = 'true';
+					reviewRequiredFieldToUse.type = "boolean";
+				}
+				fields.push(reviewRequiredFieldToUse);
+			
+				fields.push($sp.getField(gr, 'primary_assignee'));
+				fields.push($sp.getField(gr, 'status'));
+				fields.push($sp.getField(gr, 'status_reason'));
+				fields.push($sp.getField(gr, 'progress_of_sub_tasks'));
+				fields.push($sp.getField(gr, 'u_parent_template'));
+				fields.push($sp.getField(gr, 'decision'));
+				fields.push($sp.getField(gr, 'on_behalf_of'));
+				fields.push($sp.getField(gr, 'u_task_requester'));
+			
+    }
+
+    // KT - TLV - STRY0057360 - Macro Widget: Add new condition
+    if ($sp.getParameter("table") == "x_153465_discovert_route_task_instance" && data.dynamic_tree != 'true') {
+        if (gr.getValue('parent') != null) {
+
+            var grParent = new GlideRecord(($sp.getParameter("table")));
+            if (grParent.get(gr.getValue('parent'))) {
+                if (grParent.assigned_to != null) {
+                    data.parent_assigned_to = grParent.getDisplayValue('assigned_to');
+                }
+            }
+        }
+
+        if (gr.getValue('state') == '3') {
+            fields.push($sp.getField(gr, 'u_completed_on_time'));
+        }
+        if (gr.getValue('u_clarification_requested') == '1') {
+            fields.push($sp.getField(gr, 'u_clarification_requested'));
+        }
+        if (gr.getValue('extension_requested') == '1') {
+            fields.push($sp.getField(gr, 'extension_requested'));
+        }
+        if (gr.getValue('reassignment_requested') == '1') {
+            fields.push($sp.getField(gr, 'reassignment_requested'));
+        }
+        // KT - STRY0061096	
+        var tDS = new taskerDocumentScripts();
+        var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(gr);
+
+        var sharedA = $sp.getField(gr, 'u_shared_attachments');
+        if (currentAttachDocSettings.sNOWAttachmentsOn == true) {
+            sharedA.display_value = currentAttachDocSettings.sharingAttachments.toString();
+            if (sharedA.display_value == "true")
+                fields.push(sharedA);
+        }
+
+        var sharedD = $sp.getField(gr, 'u_shared_documents');
+        if (currentAttachDocSettings.docIntDocumentsOn == true) {
+            sharedD.display_value = currentAttachDocSettings.sharingDocuments.toString();
+            if (sharedD.display_value == "true")
+                fields.push(sharedD);
+        }
+
+        fields.push($sp.getField(gr, 'originator'));
+    } /* else {
+        
+    }*/
+
+    if (data.show_systemfields) {
+				fields.push($sp.getField(gr, 'sys_created_by'));
+        fields.push($sp.getField(gr, 'sys_created_on'));
+        fields.push($sp.getField(gr, 'sys_updated_by'));
+        fields.push($sp.getField(gr, 'sys_updated_on'));
+    }
+
+
+
+    if ($sp.getParameter("table") == "x_153465_discovert_route_task_instance") {
+        //2.5.21: 08.26.20 | DTLV | KT | Set up Title
+        data.only_specified_fields = false || options.only_specified_fields;
+        data.title = options.title || gs.getMessage("Summary Card");// + gr.getValue('task_name');
+        data.parent_sys_id = gr.getValue('parent');
+    } else {
+        data.title = gr.getLabel();
+    }
+
+    data.tableLabel = gr.getLabel();
+    data.fields = fields;
+    data.variables = $sp.getVariablesArray();
+    data.agent = agent;
+    data.agentPossible = gr.isValidField("assigned_to");
+    data.table = gr.getTableName();
+    data.sys_id = gr.getUniqueValue();
+
+    //------------------------------------------------------ KTorres
+    //var currentUser = gs.getUser().getID(); 
+    //---------------------------------------------------------
+})(data, options)]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>kTorres</sys_created_by>
+        <sys_created_on>2017-12-19 16:30:04</sys_created_on>
+        <sys_id>432f2c8f4f8b0300303dc3818110c7d2</sys_id>
+        <sys_mod_count>617</sys_mod_count>
+        <sys_name>Tasker Summary Card</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_432f2c8f4f8b0300303dc3818110c7d2</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-07 10:32:50</sys_updated_on>
+        <template><![CDATA[<div ng-if="data.canRead" class="panel b">
+   <div class="panel-heading bg-primary">
+      <div ng-init="spSearch.targetRequests()">
+         <sp-c-link target="form" table="data.table" id="data.sys_id"/>
+      </div>
+      {{data.title}}
+   </div>
+   <div class="panel-body">
+      <div ng-if="data.fields.length > 0">
+         <div class="row">
+            <div class="col-md-6 col-sm-12 col-xs-6 m-b break-word" ng-repeat="field in data.fields" 
+               ng-if="field.value && (field.type != 'decimal' || field.type == 'decimal' && field.value != 0) " >
+               <label class="m-n">{{field.label}}</label>
+               <span ng-switch="field.type">
+                  <div ng-switch-when="reference" title="{{field.display_value}}">
+                     <span ng-switch="field.label">
+                        <div ng-switch-when="Parent" title="{{field.display_value}}">
+                           <a ng-href="{{'?id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance&sys_id=' + data.parent_sys_id}}">{{field.display_value}}</a>
+                        </div>
+                        <div ng-switch-when="Assigned Member" title="{{field.display_value}}">
+                           <span class="glyphicon glyphicon-user default" aria-hidden="true"></span>&nbsp;{{field.display_value}}
+                        </div>
+                        <div ng-switch-default>{{field.display_value}}</div>
+                     </span>
+                  </div>
+                  <div ng-switch-default>
+                     <div ng-switch="field.display_value">
+                        <div ng-switch-when="Critical"><span class="glyphicon glyphicon-flag danger" aria-hidden="true"></span>{{field.display_value}}</div>
+                        <div ng-switch-when="Warning"><span class="glyphicon glyphicon-flag warning" aria-hidden="true"></span>{{field.display_value}}</div>
+                        <div ng-switch-when="Projected on time"><span class="glyphicon glyphicon-flag success" aria-hidden="true"></span>{{field.display_value}}</div>
+                        <div ng-switch-when="true"><span class="glyphicon glyphicon-ok default" aria-hidden="true"></span></div>
+                        <div ng-switch-when="false"><span class="glyphicon glyphicon-remove default" aria-hidden="true"></span></div>
+                        <div ng-switch-default>{{field.display_value}}</div>
+                     </div>
+                  </div>
+               </span>
+            </div>
+            <div ng-if="data.variables.length > 0" ng-init="c.variable_toggle = true">
+               <button class="h4 options-btn" ng-click="c.variable_toggle = !c.variable_toggle" aria-expanded="{{c.variable_toggle}}" aria-controls="variables-toggle">
+               <span style="font-size: 12px;" class="glyphicon" ng-class="c.variable_toggle ? 'glyphicon-chevron-down' : 'glyphicon-chevron-up'"></span>
+               ${Options}
+               </button>
+               <div ng-if="c.variable_toggle" id="variables-toggle" aria-hidden="{{!c.variable_toggle}}">
+                  <hr role="presentation">
+                  <div class="m-b break-word" ng-repeat="variable in data.variables">
+                     <label class="m-n">{{variable.label}}</label>
+                     <div>{{variable.display_value}}</div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <div ng-if="data.agentPossible && !data.agent && options.pickup_msg" class="panel-footer">
+            <div id="ticket_fields_footer" class="text-center text-muted" style="font-style: italic;" ng-bind-html="data.pickupMsg">
+            </div>
+         </div>
+      </div>
+   </div>
+   <div ng-if="data.agentPossible && !data.agent && options.pickup_msg" class="panel-footer">
+      <div id="ticket_fields_footer" class="text-center text-muted" style="font-style: italic;" ng-bind-html="data.pickupMsg">
+      </div>
+   </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

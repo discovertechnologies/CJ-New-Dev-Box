@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerStatus</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>TaskerStatus</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var TaskerStatus = Class.create();
+TaskerStatus.prototype = {
+	initialize: function() {
+	},
+	
+	updateTaskerStatus : function(strquery){
+		
+		var daysBeforeSuspenseDateTaskStatusIsWarning = gs.getProperty("x_153465_discovert.#DaysBeforeSuspenseDateTaskStatusIsWarning");
+		
+		var now = new GlideDateTime();
+		var dateStatus = "";
+		var riskStatus = "";
+		var newTaskStatus = "";   //STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
+		
+		//Added Notifications
+		//KB 4/17/2019 - Modified active
+	
+		var gr = new GlideRecord('x_153465_discovert_route_task_instance');
+		if (!strquery) gr.addEncodedQuery('active=true^status!=Critical'); else gr.addEncodedQuery(strquery);
+		gr.query();
+		var count=0;
+		
+		
+		while(gr.next()) {
+			
+			//if(gr.active) {
+				// RAJ 2018-03-13 check supsense date before using
+				if(!gr.suspense_date.nil()){
+					var suspense = new GlideDateTime(gr.suspense_date);
+					if(!gr.warning_hours.nil()){
+						suspense.addDaysLocalTime(-gr.warning_hours);
+					}
+					else{
+						suspense.addDaysLocalTime(-daysBeforeSuspenseDateTaskStatusIsWarning);// - 3
+					}
+					var new_warningdate = suspense.getLocalDate();
+					
+					if (now > gr.suspense_date)
+						dateStatus = "Overdue";
+					else {
+						if (now > new_warningdate) {
+							dateStatus = "Warning";
+						}else{
+							dateStatus = "Projected on time";
+						}
+					}
+				} else {
+					dateStatus = "No Suspense Date";
+				}
+				// Pull Risk Information
+				if(gr.risk_flag==2){
+					riskStatus = "High Risk";
+				}
+				else if (gr.risk_flag==1) {
+					riskStatus = "Medium Risk";
+				}
+				else if (gr.risk_flag==0) {
+					riskStatus = "Low Risk";
+				}
+			
+				//STRY0071865 | 2.5.13 : Set new task status to variable
+				if ((dateStatus=="Overdue")  || (riskStatus=="High Risk")){
+					newTaskStatus = "Critical";
+					
+				}
+				else if ((dateStatus=="Warning")  || (riskStatus=="Medium Risk")){
+					newTaskStatus = "Warning";
+				}
+				else {
+					newTaskStatus = "Projected on time";
+				}
+				
+			//STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
+				if (gr.getValue('status') != newTaskStatus){
+					gr.status = newTaskStatus;
+					gr.update();
+				}
+								
+			}
+		},
+		
+		type: 'TaskerStatus'
+	};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2019-06-27 00:36:37</sys_created_on>
+        <sys_id>532e93d1db5eb3002658255c8a96192e</sys_id>
+        <sys_mod_count>41</sys_mod_count>
+        <sys_name>TaskerStatus</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_532e93d1db5eb3002658255c8a96192e</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-20 20:06:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

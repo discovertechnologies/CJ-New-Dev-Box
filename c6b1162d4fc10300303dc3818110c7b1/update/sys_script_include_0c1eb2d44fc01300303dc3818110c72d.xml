@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.OrganizationalScripts</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Taking a User, find the default OU for the user.  This is used anywhere the system is trying to set the default OU.  Putting it in a script include will make a switch from finding the highest OU for a member to finding the "Default OU" for a member if we choose to make that switch.</description>
+        <name>OrganizationalScripts</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var OrganizationalScripts = Class.create();
+OrganizationalScripts.prototype = {
+	initialize: function() {
+	},
+
+		//RJ -STRY0074663
+	saveContactInfo: function(contactData)
+	{
+		var success = false;
+		var bHaveContact = false;
+		var grUserInfo;
+		var sError = '';
+		var oContactData = JSON.parse(contactData);
+		if(oContactData.userId){
+			bHaveContact = true;
+			// TODO, NEED DECISION FROM EVAN ON WHERE/HOW TO STORE
+			// update the user Info or the table x_153465_discovert_external_poc_info 
+			// may want to check if the user can insert into the User table
+			grUserInfo = new GlideRecordSecure('sys_user');
+			if(grUserInfo.get(oContactData.userId)){
+				// found user, udpate information if possible
+				if(grUserInfo.canWrite()){
+					grUserInfo.first_name = oContactData.first_name;
+					grUserInfo.last_name = oContactData.last_name;
+					grUserInfo.title = oContactData.title;
+					grUserInfo.email = oContactData.email;
+					grUserInfo.mobile_phone = oContactData.mobile_phone;
+					grUserInfo.phone = oContactData.phone;
+					grUserInfo.update();
+					bHaveContact = true;
+				}else{
+					sError = 'The user ' + gs.getUserName() + ' does not have permissions to update the User in: ' + grUserInfo.getRecordClassName();
+					gs.addErrorMessage(sError);
+					gs.error(sError);
+				}
+			}
+		}
+
+		// Update or Insert the Tasker Contact table record to write the Note
+		if(bHaveContact){
+			// check to see if there is a Tasker Contact for this user.
+			var grTaskerContact = new GlideRecordSecure('x_153465_discovert_tasker_contacts');
+			grTaskerContact.addQuery('u_contact', oContactData.userId);
+			grTaskerContact.query();
+			var sTaskerContactId;
+			if(grTaskerContact.next()){
+				// there is a contract record, update the note.
+				grTaskerContact.u_contact_notes = oContactData.u_contact_notes;
+				sTaskerContactId = grTaskerContact.getUniqueValue();
+				grTaskerContact.update();
+			}else{
+				// the the Tasker Contact record for this user doesn't exist, create it to save the note.
+				grTaskerContact.initialize();
+				grTaskerContact.u_contact = oContactData.userId;
+				grTaskerContact.u_contact_notes = oContactData.u_contact_notes;
+				sTaskerContactId = grTaskerContact.insert();
+			}
+			var grOUContact = new GlideRecordSecure('x_153465_discovert_organizational_contacts');
+			grOUContact.addQuery('u_user_information', oContactData.userId);
+			grOUContact.addQuery('u_contact_ou', oContactData.u_contact_ou);
+			grOUContact.query();
+			if(grOUContact.next()){
+				// if this is an insert, the OU already has this contact, raise an error down
+				if(oContactData.ou_contact_row_id == -1){
+					sError = 'The contact selected is already in this OU.  Please select a different contact.';
+					gs.addErrorMessage(sError);
+				}else if(grOUContact.getUniqueValue() != oContactData.ou_contact_row_id){
+					// an update is being performed that matches an OU / user combination that is already on this OU raise an error
+					sError = 'The update attempted by the user would create a duplicate Contact and OU combination.  Please select a different contact.';
+					gs.addErrorMessage(sError);
+				}else{
+					// user is performing an update that changes information, but does not create a duplicate
+					grOUContact.u_user_information = oContactData.userId;
+					grOUContact.u_contact_ou = oContactData.u_contact_ou;
+					grOUContact.u_tasker_contact = sTaskerContactId;
+					grOUContact.update();
+				}
+			}else{
+				// OU and Contact relationship not found
+				if(oContactData.ou_contact_row_id == -1){
+					grOUContact.initialize();
+					grOUContact.u_user_information = oContactData.userId;
+					grOUContact.u_contact_ou = oContactData.u_contact_ou;
+					grOUContact.u_tasker_contact = sTaskerContactId;
+					grOUContact.insert();
+				}else{
+					// update is being performed and the OU - Contact relationship is changing to another combination that does not create a duplicate
+					// If the action is update, then, do a get instead of a query and use the ID from the OU Contact
+					if(grOUContact.get(oContactData.ou_contact_row_id)){
+						// user is performing an update that changes information, but does not create a duplicate
+						grOUContact.u_user_information = oContactData.userId;
+						grOUContact.u_contact_ou = oContactData.u_contact_ou;
+						grOUContact.u_tasker_contact = sTaskerContactId;
+						grOUContact.update();
+					}
+				}
+			}
+		}
+		success = answer == '' ? true: false;
+		return success;
+	},
+
+	//RJ -STRY0074663
+	getContactNote: function(strContactId)
+	{
+		var retContactNote;
+		var grContactNote = new GlideRecordSecure('x_153465_discovert_tasker_contacts');
+		grContactNote.addQuery('u_contact',strContactId);
+		grContactNote.query();
+		if(grContactNote.next()){
+			retContactNote = grContactNote.u_contact_notes;
+		}else{
+			retContactNote = '';
+		}
+		return retContactNote;
+	},
+	
+	//KT Added to resolve the bug of leaving the Member as Taskig Authority when it is deleted from an OU
+	RemoveMemberAsTaskingAuthority: function(strOU, strUserId)
+	{ 
+		// STRY0046028, STRY0085149
+		// NOTE: Glide Record secure did NOT work here, the user may have rights to remove a member, but not rights to update the OU
+		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		grOU.addQuery('sys_id',strOU);
+		grOU.query();
+		if(grOU.next()){
+			var tasking_authorities = grOU.tasking_authorities + '';
+			grOU.tasking_authorities = tasking_authorities.replaceAll(strUserId, '');
+			grOU.update();
+		}
+		return;
+	},
+	// Returns the default ou for a given user.
+	GetUserDefaultOU: function(strUserId)
+	{
+		var officeMembersQuery = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		officeMembersQuery.addQuery('office_member',strUserId);
+		officeMembersQuery.query();
+		var retOffice;
+		while(officeMembersQuery.next()){
+			if(officeMembersQuery.u_isdefaultou == true)
+				retOffice = officeMembersQuery.discover_office_hierarchy.toString();
+				}
+		
+		// var grOU = officeMembersQuery.addJoinQuery('x_153465_discovert_discover_office_hierarchy');
+		
+		
+		// TODO:  review this note and make choices, probably checking a single row is best
+		// NOTE:  we may need to have a member set thier default OU instead of doing this where the Default OU would be the first OU the member is added to
+		// NOTE: also, may need to make office to members a many to many relationship, can look into that later...
+		// If we don't make many to many, would need to have a checkbox on the member table thas says if this row is the default office for the member
+		// when checked, on insert or update, we would have to update all other rows for this member to false
+		
+		// order the OUs in ascending order b/c the level of the highest OU will be the lowest level.
+// 		officeMembersQuery.orderBy('office_level');
+// 		officeMembersQuery.query();
+// 		// based on the join, moving to the first record should be the highest office the current user i a member of
+// 		if(officeMembersQuery.next()){
+// 			retOffice = officeMembersQuery.discover_office_hierarchy.toString();
+// 		}
+		return retOffice;
+	},
+	
+	GetUserDefaultTaskingAuthority: function(strOU)
+	{
+		var retTaskingAuthority;
+		// look up this OU in the Tasking Authority list...
+		// If it exists, default the Tasking Authority to this OU, if not, return blank
+		var TaskingAuthorityQuery = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		TaskingAuthorityQuery.addQuery('sys_id',strOU);
+		TaskingAuthorityQuery.addQuery('includeintaskingauthority',true);
+
+		TaskingAuthorityQuery.query();
+		if(TaskingAuthorityQuery.next()){
+			
+			retTaskingAuthority = TaskingAuthorityQuery.sys_id;
+		}
+		return retTaskingAuthority;
+	},
+// 	// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
+// 	getTaskingAuthorityOrganizationalUnit: function(strTaskingAuthority)
+// 	{
+// 		var retTaskingAuthority;
+		
+// 		// look up this OU in the Tasking Authority list...
+// 		// If it exists, default the Tasking Authority to this OU, if not, return blank
+// 		var TaskingAuthorityQuery = new GlideRecordSecure('x_153465_discovert_tasking_authority');
+// 		if(TaskingAuthorityQuery.get(strTaskingAuthority)){
+// 			retTaskingAuthority = TaskingAuthorityQuery.organizational_unit;
+// 		}
+// 		return retTaskingAuthority;
+// 	},
+
+	// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
+	getOrganizationalUnitAbbrAndName: function(strOU)
+	{
+		var retAbbrAndName;
+		
+		// look up this OU in the Tasking Authority list...
+		// If it exists, default the Tasking Authority to this OU, if not, return blank
+		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		// STRY0072771 - Certification Debt
+		if(grOU.get(strOU)){
+			retAbbrAndName = grOU.office_abbreviation + '9999_9999' + grOU.office_name;
+		}
+		return retAbbrAndName;
+	},
+	
+	type: 'OrganizationalScripts'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-01-30 07:11:25</sys_created_on>
+        <sys_id>0c1eb2d44fc01300303dc3818110c72d</sys_id>
+        <sys_mod_count>87</sys_mod_count>
+        <sys_name>OrganizationalScripts</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_0c1eb2d44fc01300303dc3818110c72d</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-14 00:30:38</sys_updated_on>
+    </sys_script_include>
+</record_update>

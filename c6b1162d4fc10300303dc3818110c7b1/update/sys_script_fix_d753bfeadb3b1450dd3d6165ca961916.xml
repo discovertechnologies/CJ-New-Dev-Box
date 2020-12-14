@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <before>false</before>
+        <description>Default OUs before 2.5 Patch 2 were not always set correctly.&#13;
+&#13;
+How to validate the Fix Script&#13;
+How to test the fix script.&#13;
+&#13;
+1.  Run this query... &#13;
+https://ven02975.service-now.com/x_153465_discovert_discover_office_members_list.do?sysparm_query=u_default_ouISEMPTY%5Eu_isdefaultou%3Dtrue&amp;sysparm_view=global&#13;
+&#13;
+This represents all OUs where an OU is set to true, but the default OU is not set.&#13;
+&#13;
+Log the count.&#13;
+&#13;
+2. Run the fix Script&#13;
+&#13;
+3. Run the query again.&#13;
+https://ven02975.service-now.com/x_153465_discovert_discover_office_members_list.do?sysparm_query=u_default_ouISEMPTY%5Eu_isdefaultou%3Dtrue&amp;sysparm_view=global&#13;
+&#13;
+You should see no more results query.&#13;
+&#13;
+4. Run this query&#13;
+https://ven02975.service-now.com/x_153465_discovert_discover_office_members_list.do?sysparm_query=u_default_ouISEMPTY&amp;sysparm_view=global&#13;
+&#13;
+If any OUs had no true value set, then this query will show those users.&#13;
+This query should show now members also as the Default OU is set for all rows.&#13;
+</description>
+        <flush_cache>false</flush_cache>
+        <name>Tasker2.5_3_Fix_Default_OU</name>
+        <record_for_rollback>false</record_for_rollback>
+        <run_once>true</run_once>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+// STRY0082335 - Multiple Customers - OU Member management, "Default Member OU" is empty
+updateDefaultOUs();
+
+function updateDefaultOUs(){
+	var grMembers = new GlideRecord("x_153465_discovert_discover_office_members");
+	grMembers.addNullQuery('u_default_ou');
+	grMembers.addQuery('u_isdefaultou',true);
+	grMembers.query();
+	var fixedMembers = 0;
+	while(grMembers.next()){
+		//Set the previous default OU on update
+		grMembers.u_default_ou = grMembers.getValue('discover_office_hierarchy');
+		grMembers.update('Corrected by Fix Script.');
+		fixedMembers+=1;
+	}
+	// all Members that have a "true" value set for a u_isdefaultOU now have the u_default_ou set
+	// run another query showing all members that have no u_default_ou set
+	// this will find all members that still have no default OU set
+	// take the first record for each unique sys_id and set this as the default OU
+	grMembers = new GlideRecord("x_153465_discovert_discover_office_members");
+	grMembers.addNullQuery('u_default_ou');
+	grMembers.query();
+	var skipSameMember = '';
+	while(grMembers.next()){
+		if(skipSameMember != grMembers.getValue('office_member')){
+			//Set the previous default OU on update
+			grMembers.u_default_ou = grMembers.getValue('discover_office_hierarchy');
+			grMembers.update('Corrected by Fix Script.');
+			// set the skip member value, if the same user is in the table more than once, set default to the first row found.
+			skipSameMember = grMembers.getValue('office_member');
+			fixedMembers+=1;
+		}
+	}
+	
+	// now find the default OU for every member
+	// then find any rows that have a different Default OU set for that member and update both the default OU and the previous Default OU
+	grMembers = new GlideRecord("x_153465_discovert_discover_office_members");
+	grMembers.addQuery('u_isdefaultou',true);
+	grMembers.query();
+	while(grMembers.next()){
+		// this has the default OU for the member
+		// find rows that don't match this
+		var grMemberOUs = new GlideRecord("x_153465_discovert_discover_office_members");
+		grMemberOUs.addQuery("u_default_ou", "!=", grMembers.getValue('discover_office_hierarchy'));
+		grMemberOUs.addQuery("office_member", grMembers.getValue('office_member'));
+		grMemberOUs.query();
+		while(grMemberOUs.next()){
+
+			grMemberOUs.u_default_ou = grMembers.discover_office_hierarchy;
+			grMemberOUs.update('Corrected by Fix Script.');
+			fixedMembers+=1;
+		}
+	}
+	
+	// now find the default OU for every member
+	// then find any rows that have a different Default OU set for that member and update both the default OU and the previous Default OU
+	grMembers = new GlideRecord("x_153465_discovert_discover_office_members");
+	grMembers.query();
+	while(grMembers.next()){
+		// this has the default OU for the member
+		// find rows that don't match this
+		grMemberOUs = new GlideRecord("x_153465_discovert_discover_office_members");
+		grMemberOUs.addQuery('u_isdefaultou',true);
+		grMemberOUs.addQuery("office_member", grMembers.getValue('office_member'));
+		grMemberOUs.query();
+		if(!grMemberOUs.next()){
+			grMembers.u_isdefaultou = true;
+			grMembers.update('Corrected by Fix Script.');
+			grMembers+=1;
+		}
+	}	
+	gs.info('Tasker Fix Script - Tasker2.5_3_Fix_Default_OU corrected the default OU for ' + fixedMembers + ' members.');
+}
+]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-10-15 05:22:14</sys_created_on>
+        <sys_id>d753bfeadb3b1450dd3d6165ca961916</sys_id>
+        <sys_mod_count>9</sys_mod_count>
+        <sys_name>Tasker2.5_3_Fix_Default_OU</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_d753bfeadb3b1450dd3d6165ca961916</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-13 16:57:21</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>

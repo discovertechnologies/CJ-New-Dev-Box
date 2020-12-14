@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_153465_discovert_route_task_instance</collection>
+        <condition/>
+        <description>2.5 P3&#13;
+STRY0085438 - FIX: Javascript error on new "Modals"</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>Tasker - onLoad - set max routes</name>
+        <order>400</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+(function executeRule(current, previous /*null when async*/) {
+	// STRY0085438
+	var taskPermissions = new TaskerHelpers().updateTaskPermission(current);
+	g_scratchpad.taskPermissions = JSON.stringify(taskPermissions);
+	
+	var taskOwnerId = current.u_task_requester;
+	var OrgScripts = new ClientOrganizationalScripts();
+	g_scratchpad.isUserOUTAOfAnotherUserBasedOnDefaultOu = OrgScripts.isUserOUTAOfAnotherUserBasedOnDefaultOu(gs.getUserID(), taskOwnerId);
+	var primary_assignee = current.primary_assignee;
+	var reviewer = current.u_reviewer;
+	var UserPermissions = new UserInfoScripts();	
+	g_scratchpad.reviewerInOUTA_OU = UserPermissions.IsUserInOU(primary_assignee, reviewer);
+	g_scratchpad.isTAExternal = current.tasking_authority !='' ? current.tasking_authority.u_external_flag : false;
+	g_scratchpad.isTaskManagerOUTA = UserPermissions.IsUserOUTA(gs.getUserID(),primary_assignee);
+	g_scratchpad.currentState = (current.isNewRecord()) ? "New" : current.getValue("state");
+	g_scratchpad.taskType = current.getDisplayValue("tasker_type");
+	
+	g_scratchpad.maxTaskOrder = 0;
+	g_scratchpad.taskParent = current.parent;
+	g_scratchpad.calchaschildren = current.calchaschildren;
+	
+	// STRY0071489
+	g_scratchpad.primary_office_must_match_Internal_tasking_authority = gs.getProperty('x_153465_discovert.primary_office_must_match_Internal_tasking_authority');
+	
+	// STRY0071533 - get system setting on load
+	g_scratchpad.suspenseDatesAndExpctedStartDatesMustBeInTheFuture = gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future');
+
+	g_scratchpad.parent_sys_id = '';
+	g_scratchpad.parent_active = '';
+	g_scratchpad.parent_number = '';
+
+	// set the maximum value to display in the routes dropdown
+	var gaGetMaxTaskOrder;
+	if (!current.parent.nil()){
+		g_scratchpad.parent_sys_id = current.parent + '';
+		g_scratchpad.parent_active = current.parent.active;
+		g_scratchpad.parent_number = current.parent.number;
+//gs.addInfoMessage('Calculating Max routes for task with Parent: ' + current.parent.short_description);
+		gaGetMaxTaskOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
+		gaGetMaxTaskOrder.addQuery('parent', current.parent);
+		gaGetMaxTaskOrder.addAggregate('MAX', 'task_order');
+		gaGetMaxTaskOrder.groupBy('parent');
+		gaGetMaxTaskOrder.query();
+		if(gaGetMaxTaskOrder.next()){
+			g_scratchpad.maxTaskOrder = gaGetMaxTaskOrder.getAggregate('MAX', 'task_order');
+//gs.addInfoMessage('scratchpad set to max routes g_scratchpad.maxTaskOrder: ' + g_scratchpad.maxTaskOrder);
+		}
+	}
+	// STRY0076615 - Task Form – TASK ORDER Field – Set order value on load
+	if(current.isNewRecord()){
+		// if top task, or no siblings found, set the value to 1
+		if (current.parent == '' || g_scratchpad.maxTaskOrder == 0){
+			g_scratchpad.currentTaskOrderValue = 1;
+		} else {
+			// if not first task set the current order to be the highest order currently in the tree so the tasks build in the current order.
+			g_scratchpad.currentTaskOrderValue = g_scratchpad.maxTaskOrder;
+		}
+	} else {
+		// save current value to set back in form after reloading option list
+		g_scratchpad.currentTaskOrderValue = current.task_order;
+	}
+	
+	// move to task, not just on parent
+	// STRY0016025- RAJ 2019-04-20 - Determine if Tasker close date is beyond the allowable reopen days
+	g_scratchpad.closed_to_long_to_reopen = false;
+	g_scratchpad.ReopenMaxDays = gs.getProperty('x_153465_discovert.ReopenMaxDays');
+	var maxReopenDate = new GlideDateTime(gs.daysAgo(gs.getProperty('x_153465_discovert.ReopenMaxDays'))).getNumericValue();
+	g_scratchpad.closed_at = current.closed_at;
+	var closedAt = new GlideDateTime(current.closed_at).getNumericValue();
+	if(!current.active)
+		g_scratchpad.closed_to_long_to_reopen = (closedAt < maxReopenDate);
+	
+	var bCanReopen = (!current.active && (current.parent?current.parent.active:true));
+	g_scratchpad.hasCanceledSubtask = 'false';
+	// STRY0016025- RAJ 2019-04-20 - all logic passed, reopen the Task.
+	if (bCanReopen){
+		var grSubTasksClosedIncomplete = new GlideRecord('x_153465_discovert_route_task_instance');
+		grSubTasksClosedIncomplete.addQuery('parent', current.getUniqueValue());
+		grSubTasksClosedIncomplete.addQuery('state', 4);
+		grSubTasksClosedIncomplete.query();
+		while (grSubTasksClosedIncomplete.next()){
+			// recursively reopen down the tree
+			g_scratchpad.hasCanceledSubtask = 'true';
+			break;
+		}
+	}
+
+/*
+gs.addInfoMessage('RJ - Testing - g_scratchpad.closed_to_long_to_reopen: ' + g_scratchpad.closed_to_long_to_reopen);
+gs.addInfoMessage('RJ - Testing - g_scratchpad.ReopenMaxDays: ' + g_scratchpad.ReopenMaxDays);
+gs.addInfoMessage('RJ - Testing - gs.daysAgo(gs.getProperty(x_153465_discovert.ReopenMaxDays)): ' + gs.daysAgo(gs.getProperty('x_153465_discovert.ReopenMaxDays')));
+gs.addInfoMessage('RJ - Testing - g_scratchpad.closed_at: ' + g_scratchpad.closed_at);
+gs.addInfoMessage('RJ - Testing - closedAt: ' + closedAt);
+gs.addInfoMessage('RJ - Testing - maxReopenDate: ' + maxReopenDate);
+	
+gs.addInfoMessage('RJ - Testing - !current.active: ' + !current.active);	
+gs.addInfoMessage('RJ - Testing - bCanReopen: ' + bCanReopen);		
+gs.addInfoMessage('RJ - Testing - g_scratchpad.hasCanceledSubtask: ' + g_scratchpad.hasCanceledSubtask);
+*/
+	
+//gs.addInfoMessage('Calculated max Route to be: ' + g_scratchpad.maxTaskOrder);
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-05-19 20:14:38</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>e5784befdbc29f003a8d6be3ca961965</sys_id>
+        <sys_mod_count>41</sys_mod_count>
+        <sys_name>Tasker - onLoad - set max routes</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_e5784befdbc29f003a8d6be3ca961965</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-07 11:07:45</sys_updated_on>
+        <template/>
+        <when>before_display</when>
+    </sys_script>
+    <sys_translated_text action="delete_multiple" query="documentkey=e5784befdbc29f003a8d6be3ca961965"/>
+</record_update>

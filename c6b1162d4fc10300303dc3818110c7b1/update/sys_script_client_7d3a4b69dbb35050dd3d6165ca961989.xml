@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>2.5 Patch 3&#13;
+STRY0082087 - Restricted Group - (Portal &amp; Platform)Task Form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083025 - Restricted Group - (Portal &amp; Platform) Template  form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083027 - Restricted Group - (Portal &amp; Platform) Template  Task form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+&#13;
+When the restricted group changes, validate selected OUs and Members&#13;
+</description>
+        <field>assignment_group</field>
+        <global>true</global>
+        <isolate_script>true</isolate_script>
+        <messages/>
+        <name>Task - onChange - Restricted Group</name>
+        <order/>
+        <script><![CDATA[function onChange(control, oldValue, newValue, isLoading, isTemplate) {
+   if (isLoading || newValue === '') {
+      return;
+   }
+
+	// get values off of the form to use to retrieve names
+	var formValues = {};
+	formValues.u_reviewer = {id:g_form.getValue('u_reviewer'), name:'' };
+	formValues.assigned_to = {id:g_form.getValue('assigned_to'), name:'' };
+	formValues.on_behalf_of = {id:g_form.getValue('on_behalf_of'), name:'' };
+	formValues.u_internal_contact = {id:g_form.getValue('u_internal_contact'), name:'' };
+	formValues.poc_name = {id:g_form.getValue('poc_name'), name:'' };
+	formValues.u_subtask_assigned_member_s = {ids:g_form.getValue('u_subtask_assigned_member_s'), names:'', arrIds: g_form.getValue('u_subtask_assigned_member_s').split(','), arrNames:[], arrKeepIds:[] };
+	
+	formValues.tasking_authority = {id:g_form.getValue('tasking_authority'), abbr:'' };
+	formValues.primary_office = {id:g_form.getValue('primary_office'), abbr:'' };
+	formValues.primary_assignee = {id:g_form.getValue('primary_assignee'), abbr:'' };
+	formValues.u_subtask_primary_assignee_s = {ids:g_form.getValue('u_subtask_primary_assignee_s'), abbrs:'', arrIds: g_form.getValue('u_subtask_primary_assignee_s').split(','), arrAbbrs:[], arrKeepIds:[] };
+	formValues.u_external_ou = {id:g_form.getValue('u_external_ou'), abbr:''};
+	
+	var formLabels = {};
+	formLabels.u_reviewer = g_form.getLabelOf('u_reviewer');
+	formLabels.assigned_to = g_form.getLabelOf('assigned_to');
+	formLabels.on_behalf_of = g_form.getLabelOf('on_behalf_of');
+	formLabels.u_internal_contact = g_form.getLabelOf('u_internal_contact');
+	formLabels.poc_name = g_form.getLabelOf('poc_name');
+	formLabels.u_subtask_assigned_member_s = g_form.getLabelOf('u_subtask_assigned_member_s');
+	formLabels.tasking_authority = g_form.getLabelOf('tasking_authority');	
+	formLabels.primary_office = g_form.getLabelOf('primary_office');	
+	formLabels.primary_assignee = g_form.getLabelOf('primary_assignee');	
+	formLabels.u_subtask_primary_assignee_s = g_form.getLabelOf('u_subtask_primary_assignee_s');	
+	formLabels.u_external_ou = g_form.getLabelOf('u_external_ou');	
+	formLabels.UI_Type = typeof spModal != 'undefined' ? 'Portal' : 'Platform';
+
+	// Get the OUs and Members allowed for the restricted group
+	var taskInfo  = new GlideAjax('ClientTaskInfo');
+	taskInfo.addParam('sysparm_name','getMembersAndOUsForRestrictedGroup');
+	taskInfo.addParam("newRestrictedGroupId", newValue);
+	taskInfo.addParam("previousRestrictedGroupId", oldValue);
+	taskInfo.addParam("formValues", JSON.stringify(formValues));
+	taskInfo.addParam("formLabels", JSON.stringify(formLabels));
+
+	// call script include to determine if this user is a tasking authority of the primary assignee OU.
+	taskInfo.getXML(f_returnGetMembersAndOUsForRestrictedGroup);
+}
+
+function f_returnGetMembersAndOUsForRestrictedGroup(response)
+{
+	var answer = response.responseXML.documentElement.getAttribute("answer");
+	// if the current user is a Tasking Authority in the OU, allow them to change the assigned members
+	var restrictedOUsandMembers = JSON.parse(answer);
+
+	var msg = restrictedOUsandMembers.restrictedGroupMessage;
+	var clear_fields = restrictedOUsandMembers.clear_fields;
+	
+	// only get confirmation if a field violates the restricted group
+	if(clear_fields.tasking_authority
+	   || clear_fields.primary_office
+	   || clear_fields.primary_assignee
+	   || clear_fields.u_subtask_primary_assignee_s
+	   || clear_fields.u_external_ou
+	   || clear_fields.u_reviewer
+	   || clear_fields.assigned_to
+	   || clear_fields.on_behalf_of
+	   || clear_fields.poc_name
+	   || clear_fields.u_internal_contact	   
+	   || clear_fields.u_subtask_assigned_member_s	   
+	  ){
+		var ConfirmOrNot = false;
+		if (typeof spModal != 'undefined') {
+			spModal.confirm(msg).then(function(confirmed){
+				f_confirmationAnswer(confirmed, restrictedOUsandMembers);
+			}, function(confirmed) {
+				f_confirmationAnswer(confirmed,restrictedOUsandMembers);
+			});
+		} else {
+			var gm = new GlideModal('UI_dialog_name');
+			//Sets the dialog title
+			// no easy way to put a button on this without building a page just for confirmation
+			// we probably should add a page just for confirmation in the future, but for now it will be faster to just stay with confrim
+			//gm.setTitle('Show title'); 
+			//gm.setPreference('name', 'value');
+			//gm.setWidth(550);
+			//Opens the dialog
+			//gm.render(); 
+			//gm.renderWithContent(msg);
+
+			ConfirmOrNot=confirm(msg);
+			f_confirmationAnswer(ConfirmOrNot,restrictedOUsandMembers);
+		}
+		
+	}
+}
+
+function f_confirmationAnswer(confrim, restrictedOUsandMembers) {
+	var clear_fields = restrictedOUsandMembers.clear_fields;
+	var previousRestrictedGroupId = restrictedOUsandMembers.previousRestrictedGroupId;
+	var keepMemIds = restrictedOUsandMembers.returnFormValues.u_subtask_assigned_member_s.arrKeepIds.join(',');
+	var keepOUIds = restrictedOUsandMembers.returnFormValues.u_subtask_primary_assignee_s.arrKeepIds.join(',');
+	if (confrim==true) {
+		// clear OUs and members not in the restricted group
+		if(clear_fields.tasking_authority) g_form.clearValue('tasking_authority');
+		if(clear_fields.primary_office) g_form.clearValue('primary_office');
+		if(clear_fields.primary_assignee) g_form.clearValue('primary_assignee');
+		if(clear_fields.u_subtask_primary_assignee_s) g_form.setValue('u_subtask_primary_assignee_s', keepOUIds);
+		if(clear_fields.u_external_ou) g_form.clearValue('u_external_ou');
+		if(clear_fields.u_reviewer) g_form.clearValue('u_reviewer');
+		if(clear_fields.assigned_to) g_form.clearValue('assigned_to');
+		if(clear_fields.on_behalf_of) g_form.clearValue('on_behalf_of');
+		if(clear_fields.u_internal_contact) g_form.clearValue('u_internal_contact');
+		if(clear_fields.poc_name) g_form.clearValue('poc_name');
+		if(clear_fields.u_subtask_assigned_member_s) g_form.setValue('u_subtask_assigned_member_s', keepMemIds);
+	} else {
+		g_form.setValue('assignment_group', previousRestrictedGroupId);
+	}
+}]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-10-11 23:44:31</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>7d3a4b69dbb35050dd3d6165ca961989</sys_id>
+        <sys_mod_count>95</sys_mod_count>
+        <sys_name>Task - onChange - Restricted Group</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_client_7d3a4b69dbb35050dd3d6165ca961989</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-10-20 06:28:24</sys_updated_on>
+        <table>x_153465_discovert_route_task_instance</table>
+        <type>onChange</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

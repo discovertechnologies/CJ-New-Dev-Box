@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.taskerDocumentScripts</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.5 P3 &#13;
+STRY0080141 - UIFormatter - STRETCH - (PLATFORM) My Documents Tab and Shared DocumentsTab on the Task Form.&#13;
+STRY0080143 - UIFormatter - STRETCH - (PLATFORM) Top Task Owner OR Assigned Member selects a UI to Enable OR Disable Shared Documents on the entire task tree.&#13;
+STRY0080193 - UIFormatter - STRETCH - (PLATFORM) Documents - Disable Sharing UI  - Warning Confirmation message Tasker Scrum Team.&#13;
+STRY0080195 - UIFormatter - STRETCH - (PLATFORM) Task User uploading documents to the My Documents tab.&#13;
+STRY0080196 - UIFormatter - STRETCH - (PLATFORM) Task User uploads DocInt documents to the Shared Documents tab.&#13;
+&#13;
+The Tasker application throughout checks &#13;
+- Is the Application wide ServiceNow Attachments on&#13;
+- Is shared attachments on for the Task&#13;
+- Is the Application wide DocInt Documents on&#13;
+- Is shared documents on for the Task&#13;
+- Is shared attachments on for the Process Template&#13;
+- Is shared attachments on for the Process Task Template&#13;
+This set of scripts was created to put all of these checks in one place&#13;
+&#13;
+This script also handles all document and attachment copying&#13;
+</description>
+        <name>taskerDocumentScripts</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//  RAJ STRY0063746 new functions called by server events to check document settings
+// this keeps all of the code and logic in one place
+var taskerDocumentScripts = Class.create();
+taskerDocumentScripts.prototype = {
+	initialize: function() {
+	},
+	
+	// STRY0080196 - UIFormatter 
+	isInstalled: function() {
+		var result = {};
+		result.activated = this.isActivated();
+		var gr = new GlideRecord('sys_app_application');
+		gr.addQuery('sys_name', 'DocIntegrator');
+		gr.query();
+		if(gr.next()){
+			result.installed = true;
+		}
+		
+		if (result.activated && result.installed ) {
+			result.msg = 'Docintegrator is Activated and Installed';
+			result.code = 1;
+		} else if (!result.activated && result.installed ) {			
+			result.msg = 'Docintegrator is Installed and Not Activated';
+			result.code = 2;
+		} else if (result.activated && !result.installed ) {
+			result.msg = "DocIntegrator is Activated and Not Installed";
+			result.code = 3;
+		} else if (!result.activated && !result.installed ) {
+			result.msg = "DocIntegrator is Not Activated and Not Installed";
+			result.code = 4;			
+		}
+        gs.debug("result from script include: " + JSON.stringify(result));
+		return result;
+	},
+
+	isActivated: function() {
+		var result = this.getAttachmentSystemSettings().docIntDocumentsOn;
+		if (result) {
+			gs.debug('DocIntegrator is activated.');
+		} else {
+			gs.debug('DocIntegrator is not activated.');
+		}
+		return result;
+	},	
+	
+	// RAJ 2020.11.04  separate the code to just get system properties so it can be used with out a glide record.
+	// Object - taskerDocumentSettings
+	//	- taskerDocumentSettings.sNOWAttachmentsOn - true if the global setting for ServiceNow Attachments is on
+	//	- taskerDocumentSettings.docIntDocumentsOn - true if DocInt Documents is on
+	getAttachmentSystemSettings: function() {
+		var systemSettingsUseAttachmentsorDocuments = {};
+			var propertyUseAttachmentsorDocuments = gs.getProperty("x_153465_discovert.UseAttachmentsorDocuments");
+			systemSettingsUseAttachmentsorDocuments.sNOWAttachmentsOn = (propertyUseAttachmentsorDocuments.startsWith("1") || propertyUseAttachmentsorDocuments.startsWith("3"));
+			systemSettingsUseAttachmentsorDocuments.docIntDocumentsOn = (propertyUseAttachmentsorDocuments.startsWith("2") || propertyUseAttachmentsorDocuments.startsWith("3"));
+		return systemSettingsUseAttachmentsorDocuments;
+
+	},
+	
+	// RAJ 2020.03.22  STRY0063746 - this function takes different glide record types and returns the documents, attachments and shared values for that object
+	// -------------------------------------------------------------------------------------------------------
+	// Input Values
+	// -------------------------------------------------------------------------------------------------------
+	// gr - Glide Record
+	//    Accepted glide records for this function (more could be added)
+	//    Task - tableName == "x_153465_discovert_route_task_instance"
+	//    Process Template - tableName == "x_153465_discovert_discover_routing_template"
+	//    Process Template Task - tableName == "x_153465_discovert_route_tasks"
+	// -------------------------------------------------------------------------------------------------------
+	// Return Values
+	// -------------------------------------------------------------------------------------------------------
+	// Object - taskerDocumentSettings
+	//	- taskerDocumentSettings.sNOWAttachmentsOn - true if the global setting for ServiceNow Attachments is on
+	//  - taskerDocumentSettings.sharingAttachments - true if sharing Attachments is on
+	//	- taskerDocumentSettings.docIntDocumentsOn - true if DocInt Documents is on
+	//  - taskerDocumentSettings.sharingDocuments - true sharing Documents is on
+	getAttachmentAndDocumentSettings: function(gr){
+		var taskerDocumentSettings = {};
+		taskerDocumentSettings.sNOWAttachmentsOn = false;
+		taskerDocumentSettings.docIntDocumentsOn = false;
+		taskerDocumentSettings.sharingAttachments = false;
+		taskerDocumentSettings.sharingDocuments = false;
+		
+		var systemSettingsUseAttachmentsorDocuments = this.getAttachmentSystemSettings();
+		taskerDocumentSettings.sNOWAttachmentsOn = systemSettingsUseAttachmentsorDocuments.sNOWAttachmentsOn == true;
+		taskerDocumentSettings.docIntDocumentsOn = systemSettingsUseAttachmentsorDocuments.docIntDocumentsOn == true;
+		if (gr.sys_id != -1){
+			
+			var tableName = gr.getRecordClassName();
+			// if the glide record is a Task Instance, get the Shared Settings from the top task
+			if (tableName == "x_153465_discovert_route_task_instance"){
+				taskerDocumentSettings.sharingAttachments = (gr.u_top_task.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
+				taskerDocumentSettings.sharingDocuments = (gr.u_top_task.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
+			}
+			if (tableName == "x_153465_discovert_task_tree"){
+				taskerDocumentSettings.sharingAttachments = (gr.u_task_ref.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
+				taskerDocumentSettings.sharingDocuments = (gr.u_task_ref.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
+			}
+			// if the glide record is a Process Template, get the Shared Settings from the Process Template
+			if (tableName == "x_153465_discovert_discover_routing_template"){
+				taskerDocumentSettings.sharingAttachments = (gr.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
+				taskerDocumentSettings.sharingDocuments = (gr.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
+			}
+			// if the glide record is a Process Template Task, get the Shared Settings from the Process Template Task's - Process Template
+			if (tableName == "x_153465_discovert_route_tasks"){
+				taskerDocumentSettings.sharingAttachments = (gr.tasker_process_definition.u_shared_attachments  == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
+				taskerDocumentSettings.sharingDocuments = (gr.tasker_process_definition.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
+			}
+			// RJ - PSD - STRY0064692 - first try to save documents to the Shared Documents folder for the Task Tree.
+			if (tableName == "x_153465_discovert_suggested_taskers"){
+				// just return value of sNOWAttachmentsOn for Suggested Taskers
+				taskerDocumentSettings.sharingAttachments = taskerDocumentSettings.sNOWAttachmentsOn == true;
+				// just return value of docIntDocumentsOn for Suggested Taskers
+				taskerDocumentSettings.sharingDocuments = taskerDocumentSettings.docIntDocumentsOn == true;
+			}
+			// RJ first try to save documents to the Shared Documents folder for the Task Tree.
+			if (tableName == "x_153465_discovert_discover_routing_runtime"){
+				// just return value of sNOWAttachmentsOn for Suggested Taskers
+				taskerDocumentSettings.sharingAttachments = taskerDocumentSettings.sNOWAttachmentsOn == true;
+				// just return value of docIntDocumentsOn for Suggested Taskers
+				taskerDocumentSettings.sharingDocuments = taskerDocumentSettings.docIntDocumentsOn == true;
+			}
+			
+		}
+		return taskerDocumentSettings;
+	},
+	
+
+	// RJ - PSD - STRY0063746 - Copy My Attachments and Shared Attachments from any Object to another object
+	//      this method uses standard servicenow methods, but it checks the system settings and object settings before performing the copy
+	//      Then, it only perfomrs the copy when the appropriate settings for the requested copy are provided
+	// -  fromObject - the ServiceNow ojbect documents are being copied from
+	// -  destinationObject - the ServiceNow ojbect documents are being copied to
+	// -  copyType - MyAttachments, SharedAttachments
+	copyAttachments: function(fromObject, destinationObject, copyType){
+			var attachDocSettings = this.getAttachmentAndDocumentSettings(fromObject);
+			// if SNAttachments is on, then copy attacments from one SN object to antoher SN object
+			// if SNShared is on, then copy attacments from one SN object to antoher SN object
+			if (   (copyType == 'My' && attachDocSettings.sNOWAttachmentsOn)
+ 			|| (copyType == 'Shared' && attachDocSettings.sharingAttachments)
+			)
+			{
+				// get the from tablename
+				var fromTableName = fromObject.getRecordClassName();
+				// get the from tablename
+				var destinationTableName = destinationObject.getRecordClassName();
+
+				GlideSysAttachment.copy(fromTableName, fromObject.sys_id, destinationTableName, destinationObject.sys_id);
+			}
+		
+		// copy function completed successfully
+		return true;
+	},
+		// RJ - PSD - STRY0063746 - Copy My Documents and Shared Documents from each Process Template Task into all individual tasks created when process is run.
+		// This function is used for all copying of documents in the system.
+		// -----------------Inputs-------------------------------------------------------------------
+		// -  fromObject - the ServiceNow ojbect documents are being copied from
+		// -  destinationObject - the ServiceNow ojbect documents are being copied to
+		// -  copyType -
+		//     - 'MyToShared'
+		//          There are a couple specific cases (Process Instance -> Shared Task and Suggested Task -> Shared Task)
+		//          In those cases documents are copied from a My folder to a Shared folder
+		//          in these cases, try going form from ServiceNow to a DocInt repository first
+		//          if DocInt is off, then go from ServiceNow My folder to ServiceNow Shared folder (object is provided either way)
+		//     - 'Shared'
+		//          Copy Shared to Shared, the key thing here is are shared documents on for the object passed
+		//     - 'My
+		//          Copy My to My, the key thing here is are shared documents on for the object passed
+		//     
+		// -  fromConfigId - DocIntegrator configuration id for the query mapping when documents are being copied out of DocIntegrator
+		// -  toConfigId - DocIntegrator configuration id for the mapping of infromation when documents are being copied into DocIntegrator
+		copyDocuments: function(fromObject, destinationObject, copyType, fromConfigId, toConfigId){
+			// get the document and attachment configuration for the from Object
+			var attachDocSettings = this.getAttachmentAndDocumentSettings(fromObject);
+			var cmd = new x_dtll2_contentint.CopyAndMoveDocuments();
+			var eventArgs;
+			// get the from tablename
+			var fromTableName = fromObject.getRecordClassName();
+			// get the from tablename
+			var destinationTableName = destinationObject.getRecordClassName();
+
+			// If copyType is singleToShared, check if DocInt is on before processing.
+			// In these special cases, there is no DocInt on the single.  So, try copy to DI shared.
+			// If DocInt is Off, call copy attachments to copy from SN to SN
+			// Otherwise items are copied to like types
+			switch(copyType){
+				case 'MyToShared':
+					if (attachDocSettings.sharingDocuments) {
+						
+						// copy from ServiceNow to Shared DocIntegrator
+						eventArgs = {
+							"sourceTableName": fromTableName,
+							"sourceTableItemID": fromObject.sys_id,
+							//"sourceView": fromConfigId, NOT needed for this type of event.  ServiceNow to SharePoint copy doen't need a source configuration.
+							"isAsync" : true,
+							"event" : "x_dtll2_contentint.SNtoSP",
+							"targetView": toConfigId,
+							"targetTableName": destinationTableName,
+							"targetTableItemID" : destinationObject.sys_id
+						};
+						cmd.createEvent(eventArgs);
+					}else {
+						// In this case, the calling function needs to know that the copy from SN to SP didn't happen b/c DocInt is off
+						// The calling function will need to call copyAttachments when false is returned
+						return false;
+					}
+					
+					break;
+				case 'My':  
+					if(attachDocSettings.docIntDocumentsOn){
+						eventArgs = {
+							"sourceTableName": fromTableName,
+							"sourceTableItemID": fromObject.sys_id,
+							"sourceView": fromConfigId,
+							"isAsync" : true,
+							"event" : "x_dtll2_contentint.SPtoSP",
+							"targetView": toConfigId,
+							"targetTableName": destinationTableName,
+							"targetTableItemID" : destinationObject.sys_id
+						};
+						cmd.createEvent(eventArgs);
+					}
+					break;
+				case 'Shared':
+					if(attachDocSettings.sharingDocuments){
+						eventArgs = {
+							"sourceTableName": fromTableName,
+							"sourceTableItemID": fromObject.sys_id,
+							"sourceView": fromConfigId,
+							"isAsync" : true,
+							"event" : "x_dtll2_contentint.SPtoSP",
+							"targetView": toConfigId,
+							"targetTableName": destinationTableName,
+							"targetTableItemID" : destinationObject.sys_id
+						};
+						cmd.createEvent(eventArgs);
+					}
+					break;
+					
+			}
+			// copy function completed successfully
+			return true;
+		},
+		
+		type: 'taskerDocumentScripts'
+	};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-03-22 22:07:06</sys_created_on>
+        <sys_id>b95a5dd41bb30810358efd16dc4bcb4a</sys_id>
+        <sys_mod_count>28</sys_mod_count>
+        <sys_name>taskerDocumentScripts</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_b95a5dd41bb30810358efd16dc4bcb4a</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-05 05:52:11</sys_updated_on>
+    </sys_script_include>
+</record_update>

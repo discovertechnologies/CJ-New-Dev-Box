@@ -1,0 +1,676 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerHelpers</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Includes Task related server scripts:&#13;
+&#13;
+2.5 Patch 3&#13;
+STRY0082087 - Restricted Group - (Portal &amp; Platform)Task Form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083025 - Restricted Group - (Portal &amp; Platform) Template  form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083027 - Restricted Group - (Portal &amp; Platform) Template  Task form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0084582 - FIX- ICE: SEQ - Parent Task dependent on its Subtasks in Assigned or Unassigned state goes into Waiting State when additional Subtasks are created&#13;
+STRY0085438 - FIX: Javascript error on new "Modals"&#13;
+STRY0085700 - UI: Restricted Group "Confirmation" text is not wrapping within the modal&#13;
+&#13;
+v2.5.13:&#13;
+- STRY0076605: getInitialState and getUpdateState for Waiting States&#13;
+- STRY0076789: setCountActiveSubTasks&#13;
+&#13;
+v2.5.11:&#13;
+- STRY0057360: New method for DTLV: getAncestors&#13;
+&#13;
+</description>
+        <name>TaskerHelpers</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var TaskerHelpers = Class.create();
+TaskerHelpers.prototype = {
+	initialize: function() {},
+	
+	// 2.5.3 - STRY0085438 
+	updateTaskPermission: function(current)
+	{
+		var taskPermissions = {};
+		
+		var UserPermissions = new UserInfoScripts();	
+		
+		var currentUser= gs.getUserID();
+		var primary_assignee = '';
+		var tasking_authority = '';
+		var reviewer = '';
+		var isTAExternal = false;
+		var isSubTask = false;
+		var parentTaskOwner = '';
+		var parentTaskAssignedMember = '';
+		var on_behalf_of = '';
+		var isReviewRequired = false;
+		var taskOwner = '';
+		var assignedMember = '';
+		var state = '';
+/*		
+		// when called from the client, this will receive any data sent from the Form.
+		var formData = this.getParameter('formData');
+
+		// use formdata instead values
+		if(formData) {
+			primary_assignee = formData.primary_assignee;
+			tasking_authority = formData.tasking_authority;
+			reviewer = formData.u_reviewer;
+			// if empty, need to look up on the server
+			isTAExternal = formData.isTAExternal;
+			isSubTask = formData.isSubTask;
+			on_behalf_of = formData.on_behalf_of;
+			isReviewRequired = formData.isReviewRequired;
+			taskOwner = formData.taskOwner;
+			state = formData.state;
+		// use current object
+		} else {
+*/			primary_assignee = current.getValue("primary_assignee") + '';
+			tasking_authority = current.getValue("tasking_authority") + '';
+			reviewer = current.getValue("u_reviewer") + '';
+			isSubTask = current.parent + '' != '';
+			on_behalf_of = current.on_behalf_of + '';
+			isReviewRequired = (current.provide_response+''=='true');
+			taskOwner = current.u_task_requester+'' != '' ? current.u_task_requester+'' : current.originator + '';
+			assignedMember = current.assigned_to+'';
+			state = (current.isNewRecord()) ? "New" : current.getValue("state") + '';
+			
+//		}
+		
+		if (tasking_authority != ''){
+			// get Tasking Authority External flag
+			var grTAOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+			if(grTAOU.get(tasking_authority))
+				isTAExternal =  grTAOU.getValue('u_external_flag')+'';
+		}
+		// get parent information
+		if(isSubTask){
+			var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParent.get(current.getValue('parent'))){
+				parentTaskOwner = grParent.u_task_requester + '';
+				parentTaskAssignedMember = grParent.assigned_to + '';
+			}
+		}
+
+		if (state == "11") {
+			state = (primary_assignee == undefined || primary_assignee === "") ?
+				"RejectedPrimaryAssignee" : "RejectedAssignment";
+		}
+		
+		taskPermissions.isTaskManagerOUTA = UserPermissions.IsUserOUTA(gs.getUserID(),primary_assignee);		
+		taskPermissions.reviewer = reviewer;
+		taskPermissions.reviewerInOUTA_OU = UserPermissions.IsUserInOU(primary_assignee, reviewer);
+		taskPermissions.isTAExternal = isTAExternal;
+		taskPermissions.isSubTask = isSubTask;
+		taskPermissions.parentTaskOwner = parentTaskOwner;
+		taskPermissions.parentTaskAssignedMember = parentTaskAssignedMember;
+		taskPermissions.on_behalf_of = on_behalf_of;
+		taskPermissions.isReviewRequired = isReviewRequired;
+		taskPermissions.taskOwner = taskOwner;
+		taskPermissions.assignedMember = assignedMember;
+		taskPermissions.state = state;
+
+		return  taskPermissions;
+		/*
+formData = {};
+formData.primary_assignee = g_form.getValue("primary_assignee");
+formData.tasking_authority = g_form.getValue("tasking_authority");
+formData.isSubTask = g_form.getValue("parent") != undefined && g_form.getValue("parent") != "";
+formData.isTAExternal = g_form.getValue("tasking_authority.u_external_flag");
+formData.on_behalf_of = g_form.getValue("on_behalf_of");
+formData.reviewer = g_form.getValue("u_reviewer");
+formData.isReviewRequired = (g_form.getValue('provide_response')+''=='true');
+formData.taskOwner = g_form.getValue('u_task_requester')+'';
+formData.assignedMember = g_form.getValue('assigned_to')+'';
+formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
+		
+		*/
+		
+	},
+	
+	// 2.5.3 - STRY0082087, STRY0083025, STRY0083027
+	evaluateRestrictedGroupForForm: function(restrictedOUsandMembers){
+		var formValues = restrictedOUsandMembers.returnFormValues;
+		var formLabels = restrictedOUsandMembers.formLabels;
+
+		var msgLineRet = formLabels.UI_Type == 'Portal' ? '<li>' : '\n';
+		var msgLineEnd = formLabels.UI_Type == 'Portal' ? '</li>' : ' ';
+		var msgLineBr = formLabels.UI_Type == 'Portal' ? '<br/>' : '\n';
+		var msgLineBoldStart = formLabels.UI_Type == 'Portal' ? '<b>' : '';
+		var msgLineBoldEnd = formLabels.UI_Type == 'Portal' ? '</b>' : '';
+		
+		var msg = gs.getMessage('Tasker - RestrictedGroup 1') + msgLineBoldStart + restrictedOUsandMembers.newRestrictedGroupName  + msgLineBoldEnd + gs.getMessage('Tasker - RestrictedGroup 2');
+
+		var clear_fields = {};
+		clear_fields.tasking_authority = false;
+		clear_fields.primary_office = false;
+		clear_fields.primary_assignee = false;
+		clear_fields.u_subtask_primary_assignee_s = false;
+		clear_fields.u_reviewer = false;
+		clear_fields.assigned_to = false;
+		clear_fields.on_behalf_of = false;
+		clear_fields.u_subtask_assigned_member_s = false;
+		
+		
+		msg = msg + msgLineBr + msgLineBr + gs.getMessage('Tasker - RestrictedGroup 3') + msgLineRet;
+		// STRY0085700
+		msg = msg + restrictedOUsandMembers.restrictedGroupMembers.MemberNames.join(", ") + msgLineEnd;
+		
+		msg = msg + msgLineBr + msgLineBr + gs.getMessage('Tasker - RestrictedGroup 4') + msgLineRet;
+		// STRY0085700 
+		msg = msg + restrictedOUsandMembers.restrictedGroupOUs.OUAbbrevs.join(", ") + msgLineEnd + msgLineBr;
+		
+		var msgMembersToClear = '';
+		// Now validate members
+		if(formValues.u_reviewer && formValues.u_reviewer.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(formValues.u_reviewer.id)<0){
+			msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.u_reviewer + ':' + msgLineBoldEnd;
+			msgMembersToClear = msgMembersToClear + ' [' + formValues.u_reviewer.name + ']' + msgLineEnd; 
+			clear_fields.u_reviewer = true;
+		}
+
+		if(formValues.assigned_to && formValues.assigned_to.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(formValues.assigned_to.id)<0){
+			msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.assigned_to + ':' + msgLineBoldEnd;
+			msgMembersToClear = msgMembersToClear + ' [' + formValues.assigned_to.name + ']' + msgLineEnd; 
+			clear_fields.assigned_to = true;
+		}
+		if(formValues.on_behalf_of && formValues.on_behalf_of.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(formValues.on_behalf_of.id)<0){
+			msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.on_behalf_of + ':' + msgLineBoldEnd;
+			msgMembersToClear = msgMembersToClear + ' [' + formValues.on_behalf_of.name + ']' + msgLineEnd; 
+			clear_fields.on_behalf_of = true;
+		}
+		if(formValues.poc_name && formValues.poc_name.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(formValues.poc_name.id)<0){
+			msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.poc_name + ':';
+			msgMembersToClear = msgMembersToClear + msgLineBoldEnd;
+			msgMembersToClear = msgMembersToClear + ' [' + formValues.poc_name.name + ']' + msgLineEnd; 
+			clear_fields.poc_name = true;
+		}
+		if(formValues.u_internal_contact && formValues.u_internal_contact.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(formValues.u_internal_contact.id)<0){
+			msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.u_internal_contact + ':';
+			msgMembersToClear = msgMembersToClear + msgLineBoldEnd;
+			msgMembersToClear = msgMembersToClear + ' [' + formValues.u_internal_contact.name + ']' + msgLineEnd; 
+			clear_fields.u_internal_contact = true;
+		}
+		
+		if(formValues.u_subtask_assigned_member_s && formValues.u_subtask_assigned_member_s.ids !=''){
+			var msgSubTaskAssignedMembers = '';
+			var arrKeepMemIds = [];
+			for (var i=0; i<formValues.u_subtask_assigned_member_s.arrIds.length; i++) {
+				var memberId = formValues.u_subtask_assigned_member_s.arrIds[i];
+				var memberName = formValues.u_subtask_assigned_member_s.arrNames[i];
+				if(restrictedOUsandMembers.restrictedGroupMembers.MemberIds.indexOf(memberId)<0){
+					if(clear_fields.u_subtask_assigned_member_s == true) 
+						// STRY0085700 
+						msgSubTaskAssignedMembers = msgSubTaskAssignedMembers + ', ';
+					msgSubTaskAssignedMembers = msgSubTaskAssignedMembers + memberName;
+					clear_fields.u_subtask_assigned_member_s = true;
+				}else{
+					arrKeepMemIds.push(formValues.u_subtask_assigned_member_s.arrIds[i]);
+				}
+			}
+			restrictedOUsandMembers.returnFormValues.u_subtask_assigned_member_s.arrKeepIds = arrKeepMemIds;
+			if(clear_fields.u_subtask_assigned_member_s == true){
+				msgMembersToClear = msgMembersToClear + msgLineRet + msgLineBoldStart + formLabels.u_subtask_assigned_member_s + ':' + msgLineBoldEnd;
+				msgMembersToClear = msgMembersToClear + ' [' + msgSubTaskAssignedMembers + ']' + msgLineEnd;
+			}
+		}
+		if(msgMembersToClear != ''){
+			msg = msg + gs.getMessage('Tasker - RestrictedGroup 5 - The following Member(s)') + msgLineBr;
+			msg = msg + msgLineBoldStart + gs.getMessage('Tasker - RestrictedGroup 6 - These Member(s) will be cleared') + msgLineBoldEnd;
+			msg = msg + msgMembersToClear;
+		}
+		
+		var msgOUsToClear = '';
+
+		
+		if(formValues.tasking_authority && formValues.tasking_authority.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupOUs.OUIds.indexOf(formValues.tasking_authority.id)<0){
+			msgOUsToClear = msgOUsToClear + msgLineRet + msgLineBoldStart + formLabels.tasking_authority + ':' + msgLineBoldEnd;
+			msgOUsToClear = msgOUsToClear +  ' [' + formValues.tasking_authority.abbr + ']' + msgLineEnd; 
+			clear_fields.tasking_authority = true;
+		}
+
+		if(formValues.primary_office && formValues.primary_office.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupOUs.OUIds.indexOf(formValues.primary_office.id)<0){
+			msgOUsToClear = msgOUsToClear + msgLineRet + msgLineBoldStart + formLabels.primary_office + ':' + msgLineBoldEnd;
+			msgOUsToClear = msgOUsToClear +  ' [' + formValues.primary_office.abbr + ']' + msgLineEnd; 
+			clear_fields.primary_office = true;
+		}
+		
+		if(formValues.primary_assignee && formValues.primary_assignee.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupOUs.OUIds.indexOf(formValues.primary_assignee.id)<0){
+			msgOUsToClear = msgOUsToClear + msgLineRet + msgLineBoldStart + formLabels.primary_assignee + ':' + msgLineBoldEnd;
+			msgOUsToClear = msgOUsToClear +  ' [' + formValues.primary_assignee.abbr + ']' + msgLineEnd; 
+			clear_fields.primary_assignee = true;
+		}
+
+		if(formValues.u_subtask_primary_assignee_s && formValues.u_subtask_primary_assignee_s.ids !=''){
+			var msgSubTaskPrimaryAssignee = '';
+			var arrKeepOUIds = [];
+			for (var j=0; j<formValues.u_subtask_primary_assignee_s.arrIds.length; j++) {
+				var ouId = formValues.u_subtask_primary_assignee_s.arrIds[j];
+				var ouAbbr = formValues.u_subtask_primary_assignee_s.arrAbbrs[j];
+				if(restrictedOUsandMembers.restrictedGroupOUs.OUIds.indexOf(ouId)<0){
+					if(clear_fields.u_subtask_primary_assignee_s == true) 
+						// STRY0085700 
+						msgSubTaskPrimaryAssignee = msgSubTaskPrimaryAssignee + ', ';
+					msgSubTaskPrimaryAssignee = msgSubTaskPrimaryAssignee + ouAbbr;
+					clear_fields.u_subtask_primary_assignee_s = true;
+				}else{
+					arrKeepOUIds.push(formValues.u_subtask_primary_assignee_s.arrIds[j]);
+				}
+			}
+			restrictedOUsandMembers.returnFormValues.u_subtask_primary_assignee_s.arrKeepIds = arrKeepOUIds;
+			if(clear_fields.u_subtask_primary_assignee_s == true){
+				msgOUsToClear = msgOUsToClear + msgLineRet + msgLineBoldStart + formLabels.u_subtask_primary_assignee_s + ':' + msgLineBoldEnd;
+				msgOUsToClear = msgOUsToClear + ' [' + msgSubTaskPrimaryAssignee + ']' + msgLineEnd;
+			}
+		}
+		if(formValues.u_external_ou && formValues.u_external_ou.id !='' 
+			&& restrictedOUsandMembers.restrictedGroupOUs.OUIds.indexOf(formValues.u_external_ou.id)<0){
+			msgOUsToClear = msgOUsToClear + msgLineRet + msgLineBoldStart + formLabels.u_external_ou + ':' + msgLineBoldEnd;
+			msgOUsToClear = msgOUsToClear +  ' [' + formValues.u_external_ou.abbr + ']' + msgLineEnd; 
+			clear_fields.u_external_ou = true;
+		}
+		
+		if(msgOUsToClear != ''){
+			msg = msg + msgLineBr + gs.getMessage('Tasker - RestrictedGroup 7 - The following OU(s)') + msgLineBr;
+			msg = msg + msgLineBoldStart + gs.getMessage('Tasker - RestrictedGroup 8 - These OU(s) will be cleared') + msgLineBoldEnd + msgOUsToClear;
+		}
+		
+		restrictedOUsandMembers.clear_fields = clear_fields;
+		restrictedOUsandMembers.restrictedGroupMessage = msg;
+		return restrictedOUsandMembers;
+	},
+	
+	// 2.5.3 - STRY0082087, STRY0083025, STRY0083027
+	getOUsForRestrictedGroupIdAbbrevName: function(restrictedGroup) {
+		var ArrRestrictedOUIds = [];
+		var ArrRestrictedOUAbbrevs = [];
+		var ArrRestrictedOUNames = [];
+		var OUsForRestrictedGroupIdAbbrevName = {};
+		
+		var ouMemArr = [];
+		ouMemArr = new UserInfoScripts().getAllMembersSysIdsInGroup(restrictedGroup);
+		var grOus = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		var grMemberOus = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMemberOus.addQuery('office_member', 'IN', ouMemArr.join(','));
+		grMemberOus.query();
+		while(grMemberOus.next()){
+			ArrRestrictedOUIds.push(grMemberOus.getValue('discover_office_hierarchy'));
+			if(grOus.get(grMemberOus.getValue('discover_office_hierarchy'))){
+				ArrRestrictedOUAbbrevs.push(grOus.getValue('office_abbreviation'));
+				ArrRestrictedOUNames.push(grOus.getValue('office_name'));
+			}
+		}
+		// Get External OUs with contacts
+		var grContactOus = new GlideRecordSecure('x_153465_discovert_organizational_contacts');
+		grContactOus.addQuery('u_user_information', 'IN', ouMemArr.join(','));
+		grContactOus.query();
+		while(grContactOus.next()){
+			if(grOus.get(grContactOus.getValue('u_contact_ou'))){
+				// only add externals based on conatcts, do not add internal ous based on contacts
+				if(grOus.u_external_flag==true){
+					ArrRestrictedOUIds.push(grOus.getUniqueValue());
+					ArrRestrictedOUAbbrevs.push(grOus.getValue('office_abbreviation'));
+					ArrRestrictedOUNames.push(grOus.getValue('office_name'));
+				}
+			}
+		}
+		
+		OUsForRestrictedGroupIdAbbrevName.OUIds = ArrRestrictedOUIds;
+		OUsForRestrictedGroupIdAbbrevName.OUAbbrevs = ArrRestrictedOUAbbrevs;
+		OUsForRestrictedGroupIdAbbrevName.OUNames = ArrRestrictedOUNames;
+		
+		return OUsForRestrictedGroupIdAbbrevName;
+	},
+	
+	// 2.5.3 - STRY0082087, STRY0083025, STRY0083027
+	// receives restricted group
+	// returnes a memberArr restricted to people in the restricted group
+	getMembersForRestrictedGroupIdNameEmailUserId: function(restricted_group) {
+		var ArrRestrictedMemberIds = [];
+		var ArrRestrictedMemberNames = [];
+		var ArrRestrictedMemberEmails = [];
+		var ArrRestrictedMemberUserIds = [];
+		var MembersForRestrictedGroupIdNameEmailUserId = {};
+		var grUser = new GlideRecordSecure('sys_user');
+		var grGroup = new GlideRecordSecure('sys_user_group');
+		var groupName = '';
+		
+		if(grGroup.get(restricted_group)){
+			// note this should be the same for every user found since we are filtering based on group ID.
+			groupName = grGroup.getDisplayValue();
+		}
+
+		var usersInGroup = new GlideRecordSecure('sys_user_grmember');
+		usersInGroup.addQuery('group','=', restricted_group);
+		usersInGroup.query();
+		while (usersInGroup.next()){
+			ArrRestrictedMemberIds.push(usersInGroup.getValue('user'));
+			if(grUser.get(usersInGroup.getValue('user'))){
+				ArrRestrictedMemberNames.push(grUser.getValue('name'));
+				ArrRestrictedMemberEmails.push(grUser.getValue('email'));
+				ArrRestrictedMemberUserIds.push(grUser.getValue('user_name'));
+			}
+		}
+
+		MembersForRestrictedGroupIdNameEmailUserId.groupName = groupName;
+		MembersForRestrictedGroupIdNameEmailUserId.MemberIds = ArrRestrictedMemberIds;
+		MembersForRestrictedGroupIdNameEmailUserId.MemberNames = ArrRestrictedMemberNames;
+		MembersForRestrictedGroupIdNameEmailUserId.MemberEmails = ArrRestrictedMemberEmails;
+		MembersForRestrictedGroupIdNameEmailUserId.MemberUserIds = ArrRestrictedMemberUserIds;
+		
+		return MembersForRestrictedGroupIdNameEmailUserId;
+	},
+	
+	// 2.5.3 - STRY0082087, STRY0083025, STRY0083027
+	getTaskerFormDisplayValues: function(formValues){
+		var grUser = new GlideRecordSecure('sys_user');
+		var grOrg = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		if(formValues.u_reviewer && formValues.u_reviewer.id != '' 
+			&& grUser.get(formValues.u_reviewer.id)) formValues.u_reviewer.name = grUser.getDisplayValue();
+		if(formValues.assigned_to && formValues.assigned_to.id != '' 
+			&& grUser.get(formValues.assigned_to.id)) formValues.assigned_to.name = grUser.getDisplayValue();
+		if(formValues.on_behalf_of && formValues.on_behalf_of.id != '' 
+			&& grUser.get(formValues.on_behalf_of.id)) formValues.on_behalf_of.name = grUser.getDisplayValue();
+		if(formValues.poc_name && formValues.poc_name.id != '' 
+			&& grUser.get(formValues.poc_name.id)) formValues.poc_name.name = grUser.getDisplayValue();
+		if(formValues.u_internal_contact && formValues.u_internal_contact.id != '' 
+			&& grUser.get(formValues.u_internal_contact.id)) formValues.u_internal_contact.name = grUser.getDisplayValue();
+		if(formValues.u_subtask_assigned_member_s && formValues.u_subtask_assigned_member_s.ids != '') {
+			for(var i=0; i<formValues.u_subtask_assigned_member_s.arrIds.length; i++){
+				if(grUser.get(formValues.u_subtask_assigned_member_s.arrIds[i])) 
+					formValues.u_subtask_assigned_member_s.arrNames.push(grUser.getDisplayValue());
+			}
+		}
+		
+		if(formValues.tasking_authority && formValues.tasking_authority.id != '' 
+			&& grOrg.get(formValues.tasking_authority.id)) formValues.tasking_authority.abbr = grOrg.getValue('office_abbreviation');
+		if(formValues.primary_office && formValues.primary_office.id != '' 
+			&& grOrg.get(formValues.primary_office.id)) formValues.primary_office.abbr = grOrg.getValue('office_abbreviation');
+		if(formValues.primary_assignee && formValues.primary_assignee.id != '' 
+			&& grOrg.get(formValues.primary_assignee.id)) formValues.primary_assignee.abbr = grOrg.getValue('office_abbreviation');
+		if(formValues.u_subtask_primary_assignee_s && formValues.u_subtask_primary_assignee_s.ids != '') {
+			for(var j=0; j<formValues.u_subtask_primary_assignee_s.arrIds.length; j++){
+				if(grOrg.get(formValues.u_subtask_primary_assignee_s.arrIds[j])) 
+					formValues.u_subtask_primary_assignee_s.arrAbbrs.push(grOrg.getValue('office_abbreviation'));
+			}
+		}
+		if(formValues.u_external_ou && formValues.u_external_ou.id != '' 
+			&& grOrg.get(formValues.u_external_ou.id)) formValues.u_external_ou.abbr = grOrg.getValue('office_abbreviation');
+		
+		return formValues;
+	},
+	
+		//---------------------------------------------------------------------------------------------
+		// 2.5.13: 08.12.20 | KT | SEQ | STRY0076601: SEQ - Task Details page – Displays Task Tree View Indicators
+		//---------------------------------------------------------------------------------------------
+		setCountActiveSubTasks: function(current){
+			
+			// RJ -Tasker 2.5 P2 - Certification
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTask.get(current.sys_id)){
+				// find new child count - this is AFTER insert / delete
+				var countSubtasks = new GlideAggregate('x_153465_discovert_route_task_instance');
+				countSubtasks.addQuery('parent',current.sys_id);
+				countSubtasks.addQuery('state', "NOT IN", "3,4,7");
+				countSubtasks.addAggregate('COUNT');
+				countSubtasks.query();
+				var numberActiveSubtasks = 0;
+				if(countSubtasks.next())
+					numberActiveSubtasks = countSubtasks.getAggregate('COUNT');
+				grTask.u_active_subtasks = numberActiveSubtasks;
+				grTask.update('Tasker: Total number of active subtasks updated' + numberActiveSubtasks);
+			}
+		},
+		
+	
+		//---------------------------------------------------------------------------------------------
+		// v2.5.13 | 07.20.2020 | STRY0076605:  Sequential Review
+		//---------------------------------------------------------------------------------------------
+		getInitialState: function(current) {
+			var answer = '';
+			
+			// STRY0076605 - check to see if task is in wait state due to task order
+			if(!this.isTaskOrderOfTaskActive(current)){
+				answer = -3;
+			} else{
+				if (current.u_wait_for_subtasks_to_finish == true) {
+					answer = -3;
+				} else {
+					if (current.assigned_to.nil()) {
+						answer = -5;
+					}
+					if (!current.assigned_to.nil()) {
+						answer = 1;
+					}
+				}
+			}
+			return answer;
+		},
+		
+		//---------------------------------------------------------------------------------------------
+		// v2.5.13 | 08.08.2020 | STRY0076605:  Sequential Review
+		//---------------------------------------------------------------------------------------------
+		getUpdatedState: function(current) {
+			// STRY0084582 
+			var currentState = current.state;
+			var waiting = -3;
+			var unassigned = -5;
+			var	assigned = 1;
+			var	accepted = 10;
+			var	workInProgress = 13;
+			var	inReview = 14;
+			var	reWork = 15;
+			var answer = '';
+			var stillWaiting = false;
+			// STRY0076605 - check to see if task is in wait state due to task order
+			if(!this.isTaskOrderOfTaskActive(current)){
+				answer = -3;
+			} else{
+				if (current.u_wait_for_subtasks_to_finish == true) {
+					// look for any subtasks still not completed
+					var grSubTasksStillOpen = new GlideRecord('x_153465_discovert_route_task_instance');
+					grSubTasksStillOpen.addQuery('parent', current.getUniqueValue());
+					grSubTasksStillOpen.addQuery('active', true);
+					grSubTasksStillOpen.query();
+					while (grSubTasksStillOpen.next()){
+						stillWaiting = true;
+					}
+					// STRY0076605 - if wait state changes, adjust the state of the task
+					if(stillWaiting == false){
+						// No active subtasks were found, if the task has no subtasks it still goes into wait state
+						if(current.calchaschildren == 0){
+							stillWaiting = true;
+						}
+					}
+				}
+				if(stillWaiting){
+					answer = waiting;
+				} else {
+					// STRY0084582 
+					if (current.assigned_to.nil()) {
+						answer = unassigned;
+					} else if (!current.assigned_to.nil() 
+						&& currentState != assigned
+						&& currentState != accepted
+						&& currentState != workInProgress
+						&& currentState != inReview
+						&& currentState != reWork) {
+						// do not update the state to assigned if the state is beyond assigned
+						answer = assigned;
+					} else {
+						answer = currentState;
+					}
+				}
+			}
+			return answer;
+		},
+		
+		//---------------------------------------------------------------------------------------------
+		// v2.5.13 | 08.08.2020 | STRY0076617:  Order
+		//---------------------------------------------------------------------------------------------
+		isTaskOrderOfTaskActive: function(grTask){
+			if(grTask.parent.nil()){
+				// you have reached the top true should go all the way back down to say this task is active
+				return true;
+			}
+			var grSubTasksActiveOrder = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubTasksActiveOrder.addQuery('parent', grTask.getValue('parent') );
+			grSubTasksActiveOrder.addQuery('active', true);
+			grSubTasksActiveOrder.orderBy('task_order');
+			grSubTasksActiveOrder.query();
+			// some subtasks are still active
+			if(grSubTasksActiveOrder.next()){
+				if(parseInt(grSubTasksActiveOrder.task_order) < parseInt(grTask.task_order)){
+					return false;  // at this level the order active is less than the order active of the task - return false
+				} else {
+					// this level of the tree is active for this task
+					var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+					if(grTaskParent.get(grTask.parent)){
+						// if this is not the top level, go up again and determine if that level is active
+						return this.isTaskOrderOfTaskActive(grTaskParent);
+					}
+				}
+			} else {
+				// no active tasks at this level, so, this task can be active at this level if the parent is active
+				return true;
+			}
+		},
+		
+		//---------------------------------------------------------------------------------------------
+		// v2.5.13 | 08.13.2020 | // STRY0076618 - on close or cancel if an order is complete, start next order
+		//---------------------------------------------------------------------------------------------
+		onCloseCheckIfNewOrderStarts: function(grTask){
+			if(grTask.parent.nil()){
+				// you have reached the top true should go all the way back down to say this task is active
+				return;
+			}
+			var grSubTasksActiveOrder = new GlideRecord('x_153465_discovert_route_task_instance');
+			// Query to see if tasks are still active in this task order
+			grSubTasksActiveOrder.addQuery('parent', grTask.getValue('parent') );
+			grSubTasksActiveOrder.addQuery('active', true);
+			grSubTasksActiveOrder.addQuery('task_order', grTask.task_order);
+			grSubTasksActiveOrder.query();
+			if(grSubTasksActiveOrder.next()){
+				// no work to do, exit close routine
+				return;
+			}
+			// get the parent of this task
+			var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParent.get(grTask.getValue('parent'))){
+				this.startOrder(grParent);
+			}
+			
+		},
+		
+		startOrder: function(grTask){
+			var grSubTasksActiveOrder = new GlideRecord('x_153465_discovert_route_task_instance');
+			// if we are here, start the next order
+			grSubTasksActiveOrder.addQuery('parent', grTask.getUniqueValue());
+			grSubTasksActiveOrder.addQuery('active', true);
+			grSubTasksActiveOrder.orderBy('task_order');
+			grSubTasksActiveOrder.query();
+			var activeOrder = 0;
+			// some subtasks are still active
+			while(grSubTasksActiveOrder.next()){
+				// set the active order to the value of the first active order found
+				if(activeOrder==0)
+					activeOrder = grSubTasksActiveOrder.task_order;
+				
+				// the first task that is not in the first order, break out of while
+				if(parseInt(activeOrder) != parseInt(grSubTasksActiveOrder.task_order))
+					break;
+				grSubTasksActiveOrder.state = this.getUpdatedState(grSubTasksActiveOrder);
+				grSubTasksActiveOrder.update();
+				if(grSubTasksActiveOrder.calchaschildren > 0){
+					// this task is being started due to order, start any non-dependdent child tasks
+					this.startOrder(grSubTasksActiveOrder);
+				}
+			}
+		},
+		
+		//---------------------------------------------------------------------------------------------
+		// KT - TLV - STRY0057360 - Macro Widget: 06.02.20
+		//---------------------------------------------------------------------------------------------
+		getAncestors: function(taskSysID, pad) {
+			var answer = '';
+			
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTask.get(taskSysID)){
+				if (!grTask.parent.nil()) {
+					answer += pad + grTask.sys_id + ',';
+					answer += this.getAncestors(grTask.parent, answer);
+				} else answer += pad + taskSysID + ',';
+			}
+			return answer;
+		},
+		
+		getSubTaskProgress: function(parentId) {
+			var stateSubTaskProgress = -5;
+			var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubTasks.addQuery('parent', parentId);
+			grSubTasks.orderBy('state_order');
+			grSubTasks.query();
+			
+			if (grSubTasks.next())
+				stateSubTaskProgress = grSubTasks.state;
+			
+			return stateSubTaskProgress;
+		},
+		
+		countClosed: function(parentId) {
+			var countClosed = 0;
+			var gaCountChildrenClosed = new GlideAggregate('x_153465_discovert_route_task_instance');
+			//Query child tables for all records with current parent.
+			gaCountChildrenClosed.addAggregate('COUNT');
+			gaCountChildrenClosed.addQuery('parent', parentId);
+			// Count all closed states
+			// "Closed Complete" - 3
+			// "Closed Incomplete" - 4
+			// "Cancelled" - 7
+			gaCountChildrenClosed.addQuery('state', "IN", "3,4,7");
+			
+			gaCountChildrenClosed.query();
+			
+			if (gaCountChildrenClosed.next())
+				countClosed += gaCountChildrenClosed.getAggregate('COUNT');
+			
+			return countClosed;
+		},
+		
+		hasActiveTaskInOu: function(userId, ouId) {
+			//lookup Task for assigned user in subject ou with active flag
+			var records = new GlideAggregate("x_153465_discovert_route_task_instance");
+			records.addQuery("assigned_to", userId);
+			records.addQuery("primary_assignee", ouId);
+			records.addQuery("active", true);
+			records.addAggregate("COUNT");
+			records.query();
+			return records.getAggregate("COUNT") > 0;
+		},
+		
+		type: 'TaskerHelpers'
+	};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2018-03-08 22:01:13</sys_created_on>
+        <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
+        <sys_mod_count>109</sys_mod_count>
+        <sys_name>TaskerHelpers</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-08 05:42:46</sys_updated_on>
+    </sys_script_include>
+</record_update>

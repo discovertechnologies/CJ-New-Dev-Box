@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Task_onInsert_Multiple_Sub_Tasks</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Methods to provide permission checks for UI Actions related to Mark Inactive business rules.&#13;
+&#13;
+2.5 P3&#13;
+// STRY0084850 - duration was not passed correctly</description>
+        <name>Task_onInsert_Multiple_Sub_Tasks</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var Task_onInsert_Multiple_Sub_Tasks = Class.create();
+Task_onInsert_Multiple_Sub_Tasks.prototype = {
+	//tcs: new Task_onInsert_Multiple_Sub_Tasks(),
+	initialize: function() {
+	},
+	
+	// RJ - STRY0064112 - Add value to Activity Log to show Serial.  NOTE, add an else here if decide to Say Parallel also
+	// put this in a module so it can be updated if desired in one place.
+	getActivitySuffix: function(bSerial) {
+		
+		// RJ - STRY0064112 - Add value to Activity Log to show Serial.  NOTE, add an else here if decide to Say Parallel also
+		var activitySuffix;
+		if (bSerial == true || bSerial == "true")
+			activitySuffix = " in Serial.";
+		else
+			activitySuffix = " ";  // NOTE, if decide to Say Parallel when Parallel, change this line to serialSuffix = "  in Parallel.";
+		return activitySuffix;
+	},
+	
+	
+	// RJ - STRY0064112 - Make the work note modular so we can change it in one way
+	getWorkNote: function(parentTaskernumber, currentPrimaryAssigneeOfficeAbbr, currentAassignedToName, PrimaryAssigneeOUs, AssignedMemberNames, bSerial) {
+		if (parentTaskernumber == '')
+			parentTaskernumber = 'Task Number Unassigned';
+		
+		// TODO - Internationlize message
+		var workNote = parentTaskernumber + ": Primary Assignee: " + currentPrimaryAssigneeOfficeAbbr + ", Assigned Member: " + currentAassignedToName + " - Created in a group with multiple Primary Assignee(s): [" + PrimaryAssigneeOUs + "], and multiple Assigned Member(s): [" + AssignedMemberNames + "]" + this.getActivitySuffix(bSerial);
+		
+		return workNote;
+	},
+	
+	beforeInsertProcessing: function(current) {
+		// STRY0063652 - only set work note if worknote exists, use 2 different assigned to fields
+		var isTask = current.getTableName() == 'x_153465_discovert_route_task_instance';
+		var isTempTask = current.getTableName() == 'x_153465_discovert_route_tasks';
+		// STRY0051139 - allow customer to use the script associated with this to set key values in the system
+		var taskerNM = new TaskerDisplayValueConfiguration();
+		
+		// if there is no parent we should not even get into this call, the process the Top Task as a new task
+		if(!current.parent.nil()){
+			if(current.u_create_multiple_subtasks == true){
+				var firstSubtoProcess = this.GetFirstSubTaskPrimaryAssignee(current);
+				// Now we have the first item returned and the after insert will get this same item b/c it is calling the same funtion.
+				// Before Insert is only called from a new sub task.
+				// On a sub task, the singleton Primary assignee and Assigned Member were hidden for the sub task.
+				// so, use the returned first item to set Primary assignee and/or the Assigned Member for the first subtask created
+				if (firstSubtoProcess.firstBlank) { // this should be stopped from validation logic, but if we get here and there are no items, cancel th save
+					// TODO - Internationlize message
+					// TODO - ERROR MESSAGE FLASHES TOO QUICKLY THEN DISAPPEARS
+					gs.addErrorMessage('You have selected ' + current.u_create_multiple_subtasks.getLabel() + ' but you did not select any Subtask Primary Assignee(s) or Subtask Assigned Member(s).  Please choose at least one Subtask Primary Assignee(s) or Subtask Assigned Member(s).');
+					// cancel the save, no subtasks selected
+					return false;
+				}
+				
+				// This is a sub task.  The Primary Assginee and Assigned Member were not set.
+				if(firstSubtoProcess.subAssignmentType == 'Primary_Assignee'){
+					// If we have a SubTask Primary Assignee, then set the first sub task Primary Assignee to the first SubTask Primary Assignee
+					//    in this case, the first SubTask Primary Assignee will be skipped in the after insert when we add the rest
+					current.primary_assignee = firstSubtoProcess.firstPrimaryAssignee;
+					// STRY0051139 - allow customer to use the script associated with this to set key values in the system
+					// STRY0066883 - Set the Tasker Number is done in a separate business rule to give the customer flexibility to change the rule to use other fields.  
+					//Removed from here and set after this runs
+					//if(isTask)
+					//	current.taskernumber = taskerNM.setTaskerNumber(current);
+
+				}else if(firstSubtoProcess.subAssignmentType == 'Assigned_Member'){
+					// If we have a SubTask Assinged Member, but no Primary Assignee then set the first sub task Assinged Member to the first SubTask Assinged Member
+					//    in this case, the first SubTask Assinged Member will be skipped in the after insert when we add the rest
+					// STRY0063652 - only set work note if worknote exists, use 2 different assigned to fields
+					if(isTask)
+						current.assigned_to = firstSubtoProcess.assingedMember;
+					if(isTempTask)
+						current.assigned_to_individual = firstSubtoProcess.assingedMember;
+					// now lookup the default OU for the first SubTask Assinged Member
+					var ous = new OrganizationalScripts();
+					current.primary_assignee = ous.GetUserDefaultOU(firstSubtoProcess.assingedMember);
+					// STRY0051139 - allow customer to use the script associated with this to set key values in the system
+					// STRY0066883 - Set the Tasker Number is done in a separate business rule to give the customer flexibility to change the rule to use other fields.  
+					//Removed from here and set after this runs
+					//if(isTask)
+					//	current.taskernumber = taskerNM.setTaskerNumber(current);
+				}
+				
+				// Leave u_create_multiple_subtasks true in the before insert for the first Item.
+				// In the After Insert, each item added will set the u_create_multiple_subtasks flag to false.
+				// the after insert logic that processes the list of SubTask Primary Assignee(s) and SubTask Assinged Member(s)
+				// The first item from a sub task will be skipped and the Top Task will be skipped in the after insert call.
+				
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				var sPrimaryAssigneeOUs = this.GetPrimaryOUAbbreviations(firstSubtoProcess.ArrayPrimaryAssignees);
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				var sAssignedMemberNames = this.GetAssignedMemberNames(firstSubtoProcess.ArrayAssignedMembers);
+				
+				// RJ - STRY0064112 - Add value to Activity Log to show Serial.  NOTE, add an else here if decide to Say Parallel also
+				// STRY0063652 - only set work note if worknote exists
+				if(isTask){
+					current.work_notes = this.getWorkNote(current.parent.taskernumber, current.primary_assignee.office_abbreviation, current.assigned_to.name, sPrimaryAssigneeOUs, sAssignedMemberNames, this.getActivitySuffix(current.u_create_subtasks_in_serial));
+				}
+			}
+			return true;
+		}
+		
+	},
+	
+	// Leave u_create_multiple_subtasks true in the before insert for the first Item.
+	// In the After Insert, each item added will set the u_create_multiple_subtasks glag to false.
+	// That way on the subsequent child adds this code will not be executed
+	
+	AfterInsertProcessing: function(current) {
+		// STRY0063652 - only set work note if worknote exists, use 2 different assigned to fields
+		var isTask = current.getTableName() == 'x_153465_discovert_route_task_instance';
+		var isTempTask = current.getTableName() == 'x_153465_discovert_route_tasks';
+		
+		// Process all subtasks inside of this block
+		if(current.u_create_multiple_subtasks==true){
+			
+			
+			var ous = new OrganizationalScripts();
+			
+			var firstSubtoProcess = this.GetFirstSubTaskPrimaryAssignee(current);
+			// RJ - STRY0063315	- this story descibes how to write the worknote.
+			var sPrimaryAssigneeOUs = this.GetPrimaryOUAbbreviations(firstSubtoProcess.ArrayPrimaryAssignees);
+			// RJ - STRY0063315	- this story descibes how to write the worknote.
+			var sAssignedMemberNames = this.GetAssignedMemberNames(firstSubtoProcess.ArrayAssignedMembers);
+			
+			// for EVERY subtask created here, set the create multi sub task field to false so the child doesn't add more children.
+			//current.u_create_multiple_subtasks = false;
+			
+			// save the parent to use it later after setting the children's parent on top tasks
+			var oParent = current.parent.toString();
+			var nextParent;
+			var newTask;
+			// serial parent starts with the current or the parent
+			// RJ - STRY0064121 - Serial already implemented, just turn this baby on!!!!
+			var bSerial = current.u_create_subtasks_in_serial;
+			// RJ - STRY0064112 - Add value to Activity Log to show Serial.  NOTE, add an else here if decide to Say Parallel also
+			var activitySuffix;
+			if (bSerial == true)
+				activitySuffix = " in Serial.";
+			else
+				activitySuffix = " ";  // NOTE, if decide to Say Parallel when Parallel, change this line to serialSuffix = "  in Parallel.";
+			
+			
+			// RJ - STRY0064121 - If serial set, then move the parent down the tree as you create sub items
+			if (bSerial == true){ // if serial, then the next subtask will be added to this task whether it is a new top or a new sub task
+				nextParent = current.getValue('sys_id');
+			}else{  // this else would be serial
+				if (oParent == ''){  // No parent here means the current is top of a new Top Task
+					nextParent = current.getValue('sys_id');
+				} else { // A parent exists, current is the first subtask in a group of subtasks, so add this item to the current's parent
+					nextParent = current.parent + "";
+				}
+			}
+			
+			
+			// Now process the list of Subtask Primary Assignee(s)
+			var i;
+			for (i = 0; i < firstSubtoProcess.ArrayPrimaryAssignees.length; i++) {
+				// If we started with a parent and we are processing the item retured as the first Subtask Primary Assignee, then skip insert
+				if( (oParent == '') || (firstSubtoProcess.ArrayPrimaryAssignees[i] != firstSubtoProcess.firstPrimaryAssignee)){
+					// Get a new copy of all the fields in this record and use it for the next insert
+					newTask = this.CopyRecord(current);
+					// add another row with this primary assignee
+					newTask.primary_assignee = firstSubtoProcess.ArrayPrimaryAssignees[i];
+					// STRY0063652 - only set work note if worknote exists, use 2 different assigned to fields
+					if(isTask)
+						newTask.assigned_to ='';  // clear assigned to in case it was set on the parent
+					if(isTempTask)
+						newTask.assigned_to_individual = '';  // clear assigned to in case it was set on the parent
+					
+					newTask.parent = nextParent;
+					
+					// set the work note expected
+					// TODO this should be internationalized
+					// RJ - STRY0063315	- this story descibes how to write the worknote.
+					// STRY0063652 - only set work note if worknote exists
+					if(isTask){
+						newTask.work_notes = this.getWorkNote(current.taskernumber, this.GetOUAbbreviation(firstSubtoProcess.ArrayPrimaryAssignees[i]), 'Unassigned', sPrimaryAssigneeOUs, sAssignedMemberNames, bSerial);
+					}
+					
+					newTask.u_create_multiple_subtasks = false;
+					// THIS IS ANOTER INSERT.  WE ARE ADDING A GROUP OF TASKS AT ONCE.
+					// IF THIS WON'T PASS INSPECTION, WE CAN FIGURE OUT HOW TO DO THIS IN AN EVENT
+					newTask.insert();
+					
+					// RJ - STRY0064121 - If serial set, then move the parent down the tree as you create sub items
+					if (bSerial == true){
+						nextParent = newTask.getValue('sys_id');
+					}  // no else case needed b/c the parent of the group in parallel is set before the loop starts
+				}  // END BLOCK - if( (oParent == '') || (firstSubtoProcess.ArrayPrimaryAssignees[i] != firstSubtoProcess.firstPrimaryAssignee)){
+					
+				} // END BLOCK - Now process the list of Subtask Primary Assignee(s)
+				
+				// Now process the list of Subtask Assigned Member(s)
+				for (i = 0; i < firstSubtoProcess.ArrayAssignedMembers.length; i++) {
+					if( (oParent == '') || (firstSubtoProcess.ArrayAssignedMembers[i] != firstSubtoProcess.assingedMember)){
+						// Get a new copy of all the fields in this record and use it for the next insert
+						newTask = this.CopyRecord(current);
+						var sUserDefaultOU = ous.GetUserDefaultOU(firstSubtoProcess.ArrayAssignedMembers[i]);
+						// add another row with the Assigned member
+						// STRY0063652 - only set work note if worknote exists, use 2 different assigned to fields
+						if(isTask)
+							newTask.assigned_to = firstSubtoProcess.ArrayAssignedMembers[i];  // clear assigned to in case it was set on the parent
+						if(isTempTask)
+							newTask.assigned_to_individual = firstSubtoProcess.ArrayAssignedMembers[i];  // clear assigned to in case it was set on the parent
+						
+						
+						newTask.primary_assignee = sUserDefaultOU;
+						
+						newTask.parent = nextParent;
+						// set the primary assignee using the default OU of the assigned memeber
+						if(sUserDefaultOU != ''){
+							sUserDefaultOU = this.GetOUAbbreviation(sUserDefaultOU);
+						} else {
+							// TODO this should be internationalized
+							sUserDefaultOU = 'Unassigned';
+						}
+						// set the work note expected
+						// TODO this should be internationalized
+						// RJ - STRY0063315	- this story descibes how to write the worknote.
+						// STRY0063652 - only set work note if worknote exists
+						if(isTask){
+							newTask.work_notes = this.getWorkNote(current.taskernumber, sUserDefaultOU, this.GetUserName(firstSubtoProcess.ArrayAssignedMembers[i]), sPrimaryAssigneeOUs, sAssignedMemberNames, bSerial);
+						}
+						newTask.u_create_multiple_subtasks = false;
+						// THIS IS ANOTER INSERT.  WE ARE ADDING A GROUP OF TASKS AT ONCE.
+						// IF THIS WON'T PASS INSPECTION, WE CAN FIGURE OUT HOW TO DO THIS IN AN EVENT
+						newTask.insert();
+						
+						// RJ - STRY0064121 - If serial set, then move the parent down the tree as you create sub items
+						if (bSerial == true){
+							nextParent = newTask.getValue('sys_id');
+						}
+					}  // END BLOCK -if( (oParent == '') || (firstSubtoProcess.ArrayAssignedMembers[i] != firstSubtoProcess.assingedMember)){
+					} // END BLOCK - Now process the list of Subtask Assigned Member(s)
+				} // END BLOCK - Process all subtasks inside of this block
+			},
+			
+			// Created this sub process to make sure on the before insert and after insert we grab the same item being processed on the before insert when not processing a new parent.
+			GetFirstSubTaskPrimaryAssignee: function(current) {
+				// the processing of new sub tasks needs to do something before starting the loop.
+				// For the first subtask we need to grab the first item in the list from the Subtask Primary Assignee(s) if exists.
+				// If the Subtask Primary Assignee(s) does not exists, grab the first item in the list from the Subtask Assigned Member(s) if exists.
+				// If the Subtask Subtask Assigned Member(s) does not exist, the form validation should have kept from getting here.
+				var firstSubtoProcess = {};
+					firstSubtoProcess.firstBlank = false;
+					
+					var sPrimaryAssignee = current.u_subtask_primary_assignee_s.toString();
+					firstSubtoProcess.ArrayPrimaryAssignees = [];
+					if (sPrimaryAssignee.length > 0) {
+						firstSubtoProcess.ArrayPrimaryAssignees = sPrimaryAssignee.split(",");
+					}
+					var sAssignedMember = current.u_subtask_assigned_member_s.toString();
+					firstSubtoProcess.ArrayAssignedMembers = [];
+					if (sAssignedMember.length > 0) {
+						firstSubtoProcess.ArrayAssignedMembers = sAssignedMember.split(",");
+					}
+					if(firstSubtoProcess.ArrayPrimaryAssignees.length > 0){
+						firstSubtoProcess.subAssignmentType = 'Primary_Assignee';
+						firstSubtoProcess.firstPrimaryAssignee = firstSubtoProcess.ArrayPrimaryAssignees[0];
+					} else if(firstSubtoProcess.ArrayAssignedMembers.length > 0){
+						firstSubtoProcess.subAssignmentType = 'Assigned_Member';
+						firstSubtoProcess.assingedMember = firstSubtoProcess.ArrayAssignedMembers[0];
+					}
+					else{
+						firstSubtoProcess.subAssignmentType = '';
+						firstSubtoProcess.firstBlank = true;
+					}
+					
+					return firstSubtoProcess;
+					
+				},
+				
+				CopyRecord: function(current) {
+					var fields = current.getElements();
+					//create a new record
+					var grNewRec = new GlideRecord(current.getTableName());
+					grNewRec.initialize();
+					var countCopied = 0;
+					for (var i = 0; i < fields.length; i++) {
+						var glideElement = fields[i];
+						//make sure we don't copy the sys_id
+						var key = glideElement.getName();
+						if(glideElement.getName() != 'sys_id'  && glideElement.getName() != 'number'){
+							// STRY0075989 - date field was off by the Timezone setting of the user.
+							if(glideElement.getED().getInternalType() == 'glide_date_time' ){
+								// STRY0078777 STRY0078784
+								if(!gs.nil(current[key])){
+									grNewRec.setValue(key, glideElement.dateNumericValue());
+								}
+							// STRY0084850 - duration was not passed correctly
+							}else if (glideElement.getED().getInternalType() == 'glide_duration'){
+								if(!gs.nil(current[key])){
+									var duration = current[glideElement.getName()];
+									grNewRec.setValue(key, duration);
+								}
+							}else{
+								grNewRec[key] = current.getValue(glideElement.getName());
+							}
+							countCopied= countCopied + 1;
+						}
+					}
+					return grNewRec;
+				},
+				
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				// The Subtask Primary Assignee(s) list returns the selected OUs as a list of sys_id(s)
+				// This function returns a string of names to be used in the activity log
+				GetPrimaryOUAbbreviations: function(ArrayPrimaryAssignees) {
+					var sOUAbbrs = '';
+					for (i = 0; i < ArrayPrimaryAssignees.length; i++) {
+						
+						sOUAbbrs = sOUAbbrs + this.GetOUAbbreviation(ArrayPrimaryAssignees[i]);
+						// if we are not at the end, add a ,
+						if (i < ArrayPrimaryAssignees.length-1){
+							sOUAbbrs = sOUAbbrs + ", ";
+						}
+						
+					}
+					return sOUAbbrs;
+				},
+				
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				// this function returns the abbreviation for a single OU
+				GetOUAbbreviation: function(sOU_sys_id) {
+					var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+					if (grOU.get(sOU_sys_id)){
+						return grOU.office_abbreviation;
+					}else{
+						return '';
+					}
+				},
+				
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				// The Subtask Assgined Member(s) list returns the selected Assgigned Members as a list of sys_id(s)
+				// This function returns a string of names to be used in the activity log
+				GetAssignedMemberNames: function(ArrayAssignedMembers) {
+					var sAssignedMemberNames = '';
+					for (i = 0; i < ArrayAssignedMembers.length; i++) {
+						
+						sAssignedMemberNames = sAssignedMemberNames + this.GetUserName(ArrayAssignedMembers[i]);
+						// if we are not at the end, add a ,
+						if (i < ArrayAssignedMembers.length-1){
+							sAssignedMemberNames = sAssignedMemberNames + ", ";
+						}
+						
+					}
+					return sAssignedMemberNames;
+				},
+				
+				// RJ - STRY0063315	- this story descibes how to write the worknote.
+				// this function returns the name for a single User
+				GetUserName: function(sUser_sys_id) {
+					var gr_sys_user = new GlideRecord('sys_user');
+					if (gr_sys_user.get(sUser_sys_id)){
+						return gr_sys_user.name;
+					}else{
+						return '';
+					}
+				},
+				
+				type: 'Task_onInsert_Multiple_Sub_Tasks'
+			};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-03-13 00:39:00</sys_created_on>
+        <sys_id>1d3d164d1babc0d0358efd16dc4bcb77</sys_id>
+        <sys_mod_count>141</sys_mod_count>
+        <sys_name>Task_onInsert_Multiple_Sub_Tasks</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_1d3d164d1babc0d0358efd16dc4bcb77</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-21 19:04:44</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>inModal-ClosedComplete</action_name>
+        <active>true</active>
+        <client>false</client>
+        <client_script_v2><![CDATA[function onClick(g_form) {
+
+}]]></client_script_v2>
+        <comments/>
+        <condition> new uiConditionCheck().canMarkComplete(current);</condition>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style>primary</form_style>
+        <hint/>
+        <isolate_script>false</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <list_style/>
+        <messages/>
+        <name>Mark Complete</name>
+        <onclick/>
+        <order>500</order>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+// RAJ changes for closing children
+closeTask();
+
+function closeTask(){
+	//var dialog = new GlideDialogWindow("CloseChildrenCheck");
+	//dialog.setTitle("Cancel All Children?");
+	//dialog.render();
+	
+	var blnClose = true;
+	
+	if  (current.calchaschildren > 0 &&
+		current.progress_of_sub_tasks != 3 &&
+		current.progress_of_sub_tasks != 4 &&
+		current.progress_of_sub_tasks != 7){
+				
+		// TODO - this needs to become a dialog and push language somewhere to be read back
+		//blnClose = confirm('TODO this Message needs to be changed into a dialog so users can make a choice and the text is read from a language table.             This Tasker has Sub Tasks that are not closed.  Do you want to ' + current.state + ' this Tasker and all sub taskers?  If yes, theclose note will be pushed to all open subtaskers.');
+		blnClose = true;
+	}
+	if (blnClose){
+		// NOTE: the updates happen on the server in a business rule.
+		// So, in the client script, we just need to deal with the user cancelling the update
+		// reset the assigned members to the previous value on cancel
+		var stateClosedFrom = current.getValue('state');
+		var isTaskeOwner = current.u_task_requester == gs.getUserID();
+		var isReviewer = current.u_reviewer == gs.getUserID();
+		var isAssignedMember = current.assigned_to == gs.getUserID();
+		
+		current.decision = 'N/A';
+		current.state = 3;
+		current.active = 'false';
+		var gdt = new GlideDateTime();
+		current.work_end = gdt.getValue();
+		
+		if (current.suspense_date != '') {
+			if (current.suspense_date > gdt.getValue())
+				current.u_completed_on_time = true;
+			else
+				current.u_completed_on_time = false;
+		} else current.u_completed_on_time = true;
+		current.update();
+		// if the task was closed from the review state, then we need 2 entries
+		// either way, we need to write the complete entry
+		// this first entry is for the assigned member or the task owner
+		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+		grResponseLog.initialize();
+		grResponseLog.u_task_tree = current.u_task_tree;
+		grResponseLog.u_task = current.getUniqueValue();
+		grResponseLog.u_task_number = current.number;
+		if(stateClosedFrom == '14'){
+			// making the entery for sent to review for the assigned member if state 14
+			grResponseLog.u_responded_by = current.assigned_to;
+			grResponseLog.u_role = 'assigned_member';
+			grResponseLog.response = current.response;
+			grResponseLog.u_action_taken = 'sent_to_review';
+		} else{
+			// making the entery for sent to review for the assigned member if state 14
+			grResponseLog.u_role = isAssignedMember? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+			grResponseLog.u_responded_by = gs.getUserID();
+			grResponseLog.response = current.response;
+			grResponseLog.u_action_taken = 'completed';
+		}
+		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		if (grOU.get(current.primary_assignee)){
+			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+		}
+		grResponseLog.insert();
+		// now create the Reviewer entre IF the state is 14
+		if(stateClosedFrom == '14'){
+			grResponseLog.initialize();
+			grResponseLog.u_task_tree = current.u_task_tree;
+			grResponseLog.u_task = current.getUniqueValue();
+			grResponseLog.u_task_number = current.number;
+			grResponseLog.u_responded_by = gs.getUserID();
+			grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+			grResponseLog.response = current.comments_dt;
+			grResponseLog.u_action_taken = 'completed';
+			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+			grResponseLog.insert();
+		}
+
+		gs.addInfoMessage(current.number + gs.getMessage('Tasker - has been marked as Completed'));
+	}
+	action.setRedirectURL(current);
+}
+
+
+]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-11-04 16:40:07</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>21609559db5c2810936dd498f496195b</sys_id>
+        <sys_mod_count>11</sys_mod_count>
+        <sys_name>Mark Complete</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_action_21609559db5c2810936dd498f496195b</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-28 00:51:03</sys_updated_on>
+        <table>x_153465_discovert_route_task_instance</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>false</ui16_compatible>
+    </sys_ui_action>
+</record_update>

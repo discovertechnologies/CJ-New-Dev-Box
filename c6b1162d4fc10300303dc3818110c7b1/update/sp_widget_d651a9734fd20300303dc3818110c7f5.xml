@@ -1,0 +1,579 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function($scope, $location, $rootScope, spModal, spUtil) {
+	//------------------------------------------------------------------------------------------------------------------------
+	// COMPANY: DISCOVER TECHNOLOGIES
+	// CUSTOMIZED BY: KARINA TORRES
+	// RECURSIVE GRAPHICAL TREE FOR PROCESS TEMPLATE
+	// HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
+	//------------------------------------------------------------------------------------------------------------------------
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+	var node_active_bg = '#33738e';
+	var node_inactive_bg = '#787878';
+	var node_selected_border = '#FFD247';
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	
+	var c = this;
+	var currentPage = $scope.data.page_id;
+	// STRY0069986 - move to top
+	var display_id = $location.search().sys_id;
+	// STRY0040294
+	if (!display_id && c.data.id){
+		display_id = c.data.id;
+	}
+	
+	//  UI/UX - STRY0065140 - 2.5 Template List - FIX
+	var diagram;
+		
+
+	// RJ - TUP - STRY0068618 - added run template
+	$scope.runModalProcessTemplate = function() {
+
+		
+		spModal.open({
+			title: 'Template Instance',
+			backdrop: 'static',
+			widget: 'discovertasker-widget-modal-prompt',
+			widgetInput: {process_template_sys_id: $scope.data.templateId},
+			size: 'lg',
+			buttons: [{label:'Close', cancel: true}]
+		}).then( function(){
+			/* update model after return from modal */
+			c.server.update();
+		});
+	};
+	
+$scope.openModalProcessTemplate = function() {
+
+		/* opens the platform form in a modal for this table */
+		// STRY0040294 - added isModal: true
+		c.modalInstance = spModal.open({
+				title: "Template Information",
+				backdrop: 'static',
+				widget: 'discovertasker-formtab',
+				widgetInput: {table: 'x_153465_discovert_discover_routing_template',
+											sys_id: $scope.data.templateId,
+											isModal: true},
+				size: 'lg',
+				buttons: []
+			});
+};
+
+	// STRY0040294 - use record watcher to keep grid synced
+	spUtil.recordWatch($scope, "x_153465_discovert_route_tasks",
+										 c.data.recordWatchFilter,
+										 function(name, data) {
+		spUtil.update($scope).then(function() {
+			drawTree();	
+		})
+	});
+
+
+	
+	$rootScope.$on('dataTableClick', function (evt, item) { 
+		
+		$scope.data.id = item.sys_id;
+		$scope.data.sys_id = item.sys_id;
+		$scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
+		
+
+		//  UI/UX - STRY0065140 - 2.5 Template List - FIX
+		if(item.process_level) c.data.process_level = item.process_level.display_value;
+		if(item.template_name) c.data.name = item.template_name.display_value;
+		
+		$location.search('table', $scope.data.table).search('sys_id', $scope.data.sys_id).search('spa', 1);
+		c.server.update().then(function(){
+			drawTree();	
+		});
+		
+	});
+
+	$scope.$on('$taskerTabbedForm.list.click', function(e, parms) {
+		c.data.sys_id = parms.sys_id;
+		// STRY0074663 Only rebroadcast if the node changed
+		if(display_id != parms.sys_id){
+			display_id = parms.sys_id;	
+			// Select the node using the sys_id parameter supplied.
+			var node_select = diagram.findNodeForKey(display_id);
+			diagram.select(node_select);
+		}
+	})
+	
+		function nodeSelectionChanged(node) { 
+			
+			var evt = {};
+				var d = node.data;
+				evt.sys_id = d.sys_id;
+
+				if (evt.sys_id == display_id) { // get called twice by gojs
+					return;
+				}
+				evt.table = d.sys_class_name || d.table;
+				// RJ -ET - Story 4
+				evt.parent = d.parent;
+			
+				display_id = evt.sys_id;
+				$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+				$rootScope.$broadcast('$sp.list.click', evt);
+				// STRY0072032
+				if(!c.data.isSystemTreeOrientationVertical){
+					diagram.centerRect(node.actualBounds);
+				}
+		}
+
+		$scope.page = {
+				displayValue: $scope.data.title,
+				value: $scope.data.id,
+				name: 'page'
+		};
+	
+	// STRY0069986 - one draw tree function, not 2 places with the same logic.
+	if ($scope.data.id) { 
+		drawTree();
+	}
+	
+	function drawTree() {  
+		//  UI/UX - STRY0065140 - 2.5 Template List - FIX
+		if(diagram != undefined){
+			diagram.div = null;
+			diagram = null;
+		}
+
+			//setTimeout(function () {	
+				var $go = go.GraphObject.make; // for conciseness in defining templates
+				var node_id = "page_map_new";
+				//jslog(diagram.div)
+
+				if(currentPage == "discovertasker_processtemplatedetails" ){
+									c.data.name = $scope.data.map[0].process_name_map;
+									c.data.process_level = $scope.data.map[0].process_level_map;
+				} 
+				
+				// STRY0072032
+				if(!c.data.isSystemTreeOrientationVertical){
+					// Horizontal Settings
+					diagram = $go(go.Diagram, node_id, {
+						allowVerticalScroll:false,
+						//initialContentAlignment: go.Spot.Default,
+						//allowZoom: false,
+						// define the layout for the diagram
+						layout: $go(go.TreeLayout, {
+							nodeSpacing: 5,
+							layerSpacing: 60
+						})
+					});
+				} else{
+					diagram = $go(go.Diagram, node_id, {
+						initialAutoScale: go.Diagram.UniformToFill,
+						// STRY0072032 trying takign this out for vertical, thinking we may need to allow vertical scroll
+						// allowVerticalScroll:false,
+						
+						//initialContentAlignment: go.Spot.Default,
+						//allowZoom: false,
+						// define the layout for the diagram
+						layout: $go(go.TreeLayout, {
+							angle:90,
+							nodeSpacing: 5,
+							layerSpacing: 60
+						})
+					});
+					
+				}
+
+				diagram.model = new go.TreeModel($scope.data.map);
+				//var font = "12px SourceSansPro, Helvetica, Arial, sans-serif";
+				var fontStyle = "13px Segoe UI";
+				// Define a simple node template consisting of text followed by an expand/collapse button
+				// STRY0072032
+				var treeOrientation;
+				if(!c.data.isSystemTreeOrientationVertical){
+					treeOrientation = "Horizontal";
+				} else {
+					treeOrientation = "Vertical";
+				}
+		
+				diagram.nodeTemplate = $go(go.Node, treeOrientation, {
+						selectionAdorned: false,
+						selectionChanged: nodeSelectionChanged,
+						isTreeExpanded: true,
+						isTreeLeaf: true
+					}, // this event handler is defined below
+					$go(go.Panel, "Auto",
+						$go(go.Shape, "RoundedRectangle", {
+								strokeWidth: 3
+							}, {
+								fill: "Gray"
+							},
+							new go.Binding("stroke", "isSelected", function (s) {
+								if (s)
+									return node_selected_border;
+								else
+									return null;
+							}).ofObject(""),
+
+							new go.Binding("fill", "active", function (t) { 
+									switch(t){
+										case "false":
+											return node_inactive_bg;
+										default:
+											return node_active_bg;
+									}
+							})
+						),
+						$go(go.TextBlock, {
+								font: fontStyle,
+								stroke: "white",
+								margin: 3,
+								width: 200
+							},
+							new go.Binding("text", "name"))
+					),
+					$go("TreeExpanderButton") // this was overkill for small diagrams
+				);
+				if(c.selectedNode == null){
+					c.selectedNode = $scope.data.map[0].sys_id;
+				}
+				diagram.select(diagram.findNodeForKey(display_id));
+				// Define a trivial link template with no arrowhead
+				// STRY0072032
+				if(!c.data.isSystemTreeOrientationVertical){
+					diagram.initialAutoScale=go.Diagram.Uniform;
+				}
+				//  UI/UX - STRY0065140 - 2.5 Template List - FIX
+				diagram.allowVerticalScroll=false;
+				diagram.linkTemplate = $go(go.Link, {
+					selectable: false
+				}, $go(go.Shape)); // the link shape
+				// Resize the graph container height when the graph changes size
+				diagram.addDiagramListener('DocumentBoundsChanged', function () {
+					var diagramHeight = parseInt(diagram.documentBounds.height);
+					jQuery("#" + node_id).height(diagramHeight);
+				})
+				// Select the node using the sys_id parameter supplied.
+				var node_select = diagram.findNodeForKey(display_id);
+				diagram.select(node_select);
+				
+			//}, 1000);
+			//}
+	}
+	// only add the listner if data.id was set.
+	if ($scope.data.id) { 
+		// this event handler is called when the diagram is first ready
+		diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
+			var node = diagram.findNodeForKey(display_id);
+			// and center it and select it
+			// STRY0072032
+			if(c.data.isSystemTreeOrientationVertical){
+				diagram.centerRect(node.actualBounds);
+			}
+		});
+	}
+	
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES 
+//------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------
+// 2.5.21 | 09.10.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+//------------------------------------------------------------------------------------------------------------------------
+// No updates needed on Tasker theme, updates done on the client script.
+
+.designer-link {
+  margin-top: .5em;
+  margin-bottom: .5em;
+  padding-left: 8px;  
+}
+
+.fa {
+    display: inline-block;
+    font: normal normal normal 14px/1 FontAwesome;
+    font-size: inherit;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.placeholder-right-pane p {
+    color: #81878E;
+    font-size: 18px;
+    font-weight: 300;
+}
+
+.placeholder-right-pane i {
+    font-size: 200px;
+    color: #E6E8EA;
+}
+
+
+a {
+  margin: 2px!important;
+  padding-right: 10px!important;
+}
+
+a.span {
+	font-family: Tahoma, Geneva, sans-serif!important;
+}
+
+.note {
+	//float: left;
+  padding-top: 12px;
+  font-size: 13px;
+} 
+
+.templateName {
+	//float: left;
+  padding-top: 18px;
+  font-size: 16px;
+} </css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>discovertasker-processtemplatetreegraph</id>
+        <internal>false</internal>
+        <link/>
+        <name>Tasker Graph - Template Tree</name>
+        <option_schema/>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES & BRIAN KEENER
+// GRAPHICAL TREE FOR PROCESS DEFINITION
+//------------------------------------------------------------------------------------------------------------------------
+(function() {
+	//data.placeholderMsg = gs.getMessage("Select Template ...");
+	var map = data.map = [];
+	data.pageTemplateDetails = "discovertasker_processtemplatedetails"; //"discovertasker_processtemplatedetails";
+	data.table_detail = "x_153465_discovert_route_tasks";
+	//------------------------------------------------------------------------------------------------------------------------
+	// CUSTOM
+	//------------------------------------------------------------------------------------------------------------------------
+	data.page_id = $sp.getParameter("id");
+	data.view = $sp.getParameter("view");
+	data.filter = $sp.getParameter("filter");
+	data.table = $sp.getParameter("table");
+	data.isValid = true;
+	data.sys_id = $sp.getParameter("sys_id");
+	//----------------------------------------------------------------------------------------------------
+	// Initializing Variables
+	//----------------------------------------------------------------------------------------------------
+	var sys_id_currenttask = data.sys_id;
+	var id = "";
+	
+	if (input) {
+		data.table = input.table;
+		data.sys_id = input.sys_id;
+		//id =  input.sys_id;
+		sys_id_currenttask = input.sys_id;
+	}
+
+	// STRY0072032
+	data.isSystemTreeOrientationVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
+
+	if ($sp.getParameter("table") == 'x_153465_discovert_discover_routing_template') {
+		id = getProcessTemplate(sys_id_currenttask);
+	} else {
+		if ($sp.getParameter("table") == 'x_153465_discovert_route_tasks') {
+			id = getTopParent(sys_id_currenttask);
+		}
+	}
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	
+	if (!id) {
+		data.id = null;
+		return;
+	}
+	var gr = new GlideRecordSecure('x_153465_discovert_route_tasks');
+	gr.addQuery('sys_id', id);
+	gr.query();
+	gr.next();
+	var uiChec = new uiConditionCheck();
+	data.canRunTemplate = uiChec.runTemplateUIAction(gr)
+
+	data.id = gr.getValue('sys_id');
+	data.title = gr.getValue('short_description');
+	// RJ - TUP - STRY0068618 - added run template
+	data.topParentTask_id = id;
+	//data.templateId = id;
+	data.templateId = gr.getValue('tasker_process_definition');
+	data.templateName = gr.getDisplayValue('tasker_process_definition');
+		
+	// STRY0040294 - use record watcher to keep grid synced
+	data.recordWatchFilter = "active=true^tasker_process_definition=" + data.templateId;
+	
+	var m = getO(gr);
+	
+	m.name = gr.number.toString() + ' - ' + gr.short_description.toString() + ' (' + gr.primary_assignee.getDisplayValue().toString() + ')';
+	m.level = 1;
+	m.active = gr.active.getDisplayValue();
+	m.process_level_map = gr.tasker_process_definition.process_level.getDisplayValue() + " - ";
+	m.process_name_map = gr.number.toString() + ' - ' + gr.short_description.toString();
+	map.push(m);
+	getLevel1(map, gr.getValue('sys_id'), m.level);
+	//------------------------------------------------------------------------------------------------------------------------
+	//Get Tasks Level 1
+	function getLevel1(map, sys_id) {
+		var t = getGR('x_153465_discovert_route_tasks', 'parent', sys_id, 'route_order');
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			c.name = t.number.toString() + ' - ' + t.short_description.toString() + ' (' + t.primary_assignee.getDisplayValue().toString() + ')';
+			if (t.route_order != null) c.name = t.route_order + ". " + c.name;
+			c.level = 2;
+			c.active = t.active.getDisplayValue();
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'), c.level);
+		}
+	}
+	//Get Tasks Level 1++
+	function getLeveln(map, sys_id, level) {
+		var t = getGR('x_153465_discovert_route_tasks', 'parent', sys_id, 'number');
+		var currentLevel = level + 1;
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			c.name = t.number.toString() + ' - ' + t.short_description.toString() + ' (' + t.primary_assignee.getDisplayValue().toString() + ')';
+			if (t.route_order != null) c.name = t.route_order + ". " + c.name;
+				c.parent = t.parent.toString();
+			//c.status = t.status.toString();
+			c.active = t.active.getDisplayValue();
+			c.level = currentLevel;
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'), currentLevel);
+		}
+	}
+	
+	function getGR(table, parentField, parentID, orderby) {
+		var t = new GlideRecordSecure(table);
+		t.addQuery(parentField, parentID);
+		t.orderBy(orderby);
+		t.query();
+		return t;
+	}
+	// object that goes in the array
+	// common vars table, key, sys_id
+	function getO(gr, parent) {
+		var c = {};
+			c.table = gr.getTableName();
+			c.key = gr.getValue('sys_id');
+			c.sys_id = gr.getValue('sys_id');
+			if (c.status)
+				c.status = gr.getValue('status');
+			if (parent)
+				c.parent = parent;
+			return c;
+		}
+		//------------------------------------------------------------------------------------------------------------------------
+		// GET THE TOP PARENT FOR THE CURRENT SYS_ID
+		//------------------------------------------------------------------------------------------------------------------------
+		function getProcessTemplate(sys_id_currenttask) {
+			var grProcessTemplate = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+			grProcessTemplate.addQuery('sys_id', sys_id_currenttask);
+			grProcessTemplate.query();
+			grProcessTemplate.next();
+			
+			if (grProcessTemplate.parent_task_def) {
+				return grProcessTemplate.getValue('parent_task_def');
+			}
+			
+		}
+		//------------------------------------------------------------------------------------------------------------------------
+		// GET THE TOP PARENT FOR THE CURRENT SYS_ID
+		//---------------------------------------------)---------------------------------------------------------------------------
+		function getTopParent(sys_id_currenttask) {
+			var hasParent;
+			var parentID;
+			var parentProcessDefinition;
+			var parentGR = new GlideRecordSecure('x_153465_discovert_route_tasks');
+			parentGR.addQuery('sys_id', sys_id_currenttask);
+			parentGR.query();
+			parentGR.next();
+			if (parentGR.parent) {
+				hasParent = true;
+				parentID = parentGR.getValue('parent');
+				while (hasParent) {
+					var gp = new GlideRecordSecure('x_153465_discovert_route_tasks');
+					gp.addQuery('sys_id', parentID);
+					gp.query();
+					gp.next();
+					//parentProcessDefinition = gp.getValue('tasker_process_definition');
+					if (gp.parent) {
+						parentID = gp.getValue('parent');
+					} else {
+						hasParent = false;
+					}
+				}
+				//parentID = parentProcessDefinition;
+			} else {
+				parentID = sys_id_currenttask;
+			}
+			return parentID;
+		}
+		
+		
+		//------------------------------------------------------------------------------------------------------------------------
+	})();
+	]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2017-11-14 21:17:38</sys_created_on>
+        <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
+        <sys_mod_count>1489</sys_mod_count>
+        <sys_name>Tasker Graph - Template Tree</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-15 12:44:33</sys_updated_on>
+        <template><![CDATA[
+
+<div class="panel panel-default">
+    <div class="panel-heading">
+      <div class="modal-body text-right" ng-if="data.sys_id && (data.page_id == 'discovertasker_processtemplatelist' || data.page_id == 'discovertasker_processtemplatedetails')" class="pull-right">
+				 
+        <a href="javascript:void(0)"  ng-if="data.canRunTemplate"
+           ng-click="runModalProcessTemplate()" class="btn btn-primary" title="Run Template" role="link">Run</a>
+
+        <a href="javascript:void(0)" 
+           ng-click="openModalProcessTemplate(data.sys_id)" class="btn btn-primary" title="View Template" role="link">View</a>
+
+        <a ng-if="data.page_id == 'discovertasker_processtemplatelist'" href="?id={{data.pageTemplateDetails}}&&table={{data.table_detail}}&sys_id={{data.topParentTask_id}}" 
+           ng-click="clearDiagramTree()" class="btn btn-primary" title="Edit Template in new tab" role="link" target="_blank">Edit</a>
+  		</div>
+    
+    <h4 class="panel-title">
+      <span ng-if="!data.templateName && data.page_id != 'discovertasker_processtemplatedetails'">
+      	Select a Template from the list on the left
+      </span>
+      <span ng-if="data.templateName">
+        <span class="templateName"><strong>{{data.templateName}} &nbsp;&nbsp; ({{data.process_level}})</strong></span>
+      </span><br>
+      <span ng-if="data.templateName" class="note">
+        Note: Hold CTRL and scroll the mouse wheel to zoom in and out.
+      </span>
+    </h4>
+    
+	</div>
+	<div class="panel-body">
+ 		<div ng-if="!data.sys_id" class="col-md-12 text-center placeholder-right-pane ng-scope">
+			<i class="fa fa-gears" aria-hidden="true"></i>
+			<p class="m-t-lg">Select a Template from the list on the left</p>
+    </div>
+    <div ng-if="data.sys_id">
+    	
+    </div> 
+    <div id="page_map_new" class="page_map_new" ng-show="data.id"/>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.ClientUserInfoScripts</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>2.5 P3&#13;
+STRY0087458 - DTLV - Response log &#13;
+&#13;
+Checks to see if the user given is in the organizational unit provided.  Requires user and Organizational Unit to be provided and returns true or false.</description>
+        <name>ClientUserInfoScripts</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var ClientUserInfoScripts = Class.create();
+ClientUserInfoScripts.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+	
+	getUserDefaultOU : function(userId)
+	{
+		if (!userId || userId == '')
+			userId = gs.getUserID();
+		var defaultOU = '';
+		var grOM = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grOM.addQuery('office_member', userId);
+		grOM.setLimit(1);
+		grOM.query();
+		if (grOM.next()){
+			defaultOU = grOM.getValue("u_default_ou");
+		}
+		return defaultOU;
+	},
+	
+	IsUserGlobalTA: function()
+	{
+		var userId = this.getParameter('UserId');
+		var ou = this.getParameter('OU');
+		return new UserInfoScripts().IsUserTaskingAuthority(userId, ou);
+	},
+	
+	IsUserInOU: function()
+	{
+		//Query organizational unit members to see if the user is a member
+		var userID = this.getParameter('UserId');
+		var ouID = this.getParameter('OU');
+		
+		var UserPermissions = new UserInfoScripts();	
+		if(UserPermissions.IsUserInOU(ouID,userID)){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	
+	//  RAJ STSK0011104 - allow changing task assingment based on user being a tasking authority 
+	//  changed the script include to add a method to determine if the user is a Tasking Authority
+	IsUserTaskingAuthority: function()
+	{
+		//Query organizational unit members to see if the user is a Tasking Authority for the OU
+		var userID = this.getParameter('UserId');
+		var ouID = this.getParameter('OU');
+		//  RAJ STSK0011104 updated to control whether a user can assign tasks based on Tasking Authority instead of ownership of the task or membership in the OU
+		
+		var UserPermissions  = new UserInfoScripts();
+		if(UserPermissions.IsUserTaskingAuthority(ouID,userID).toString() == 'true'){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	
+	//  RAJ STSK0011104 if the user is NOT a TA, but is in the OU, they can assign themselves to the Tasker, so the user needs to be able to see the "assigned members.  
+//  RAJ STSK0011104 - allow changing task assingment based on user being a tasking authority 
+	//  changed the script include to add a method to determine if the user is a Tasking Authority
+	CanUserAssignSelfOrOthers: function()
+	{
+		//Query organizational unit members to see if the user is a Tasking Authority for the OU
+		var userID = this.getParameter('UserId');
+		var ouID = this.getParameter('OU');
+		//  RAJ STSK0011104 updated to control whether a user can assign tasks based on Tasking Authority instead of ownership of the task or membership in the OU
+		var UserPermissions  = new UserInfoScripts();
+		if(UserPermissions.CanUserAssignSelfOrOthers(ouID,userID)){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	// STRY0067125 - Check the users permissions for assigning members in a template
+	CanUserAssignSelfOrOthersInTemplate: function()
+	{
+		//Query organizational unit members to see if the user is a Tasking Authority for the OU
+		var userID = this.getParameter('UserId');
+		var ouID = this.getParameter('OU');
+		var template = this.getParameter('Template');
+		//  RAJ STSK0011104 updated to control whether a user can assign tasks based on Tasking Authority instead of ownership of the task or membership in the OU
+		var UserPermissions  = new UserInfoScripts();
+		if(UserPermissions.CanUserAssignSelfOrOthersInTemplate(ouID,userID, template)){
+			return true;
+		}
+		else{
+			return false;
+		}
+	},
+	
+	IsUserOUTA: function(){
+		
+		var userId = this.getParameter('UserId');
+		var ou = this.getParameter('OU');
+		var answer = "false";
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grMembers.addQuery('discover_office_hierarchy', ou);
+		grMembers.addQuery('office_member' , userId);
+		grMembers.addQuery('office_task_authority', 'true');	
+		grMembers.query();
+		
+		
+		if(grMembers.next()){
+			return true;
+		}else{
+			return false;
+		}
+		
+		
+	},
+	isOUExternalTA: function(){
+		var strOU = this.getParameter('OU');
+		var grOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		grOU.addQuery('sys_id',strOU);
+		grOU.addQuery('u_external_flag', true);
+		grOU.query();
+		if(grOU.next()){
+			return true;
+		}
+		
+		return  false;
+	},
+	userHasRole: function()
+	{
+		var user = this.getParameter('user');
+		var roles = this.getParameter("roles");
+		var hasRole = false;
+		var parsRoles = roles.split(",");
+		var permissions = [];
+		for(var i=0; i<parsRoles.length; i++){
+			var grRole = new GlideRecord('sys_user_has_role');
+			grRole.addQuery('user', user);
+			grRole.addQuery('role.name', parsRoles[i]);
+			grRole.query();
+			if (grRole.next()) {
+				permissions.push({
+					"role":parsRoles[i], "hasRole": true
+				});
+			}else{
+				permissions.push({
+					"role":parsRoles[i], "hasRole": false
+				});
+			}
+		}
+		var data = JSON.stringify(permissions);
+		return data;
+	},
+	type: 'ClientUserInfoScripts'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-01-15 20:41:19</sys_created_on>
+        <sys_id>6c5b28ff4faf4300303dc3818110c756</sys_id>
+        <sys_mod_count>45</sys_mod_count>
+        <sys_name>ClientUserInfoScripts</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_6c5b28ff4faf4300303dc3818110c756</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-19 12:28:09</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_rectangle_menu_item">
+    <sp_rectangle_menu_item action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <color>primary</color>
+        <condition>gs.isLoggedIn()</condition>
+        <display_1/>
+        <display_2/>
+        <display_date/>
+        <filter/>
+        <glyph>university</glyph>
+        <hint>Acceptance Overdue: Suspense date &lt; Next Week  (As the OU Task Manager)</hint>
+        <kb_article/>
+        <kb_category/>
+        <kb_topic/>
+        <label>Awaiting Assignment Overdue</label>
+        <order>210</order>
+        <record_script><![CDATA[	// Menu Item Label
+	var label = 'Awaiting Assignment Overdue';
+    var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
+	var max = 5;
+	var filter ='u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11';
+    var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+
+	var t = data;
+
+	t.items = [];
+	var u = gs.getUser().getID();
+	
+	t.record_watchers = [];
+	t.record_watchers.push({
+							'table':'x_153465_discovert_route_task_instance',
+							'filter':filter
+							});
+
+   //KTORRES: BASED ON PRIMARY ASSIGNEE TA
+   //------------------------------------------------------------------------------------------------------------------
+   var primary_assigneeFilter = "primary_assigneeIN";
+   var grPrimaryAssigneeTA = new GlideRecord('x_153465_discovert_discover_office_members');
+   grPrimaryAssigneeTA.addQuery('office_task_authority', 'true');
+   grPrimaryAssigneeTA.addEncodedQuery('office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe');
+   grPrimaryAssigneeTA.orderByDesc('sys_updated_on');
+   grPrimaryAssigneeTA.query();
+
+   while (grPrimaryAssigneeTA.next()) {
+          primary_assigneeFilter += (',' + grPrimaryAssigneeTA.discover_office_hierarchy.toString());
+        }
+    //------------------------------------------------------------------------------------------------------------------
+   //if(isGTA){
+   //   primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY";
+   //}
+
+
+	var a = new GlideAggregate('x_153465_discovert_route_task_instance');
+	a.addEncodedQuery(filter);
+	if(!isGTA){
+    	a.addEncodedQuery(primary_assigneeFilter);
+    }
+	a.addAggregate("COUNT");
+    a.addEncodedQuery('u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+daysBeforeTaskAcceptanceIsOverdue); 
+	a.query();
+	
+	var totcount = 0;
+
+	if(a.next()){
+		totcount = a.getAggregate("COUNT");
+	}
+
+	var z = new GlideRecord('x_153465_discovert_route_task_instance');
+	z.addActiveQuery();
+	if(!isGTA){
+    	z.addEncodedQuery(primary_assigneeFilter);
+    }
+	z.addEncodedQuery(filter);
+    z.addEncodedQuery('u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+daysBeforeTaskAcceptanceIsOverdue); 
+	z.orderByDesc('sys_updated_on');//STRY0050767 //z.orderByDesc('u_last_unassigned_date'); 
+	z.setLimit(max);
+	z.query();
+
+		   
+	while (z.next()) {    
+	   t.items.push({
+					title: z.getValue('task_name') ,
+					type: 'link',
+					href: '?sys_id='+ z.getValue('sys_id') + '&view=sp&id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance'
+	  }); 
+	  
+	  if (!z.canRead())
+		continue;
+	  
+	     var a = {};
+	        if (z.short_description.nil())
+		       a.short_description = "(No description)";
+	        a.__table = z.getTableName();
+	        a.type = 'record';  
+	}
+
+	t.items.sort(function(a, b) {
+	  return b.sortOrder - a.sortOrder;
+	});
+
+	t.items = t.items.slice(0, max); 
+	t.count = totcount;
+
+	var link = {};
+	if(!isGTA){
+      link = {
+        title: gs.getMessage('View all requests'), 
+        type: 'link', 
+        href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='  + primary_assigneeFilter+'^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + daysBeforeTaskAcceptanceIsOverdue +'&label=' + label, 
+        items: []
+      };
+    } else {
+      link = {
+        title: gs.getMessage('View all requests'), 
+        type: 'link', 
+        href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='  + 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + daysBeforeTaskAcceptanceIsOverdue +'&label=' + label, 
+        items: []
+      };
+    }
+	t.items.push(link);]]></record_script>
+        <sc_cat_item/>
+        <sc_category/>
+        <short_description/>
+        <sp_page/>
+        <sp_rectangle_menu display_value="Tasker Banner Notification">2319a93cdb915340bb8ee536ca9619cd</sp_rectangle_menu>
+        <sp_rectangle_menu_item/>
+        <sys_class_name>sp_rectangle_menu_item</sys_class_name>
+        <sys_created_by>ktorres</sys_created_by>
+        <sys_created_on>2019-10-08 19:00:15</sys_created_on>
+        <sys_id>1ea7f93a1b588c10888aebde6e4bcb93</sys_id>
+        <sys_mod_count>117</sys_mod_count>
+        <sys_name>Awaiting Assignment Overdue</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_rectangle_menu_item_1ea7f93a1b588c10888aebde6e4bcb93</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-13 21:03:24</sys_updated_on>
+        <table/>
+        <type>scripted</type>
+        <url/>
+        <url_target/>
+    </sp_rectangle_menu_item>
+    <sys_translated_text action="delete_multiple" query="documentkey=1ea7f93a1b588c10888aebde6e4bcb93"/>
+</record_update>

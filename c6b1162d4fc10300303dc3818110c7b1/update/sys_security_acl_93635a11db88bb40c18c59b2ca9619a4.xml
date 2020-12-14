@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>false</active>
+        <admin_overrides>false</admin_overrides>
+        <advanced>true</advanced>
+        <condition/>
+        <description>Deprecated - Allow write for includeintaskingauthority in x_153465_discovert_discover_office_hierarchy, for users with roles (x_153465_discovert.tasker_application_admin, x_153465_discovert.tasker_global_Tasking_Authority_member_admin), and if the ACL script returns true.</description>
+        <name>x_153465_discovert_discover_office_hierarchy.includeintaskingauthority</name>
+        <operation display_value="write">write</operation>
+        <script><![CDATA[if(current.isNewRecord()) {
+	answer = true;
+} else {
+	var taskerCommonScripts = new TaskerCommonScriptingMethods();
+	try {
+		var processTaskTemplateTableName = "x_153465_discovert_route_tasks";
+		var taskTableName = "x_153465_discovert_route_task_instance";
+		var taskingAuthorityTableName = "x_153465_discovert_discover_office_hierarchy";
+		var sysId = current.sys_id;
+
+		// prepare the query that will find out if this OU has a TA defined
+		var ouTaQuery = [{"includeintaskingauthority": "true"}]; 
+		// get the tasking authority table record that corresponds to the given ou sysId
+		var taskingRecord = taskerCommonScripts.queryRelatedShort(taskingAuthorityTableName, ouTaQuery, function(record) {
+			return record;
+		}, true);
+		// if we got a tasking authority record from the table, then we use it! If not, we print a warning in system logs
+		if(taskingRecord[0]) {
+			// with the tasking record found, get the sys_id of the tasking record
+			var taskingRecordSysId = taskingRecord[0].sys_id;
+			// active checker callback function, this function is used to check if a given record is active
+			// will be used later in the script
+			var hasActive = false;
+			var isActive = function(record2) {
+				if(record2.getValue("active") == true || record2.getValue("u_active") == true) {
+					hasActive = true;
+					return true;
+				} else return false;
+			};
+			// loop through the process template tasks to find any active process template tasks that reference this ou in the "tasking authority" field 
+			taskerCommonScripts.queryRelatedShort(processTaskTemplateTableName, [{"tasking_authority":taskingRecordSysId}], isActive, true);
+			var taskQuery = [
+				{"primary_assignee":sysId}, 
+				{"primary_office":sysId},
+				{"tasking_authority":current.sys_id}
+			];
+			// loop through all tasks to find if the current ou is referenced in any active task's tasking authority, primary office or assignee fields
+			taskerCommonScripts.queryRelatedOrShort(taskTableName, null, taskQuery, isActive, true);
+			// if any of the tasks or process template tasks are still active that reference this ou, then we do not allow modification of TA flag
+			if(hasActive) {
+				answer = false;
+			} else {
+				answer = true;
+			}
+		} else {
+			taskerCommonScripts.commonMessage("[OU Hierarchy ACL]",  "Tasking authority table record for "+ current.office_abbreviation + " not found", gs.warn);
+			answer = false;
+		}
+
+	} catch(e) {
+		taskerCommonScripts.checkException("ACL", gs.error, e);
+		answer = false;
+	}
+}
+]]></script>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>kbaton</sys_created_by>
+        <sys_created_on>2019-03-06 22:45:21</sys_created_on>
+        <sys_id>93635a11db88bb40c18c59b2ca9619a4</sys_id>
+        <sys_mod_count>34</sys_mod_count>
+        <sys_name>x_153465_discovert_discover_office_hierarchy.includeintaskingauthority</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_security_acl_93635a11db88bb40c18c59b2ca9619a4</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2020-05-05 18:17:28</sys_updated_on>
+        <type display_value="record">record</type>
+    </sys_security_acl>
+</record_update>

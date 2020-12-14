@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function($scope, $location, $rootScope,spModal, spUtil) {
+	//------------------------------------------------------------------------------------------------------------------------
+	// COMPANY: DISCOVER TECHNOLOGIES
+	// CUSTOMIZED BY: KARINA TORRES
+	// RECURSIVE GRAPHICAL TREE FOR PROCESS TEMPLATE
+	// HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
+	//------------------------------------------------------------------------------------------------------------------------
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+	var node_active_bg = '#33738e';
+	var node_inactive_bg = '#787878';
+	var node_selected_border = '#FFD247';
+	
+	//------------------------------------------------------------------------------------------------------------------------
+
+	// RJ -ET - Story 4
+	var c = this;
+	c.data.topOU="";
+	// STRY0074597
+	setOUPicker();
+	
+	// RJ -ET - Story 4
+	var diagram;
+	var display_id = $location.search().sys_id;
+	// RJ -ET - Story 4
+	// if no ID on URL, use the current id
+	if (!display_id && c.data.id){
+		display_id = c.data.id;
+		broadcastTopNodeChange(display_id);
+	}
+	
+	
+	// STRY0078258 - use record watcher to keep grid synced
+	spUtil.recordWatch($scope, "x_153465_discovert_discover_office_hierarchy", "",
+	function(name) {
+		var refreshDiagram = false;
+		if(name.data.operation=="insert" || name.data.operation == "delete")
+			refreshDiagram = true;
+		else if(name.data.changes.includes("office_name")  ||
+						name.data.changes.includes("office_abbreviation") ||
+						name.data.changes.includes("active") || 
+						name.data.changes.includes("level")
+					 ){
+			refreshDiagram = true;			
+		}
+		if(refreshDiagram){
+			spUtil.update($scope).then(function() {
+				drawTree();
+			})
+		}
+	});
+	
+	function broadcastTopNodeChange(topId) {
+		var evt = {};
+			evt.sys_id = topId;
+			evt.table = 'x_153465_discovert_discover_office_hierarchy';
+			// RJ -ET - Story 4
+			evt.parent = '';
+			$rootScope.$broadcast('$sp.list.click', evt);
+		}
+		// STRY0074597
+		$scope.topOnlyCheck = function() {
+			setOUPicker();
+		}
+		// STRY0074597
+		function setOUPicker(){
+			if(c.data.topOnly){
+				c.data.OUPicker_displayFields='office_abbreviation,office_name';
+				c.data.OUPicker_searchFields = 'office_abbreviation,office_name';
+				c.data.OUPicker_query='active=true^parentISEMPTY';
+			}else{
+				c.data.OUPicker_displayFields='office_level,office_abbreviation,office_name';
+				c.data.OUPicker_searchFields = 'office_level,office_abbreviation,office_name';
+				c.data.OUPicker_query='active=true';
+			}
+		}
+		
+		$scope.topOU={
+			displayValue: c.data.office_abbreviation + c.data.office_name,
+			value: c.data.sys_id,
+			name: 'topOU'
+		};
+		$scope.$on("field.change",function(evt,params){
+			c.data.topOU = $scope.topOU.value;
+			display_id = c.data.topOU;
+			c.server.update().then(function(){
+				drawTree();
+			});
+			broadcastTopNodeChange(display_id);
+		})
+		
+		$scope.expandGraph = function(){
+			spModal.open({
+				title: "",
+				backdrop:'static',
+				widget: 'discovertasker-officehierarchy',
+				size: 'lg',
+				// STRY0074597
+				widgetInput: {topOU:$scope.topOU.value,
+					topOnly:c.data.topOnly
+				},
+				buttons:[]
+			});
+		}
+		// STRY0074663
+		$scope.$on('sp.form.record.updated', function(evt, item) {
+			/* update model after return from modal */
+			c.server.update().then(function(){
+				drawTree();
+			});
+		});
+		
+		// RJ -ET - Story 4
+		$scope.$on('$taskerTabbedForm.list.click', function(e, parms) {
+			c.data.sys_id = parms.sys_id;
+			// STRY0074663 Only rebroadcast if the node changed
+			if(display_id != parms.sys_id){
+				display_id = parms.sys_id;
+				// Select the node using the sys_id parameter supplied.
+				var node_select = diagram.findNodeForKey(display_id);
+				diagram.select(node_select);
+			}
+			
+		})
+		
+		function nodeSelectionChanged(node) {
+			var evt = {};
+				var d = node.data;
+				evt.sys_id = d.sys_id;
+				if (evt.sys_id == display_id)  // get called twice by gojs
+					return;
+				
+				evt.table = d.sys_class_name || d.table;
+				// RJ -ET - Story 4
+				evt.parent = d.parent;
+				display_id = evt.sys_id;
+				$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+				$rootScope.$broadcast('$sp.list.click', evt);
+			
+				// STRY0072032
+				if(!c.data.isSystemTreeOrientationVertical){
+					diagram.centerRect(node.actualBounds);
+				}
+			}
+			
+			$scope.page = {
+				displayValue: $scope.data.title,
+				value: $scope.data.id,
+				name: 'page'
+			};
+			
+			$scope.$on("field.change", function(evt, parms) {
+				if (parms.field.name == 'page')
+					changePage(parms.newValue);
+			});
+			
+			function changePage(p){
+				var path = $location.path();
+				var searchParms = $location.search();
+				$location.search({id: searchParms.id, p: p});
+				}
+				
+				// RJ -ET - Story 4
+				// Move this into a fucntion to redraw tree when a new node is selected
+				if ($scope.data.id) {
+					drawTree();
+				}
+				
+				
+				function drawTree() {
+					if(diagram != undefined){
+						diagram.div = null;
+						diagram = null;
+					}
+					
+					var $go = go.GraphObject.make;  // for conciseness in defining templates
+					var node_id = "page_map";
+					// STRY0072032
+					if(!c.data.isSystemTreeOrientationVertical){
+						// Horizontal Settings
+						diagram =
+							$go(go.Diagram, node_id, {
+							allowZoom: true,
+							// define the layout for the diagram
+							layout: $go(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 60 })
+						});
+					} else{
+						diagram =
+							$go(go.Diagram, node_id, {
+							initialAutoScale: go.Diagram.UniformToFill,
+							allowZoom: true,
+							// define the layout for the diagram
+							layout: $go(go.TreeLayout, { angle:90, nodeSpacing: 5, layerSpacing: 60 })
+						});
+					}
+
+						
+						diagram.model = new go.TreeModel($scope.data.map);
+						var fontStyle = "13px Segoe UI";
+						//var font = "13px Helvetica, Arial, sans-serif";
+						// Define a simple node template consisting of text followed by an expand/collapse button
+						// STRY0072032
+						var treeOrientation;
+						if(!c.data.isSystemTreeOrientationVertical){
+							treeOrientation = "Horizontal";
+						} else {
+							treeOrientation = "Vertical";
+						}
+						diagram.nodeTemplate = $go(go.Node, treeOrientation,
+						{ selectionAdorned: false,
+							selectionChanged: nodeSelectionChanged,
+							isTreeExpanded: true,
+							isTreeLeaf: true
+						},  // this event handler is defined below
+						$go(go.Panel, "Auto",
+						$go(go.Shape, { strokeWidth: 3 },
+							new go.Binding("stroke", "isSelected", function(s){
+								if (s)
+									return node_selected_border;
+								else
+									return null;
+							}).ofObject(""),
+							new go.Binding("fill", "active", function (t) { 
+									switch(t){
+										case "false":
+											return node_inactive_bg;
+										default:
+											return node_active_bg;
+									}
+							})),
+							$go(go.TextBlock, { font: fontStyle, stroke: "white", margin: 3 },
+								new go.Binding("text", "name"))
+								),
+								$go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
+								);
+								
+								diagram.select(diagram.findNodeForKey(display_id));
+								// STRY0072032
+								if(!c.data.isSystemTreeOrientationVertical){
+									diagram.initialAutoScale=go.Diagram.Uniform;
+								}
+					
+								diagram.allowVerticalScroll=false;
+								// Define a trivial link template with no arrowhead
+								diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
+									
+									// Resize the graph container height when the graph changes size
+									diagram.addDiagramListener('DocumentBoundsChanged', function(){
+										var diagramHeight = parseInt(diagram.documentBounds.height);
+										jQuery("#" + node_id).height(diagramHeight);
+									})
+									
+									// Select the node using the sys_id parameter supplied.
+									var node_select = diagram.findNodeForKey(display_id);
+									diagram.select(node_select);
+								}
+ // this event handler is called when the diagram is first ready
+  diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
+		var node = diagram.findNodeForKey(display_id);
+    // and center it and select it
+		// STRY0072032
+		if(c.data.isSystemTreeOrientationVertical){
+			diagram.centerRect(node.actualBounds);
+		}
+  });
+	
+							}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES 
+//------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------
+// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+//------------------------------------------------------------------------------------------------------------------------
+// No updates needed on Tasker theme, updates done on the client script.
+
+
+.designer-link {
+  margin-top: .5em;
+  margin-bottom: .5em;
+  padding-left: 8px;  
+}
+.note {
+	float: right;
+  padding-top: 12px;
+}
+.modal-lg {
+  width: 1400px;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 20px;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>discovertasker-officehierarchy</id>
+        <internal>false</internal>
+        <link/>
+        <name>Tasker Graph - Office Hierarchy</name>
+        <option_schema>[]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[//(function() {
+(function($sp, input, data, options, gs) {
+	data.placeholderMsg = gs.getMessage("Select Task...");
+	var map = data.map = [];
+	
+	data.topParentNeeded = false;
+	// STRY0074597 default to true, will change later if input
+	data.topOnly = true;
+	var count = new GlideAggregate('x_153465_discovert_discover_office_hierarchy');
+	count.addQuery('parent', 'null');
+	count.addAggregate('COUNT');
+	count.query();
+	var topHierarchy = 0;
+	if(count.next())
+		topHierarchy = count.getAggregate('COUNT');
+	
+	if (topHierarchy < 1 ) {
+		data.topParentNeeded = true;
+		return;
+	}
+	
+	// STRY0072032
+	data.isSystemTreeOrientationVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
+	
+	//------KTORRES: CHECK IF PARENT OFFICE HIERARCHY HAS BEEN DEFINED BY PROPERTY SETTING
+	var defaultIdTopOfficeHierarchy = gs.getProperty("x_153465_discovert.defaultIdTopOfficeHierarchy");
+	// RJ -ET - Story 4
+	// if the user selected a TOP OU, then rebuild the tree with the selected topOU
+	if(input){
+		if(input.topOU){
+			defaultIdTopOfficeHierarchy = input.topOU;
+		}
+		// STRY0074597 
+		data.topOnly = input.topOnly;
+	}
+	// RJ -ET - Story 4
+	var gr;
+	
+	if (defaultIdTopOfficeHierarchy != null) {
+		gr = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		if (!gr.get(defaultIdTopOfficeHierarchy)) {
+			defaultIdTopOfficeHierarchy = null;
+		}
+	}
+	
+	if (defaultIdTopOfficeHierarchy == null) {
+		gr = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		gr.addQuery('parent', 'null');
+		gr.query();
+		gr.next();
+	}
+	
+	//--------------------------------------------------------------------------------------
+	
+	data.id = gr.getValue('sys_id');
+	id = data.id;
+	data.title = gr.getValue('office_abbreviation');
+	
+	
+	if (!id) {
+		data.id = null;
+		return;
+	}
+	
+	var m = getO(gr);
+	//m.name = gr.getValue('office_abbreviation');
+	m.name = '' + gr.getValue('office_name') + '  (' + gr.getValue('office_abbreviation') + ')';
+	m.active = gr.getDisplayValue('active');
+	m.level = 1;
+	map.push(m);
+	getLevel1(map, gr.getValue('sys_id'), m.level);
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	function getLevel1(map, sys_id) {
+		var t = getGR('x_153465_discovert_discover_office_hierarchy', 'parent', sys_id);
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			c.name = '' + t.office_name + '  (' + t.office_abbreviation + ')';
+			c.active = t.active.getDisplayValue();
+			c.level = 2;
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'), c.level);
+		}
+	}
+	
+	function getLeveln(map, sys_id, level) {
+		var t = getGR('x_153465_discovert_discover_office_hierarchy', 'parent', sys_id);
+		var currentLevel = level + 1;
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			c.name = '' + t.office_name + '  (' + t.office_abbreviation + ')';
+			c.level = currentLevel;
+			c.active = t.active.getDisplayValue();
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'), currentLevel);
+		}
+	}
+	
+	
+	function getGR(table, parentField, parentID) {
+		var t = new GlideRecordSecure(table);
+		t.addQuery(parentField, parentID);
+		t.orderBy('level_order');
+		t.orderBy('office_name');
+		t.query();
+		return t;
+	}
+	
+	// object that goes in the array
+	// common vars table, key, sys_id
+	function getO(gr, parent) {
+		var c = {};
+			c.table = gr.getTableName();
+			c.key = gr.getValue('sys_id');
+			c.sys_id = gr.getValue('sys_id');
+			if (parent)
+				c.parent = parent;
+			
+			return c;
+		}
+		
+	//})();
+	})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2017-11-14 21:35:27</sys_created_on>
+        <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
+        <sys_mod_count>477</sys_mod_count>
+        <sys_name>Tasker Graph - Office Hierarchy</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-10 05:54:34</sys_updated_on>
+        <template><![CDATA[<style>
+
+  
+.modal-lg .expand-tree{
+  display:none;
+}
+  @media only screen and (min-device-width: 1100px) {
+.modal-lg {
+  width: 90%;;
+}
+}
+
+</style>
+<!--
+<div ng-if="!data.topParentNeeded" class="alert alert-primary alert-info" ng-class="m.type == 'error' ? 'alert-danger' : 'alert-success'" style="text-align: right;">
+  To create a new office, click on a node, then click on "Sub OUs" tab and click New.
+</div>
+-->
+<span class="pull-right" style="padding: 10px;">
+  <span class="glyphicon glyphicon-resize-full expand-tree"  ng-click="expandGraph()" title="Full-screen"></span>
+</span>
+
+<div ng-if="data.topParentNeeded" style="text-align: right;">
+  <div class="alert alert-primary alert-info" ng-class="m.type == 'error' ? 'alert-danger' : 'alert-success'" style="">
+    A top OU needs to be created, click here to create one &nbsp; &nbsp;
+    <a class="btn btn-primary" href="../discovertaskerportal/?id=discovertasker_officehierarchy&table=x_153465_discovert_discover_office_hierarchy&sys_id=-1">New Top OU</a>
+  </div>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h4 class="panel-title">
+      <div class="grid-container">
+        <div>Organizational Hierarchy</div>
+        <div>
+          <!-- STRY0074597 -->
+          <div>
+            <label>Organizations &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <input type="checkbox" ng-change=topOnlyCheck() ng-model=data.topOnly value=""> Top Only
+            </label>  
+          </div>
+          <sn-record-picker field="topOU" table="'x_153465_discovert_discover_office_hierarchy'" value-field="'sys_id'" display-field="'office_name'" display-fields="data.OUPicker_displayFields" search-fields="c.data.OUPicker_searchFields" page-size="100" default-query="data.OUPicker_query"></sn-record-picker></div>
+      </div>
+</h4>        
+      <span class="note">Note: Hold CTRL and scroll the mouse wheel to zoom in and out.</span>
+		</div>
+		<div class="panel-body">
+      <div class="m-t-sm">
+        <div id="page_map" class="page-map" ng-show="data.id"/>
+      </div>
+    </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

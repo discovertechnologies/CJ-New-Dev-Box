@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.ClientOrganizationalScripts</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>This is the "client callable" version of the OrganizationalScripts script include.&#13;
+&#13;
+Taking a User, find the default OU for the user.  This is used anywhere the system is trying to set the default OU.  Putting it in a script include will make a switch from finding the highest OU for a member to finding the "Default OU" for a member if we choose to make that switch.&#13;
+&#13;
+// v 2.5.13 - get the notes for a tasker contact when the user changes the organizationl Contact&#13;
+// v.2.5 P4 - issue when adding a member for the second time, the default ou for the member was not being shown correctly</description>
+        <name>ClientOrganizationalScripts</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var ClientOrganizationalScripts = Class.create();
+ClientOrganizationalScripts.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+
+	//RJ -STRY0074663
+	saveContactInfo: function()
+	{
+		// Returns the note for a given contact
+		// if more fields are added to the contact, we would add them to the JSON returned.
+		var contactData = this.getParameter('sysparam_contactData');
+		
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.saveContactInfo(contactData);
+	},
+	
+	//RJ -STRY0074663
+	getContactNote: function()
+	{
+		// Returns the note for a given contact
+		// if more fields are added to the contact, we would add them to the JSON returned.
+		var contactId = this.getParameter('sysparam_contactId');
+		
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.getContactNote(contactId);
+	},
+	
+	
+	GetUserDefaultOU: function(ID)
+	{
+		// Returns the default OU for a given user
+		var userID = this.getParameter('UserId');
+		
+		//KB - STRY0035824 - 10/10/2019
+		if(ID) {
+			userID = ID;
+		}
+		
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.GetUserDefaultOU(userID);
+	},
+	
+	
+	GetUserDefaultTaskingAuthority: function()
+	{
+		//Query organizational unit members to see if the user is a member
+		var strOU = this.getParameter('OU');
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.GetUserDefaultTaskingAuthority(strOU);
+	},
+	
+	// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
+	getTaskingAuthorityOrganizationalUnit: function()
+	{
+		//Query organizational unit members to see if the user is a member
+		var strTaskingAuthority = this.getParameter('sysParam_TaskingAuthority');
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.getTaskingAuthorityOrganizationalUnit(strTaskingAuthority);
+	},
+	
+	// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
+	getOrganizationalUnitAbbrAndName: function()
+	{
+		//Query organizational unit members to see if the user is a member
+		var strOU = this.getParameter('sysParam_OU');
+		
+		var orgScripts = new OrganizationalScripts();
+		return orgScripts.getOrganizationalUnitAbbrAndName(strOU);
+	},
+	
+	getOrganizationalUnitTaskingAuthorities: function(){
+		
+		var taskingAuthoritie;
+		var strOU = this.getParameter('OU');
+		var grOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		grOU.addQuery('sys_id',strOU);
+		grOU.query();
+		while(grOU.next()){
+			taskingAuthoritie = grOU.tasking_authorities;
+		}
+
+		return  taskingAuthoritie;
+	},
+
+	getUserDefaultOU_2: function(){
+		var user = this.getParameter('sysparam_user');
+		
+		var grUser = new GlideRecordSecure("x_153465_discovert_discover_office_members");
+		grUser.addQuery('office_member', user);
+		grUser.addQuery('u_isdefaultou', true);
+		grUser.query();
+		if(grUser.next()){
+			//// v.2.5 P4 - issue when adding a member for the second time, the default ou for the member was not being shown correctly
+			return grUser.getValue('discover_office_hierarchy');
+		}
+		else
+			return '';
+	},
+	
+	//KB - STRY0032629 10/16/2019
+	isUserOUTAOfAnotherUserBasedOnDefaultOu: function(potentialOuTa, subject) {
+		var OUTAUser = this.getParameter("OUTAUser");
+		var Subject = this.getParameter("Subject");
+		if(potentialOuTa && subject) {
+			OUTAUser = potentialOuTa;
+			Subject = subject;
+		}
+		var subjectOu = this.GetUserDefaultOU(Subject);
+		var UIS = new UserInfoScripts();
+		return UIS.isGivenUserOUTA(OUTAUser, subjectOu);
+	},
+	
+	isOUTaskingAuthority: function(OU){
+		var strOU = this.getParameter('OU');
+		// KB - STRY0035824 10/10/2019
+		if(OU) {
+			strOU = OU;
+		}
+		var grOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		grOU.addQuery('sys_id',strOU);
+		grOU.addQuery('includeintaskingauthority', true);
+		grOU.query();
+		if(grOU.next()){
+			return true;
+		}
+		
+		return  false;
+	},
+	
+	// KB - STRY0035824 10/10/2019
+	isDefaultOUTaskingAuthority: function() {
+		var userId = this.getParameter('userId');
+		var OU = this.GetUserDefaultOU(userId);
+		return this.isOUTaskingAuthority(OU);
+	},
+	
+	// KB - STRY0035824 10/9/2019
+	// gets multiple values, calling isOuTaskingAuthority and hasChildren
+	isOuTaskingAuthority_CellEditTA: function() {
+		var results = {};
+			try {
+				var OU = this.getParameter('OU');
+				var taskId = this.getParameter('Task');
+				
+				results.isOuTaskingAuthority = this.isOUTaskingAuthority(OU);
+				results.hasChildren = (this.taskParentHasSubtasks(taskId)  > 0);
+			} catch(e) {
+				results = {};
+					gs.error(e);
+				}
+				
+				return JSON.stringify(results);
+			},
+			
+			taskParentHasSubtasks: function (ID) {
+				try {
+					var parentID = this.getParameter("parentID");
+					if(ID) {
+						parentID = ID;
+					}
+					var data ;
+					var gr = new GlideRecord('x_153465_discovert_route_task_instance');
+					
+					gr.addQuery('sys_id',parentID);
+					gr.query();
+					
+					while(gr.next()){
+						data = gr.calchaschildren;
+					}
+					return data;
+				} catch(e) {
+					gs.error(e);
+				}
+				
+			},
+			
+			isOUExternalTA: function(){
+				var strOU = this.getParameter('OU');
+				var grOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+				grOU.addQuery('sys_id',strOU);
+				grOU.addQuery('u_external_flag', true);
+				grOU.query();
+				if(grOU.next()){
+					return true;
+				}
+				
+				return  false;
+			},
+			
+			checkOffice_name: function(){
+				var office_name = this.getParameter('office_name');
+				var sys_id = this.getParameter('sys_id');
+				var table = "x_153465_discovert_discover_office_hierarchy";
+				var gr = new GlideRecordSecure(table);
+				gr.addEncodedQuery('office_name='+ office_name);
+				gr.query();
+				
+				if (gr.next() && gr.sys_id != sys_id) {
+					return true;
+				}else{
+					return false;
+				}
+			},
+			
+			checkOffice_abbreviation: function(){
+				var office_abbreviation = this.getParameter('office_abbreviation');
+				var sys_id = this.getParameter('sys_id');
+				var table = "x_153465_discovert_discover_office_hierarchy";
+				var gr = new GlideRecordSecure(table);
+				gr.addEncodedQuery('office_abbreviation=' + office_abbreviation);
+				gr.query();
+				
+				if (gr.next() && gr.sys_id != sys_id) {
+					return true;
+				}
+				else{
+					return false;
+				}
+				
+			},
+			type: 'ClientOrganizationalScripts'
+		});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-07-18 15:27:09</sys_created_on>
+        <sys_id>4c9bfebadb5f5f40bb8ee536ca9619ec</sys_id>
+        <sys_mod_count>139</sys_mod_count>
+        <sys_name>ClientOrganizationalScripts</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_4c9bfebadb5f5f40bb8ee536ca9619ec</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-13 03:52:48</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.ClientTaskInfo</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>2.5 Patch 3&#13;
+STRY0082087 - Restricted Group - (Portal &amp; Platform)Task Form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083025 - Restricted Group - (Portal &amp; Platform) Template  form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+STRY0083027 - Restricted Group - (Portal &amp; Platform) Template  Task form - Confirmation message - Restricted group selected after user selects OUs or Assigned Members&#13;
+&#13;
+v2.5.13:&#13;
+- STRY0076598: New method to Reopen a Task&#13;
+- STRY0076619- Task Form - TASK ORDER Field filter on New Subtask form and prompt for user on Save.&#13;
+&#13;
+v2.5.15:&#13;
+STRY0077855&#13;
+- Information message on Parent Task's Suspense Date Field - Subtask's Suspense Date is after Parent Task's Suspense Date &#13;
+STRY0077847&#13;
+- Information message on Subtask's Suspense Date field - Subtask's Suspense Date is after Parent Task's Suspense Date&#13;
+STRY0079667&#13;
+- when reopening a task, set the Signature instructioins complete back to false.&#13;
+&#13;
+Has two funcitons: &#13;
+1 - taskParentHasSubtasks() - returns number of children tasks the parent task has.&#13;
+2 - taskGetTaskSysId() -  Returns the task sys_id for a task that was created from a suggested task</description>
+        <name>ClientTaskInfo</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var ClientTaskInfo = Class.create();
+ClientTaskInfo.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+
+	// STRY0082087, STRY0083025, STRY0083027
+	getMembersAndOUsForRestrictedGroup: function()
+	{
+		var taskerHelpers = new TaskerHelpers();
+		var MembersAndOUsForRestrictedGroup = {};
+		var newRestrictedGroupId = this.getParameter('newRestrictedGroupId');
+		var previousRestrictedGroupId = this.getParameter('previousRestrictedGroupId');
+		var formValues = JSON.parse(this.getParameter('formValues'));
+		var formLabels = JSON.parse(this.getParameter('formLabels'));
+		var restrictedGroupOUs = taskerHelpers.getOUsForRestrictedGroupIdAbbrevName(newRestrictedGroupId);
+		var restrictedGroupMembers = taskerHelpers.getMembersForRestrictedGroupIdNameEmailUserId(newRestrictedGroupId);
+		var returnFormValues = taskerHelpers.getTaskerFormDisplayValues(formValues);
+		
+		MembersAndOUsForRestrictedGroup.newRestrictedGroupId = newRestrictedGroupId;
+		MembersAndOUsForRestrictedGroup.newRestrictedGroupName = restrictedGroupMembers.groupName;
+		MembersAndOUsForRestrictedGroup.previousRestrictedGroupId = previousRestrictedGroupId;
+		MembersAndOUsForRestrictedGroup.restrictedGroupOUs = restrictedGroupOUs;
+		MembersAndOUsForRestrictedGroup.restrictedGroupMembers = restrictedGroupMembers;
+		MembersAndOUsForRestrictedGroup.returnFormValues = returnFormValues;
+		MembersAndOUsForRestrictedGroup.formLabels = formLabels;
+		
+		MembersAndOUsForRestrictedGroup = taskerHelpers.evaluateRestrictedGroupForForm(MembersAndOUsForRestrictedGroup);
+		var answer = JSON.stringify(MembersAndOUsForRestrictedGroup);
+		return answer;
+	},
+	
+	// v2.5 P2 | 08.24.2020 | STRY0077855 - STRY0077847 : Suspense Date Timing Updates
+	compareTaskSuspenseDateToParentAndChildDates: function(){
+		var data = {};
+		var taskSuspenseDateOlderThanParent = false;
+		var subtaskSuspenseDateOlderThanParent = false;
+		var task_id = this.getParameter('sysparm_task_id');
+		var parent_task_id = this.getParameter('sysparm_parent_task_id');
+		var taskNewSuspenseDate = this.getParameter('sysparm_taskNewSuspenseDate');
+
+		var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grParentTask.get(parent_task_id)){
+			var gdt2 = new GlideDateTime(grParentTask.suspense_date);
+			var gdtParent = gdt2.getNumericValue();
+			if(taskNewSuspenseDate > gdtParent){
+				taskSuspenseDateOlderThanParent = true;
+			}
+		}
+		if(task_id != '-1'){
+			var countDateSubtasks = new GlideRecord('x_153465_discovert_route_task_instance');
+			countDateSubtasks.addQuery('parent', task_id);
+			countDateSubtasks.addQuery('suspense_date','>', taskNewSuspenseDate); 
+			countDateSubtasks.addNotNullQuery('suspense_date');
+			countDateSubtasks.addQuery('state', "NOT IN", "3,4,7");
+			countDateSubtasks.query();
+			if(countDateSubtasks.next()){
+				subtaskSuspenseDateOlderThanParent = true;
+			}
+		}
+		data.subtaskSuspenseDateOlderThanParent = subtaskSuspenseDateOlderThanParent;
+		data.taskSuspenseDateOlderThanParent = taskSuspenseDateOlderThanParent;
+		return JSON.stringify(data);
+	},
+
+    // v2.5.13 | 08.12.2020 | STRY0076619:  Sequential Review
+	checkActiveOrderOfParent: function(){
+		var taskOrderNeedsToBeHiger=false;
+		var task_parent_id = this.getParameter('sysparm_task_parent');
+		var order_setting = this.getParameter('sysparm_order');
+		var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grTaskParent.get(task_parent_id)){
+			// start assuming true
+			var taskOrderSelectedIsAlreadyCompleted = true;
+			var grSubTasksActiveLower = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubTasksActiveLower.addQuery('parent', task_parent_id);
+			grSubTasksActiveLower.addQuery('active', true);
+			grSubTasksActiveLower.addQuery('task_order', '<=', order_setting);
+			grSubTasksActiveLower.query();
+			while (grSubTasksActiveLower.next()){
+				taskOrderSelectedIsAlreadyCompleted = false;
+				break;
+			}
+			taskOrderNeedsToBeHiger = taskOrderSelectedIsAlreadyCompleted;
+		}
+		return taskOrderNeedsToBeHiger;
+	},
+	
+    // v2.5.13 | 08.07.2020 | STRY0076598:  Sequential Review
+	reopenValidateAndCheckHasCanceledSubtask: function(){
+		var hasCanceledSubtask=false;
+		var bReopen = true;
+		var task_sys_id = this.getParameter('sysparm_task');
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grTask.get(task_sys_id)){
+			// STRY0016025- RAJ 2019-04-20 - if Tasker has parent and parent is inactive, this tasker cannot be reopened.
+			// CONDITION 1:
+			if (!grTask.parent.nil()) {
+				if (!grTask.parent.active){
+					var id = grTask.parent + '';
+					var link = "../discovertaskerportal?id=discovertasker_taskdetails&sys_id=" + id +"&table=x_153465_discovert_route_task_instance&view=sp&state=3&order=1"	;
+					gs.addErrorMessage(" <b>The Parent of this task is not active. Parent " + '<a href='+link+'>' +grTask.parent.number+'</a>'  + ' must be reopened before you can reopen Subtask(s).</b>');					
+					bReopen = false;
+				}
+			} 
+			// CONDITION 2:
+			// STRY0016025- RAJ 2019-04-20 - Determine if Tasker close date is beyond the allowable reopen days
+			if (bReopen != false && grTask.closed_at < gs.daysAgo(gs.getProperty('x_153465_discovert.ReopenMaxDays'))){
+				// RAJ todo - this info message should be pulled from somewhere multilingual
+				gs.addErrorMessage(grTask.number + ' has been closed more than ' + gs.getProperty('x_153465_discovert.ReopenMaxDays') + ' days ago on ' +  grTask.closed_at + '.  It cannot be reopened, it has be restarted.');
+				bReopen = false;
+			}
+			// STRY0016025- RAJ 2019-04-20 - all logic passed, reopen the Task.
+			if (bReopen){
+				var grSubTasksClosedIncomplete = new GlideRecord('x_153465_discovert_route_task_instance');
+				grSubTasksClosedIncomplete.addQuery('parent', grTask.getUniqueValue());
+				grSubTasksClosedIncomplete.addQuery('state', 4);
+				grSubTasksClosedIncomplete.query();
+				while (grSubTasksClosedIncomplete.next()){
+					// recursively reopen down the tree
+					hasCanceledSubtask = true;
+					break;
+				}
+			}
+		}else{
+			bReopen = false;
+		}
+		//put all the variables collected above into a data object
+		var data = {};
+		data.hasCanceledSubtask = hasCanceledSubtask;
+		data.Reopen = bReopen;
+		return JSON.stringify(data);
+	},
+	
+	// STRY0076598: New method to Reopen a Task
+	reopenTask: function(){
+		var task_sys_id = this.getParameter('sysparm_task');
+		var reopenSubtasks = this.getParameter('sysparm_reopenSubtasks');
+		// Glide Record Secure will break this b/c of the Task Table.
+		// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grTask.get(task_sys_id)){
+			return this.reopenTaskInernal(grTask, reopenSubtasks);
+		}
+	},
+	
+	// STRY0076598: New method to Reopen a Task
+	reopenTaskInernal: function(current, reopenSubtasks) {
+		// this was pulled from the previous function, but needs to be updated to account for wait state
+		var TaskerHelper = new TaskerHelpers();
+		
+		// NOTE this was copied from reopen, this should be set based on a function, not hard coded
+		current.status = "Projected on time";
+		current.active = true;
+		// STRY0079667
+		current.u_reviewer_signed = false;
+		current.u_completed_on_time = false;
+		// STRY0016025- RAJ todo - this work note should be pulled from somewhere multilingual
+		current.work_notes = current.number + ' has been reopened by ' + gs.getUserDisplayName();
+		// STRY0016025- RAJ todo - this info message should be pulled from somewhere multilingual
+		gs.addInfoMessage(current.number + ' has been reopened by ' + gs.getUserDisplayName());
+		var childOpening = false;
+		if(reopenSubtasks){
+			// Glide Record Secure will break this b/c of the Task Table.
+			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+			var grSubTasksClosedIncomplete = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubTasksClosedIncomplete.addQuery('parent', current.getUniqueValue());
+			grSubTasksClosedIncomplete.addQuery('state', 4);
+			// STRY0076617 and STRY0076618 - reopen in order so that the order by waiting is applied while reopening
+			grSubTasksClosedIncomplete.orderBy('task_order');
+			grSubTasksClosedIncomplete.query();
+			if(grSubTasksClosedIncomplete.next()){
+				// if one subtask is being reopened, and the parent is of type waiting, then state should be waiting
+				childOpening = true;
+				// if we find a subtask that is reopening and the parent waits for subtasks to complete, then this task should go into wait state.
+				if(current.u_wait_for_subtasks_to_finish == true)
+					current.state = -3;
+				else
+					current.state = TaskerHelper.getUpdatedState(current);
+				current.update();
+				this.reopenTaskInernal(grSubTasksClosedIncomplete,true);
+			}
+			// Open the rest
+			while (grSubTasksClosedIncomplete.next()){
+				// recursively reopen down the tree
+				this.reopenTaskInernal(grSubTasksClosedIncomplete,true);
+			}
+		} 
+		// no subtasks were opened, set the state based on the task values
+		if (!childOpening){
+			current.state = TaskerHelper.getUpdatedState(current);			
+			current.update();
+		}
+		
+		// check the parent to see if it has the wait flag set.  If it does then reopening the child should put it in wait state
+		if(current.parent){
+			// Glide Record Secure will break this b/c of the Task Table.
+			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+			var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTaskParent.get(current.getValue("parent"))){
+				if(grTaskParent.u_wait_for_subtasks_to_finish == true) {
+					grTaskParent.state = -3;
+					grTaskParent.setWorkflow(false);
+					grTaskParent.update();
+				}
+			}
+		}
+		return true;
+    },
+
+	
+	// KT - STRY0058367:  2.2 PATCH 6 - FEB-26-2020
+	/*
+	As a "Task Owner" or "Assigned Member" of a parent task, upon filling out the new sub task form, The "Task Owner" field on the new sub task form should default to:
+	• If parent task is unassigned: the Task Parent Originator (Created by field)
+	• If parent task is assigned: the Task Parent Assigned Member
+ 	*/
+	setSubTaskTaskOwner: function(){
+		
+		var task_owner = "";
+		var parent_sys_id = this.getParameter('sysparm_parent');
+		
+		var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+		grTaskParent.addQuery("sys_id",parent_sys_id);
+		grTaskParent.query();
+		
+		if (grTaskParent.next()) {
+			
+			if(grTaskParent.state == "-5" || grTaskParent.getValue('assigned_to') == null){ //Unassigned
+				// STRY0078378 - if task owner of parent not set, set the owner of the subtask to the originator of the parent
+				if (grTaskParent.getValue('u_task_requester') == null){
+					task_owner = grTaskParent.getValue('originator');	
+				} else {
+					task_owner = grTaskParent.getValue('u_task_requester');	
+				}
+				
+			}
+			
+			if(grTaskParent.state == "1" || grTaskParent.getValue('assigned_to') != null){ //Assigned
+				task_owner = grTaskParent.getValue('assigned_to');
+			}
+		}
+	
+		return task_owner;
+	},
+	
+	// KT - STRY0048914:  2.2 PATCH 6 - FEB-26-2020
+	/*
+	As a user that can create subtasks, Parent Task Owner or Parent Assigned Member, upon filling out the new sub task form, I want the "instruction" field to be EDITABLE when it is in a "new" state, so that I can provide updated Instructions to the assigned member of the sub task. 
+	*/
+	checkUserIsAssignedMemberORTaskOwner: function(){
+		
+		var UserIsAssignedMemberORTaskOwner = false;
+		var currentUser = gs.getUser();
+		var parent_sys_id = this.getParameter('sysparm_parent');
+		
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		grTask.addQuery("sys_id",parent_sys_id);
+		grTask.query();
+		
+		while(grTask.next()){
+			if(grTask.assigned_to == currentUser.getID() || grTask.u_task_requester == currentUser.getID()){
+				UserIsAssignedMemberORTaskOwner = true;
+			}
+			return UserIsAssignedMemberORTaskOwner;
+		}
+	},
+	
+	//MK-STRY0052581
+	updateTaskStateToComplete: function(){
+		var task_sysID = (this.getParameter('sysparm_sysId'));
+		var set_state = new GlideRecord("x_153465_discovert_route_task_instance");
+		if(set_state.get(task_sysID)){
+			set_state.state = 3;
+			set_state.work_notes = 'Task was marked as Read';
+			set_state.update();
+		}
+	},
+	
+	taskParentHasSubtasks: function(){
+		var parentID = this.getParameter("parentID");
+		var data ;
+		var gr = new GlideRecord('x_153465_discovert_route_task_instance');
+		gr.addQuery('sys_id',parentID);
+		gr.query();
+		
+		while(gr.next()){
+			data = gr.calchaschildren;
+		}
+		return data;
+	},
+	
+	taskGetTaskSysId: function(){
+		var suggested_task_number = this.getParameter("suggested_task_sys_id");
+		var gr = new GlideRecord('x_153465_discovert_route_task_instance');
+		gr.addQuery('suggested_task',suggested_task_number);
+		gr.query();
+		
+		var new_task_id;
+		
+		while(gr.next()){
+			new_task_id = gr.sys_id;
+		}
+		return new_task_id;
+	},
+	
+	getTaskInfo: function(){
+		var user = this.getParameter("currentUser");
+		var currentOu = this.getParameter("currentOu");
+		var currentTask = this.getParameter("currentTask");
+		var taskInfo = new GlideRecord('x_153465_discovert_route_task_instance');
+		taskInfo.addQuery('sys_id',currentTask);
+		taskInfo.query();
+		var viewer="user";
+		var state = '';
+		var isOuTa = this.IsUserTaskingAuthority(user,currentOu);
+		while(taskInfo.next()){
+			state = taskInfo.getValue('state');
+			if(taskInfo.getValue('assigned_to') == user){
+				viewer = 'assigned_to';
+			}
+			if(taskInfo.getValue('originator') == user){
+				viewer = 'originator';
+			}
+			if(taskInfo.getValue('u_task_requester') == user){
+				viewerClientTaskInfo = 'task_owner';
+			}
+			if(taskInfo.getValue('u_reviewer') == user){
+				viewerClientTaskInfo = 'u_reviewer';
+			}
+			if(isOuTa){
+				viewerClientTaskInfo = 'outa';
+			}
+			if(gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin")){
+				viewer = 'gta';
+			}
+		}
+		
+		/*
+		var permissionsRecordClientTaskInfo= new GlideRecordSecure('x_153465_discovert_read_only_rules');
+		permissionsRecord.addQuery('u_viewer', viewer);
+		permissionsRecord.query();
+		var permissions=[];
+		while(permissionsRecord.next()){
+			if(state == "-5"){
+				state = "5";
+			}
+			permissions.push(
+			{"field": permissionsRecord.getValue('u_field'), "readOnly": permissionsRecord.getDisplayValue('u_' + state)}
+				);
+			}
+			var data = JSON.stringify(permissions);
+			return data;
+ 			*/
+			
+		}
+	});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>aalzyoud</sys_created_by>
+        <sys_created_on>2019-02-26 18:04:26</sys_created_on>
+        <sys_id>eca4cc3edbffab00bb8ee536ca961995</sys_id>
+        <sys_mod_count>257</sys_mod_count>
+        <sys_name>ClientTaskInfo</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_eca4cc3edbffab00bb8ee536ca961995</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-06 21:27:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

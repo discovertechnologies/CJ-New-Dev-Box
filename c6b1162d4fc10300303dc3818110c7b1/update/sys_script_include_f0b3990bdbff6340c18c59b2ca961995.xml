@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerCommonScriptingMethods</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Common server-side scripting patterns that occur within the application</description>
+        <name>TaskerCommonScriptingMethods</name>
+        <script><![CDATA[var TaskerCommonScriptingMethods = Class.create();
+TaskerCommonScriptingMethods.prototype = {
+    initialize: function() {
+    },
+	//TODO: Add state constants here to be reused later, named states may make more sense in the code instead of trying to remember which numbers match which state
+	/**
+* @copyrite © 2019 Discover Technologies LLC
+	* Constant name: UNASSIGNED_STATE
+	* Type: integer/number
+	* Purpose: Unassigned state value for Task Records
+	* Value: -5
+	* Example:
+	* 	if(current.parent.assigned_to && current.parent.state != tcs.UNASSIGNED_STATE){
+	*		//do something
+	*	}
+	*/
+	UNASSIGNED_STATE: -5,
+	/**
+	* Constant name: ASSIGNED_STATE
+	* Type: integer/number
+	* Purpose: Assigned state value for Task Records
+	* Value: 1
+	* Example:
+	* 	if(current.parent.assigned_to && current.parent.state == tcs.ASSIGNED_STATE){
+	*		//do something
+	*	}
+	*/
+	ASSIGNED_STATE: 1,
+	/**
+	* Constant name: CANCELLED_STATE
+	* Type: integer/number
+	* Purpose: Cancelled state value for Task Records
+	* Value: 7
+	* Example:
+	* 	if(current.parent.assigned_to && current.parent.state == tcs.CANCELLED_STATE){
+	*		//do something
+	*	}
+	*/
+	CANCELLED_STATE: 7,
+	/**
+	* Function name: checkException
+	* Purpose: write a preformatted exception message to the reporting function
+	* Params:
+	* 	- title <string>: the title of the message line / script function
+	* 	- reportingFunction <function(string)>: the function to use for reporting, will print message
+	* 	- e <exception>: the exception to print including line number and file name
+	* Returns:
+	* 	undefined
+	* Example:
+	* 	}catch(e) {
+	*		this.tcs.checkException("MarkInactiveCond", gs.warn, e);
+	*		return false;
+	*	}
+	*   // output: [MarkInactiveCond] Error: Type error in sys_script.js at 134.
+	*/
+	checkException: function(title, reportingFunction, e) {
+		reportingFunction("["+title+"] Error: " + e + " in " + e.fileName + " at " + e.lineNumber + ".");
+	},
+	/**
+	* Function name: invalidPermissionsMessage
+	* Purpose: write a preformatted permission message to the reporting function
+	* Params:
+	* 	- title <string>: the title of the message line / script function
+	*	- operationName <string>: the name of the operation that was attempted
+	*	- reportingFunction <function(string)>: the function to use for reporting, will print message
+	* Returns:
+	* 	undefined
+	* Example:
+	* 		answer = false;
+	*		tcs.invalidPermissionsMessage("Organizational Hierarchy", "deactivation", gs.addInfoMessage);
+	*		// output: [Organizational Hierarchy] unable to perform deactivation with current permissions
+	*/
+	invalidPermissionsMessage: function(title, operationName, reportingFunction ) {
+		reportingFunction("["+title+"] unable to perform " + operationName + " with current permissions.");
+	},
+	/**
+	* Function name: commonMessage
+	* Purpose: write a preformatted generic message to the reporting function
+	* Params:
+	* 	- title <string>: the title of the message line / script function
+	*	- message <string>: the message to send
+	*	- reportingFunction <function(string)>: the function to use for reporting, will print message
+	* Returns:
+	* 	undefined
+	* Example:
+	* 		tcs.commonMessage("Process Template", "You are not permitted to perform this operation.", gs.addErrorMessage);
+	*		// output: [Process Template] You are not permitted to perform this operation.
+	*/
+	commonMessage: function(title, message, reportingFunction) {
+		reportingFunction("["+title+"] "+ message);
+	},
+	/**
+	* Function name: checkUserForSingleRoleMatch
+	* Purpose: check if a user has at least one of the provided roles
+	* Params:
+	* 	- user <GlideUser>: the title of the message line / script function
+	*	- roles <string array>: list of roles to check
+	* Returns:
+	* 	true if role was found in the user's role list, false otherwise
+	* Example:
+	* 		var roles = ["x_153465_discovert.tasker_process_template_admin", "x_153465_discovert_discover_routing_template"];
+	*		return user.getID() == processOwner || this.tcs.checkUserForSingleRoleMatch(user, roles);
+	*/
+	checkUserForSingleRoleMatch: function(user /* User Record */, roles /* array of strings */) {
+		var result = false;
+		roles.forEach(function(role) {
+			if(user.hasRole(role)) {
+				result = true;
+				return;
+			}
+		});
+		return result;
+	},
+	/**
+	* Function name: checkUserMatchAllRoles
+	* Purpose: check if a user has all of the provided roles
+	* Params:
+	* 	- user <GlideUser>: the title of the message line / script function
+	*	- roles <string array>: list of roles to check
+	* Returns:
+	* 	true if all roles were found in the user's role list, false otherwise
+	* Example:
+	* 		var roles = ["x_153465_discovert.tasker_process_template_admin", "x_153465_discovert_discover_routing_template"];
+	*		return user.getID() == processOwner || this.tcs.checkUserMatchAllRoles(user, roles);
+	*/
+	checkUserMatchAllRoles: function(user /* User Record */, roles /* array of strings */) {
+		var result = false;
+		roles.forEach(function(role) {
+			if(user.hasRole(role)) {
+				result = true;
+			} else {
+				result = false;
+				return;
+			}
+		});
+		return result;
+	},
+	/**
+	* Function name: queryRelated
+	* Purpose: Loop through a table, performing the callback function on each record. The callback function takes one glide record as a parameter.
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- queries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results
+	*	- callback <function(GlideRecordSecure)>: a function that performs an operation on each record returned from the table query
+	* Returns:
+	*	An array composed of the non-null return values from the result of each callback
+	* Examples:
+	*	queries Example: [
+	*		{
+	*			"sys_id": "123abc12345" // return all records with a matching sys_id
+	*		},
+	*		{
+	*			"active": "true"		// where active is also 'true'
+	*		},
+	*		{	
+	*			"state": ["IN","1,2,3,13,15"] // a GlideRecordSecure addQuery with 3 parameters, the array's first param is the operation, second param is value
+	*		}
+	*	]
+	*	callback Example: function(glideRecord) {
+	*		var recordValue = glideRecord.getValue('someField');
+	*		return performSingleAction(recordValue);
+	*	}
+	*	
+	*	
+	*	//use 'jshint esnext: true' at top of script to make concise query objects like the below
+	*	var tableName = "x_12345_SomeTable";
+	*	var queries = [{ "sys_id": gs.getUserID()}]
+	*	tcs.queryRelated(tableName, queries, function(record){
+	*		if(recordIsOuTa(record)) {
+	*			return true;
+	*		}
+	*		return false;
+	*	})
+	*	
+	* Notes:
+	*	- The queryRelatedShort method differs from the queryRelated method by providing a short circuit evaluation mechanism which allows for an early break from the looping through items by returning null from the callback function. Returning null indicates that the loop should be broken and accumulated results returned to the caller immediately.
+	*	- We use esnext option to streamline our queries, see the "var queries" above, we are able to define objects inside arrays
+	*/
+	queryRelated: function(targetTableName, queries, callback) {
+		return this.queryRelatedShort(targetTableName, queries, callback, false);
+	},
+	/**
+	* Function name: queryRelatedOr
+	* Purpose: Loop through a table, performing the callback function on each record. The callback function takes one glide record as a parameter.
+	*		This function adds OR conditions to the end of the andQueries, the OR conditions are appended to the last AND condition
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- andQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'AND' logic
+	*	- orQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'OR' logic
+	*	- callback <function(GlideRecordSecure)>: a function that performs an operation on each record returned from the table query
+	* Returns:
+	*	An array composed of the non-null return values from the result of each callback
+	* Examples:
+	*   // solution: for all tasks that have sysId in any combo of the three fields, find out if those tasks are active
+	*	var taskQuery = [
+	*		{"primary_assignee":sysId}, 
+	*		{"primary_office":sysId},
+	*		{"tasking_authority": sysId}
+	*	];
+	*	var hasActive = false;
+	*	tcs.queryRelatedOr(taskTableName, null, taskQuery, function(record){
+	*		if(record.getValue("active") == true) {
+	*			hasActive = true;
+	*		} 
+	*		return null;
+	* 	}); // end of queryRelatedOr call
+	*/
+	queryRelatedOr: function(targetTableName, andQueries, orQueries, callback) {
+		return this.queryRelatedOrShort(targetTableName, andQueries, orQueries, callback, false);
+	},
+	/**
+	* Function name: queryRelatedShort
+	* Purpose: Loop through a table, performing the callback function on each record. The callback function takes one glide record as a parameter.
+	*		This function short circuits a query. Short circuit consists of returning null when we find the record that we were looking for the short circuit speeds up the processing for the application
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- queries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results
+	*	- callback <function(GlideRecordSecure)>: a function that performs an operation on each record returned from the table query
+	*   - shortCircuitOnNull <boolean>: a flag indicating if the shortcircuit logic should be followed, if true, 
+	*		the function will stop performing further callbacks once the first null is returned in the callback.
+	* Returns:
+	*	An array composed of the non-null return values from the result of each callback
+	* Examples:
+	*   // check if any members active
+	*   var ouMemberTableQuery = [{"discover_office_hierarchy":ouId}];
+	*	tcs.queryRelatedShort(ouMembersTableName, ouMemberTableQuery, function(record) {
+	*		hasOuMembers = true;
+	*		hasActive = true;
+	*		return null;
+	*	}, true);
+	*/
+	queryRelatedShort: function(targetTableName, queries, callback, shortCircuitOnNull) {
+		return this.queryRelatedOrShort(targetTableName, queries, null, callback, shortCircuitOnNull);
+	},
+	/**
+	* Function name: queryRelatedOrShort
+	* Purpose: Loop through a table, performing the callback function on each record. The callback function takes one glide record as a parameter.
+	*		This function short circuits a query. Short circuit consists of returning null when we find the record that we were looking for the 
+	*		short circuit speeds up the processing for the application. This function combines functionality of the OR and Short methods
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- andQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'AND' logic
+	*   - orQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'OR' logic
+	*	- callback <function(GlideRecordSecure)>: a function that performs an operation on each record returned from the table query
+	*   - shortCircuitOnNull <boolean>: a flag indicating if the shortcircuit logic should be followed, if true, 
+	*		the function will stop performing further callbacks once the first null is returned in the callback.
+	* Returns:
+	*	An array composed of the non-null return values from the result of each callback
+	* Examples:
+	*   // check if any tasks are active and stop as soon as we find the first one
+	*   var taskQuery = [
+	*		{"primary_assignee":sysId}, 
+	*		{"primary_office":sysId},
+	*		{"tasking_authority":current.sys_id}
+	*	];
+	*	tcs.queryRelatedOrShort(taskTableName, null, taskQuery, isActive, true);
+	*/
+	queryRelatedOrShort: function(targetTableName, andQueries, orQueries, callback, shortCircuitOnNull) {
+		return this.commonQuery(new GlideRecord(targetTableName), andQueries, orQueries, callback, shortCircuitOnNull);
+	},
+	/**
+	* Function name: countRelated
+	* Purpose: Using a GlideAggregate, counts the number of records that are filtered by given queries; this method does not take a callback like queryRelated
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- queries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results
+	* Returns:
+	*	An integer indicating the total count of all found records
+	* Examples:
+	*	// count the number of active tasks assigned to a particular user in any of the given states
+	*	var query = [
+	*		{"active":true},
+	*		{"assigned_to":userId},
+	*		{"state": ["IN","1,2,3,13,15"]}
+	*	];
+	*   var count = tcs.countRelated(taskTableName, query);
+	*/
+	countRelated: function(targetTableName, queries) {
+		return this.countRelatedOr(targetTableName, queries, null);
+	},
+	/**
+	* Function name: countRelatedOr
+	* Purpose: Using a GlideAggregate, counts the number of records that are filtered by "and" and "or" queries, 
+	*		this method does not take a callback note that the OR query behavior is similar to the queryRelatedOr 
+	*		series of functions and the OR predicates are appended to the last AND predicate
+	* Params:
+	* 	- targetTableName <string>: the system name of the table to traverse
+	*	- andQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'AND' logic
+	*	- orQueries <array of objects>: an array of name-value pair objects indicating which values should be matched for filtering the table results using 'OR' logic
+	* Returns:
+	*	An integer indicating the total count of all found records
+	* Examples:
+	*   // count number of tasks where sysId is in any of the given fields and is active
+	*   var taskQuery = [
+	*		{"primary_assignee":sysId}, 
+	*		{"primary_office":sysId},
+	*		{"tasking_authority":current.sys_id}
+	*	];
+	*	var count = tcs.countRelatedOr(taskTableName, ["active":true], taskQuery);
+	*/
+	countRelatedOr: function(targetTableName, andQueries, orQueries) {
+		var agg = new GlideAggregate(targetTableName);
+		agg.addAggregate("COUNT");
+		var count = 0;
+		this.commonQuery(agg, andQueries, orQueries, function(record){ 
+			count = parseInt(record.getAggregate("COUNT")); 
+			return null; 
+		}, true);
+		return count;
+	},
+	// This function is the single generic method that powers all queryRelated and countRelated functions
+	// This function should not be directly used in the API but should be extended to accomodate the additional functionalities needed
+	// Modification of this function should be considered carefully to fulfill all contracts with above functions
+	commonQuery: function(query /* GlideAggregate or GlideRecordSecure*/, andQueries, orQueries, callback, shortCircuitOnNull) {
+		var lastAndCond = null;
+		// Prepare a function to loop through all Or conditions and add them to the GlideAggregate or GlideRecordSecure query
+		// This inner function is created in preparation for supplying the functionality for adding OR conditions to each AND query
+		// instead of relying on providing OR conditions at the end, which is very limiting
+		var writeOrConditions = function(andCond, element) {
+			if(element) {
+				var key2 = Object.keys(element)[0];
+				var value2 = element[key2];
+				if(andCond == null) {
+					if(Array.isArray(value2) && value2.length > 1) {
+						return query.addQuery(key2, value2[0], value2[1]);
+					} else {
+						return query.addQuery(key2, value2);
+					}
+				} else {
+					if(Array.isArray(value2) && value2.length > 1) {
+						andCond.addOrCondition(key2, value2[0], value2[1]);
+					} else {
+						andCond.addOrCondition(key2, value2);
+					}
+				}
+			}
+			return null;
+		};
+			
+		// Loop through all AND queries and add them to the GlideAggregate or GlideRecordSecure query
+		if(andQueries && andQueries != null) {
+			for(var i=0; i< andQueries.length; i++) {
+				var elem = andQueries[i];
+				if(elem) {
+					var key = Object.keys(elem)[0];
+					var value = elem[key];
+					// if value is an array, we do a triple add query (for dates etc)
+					// EX: gr.addQuery("field", "<=", "2010-01-05 00:00:00")
+					if(Array.isArray(value) && value.length > 1) {
+						lastAndCond = query.addQuery(key,value[0], value[1]);
+					} else {
+						lastAndCond = query.addQuery(key, value);
+					}
+				}
+			}
+		}
+		// Loop through all OR queries and add them to the GlideAggregate or GlideRecordSecure query using the writeOrConditions function
+		if(orQueries && orQueries != null) {
+			for(var j=0; j< orQueries.length; j++) {
+				var elem2 = orQueries[j];
+				
+				if(lastAndCond == null) {
+					lastAndCond = writeOrConditions(null, elem2);
+				} else {
+					writeOrConditions(lastAndCond, elem2);
+				}
+			}
+		}		
+		
+		// perform the query
+		query.query();
+		// collect the results of each callback call, ignores 'null' results
+		var resultArray = [];
+		while(query.next()) {
+			var callbackResult = callback(query);
+			if(callbackResult !== null) {
+				resultArray.push(callbackResult);
+			} else if(shortCircuitOnNull) {
+				break;
+			}
+		}
+		return resultArray;		
+	},
+    type: 'TaskerCommonScriptingMethods'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>kbaton</sys_created_by>
+        <sys_created_on>2019-02-27 18:53:40</sys_created_on>
+        <sys_id>f0b3990bdbff6340c18c59b2ca961995</sys_id>
+        <sys_mod_count>69</sys_mod_count>
+        <sys_name>TaskerCommonScriptingMethods</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_f0b3990bdbff6340c18c59b2ca961995</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-21 19:12:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

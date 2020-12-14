@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>2.5 Patch 3&#13;
+STRY0085333 - UI MODAL - (Portal &amp; Platform) Modal for Send to Review  - Response Comments - "Reviewer" field Editable&#13;
+STRY0085338 - UI MODAL - (Portal &amp; Platform) Modal for Send to Review - Response Comments - "Reviewer" field Read-Only&#13;
+STRY0086943 - RESPONSE/REVIEWER - Response &amp; Reviewer Section Displays/Hidden on Approval and Concur Task Types in Completed, Closed, Incomplete and Cancel states&#13;
+STRY0089415 - "Send to Review" Modal - Review Required flag displays read-only on Modal for Assigned Member &#13;
+&#13;
+2.5.20 - Patch 2 &#13;
+STRY0079375 - UI - STRETCH  - Modal for Additional Comments - NonConcur UI Action</description>
+        <field>u_active_subtasks</field>
+        <global>true</global>
+        <isolate_script>true</isolate_script>
+        <messages>Tasker - Title - Send to Review for Task&#13;
+Tasker - Title - Nonconcur&#13;
+Tasker - Title - Nonconcur &amp; sign&#13;
+Tasker - Title - Rejection for Approval without Signature&#13;
+Tasker - Title - Rejection for Approval with Signature&#13;
+Tasker - Title - Reject Assignment&#13;
+Tasker - Title - Reject Primary Assignee for Task&#13;
+Tasker - Title - Appove &amp; sign Acknowledgement for&#13;
+Tasker - Title - Approve&#13;
+Tasker - Title - Concur &amp; sign&#13;
+Tasker - Title - Concur&#13;
+Tasker - Title - Abstain&#13;
+Tasker - Title - Send to Rework&#13;
+Tasker - Title - Mark Complete for Task&#13;
+Tasker - Please enter Additional Comments&#13;
+Tasker - Please enter Response Comments&#13;
+Tasker - Please enter Reviewer Response&#13;
+Tasker - Please enter Rework Comments&#13;
+Tasker - Please enter Review Comments&#13;
+Tasker - Modal Save Changes Message</messages>
+        <name>Task - onSubmit - Modal Open</name>
+        <order/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+// STRY0079375
+function onSubmit() {
+	try{
+		var table = 'x_153465_discovert_route_task_instance';
+		//var taskNumber = g_form.getValue('number');
+		var taskerNumber = g_form.getValue('taskernumber');
+		var nonconcur_confirmation;
+		var currentUser = g_user.getFullName();
+		var comments= '';
+		var review_sign_comments = '';
+		var commentsRequired = false;
+		var reviewCommentsRequired = false;
+		var response_comments = '';	
+		var reviewer_comments = '';
+		var rework_comments = '';
+		var provide_response = '';
+		
+		var signCheckRequired = false;
+		var u_signature_instructions = g_form.getValue('u_signature_instructions') + '';
+		var formAction = '';
+		var shared = {};
+
+		var title = '';
+		var btnLabel = '';
+		var formErrorMsg = '';
+		var view = '';
+		// this is the same for all
+		var placeHolderText = '';
+		
+		formAction = g_form.getActionName();
+		
+		if (formAction == 'Abstain-SendToReview'
+			|| formAction == 'Approve-SendToReview' 
+			|| formAction == 'ApproveSign-SendToReview' 
+			|| formAction == 'ClosedComplete' 
+			|| formAction == 'Concur-SendToReview' 
+			|| formAction == 'ConcurSign-SendToReview' 
+			|| formAction == 'inReview' 
+			|| formAction == 'NonConcur-SendToReview' 
+			|| formAction == 'NonconcurSign-SendToReview' 
+			|| formAction == 'Reject-SendToReview' 
+			|| formAction == 'rejectAssignment' 
+			|| formAction == 'rejectOUAssignment' 
+			|| formAction == 'rework') {
+			// If the form is dirty, ask the user if they would like to save the record
+			if((typeof spModal != 'undefined' && g_form.serialize(true).length>0)
+				|| (typeof spModal == 'undefined' && g_form.modified)){
+				
+				if(confirm(getMessage('Tasker - Modal Save Changes Message'))){
+					g_form.save();
+				} else{
+					return false;
+				}
+			}
+			switch (formAction) {
+				case 'Abstain-SendToReview':
+					title = getMessage('Tasker - Title - Abstain') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Abstain_Response';
+					reviewer_comments = g_form.getValue('comments_dt');
+					reviewCommentsRequired = true;
+					break;
+				case 'Approve-SendToReview':
+					title = getMessage('Tasker - Title - Approve') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Accept_Response';
+					reviewer_comments = g_form.getValue('comments_dt');
+					reviewCommentsRequired = true;
+					break;
+				case 'Concur-SendToReview':
+					title = getMessage('Tasker - Title - Concur') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Accept_Response';
+					reviewer_comments = g_form.getValue('comments_dt');
+					reviewCommentsRequired = true;
+					break;
+				case 'NonConcur-SendToReview': 
+					title = getMessage('Tasker - Title - Nonconcur') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Reject_Response';
+					reviewer_comments = g_form.getValue('comments_dt');
+					reviewCommentsRequired = true;
+					break;
+				case 'Reject-SendToReview': 
+					if (g_scratchpad.taskType == 'Approval with signature'){
+						title = getMessage('Tasker - Title - Rejection for Approval with Signature') + ' ' + taskerNumber;
+					} else if (g_scratchpad.taskType == 'Approval without signature') {
+						title = getMessage('Tasker - Title - Rejection for Approval without Signature') + ' ' + taskerNumber;
+					}
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Reject_Response';
+					reviewer_comments = g_form.getValue('comments_dt');
+					reviewCommentsRequired = true;
+					break;
+				case 'rejectAssignment': 
+					title = getMessage('Tasker - Title - Reject Assignment') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					comments= g_form.getValue('comments') + '';
+					commentsRequired = true;
+					break;
+				case 'rejectOUAssignment':
+					title = getMessage('Tasker - Title - Reject Primary Assignee for Task') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					comments= g_form.getValue('comments') + '';
+					commentsRequired = true;
+					break;
+				case 'NonconcurSign-SendToReview': 
+					title = getMessage('Tasker - Title - Nonconcur & sign') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Reject_Signature_Instructions';
+					signCheckRequired = true;
+					review_sign_comments = g_form.getValue('comments_dt');
+					break;
+				case 'ApproveSign-SendToReview': 
+					title = getMessage('Tasker - Title - Appove & sign Acknowledgement for') + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Confirm_Signature_Instructions';
+					signCheckRequired = true;
+					review_sign_comments = g_form.getValue('comments_dt');
+					break;
+				case 'ConcurSign-SendToReview':
+					title = getMessage('Tasker - Title - Concur & sign') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
+					view = 'Confirm_Signature_Instructions';
+					signCheckRequired = true;
+					review_sign_comments = g_form.getValue('comments_dt');
+					break;
+				case 'inReview':
+					title = getMessage('Tasker - Title - Send to Review for Task') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Response Comments');
+					view = 'Send_to_Review';
+					response_comments = g_form.getValue('response');
+					rework_comments = g_form.getValue('rework_comments');
+					provide_response = g_form.getValue('provide_response');
+					shared = { 
+						fields: {
+							response: {value: response_comments, displayValue: response_comments, sys_mandatory: true, mandatory: true, placeholder: placeHolderText, readonly: false}, 
+							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: false},
+							provide_response: {value: provide_response, sys_mandatory: true, mandatory: true}
+						}
+					};
+					break;
+				case 'rework':
+					title = getMessage('Tasker - Title - Send to Rework') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Rework Comments');
+					view = 'Send_to_Rework';
+					response_comments = g_form.getValue('response');
+					rework_comments = g_form.getValue('rework_comments');
+					shared = { 
+						fields: {
+							response: {value: response_comments, displayValue: response_comments, sys_mandatory: false, mandatory: false},
+							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: true, placeholder: placeHolderText}
+						}
+					};
+
+					break;
+				case 'ClosedComplete':
+					// any user will use this button to close the task
+					title = getMessage('Tasker - Title - Mark Complete for Task') + ' ' + taskerNumber;
+					placeHolderText = getMessage('Tasker - Please enter Review Comments');
+					view = 'Reviewer_Complete';
+					var reviewerCommentsMandatory = (g_form.getValue('state') == "14");
+					var responseCommentsMandatory = !reviewerCommentsMandatory;
+					response_comments = g_form.getValue('response');					
+					reviewer_comments = g_form.getValue('comments_dt');
+					rework_comments = g_form.getValue('rework_comments');
+					shared = { 
+						fields: {
+							response: {value: response_comments, displayValue: response_comments, sys_mandatory: false, mandatory: responseCommentsMandatory},
+							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: false},
+							comments_dt: {value: reviewer_comments, displayValue: reviewer_comments, sys_mandatory: reviewerCommentsMandatory}
+						}
+					};
+					break;
+				default:
+					// if you got here then none of the UI Actions being handled in the modal have fired
+					return;
+				}
+			if(reviewCommentsRequired){
+				reviewer_comments = g_form.getValue('comments_dt');
+				shared = { 
+					fields: {
+						comments_dt: {value: reviewer_comments, 
+									displayValue: reviewer_comments, 
+									sys_mandatory: true, mandatory: true, 
+									placeholder: placeHolderText, 
+									readonly: false}, 
+					}					
+				};
+			}
+
+			if(commentsRequired){
+				view = 'Additional_Comments_Modal';
+				shared = { 
+					fields: {
+						comments: {value: comments, 
+								displayValue: comments, 
+								sys_mandatory: true, 
+								mandatory: true, 
+								placeholder: placeHolderText}
+					}
+				};
+			}
+			if(signCheckRequired){
+				shared = { 
+					fields: {
+						u_signature_instructions: {value: u_signature_instructions, 
+												displayValue: u_signature_instructions, 
+												sys_mandatory: true, 
+												mandatory: true, 
+												placeholder: placeHolderText},
+						u_reviewer_signed: {value: false, sys_mandatory: true, mandatory: true},
+						comments_dt: {value: review_sign_comments, 
+									displayValue: review_sign_comments, 
+									sys_mandatory: true, 
+									mandatory: true}
+					}
+				};
+			}
+			
+			if (typeof spModal != 'undefined' ) {
+
+				spModal.open({
+					title: title,
+					message:'',
+					backdrop:'static',
+					widget: 'tasker_modal_additional_information',
+					widgetInput: {
+						table: table, 
+						sys_id: g_form.getUniqueValue(), 
+						view: view, 
+						//disableUIActions: "true",
+						//omitHeaderOptions: 'true',
+						hideRelatedLists: true,
+						omitHeader: 'true',
+						hideAttachmentBtn: true,
+						isModal: true},
+						shared: shared,
+						size:'lg',
+						buttons: []
+					});
+				} else {
+					// This callback is no longer needed.  
+					// The Modals have been updated to include UI Actions that are submitted in the Modal
+					// In addition, Save has been implemented to save the form before opening the modal.  
+					// So, there is no need for a callback
+					var modalForm = new GlideModalForm(title, 'x_153465_discovert_route_task_instance', modalCompleteCallback);
+					//modalForm.setCompletionCallback(modalCompleteCallback);
+					modalForm.setSysID(g_form.getUniqueValue());
+					modalForm.addParm('sysparm_view',view);
+					modalForm.addParm("sysparm_view_forced", true);
+					modalForm.addParm('sysparm_form_only', 'true');
+					modalForm.on("beforeclose", modalCloseCallback);
+					if(view == 'Additional_Comments_Modal'){
+						modalForm.setPreference("sysparm_comments", comments);
+						modalForm.render();
+						if((g_form.getValue('comments') + '')== ''){
+							g_form.showFieldMsg('comments', placeHolderText, 'error', true);
+							return false;
+						}
+					} else if(view == 'Confirm_Signature_Instructions'){
+						modalForm.setPreference("sysparm_u_signature_instructions", u_signature_instructions);
+						modalForm.setPreference("sysparm_comments_dt", review_sign_comments);
+						modalForm.render();
+						return false;
+					} else if(view == 'Reject_Signature_Instructions'){
+						modalForm.setPreference("sysparm_u_signature_instructions", u_signature_instructions);
+						modalForm.setPreference("sysparm_comments_dt", review_sign_comments);
+						modalForm.render();
+						return false;
+					} else if(view == 'Send_to_Review'){
+						modalForm.setPreference("sysparm_response", response_comments);
+						modalForm.setPreference("sysparm_rework_comments", rework_comments);
+						modalForm.render();
+					} else if(view == 'Reject_Response'){
+						modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
+						modalForm.render();
+					} else if(view == 'Accept_Response'){
+						modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
+						modalForm.render();
+					} else if(view == 'Abstain_Response'){
+						modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
+						modalForm.render();
+					} else if(view == 'Send_to_Rework'){
+						modalForm.setPreference("sysparm_response", response_comments);
+						modalForm.setPreference("sysparm_rework_comments", rework_comments);
+						modalForm.render();
+					} else if(view == 'Reviewer_Complete'){
+						modalForm.setPreference("sysparm_response", response_comments);
+						modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
+						modalForm.setPreference("sysparm_rework_comments", rework_comments);
+						modalForm.render();
+					}
+				}
+			return false;
+		}
+		
+	}catch(e){
+		jslog(e);
+		return false;
+	}
+	// This is no longer needed.  The Modals have been updated to include UI Actions that are submitted in the Modal
+	// In addition, Save has been implemented to save the form before opening the modal.  
+	// So, there is no need for a callback
+	function modalCompleteCallback (action_verb, sys_id, table, displayValue){
+		g_form.submit();
+	}
+	
+	// STRY0089452, STRY0089339, STRY0089338, STRY0089337, STRY0089336
+	function modalCloseCallback(){
+		var iframe = this.$window.find("#dialog_frame")[0];
+		var iframeWindow = iframe.contentWindow ? iframe.contentWindow :iframe.contentDocument.defaultView;
+		var m_form = iframeWindow.g_form;
+		var taskerNumber = g_form.getValue('taskernumber');
+		if(m_form.modified && confirm(getMessage('Tasker - Modal Save Changes Message'))){
+			for (var field in m_form.modifiedFields) {
+				var fieldName = field + ''; 
+				fieldName = fieldName.substr(fieldName.indexOf('.')+1);
+				g_form.setValue(fieldName, m_form.getValue(fieldName));
+			}
+			g_form.save();
+		}
+			
+	}
+}]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2020-11-03 05:28:14</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>a10da130db98e410936dd498f49619fe</sys_id>
+        <sys_mod_count>161</sys_mod_count>
+        <sys_name>Task - onSubmit - Modal Open</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_client_a10da130db98e410936dd498f49619fe</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-08 06:51:22</sys_updated_on>
+        <table>x_153465_discovert_route_task_instance</table>
+        <type>onSubmit</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

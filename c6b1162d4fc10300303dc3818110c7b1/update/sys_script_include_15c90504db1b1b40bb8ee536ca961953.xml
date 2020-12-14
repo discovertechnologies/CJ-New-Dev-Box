@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Tasker_RecurringTask_Functions</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script include contains all of the functions used to run the recurring Taskers.&#13;
+&#13;
+These Methods are used in the Scheduled Script Exection script - "DiscoverTasker - Start Recurring Processes"&#13;
+</description>
+        <name>Tasker_RecurringTask_Functions</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var Tasker_RecurringTask_Functions = Class.create();
+Tasker_RecurringTask_Functions.prototype = {
+	initialize: function() {
+	},
+	
+	findAndStartRecurringTaskersDaily: function(){
+		var grSchedules = new GlideRecord('x_153465_discovert_tasker_schedule');
+		var gqc = grSchedules.addNotNullQuery('next_run_date');
+		// if next run date is less than or equal to the end of today
+		grSchedules.addQuery('next_run_date', '<=',gs.daysAgoEnd(0));
+		grSchedules.addEncodedQuery('active=true'); //STRY0017151 //STR0049316
+		grSchedules.addEncodedQuery('tasker_processISNOTEMPTY'); // STRY0055116
+		grSchedules.query();
+		while(grSchedules.next()){
+			this.startRecurringTasker(grSchedules);
+		}
+	},
+	
+	// start any due to run today
+	// update the last run date and log the date run into the recurringTasker run calendar
+	startRecurringTasker: function(grScheduleToStart) {
+		// Start processes due to run today
+		var gdt = new GlideDateTime();
+		var currentTime = gdt.getDisplayValue();
+		// STRY0063859 - change to use the new helper functions so all calls are consistent.
+		//var recRunTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_runtime');
+		//recRunTemp.initialize();
+		//recRunTemp.setValue ( 'routing_template_ref', grScheduleToStart.tasker_process );
+		
+		// STRY0063859 - change to use the new helper functions so all calls are consistent.
+		var tTH = new TaskTemplateHelpers();
+		var inputs = {};
+		var recTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		if(recTemp.get(grScheduleToStart.getValue('tasker_process'))){
+			inputs = tTH.loadInputDefaultFromTemplate(recTemp);
+			// STRY0076608
+			inputs.originator = grScheduleToStart.originator;
+
+			// STRY0063859 - change to use the new helper functions so all calls are consistent.
+			// that is it, workflow is still going to fire off the insert of the Process Instance table
+			// set the originator to the person who last updated the process schedule
+			//recRunTemp.originator = grScheduleToStart.sys_created_by;
+			//recRunTemp.instance_notation = currentTime;
+			//recRunTemp.u_objective = grScheduleToStart.tasker_process.u_objective;
+			//recRunTemp.insert();
+			// value is already set by the load function
+			//inputs.objective = grScheduleToStart.tasker_process.u_objective;
+			//inputs.templateNotation = currentTime;
+			// running syncronously b/c we need the sys_id back
+			var recTempInstId = tTH.createTemplateInstanceToRunTemplate(recTemp, inputs, grScheduleToStart.originator);
+			// update the last run on the Schedule table
+			grScheduleToStart.last_run = new GlideDateTime();
+			// below is to move back a day to test only!
+			//grScheduleToStart.last_run = gs.daysAgoStart(1);
+			grScheduleToStart.update();
+
+			// update the schedule run history table
+			var grScheduleHistory = new GlideRecord('x_153465_discovert_tasker_scheduler_history');
+			grScheduleHistory.initialize();
+			grScheduleHistory.run_note_from_schedule = grScheduleToStart.notes;
+			// set this when you have the proc inst from the process you just started
+			grScheduleHistory.tasker_process_instance = recTempInstId;
+			grScheduleHistory.tasker_process_template = grScheduleToStart.tasker_process;
+			grScheduleHistory.tasker_schedule = grScheduleToStart.sys_id;
+			grScheduleHistory.time_run = new GlideDateTime();
+			grScheduleHistory.insert();
+		}
+	},
+	
+	isCountTrue:function (){
+		var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+		var a = new GlideAggregate('x_153465_discovert_route_task_instance');
+		a.addEncodedQuery('state=1');
+		a.addEncodedQuery('primary_assigneeISNOTEMPTY');
+		a.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@' + daysBeforeTaskAcceptanceIsOverdue);
+		a.addAggregate("COUNT");
+		a.query();
+		a.next();
+		
+		return a.getAggregate('COUNT') > '0';
+	},
+	
+	acceptanceOverdueNotification: function(){
+		//HT - STRY0033444
+		/*KT - STRY0033444
+		WHO IS NOTIFIED:
+		
+		Task Owner, and
+		Send to Assigned Member, (If an Assigned member is set) and
+		If Primary Assignee is set and Primary Assignee OU has a TA, send it to Primary Assignee OU-TA
+		If Primary Assignee is empty OR Primary Assignee OU does not have an OU-TA, send to Global-TA.
+ 		*/
+		var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+
+		//query the task table looking for records where the task is assigned and
+		//the primary assignee is not empty and
+		//it has a suspense date older than the system property value daysBeforeTaskAcceptanceIsOverdue
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		grTask.addEncodedQuery('state=1');
+		grTask.addEncodedQuery('primary_assigneeISNOTEMPTY');
+		grTask.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@' + daysBeforeTaskAcceptanceIsOverdue);
+		grTask.query();
+		
+		while(grTask.next()) {
+			//temporary array to store either OUTAs or GTAs
+			var taskingAuthorities = [];
+			
+			var taskName = grTask.getDisplayValue('task_name');
+			var AssignedMemberSysId = grTask.getValue('assigned_to');
+			var assigned_member_display = grTask.getDisplayValue('assigned_to');
+			var dueDate = grTask.getDisplayValue('suspense_date');
+			var suspense_date = dueDate.substring(0, 10);
+			var taskOwner = grTask.getValue('u_task_requester');
+			var sys_id = grTask.getValue('sys_id');
+			
+			var OUTAs = grTask.primary_assignee.tasking_authorities.toString();
+			
+			//if the list of tasking authorities is not empty
+			//assign the value from OUTAs to  taskingAuthorities
+			if(OUTAs.length > 0){
+				taskingAuthorities = OUTAs;
+			}
+			//if the list of tasking authorities is empty
+			//assign the value from GTAs to taskingAuthorities
+			if(OUTAs.length < 1){
+				var GTAs = grTask.primary_assignee.u_global_authorities.toString();
+				if(GTAs.length > 0)
+					taskingAuthorities = GTAs;
+			}
+			
+			//get data in JSON format to be sent over to the email script
+			var data = {"assigned_user": assigned_member_display, "pending_task": taskName, "suspense_date":suspense_date, "id":sys_id};
+				var payload = JSON.stringify(data);
+			
+				var recipientsList = [AssignedMemberSysId, taskOwner, taskingAuthorities.toString()];
+				var recipients = recipientsList.toString();
+			
+				gs.eventQueue('x_153465_discovert.NotificationAcceptanc', grTask, payload, recipients);	
+			}
+		},
+		
+		type: 'Tasker_RecurringTask_Functions'
+	};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2018-07-09 17:12:21</sys_created_on>
+        <sys_id>15c90504db1b1b40bb8ee536ca961953</sys_id>
+        <sys_mod_count>121</sys_mod_count>
+        <sys_name>Tasker_RecurringTask_Functions</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_15c90504db1b1b40bb8ee536ca961953</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-22 20:50:19</sys_updated_on>
+    </sys_script_include>
+</record_update>

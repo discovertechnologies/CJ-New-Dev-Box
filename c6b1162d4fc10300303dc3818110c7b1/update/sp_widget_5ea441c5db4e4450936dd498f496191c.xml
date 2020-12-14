@@ -1,0 +1,1208 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>standard</category>
+        <client_script><![CDATA[function ($scope,spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager) {
+	var c = this;
+	/*
+ 	* options:
+ 	* hide_footer (bool) = true to remove the data table footer contents
+ 	* hide_header (bool) = true to remove the data table header contents
+ 	* show_new (bool) = true to show the "New" record button
+ 	* show_keywords (bool) = true to show the keyword search field
+ 	* table (string) = the table name to query
+ 	* filter (string) = the encoded query
+ 	* o (string) = the order by column
+ 	* d (string) = The order by direction: asc or desc
+ 	* p (int) = the page to jump to
+ 	* fields (string) = comma seperated list of fields that become the list columns
+ 	* view (string) = the default view to load for columns, overrides fields
+ 	*/
+	$scope.exportTypes = [{label:'PDF', value: 'PDF'}, {label:'Excel', value:'EXCEL'}, {label:'CSV', value:'CSV'}];
+		var keys = ['table', 'filter', 'p', 'o', 'd'];
+		
+		var eventNames = {
+			click: 'data_table.click',
+			setFilter: 'data_table.setFilter',
+			setKeywords: 'data_table.setKeywords'
+		};
+		
+		// AAlzyoud Custom Starts here
+		//-----------------------------------------------------------------------------
+		
+		// record watcher
+		function initiateRecordWatcher(filter){
+			spUtil.recordWatch($scope, filter.table , filter.filter, function(name, data) {
+				c.getData(filter);
+			});
+			
+		}
+		c.getData = function(data){
+			$scope.setPageNum(1)
+			$rootScope.$broadcast("dropdownMenuClicked",data);
+			initiateRecordWatcher(data)
+		}
+		
+		$scope.$on("countPanelClicked",function(evt,data){
+			c.data.table = data.table;
+			c.data.filter = data.filter;
+			c.data.sp_page_dv = data.sp_page_dv;
+			c.data.title = data.title;
+			c.data.d = data.d;
+			c.data.o = data.o;
+			$scope.server.update();
+		})
+		
+		$scope.$on("dropdownMenuClicked", function(evt,data){
+			c.data.table = data.table;
+			c.data.filter = data.filter;
+			c.data.sp_page_dv = data.view_all_page;
+			c.data.title = data.filter_label;
+			c.data.d = data.d;
+			c.data.o = data.o;
+			$scope.server.update();
+		})
+		c.sayHi=function(field){
+			jslog(c.data.list)
+		}
+		c.sayBye=function(){
+			jslog('bye')
+		}
+		// open popover
+		c.openPopover = function(e,sys_id){
+			//	jslog(c.data.popOverRecord[sys_id].numComments)
+			// show tool-tip
+			var offset = $("#short").offset();
+			var topOffset = $("#short").offset().top - $(window).scrollTop();
+			
+			$("#floaty").css('display','block')
+			$("#floaty").css({
+				position: "fixed",
+				top: (e.pageY + 5 )+ "px",
+				left: (e.pageX + 5) + "px",
+				zIndex: 10000
+			});
+			
+			//	 pupulate tool tip info
+			c.title = c.data.popOverRecord[sys_id].title;
+			c.objective =  c.data.popOverRecord[sys_id].objective;
+			c.state = c.data.popOverRecord[sys_id].state;
+			c.classification = c.data.popOverRecord[sys_id].classification;
+			c.status= c.data.popOverRecord[sys_id].status;
+			c.taskType = c.data.popOverRecord[sys_id].taskType;
+			
+		}
+		c.closePopover = function(){
+			$("#instructions").empty();
+			$("#floaty").css("display", "none");
+			
+		}
+		// open quickview modal
+		c.quickView = function(sys_id,widgetId,taskNumber,taskName){
+			var title =taskNumber +' - '+taskName;
+			
+			spModal.open({
+				title: title,
+				backdrop:'static',
+				widget: widgetId,
+				widgetInput: {table: $scope.data.table , sys_id: sys_id, view: 'sp'},
+					size: 'lg',
+					buttons: []
+					
+				}).then( function(){
+					/* update model after return from modal */
+				});
+			}
+			
+			// AAlzyoud custom ends here
+			//-----------------------------------------------------------------------------
+			$scope.go = function(table, item) {
+				spNavStateManager.onRecordChange(table).then(function() {
+					var parms = {};
+						parms.table = table;
+						parms.sys_id = item.sys_id;
+						parms.record = item;
+						$scope.ignoreLocationChange = true;
+						for (var x in c.data.list) {
+							c.data.list[x].selected = false;
+						}
+						item.selected = true;
+						$scope.$emit(eventNames.click, parms);
+					}, function() {
+						// do nothing in case of closing the modal by clicking on x
+					});
+				};
+				
+				$scope.newRecord = function(){
+					var parms = {
+						id: 'form',
+						table: $scope.data.table,
+						view: $scope.data.view,
+						sys_id: '-1'
+					};
+					if ($scope.data.filter != '')
+						parms.query = $scope.data.filter;
+					
+					$location.search(parms);
+				};
+				
+				function recoverStateFromUrl() {
+					alert('recorverstatefromurl')
+					$scope.data.fields = [];
+					var s = $location.search();
+					for (var x in keys) {
+						if (s[keys[x]]) {
+							$scope.data[keys[x]] = s[keys[x]];
+						}
+					}
+					$scope.server.update().then(function(data) {
+						if (s.sys_id) {
+							for (var x in data.list) {
+								if (data.list[x].sys_id == s.sys_id) {
+									$scope.go(s.table, data.list[x]);
+								}
+							}
+						}
+					});
+				}
+				
+				if ($scope.options.fromUrl) {
+					var origSearch = $location.search();
+					$scope.$on('$locationChangeSuccess', function(e) {
+						var s = $location.search();
+						if (origSearch.id !== s.id)
+							return;
+						
+						if ($scope.ignoreLocationChange){
+							$scope.ignoreLocationChange = false;
+							return;
+						}
+						
+						// Helps to recover state when using the browser's back button
+						recoverStateFromUrl();
+					});
+				}
+				
+				$scope.getNumber = function(num) {
+					return new Array(num);
+				}
+				
+				$scope.mathMin = function(v1,v2) {
+					return Math.min(v1,v2);
+				}
+				
+				function getData(updateUrl) {
+					var f = $scope.data;
+					spUtil.update($scope).then(function(data) {
+						f.view = data.view;
+						if ($scope.options.fromUrl && updateUrl)
+							setPermalink(f.table, f.filter, f.o, f.d, f.p);
+						
+						if ($scope.options.show_breadcrumbs && data.filterBreadcrumbs)
+							$scope.$broadcast('widget-filter-breadcrumbs.setBreadcrumbs', data.filterBreadcrumbs.data, data.filter);
+						
+						initRecordWatcher(f.table, f.filter);
+					});
+				}
+				
+				function setPermalink(table, filter, orderBy, orderDirection, page){
+					$scope.ignoreLocationChange = true;
+					var search = $location.search();
+					angular.extend(search, {
+						spa: 1,
+						table: table,
+						filter: filter,
+						p: page,
+						o: orderBy,
+						d: orderDirection
+					});
+					$location.search(search);
+				}
+				
+				var watcher;
+				function initRecordWatcher(table, filter){
+					if (watcher)
+						watcher.unsubscribe();
+					
+					if (table && filter) {
+						var watcherChannel = amb.getChannelRW(table, filter);
+						amb.connect();
+						watcher = watcherChannel.subscribe(function(message) {
+							if (!message.data)
+								return;
+							switch(message.data.action) {
+								case "change":
+								updateRowFromRW(message);
+								break;
+								case "exit":
+								// A record was removed
+								case "enter":
+								// A record was added
+								default:
+								spUtil.update($scope);
+								break;
+							}
+						});
+					}
+				}
+				
+				function updateRowFromRW(message) {
+					if (message.data && message.data.sys_id && $scope.data.list) {
+						var row, field;
+						for(var i=0;i<$scope.data.list.length; i++) {
+							row = $scope.data.list[i];
+							if (row.sys_id == message.data.sys_id) {
+								var fields = Object.getOwnPropertyNames(message.data.record);
+								for(var f in fields) {
+									field = fields[f];
+									if(typeof row[field] !== 'undefined') {
+										row[field].display_value = message.data.record[field].display_value;
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				$scope.$on('$destroy', function() {
+					if (watcher)
+						watcher.unsubscribe();
+				});
+				
+				$scope.setPageNum = function(num) {
+					$scope.data.p = num;
+					getData(true);
+					$timeout(function() {
+						$scope.focusOnTableHeader();
+					});
+				}
+				
+				$scope.setOrderBy = function(field) {
+					var d = "asc";
+					if ($scope.data.o == field) {
+						if ($scope.data.d == "asc")
+							d = "desc";
+						else
+							d = "asc";
+					}
+					
+					if (d === "asc") {
+						spAriaUtil.sendLiveMessage($scope.data.msg.sortingByAsc);
+					} else if (d === "desc") {
+						spAriaUtil.sendLiveMessage($scope.data.msg.sortingByDesc);
+					}
+					
+					$scope.data.o = field;
+					$scope.data.d = d;
+					$scope.setSearch(true);
+				}
+				
+				$scope.setSearch = function(updateUrl) {
+					$scope.data.p = 1;
+					getData(updateUrl);
+				}
+				
+				$scope.$on(eventNames.setFilter, function(e, newFilter){
+					$scope.data.filter = newFilter;
+					$scope.setSearch(false);
+				});
+				
+				$scope.$on(eventNames.setKeywords, function(e, keywords){
+					$scope.data.keywords = keywords;
+					$scope.setSearch(false);
+				});
+				
+				$scope.$on('widget-filter-breadcrumbs.queryModified', function(e, newFilter){
+					$scope.data.filter = newFilter;
+					$scope.setSearch(true);
+				});
+				
+				$scope.rowsWerePruned = function() {
+					if (!$scope.data.list)
+						return;
+					
+					$scope.rowsPruned = $scope.mathMin($scope.data.window_end,$scope.data.row_count) - $scope.data.window_start - $scope.data.list.length;
+					return $scope.rowsPruned > 0;
+				}
+				
+				$scope.showFilter = function() {
+					return !$scope.data.list.length && !$scope.data.num_pages && !$scope.data.invalid_table && !$scope.loadingData;
+				}
+				
+				c.appendQuery = function(query){
+					if ($scope.data.filter.length > 1)
+						$scope.data.filter += '^';
+					$scope.data.filter += query;
+					$scope.setSearch();
+					
+				}
+				
+				// Makes Widget Async
+				$scope.data = $scope.options;
+				$scope.loadingData = true;
+				$scope.server.update().then(function() {
+					if ($scope.data.newButtonUnsupported)
+						jslog("Service Portal: New button not supported for sys_attachment list");
+					$scope.loadingData = false;
+					initRecordWatcher($scope.data.table, $scope.data.filter);
+				});
+				
+				function parseQuery(table, queryString){
+					return $http.post('/api/now/sp/parsequery/' + table, queryString).then(function(response){
+						return response.data.result;
+					});
+				}
+				
+				c.createQueryTerm = function(table, field, sys_id, operator){
+					return $http.get('/api/now/sp/getInOutQueryTerm', {
+						params: {
+							table: table,
+							sys_id: sys_id,
+							field: field,
+							operator: operator
+						}
+					}).then(function(response){
+						if (response && response.data && response.data.result)
+							return response.data.result.parts;
+					});
+				}
+				
+				c.showMatching = function(field, newTerm) {
+					var queryString = $scope.data.filter;
+					var eq = "";
+					parseQuery($scope.data.table, queryString).then(function(oldTerms) {
+						for(var i=0; i<oldTerms.length; i++){
+							var term = oldTerms[i];
+							if (isSameField(newTerm, term))
+								continue;
+							
+							if (eq.length)
+								eq += '^';
+							
+							eq += getEncodedTerm(term);
+						}
+						if (eq.length)
+							eq += '^';
+						eq += getEncodedTerm(newTerm);
+						
+						$scope.data.filter = eq;
+						$scope.setSearch();
+					});
+				};
+				
+				c.filterOut = function(field, newTerm) {
+					var eq = $scope.data.filter;
+					if (eq.length)
+						eq += '^';
+					
+					eq += getEncodedTerm(newTerm);
+					$scope.data.filter = eq;
+					$scope.setSearch();
+				};
+				
+				function isSameField(t1, t2) {
+					if ('left' in t1 && 'left' in t2)
+						return t1.left.query_term_field === t2.left.query_term_field;
+					else if ('left' in t1)
+						return t1.left.query_term_field === t2.query_term_field;
+					else if ('left' in t2)
+						return t1.query_term_field === t2.left.query_term_field;
+					return t1.query_term_field === t2.query_term_field;
+				}
+				
+				function getEncodedTerm(term) {
+					var eq;
+					if (term.left) {
+						eq = getEncodedTerm(term.left);
+						eq += '^OR';
+						eq += getEncodedTerm(term.right);
+					} else {
+						eq = term.query_term_field;
+						eq += term.operator;
+						eq += term.value;
+					}
+					return eq;
+				}
+			}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES 
+//------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------
+// 2.5.21 | 09.01.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+//------------------------------------------------------------------------------------------------------------------------
+.panel-default &gt; .panel-heading .badge {
+ 		background-color: $banner-count-bg;
+		color: $banner-count-text;
+}
+//------------------------------------------------------------------------------------------------------------------------
+
+.glyphicon {
+  font-size: 16px;
+	color: #3A3F51;
+  padding: 3px;
+}
+
+.glyphicon-comment:before {
+    padding-right: 5px;
+}
+
+.taskertype{
+    display:inline-block;
+    border-bottom:2px solid #004475;
+    padding-bottom:3px;
+  	float: right;
+  	font-size: 13px;
+ 		padding-top: 0px;
+ 	 	margin-right: 10px;
+}
+
+.tableContent {
+	min-height:35px; 
+  padding-left: 15px;
+  padding-top: 5px;
+  padding-right: 5px;
+  padding-bottom: 5px;
+}
+
+//KT: 04/05/2020
+.buttonwrapper {
+  display: inline-block;
+  position: absolute;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+//KT: 04/05/2020
+.table td {
+	vertical-align: top;
+  padding-left: 5px;
+}
+
+.panel-heading {
+  padding-left: 8px;
+}
+
+thead {
+  border-bottom: 1px solid #ddd;
+}
+
+table {
+  margin-bottom: 0;
+}
+
+.table &gt; thead &gt; tr &gt; th {
+  border: 1px solid #ddd;
+  cursor: pointer;
+  vertical-align: middle;
+
+  &amp;:nth-child(2) {
+    border-left: none;
+  }
+
+  &amp;:last-child {
+    border-right: none;
+  }
+}
+
+th i {
+  display: inline-block;
+  margin-left: 5px;
+  color: #A0A0A0;
+}
+
+
+td {
+  padding-left: 5px;
+}
+
+th .disabled{
+  color:#ddd;
+}
+
+.th-title {
+  display: inline-block;
+  color: $primary;
+}
+
+.panel-body {
+  overflow: auto;
+  padding: 0px;
+}
+
+.selected {
+  color: $taskerdatatable-selected-row-text;
+  background-color: $taskerdatatable-selected-row-bg;
+  border-color: 1px solid #fff;
+}
+
+tbody tr:last-child {
+  border-bottom: none;
+}
+
+.pruned-msg {
+  padding-bottom: 10px;
+  padding-left: 4px;
+  text-align: center;
+}
+
+.pruned-msg-filter-pad {
+  padding-top:8px;
+}
+
+.filter-breadcrumbs {
+  border-bottom: 1px solid #ddd;
+  padding-top: 3px;
+}
+
+.dropdown-toggle {
+  background: none;
+  padding: 0 0 4px 0;
+}
+
+.sp-list-cell {
+  white-space: pre-wrap;
+}
+
+.dropdown {
+  .glyphicon-menu-hamburger:focus {
+ 		outline: thin dotted;
+		outline: 5px auto -webkit-focus-ring-color;
+		outline-offset: -2px; 
+	}
+}
+#floaty{
+  position:absolute;
+  box-shadow:0 5px 15px rgba(0,0,0,.5);
+  background-color: #fff;
+  background-clip: padding-box;
+ 	width:540px;
+  display:none;
+  border: 1px solid rgba(0,0,0,.2);
+  border-radius: 6px;
+  !important
+}
+
+.dropdown-left-manual {
+  right: 0;
+  padding-left: 1px;
+  padding-right: 1px;
+}
+
+.border-bottom-manual{
+ 	border-bottom: 1px solid gray; 
+}
+
+.notification-dot{
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  padding:0px 7px;
+  border-radius: 50%;
+  background-color: $banner-count-bg;
+  color: $banner-count-bg;
+}
+
+//------------------------------------------------------------------------------------------------------------------------
+// STATES
+//------------------------------------------------------------------------------------------------------------------------
+.waiting {
+    background-color: $state-waiting-bg;
+		color: $state-waiting-text;
+}
+
+.unassigned {
+  	background-color: $state-unassigned-bg;
+  	color: $state-unassigned-text; 
+}
+
+.assigned {
+  	background-color: $state-assigned-bg;
+		color: $state-assigned-text;
+} 
+
+.accepted {
+  	background-color: $state-accepted-bg;
+		color: $state-accepted-text;
+}
+
+.rejected {
+ 		background-color: $state-rejected-bg;
+		color: $state-rejected-text;
+}
+
+.workscheduled {
+  	background-color: $state-workscheduled-bg;
+		color: $state-workscheduled-text;
+}
+
+.workinprogress {
+  	background-color: $state-workinprogress-bg;
+		color: $state-workinprogress-text;
+}
+
+.inreview {
+  	background-color: $state-inreview-bg; 
+		color: $state-inreview-text;
+}
+
+.rework {
+  	background-color: $state-rework-bg;
+		color: $state-rework-text;
+}
+
+.completed {
+  	background-color: $state-completed-bg;
+		color: $state-completed-text;
+}
+
+.closed-incomplete {
+  	background-color: $state-closedincomplete-bg;
+		color: $state-closedincomplete-text;
+}
+
+.cancelled {
+  	background-color: $state-cancelled-bg;
+		color: $state-cancelled-text;
+}
+
+</css>
+        <data_table>sp_instance_table</data_table>
+        <demo_data>{"data":
+	{
+		"table": "incident",
+		"view": "default",
+		"o": "opened_at",
+		"d": "desc",
+		"filter": "activeEQtrue",
+		"p": 1,
+		"fields": "number,short_description"
+	}
+}</demo_data>
+        <description>Tasker Portal Board with Filter</description>
+        <docs/>
+        <field_list>table,filter,field_list,maximum_entries,order,order_by,order_direction,title,color,glyph,sp_page</field_list>
+        <has_preview>false</has_preview>
+        <id>tasker_portal_board_with_filter</id>
+        <internal>false</internal>
+        <link><![CDATA[function(scope, element, attrs, ctrl){
+	var $ul, $contextMenu;
+	
+	scope.focusOnTableHeader = function() {
+		element.find(".data-table-title").attr("tabindex", "-1").focus();
+	}
+	
+	element.on('contextmenu', function(e){
+		if (e.ctrlKey)
+			return; // ctrlKey is for the debug menu, not this menu
+		
+		var rowScope = angular.element(e.target).scope();
+		var field, item, fieldVal;
+		
+		// Context Menu for tbody
+		if (angular.isDefined(rowScope.field) && angular.isDefined(rowScope.item)){
+			e.preventDefault();
+			field = rowScope.field;
+			item = rowScope.item;
+			fieldVal = item[field].value;
+			
+			var items = [
+			['${Show Matching}', function(){
+				ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '=').then(function(term){
+					ctrl.showMatching(field, term);
+				});
+			}],
+			['${Filter Out}', function(){
+				ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '!=').then(function(term){
+					ctrl.filterOut(field, term);
+				});
+			}]
+			];
+			
+			renderContextMenu(items);
+			setContextMenuPosition(e);
+		}
+	});
+	
+	function renderContextMenu(items){
+		var scrollHeight = $('body').get(0).scrollHeight;
+		$contextMenu = angular.element('<div>', {'class': 'dropdown clearfix context-dropdown open'});
+			
+			$contextMenu.on('click', function (e) {
+				if ($(e.target).hasClass('dropdown')) {
+					_clearContextMenus(event);
+				}
+			});
+			$contextMenu.on('contextmenu', function (event) {
+				event.preventDefault();
+				_clearContextMenus(event);
+			});
+			
+			$contextMenu.css({
+				position: 'absolute',
+				top: 0,
+				height: scrollHeight,
+				left: 0,
+				right: 0,
+				zIndex: 9999
+			});
+			
+			$('body').append($contextMenu);
+			
+			$ul = angular.element('<ul>', {
+				'class': 'dropdown-menu',
+				'role': 'menu'
+			});
+			renderItems();
+			$contextMenu.append($ul);
+			
+			function renderItems(){
+				angular.forEach(items, function (item) {
+					var $li = angular.element('<li>');
+					
+					if (item === null) {
+						$li.addClass('divider');
+					} else {
+						var $a = angular.element('<a>');
+						$a.attr({tabindex: '-1', href:'#'});
+							$a.text(item[0]);
+							$li.append($a);
+							$li.on('click', function (e) {
+								e.preventDefault();
+								scope.$apply(function () {
+									_clearContextMenus(e);
+									item[1].call(item, item);
+								});
+							});
+						}
+						
+						$ul.append($li);
+					});
+				}
+			}
+			
+			function _clearContextMenus(event){
+				if (!event){
+					return;
+				}
+				
+				angular.element(event.currentTarget).removeClass('context');
+				
+				var els = angular.element(".context-dropdown");
+				angular.forEach(els, function(el){
+					angular.element(el).remove();
+				});
+			}
+			
+			var contextMenuItemHeight = 0;
+			function setContextMenuPosition(event){
+				if (contextMenuItemHeight === 0)
+					contextMenuItemHeight = $ul.children(0).height();
+				
+				// Why not just call .width() and .height() on the container? Because those calculations cause browsers to reflow
+				// that can cause IE10 to take 200ms to render a context menu.
+				var cmWidth = 150;
+				var cmHeight = contextMenuItemHeight * $ul.children().length;
+				var startX = event.pageX + cmWidth >= window.innerWidth ? event.pageX - cmWidth : event.pageX;
+				var startY = event.pageY + cmHeight >= window.innerHeight ? event.pageY - cmHeight : event.pageY;
+				
+				$ul.css({
+					display: 'block',
+					position: 'absolute',
+					left: startX,
+					top: startY,
+					'min-width': cmWidth
+				});
+			}
+		}]]></link>
+        <name>Tasker Portal Board with Filter</name>
+        <option_schema>[{"hint":"If enabled, show the list filter in the breadcrumbs of the data table","name":"enable_filter","default_value":"false","section":"Behavior","label":"Enable Filter","type":"boolean"}]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[//------------------------------------------------------------------------------------------------------------------------
+// WIDGET BASE: TASKER DATA TABLE
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+//------------------------------------------------------------------------------------------------------------------------
+(function() {
+	if (!input) // asynch load list
+		return;
+
+	data.msg = {};
+	data.msg.sortingByAsc = gs.getMessage("Sorting by ascending");
+	data.msg.sortingByDesc = gs.getMessage("Sorting by descending");
+	data.popOver = "active";
+	data.filters = {};
+	/*
+	 * data.table = the table
+	 * data.p = the current page starting at 1
+	 * data.o = the order by column
+	 * data.d = the order by direction
+	 * data.keywords = the keyword search term
+	 * data.list = the table data as an array
+	 * data.invalid_table = true if table is invalid or if data was not succesfully fetched
+	 * data.table_label = the table's display name. e.g. Incident
+	 * data.table_plural = the table's plural display name. e.g. Incidents
+	 * data.fields = a comma delimited list of field names to show in the data table
+	 * data.column_labels = a map of field name -> display name
+	 * data.window_size = the number of rows to show
+	 * data.filter = the encoded query
+	 */
+	// copy to data[name] from input[name] || option[name]
+
+	optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
+	optCopy(['relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
+	if (!data.table) {
+		data.invalid_table = true;
+		data.table_label = "";
+		return;
+	}
+
+	if (!data.fields) {
+		if (data.view)
+			data.fields = $sp.getListColumns(data.table, data.view);
+		else
+			data.fields = $sp.getListColumns(data.table);
+	}
+	data.filters= [];
+	data.title = input.headerTitle;	
+	data.view = data.view || 'mobile';
+	data.table = data.table || $sp.getValue('table');
+	data.filter = data.filter || $sp.getValue('filter');
+	
+	data.keywords = data.keywords || $sp.getValue('keywords');
+	data.p = data.p || $sp.getValue('p') || 1;
+	data.p = parseInt(data.p);
+	data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by');
+	data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction');
+	data.page_index = data.p - 1;
+	data.show_new = data.show_new || options.show_new;
+	var windowSize = data.window_size || $sp.getValue('maximum_entries') || 20;
+	windowSize = parseInt(windowSize);
+	if (isNaN(windowSize) || windowSize < 1)
+		windowSize = 20;
+	data.window_size = windowSize;
+			if(input){
+		data.filter= input.filter;
+	}
+	// get filter from filters table
+	var gr_filters = new GlideRecordSecure('x_153465_discovert_tasker_filters');
+	gr_filters.addQuery('u_active', true);
+	gr_filters.orderBy('u_order');
+	gr_filters.query();
+	
+	while(gr_filters.next()){
+		data.filters.push({
+			table: gr_filters.getDisplayValue('u_table.name'),
+			filter_label: gr_filters.getDisplayValue('u_filter_label'),
+			filter: gr_filters.getDisplayValue('u_filter'),
+			view_all_page: gr_filters.getDisplayValue('u_view_all_page'),
+			o: gr_filters.getDisplayValue('u_order_by'),
+			d: gr_filters.getDisplayValue('u_direction')
+		});
+	}
+		// get task count for filter menu
+	data.filtersFlag = false;
+	for(var r = 0; r < data.filters.length; r++){
+		
+	var count = new GlideAggregate('x_153465_discovert_route_task_instance');
+	count.addEncodedQuery(data.filters[r].filter);
+	count.addAggregate('COUNT');
+	count.query();
+	if(count.next())
+		data.filters[r].count = count.getAggregate('COUNT');
+		if(data.filters[r].count > 0){
+			data.filtersFlag = true;
+		}
+	}
+	var gr;
+	if (gs.getProperty("glide.security.ui.filter") == "true" ) {
+		gr = new GlideRecord(data.table);
+		gr.applyRowSecurity();
+	} else
+		gr = new GlideRecordSecure(data.table);
+	if (!gr.isValid()) {
+		data.invalid_table = true;
+		data.table_label = data.table;
+		return;
+	}
+
+  data.canCreate = gr.canCreate();
+	data.newButtonUnsupported = data.table == "sys_attachment";
+	data.table_label = gr.getLabel();
+	//data.table_plural = gr.getPlural();
+	if (data.filter) {
+		if (data.filterACLs)
+			gr = $sp.addQueryString(gr, data.filter);
+		else
+			gr.addEncodedQuery(data.filter);
+	}
+
+	if (data.keywords){
+		gr.addQuery('123TEXTQUERY321', data.keywords);
+		data.keywords = null;
+	}
+
+	data.filter = gr.getEncodedQuery();
+
+	if (data.relationship_id) {
+		var rel = GlideRelationship.get(data.relationship_id);
+		var target = new GlideRecord(data.table);
+		var applyTo = new GlideRecord(data.apply_to);
+		applyTo.get("sys_id", data.apply_to_sys_id);
+		rel.queryWith(applyTo, target); // put the relationship query into target
+		gr.addEncodedQuery(target.getEncodedQuery()); // get the query the relationship made for us
+	}
+
+	if (data.o){
+		if (data.d == "asc")
+			gr.orderBy(data.o);
+		else
+			gr.orderByDesc(data.o);
+	}
+
+	data.window_start = data.page_index * data.window_size;
+	data.window_end = (data.page_index + 1) * data.window_size;
+	gr.chooseWindow(data.window_start, data.window_end);
+	gr._query();
+
+	data.row_count = gr.getRowCount();
+	data.num_pages = Math.ceil(data.row_count / data.window_size);
+	data.column_labels = {};
+	data.fields_array = options.field_list.split(',');
+	// use GlideRecord to get field labels vs. GlideRecordSecure
+	var grForLabels = new GlideRecord(data.table);
+	for (var i in data.fields_array) {
+		var field = data.fields_array[i];
+		var ge = grForLabels.getElement(field);
+		if (ge == null)
+			continue;
+
+		data.column_labels[field] = ge.getLabel();
+	}
+	data.popOverData = [];
+	data.list = [];
+	data.popOverRecord={};
+	while (gr.next()) {
+		// calculate number of comments
+		var numComments = 0;
+		var stream = $sp.getStream('x_153465_discovert_route_task_instance', gr.getUniqueValue());
+		for(var x=0; x < stream.entries.length; x++){
+			if(stream.entries[x].element == 'comments'){
+				numComments++;
+			}
+		}
+		var record = {};
+		var sys_id = gr.getUniqueValue();
+		if(!data.popOverRecord[sys_id]){
+			data.popOverRecord[sys_id] = {
+				'sys_id': gr.getUniqueValue(),
+				'title': gr.getDisplayValue('number') + ' - ' +gr.getDisplayValue('short_description') ,
+				"objective": gr.getDisplayValue('u_objective'),
+				"short_description": gr.getDisplayValue('short_description'),
+				"number": gr.getValue('number'),
+				"state":gr.getDisplayValue('state'),
+				"taskType": gr.getDisplayValue('tasker_type'),
+				"classification": gr.getDisplayValue('classification'),
+				'status': gr.getDisplayValue('status'),
+				'reviewer': gr.getDisplayValue('u_reviewer'),
+				'numComments': numComments
+			};
+		}
+	
+		$sp.getRecordElements(record, gr, options.field_list);
+		
+		if (gr instanceof GlideRecordSecure) {
+			// FilteredGlideRecord doesn't do field-level
+			// security, so take care of that here
+			for (var f in data.fields_array) {
+				
+				var fld = data.fields_array[f];
+				if (!gr.isValidField(fld))
+					continue;
+
+				if (!gr[fld].canRead()) {
+					record[fld].value = null;
+					record[fld].display_value = null;
+				}
+			}
+			
+		}
+		record.sys_id = gr.getValue('sys_id');
+		data.list.push(record);
+	}
+
+	data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
+		options.enable_filter == true || options.enable_filter == "true");
+	var breadcrumbWidgetParams = {
+		table: data.table,
+		query: data.filter,
+		enable_filter: data.enable_filter
+	};
+	data.filterBreadcrumbs = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
+
+	// copy to data from input or options
+	function optCopy(names) {
+		names.forEach(function(name) {
+			data[name] = input[name] || options[name];
+		});
+	}
+
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>aalzyoud</sys_created_by>
+        <sys_created_on>2019-12-29 04:37:56</sys_created_on>
+        <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
+        <sys_mod_count>255</sys_mod_count>
+        <sys_name>Tasker Portal Board with Filter</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-24 21:11:15</sys_updated_on>
+        <template><![CDATA[<div class="panel panel-{{options.color}} b">
+   <div class="panel-heading form-inline" ng-hide="options.hide_header">
+      <div class="dropdown pull-right">
+         <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" style="border:none;">
+         <span class=" notification-dot" ng-if="data.filtersFlag == true" ></span>
+         <span class="glyphicon glyphicon-filter" aria-hidden="true" title="More options" ></span>
+         </button>
+         <ul class="dropdown-menu pull-right" aria-labelledby="dropdownMenu1" >
+            <li ng-repeat="filter in data.filters" ng-click="c.getData(filter)"><a href="javascript:void(0)">{{filter.filter_label}} <span ng-if="filter.count > 0" class="pull-right badge danger">  {{filter.count}}</span></a></li>
+         </ul>
+      </div>
+      <span class="dropdown m-r-xs">
+         <button aria-label="${Table menu}" class="btn dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="optionsMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
+         <ul class="dropdown-menu" aria-labelledby="optionsMenu">
+            <li ng-repeat="t in ::exportTypes">
+               <a ng-href="/{{data.table}}_list.do?{{::t.value}}&sysparm_query={{data.filter}}&sysparm_view={{data.view}}&sysparm_fields={{data.fields}}" target="_new">${Export as} {{::t.label}}</a>
+            </li>
+         </ul>
+      </span>
+      <span class="panel-title"><i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>{{data.title || data.table_plural}}</span>
+      <button name="new" role="link" class="btn btn-primary btn-sm m-l-xs" ng-click="newRecord()" ng-if="options.show_new && data.canCreate && !data.newButtonUnsupported" aria-label="${Create new record}">${New}</button>
+      <div class="pull-right" ng-if="options.show_keywords">
+         <form ng-submit="setSearch(true)">
+            <div class="input-group">
+               <input type="text" name="datatable-search" ng-model="data.keywords" ng-model-options="{debounce:250}" class="form-control" placeholder="${Keyword Search}">
+               <span class="input-group-btn">
+               <button name="search" class="btn btn-default" type="submit" aria-label="${Search}"><span class="glyphicon glyphicon-search"></span></button>
+               </span>
+            </div>
+         </form>
+      </div>
+      <div class="clearfix"></div>
+   </div>
+   <!-- body -->
+   <div class="panel-body">
+      <h2 class="sr-only data-table-title">{{data.title || data.table_plural}} ${table} - ${page} {{data.p}}</h2>
+      <div ng-if="options.show_breadcrumbs && (data.filter || data.enable_filter)" class="filter-breadcrumbs">
+         <sp-widget widget="data.filterBreadcrumbs"></sp-widget>
+      </div>
+      <div class="alert alert-info" ng-if="!data.list.length && !data.num_pages && !data.invalid_table && !loadingData">
+         ${No records in {{data.table_label}} <span ng-if="data.filter">using that filter</span>}
+      </div>
+      <div class="alert alert-info" ng-if="loadingData">
+         <fa name="spinner" spin="true"></fa>
+         ${Loading data}...
+      </div>
+      <table class="table table-striped table-responsive" ng-if="data.list.length">
+         <thead>
+            <tr>
+               <th style="width: 60px"></th>
+               <th ng-repeat="field in data.fields_array track by $index" class="text-nowrap" ng-click="setOrderBy(field)" tabindex="1">
+                  <div class="th-title" aria-label="${Sort by } {{data.column_labels[field]}}">{{data.column_labels[field]}}</div>
+                  <i class="fa" ng-if="field == data.o" ng-class="{'asc': 'fa-chevron-up', 'desc': 'fa-chevron-down'}[data.d]" aria-label="${Sorted by } {{data.column_labels[field]}} {{data.d == 'asc' ?  '${Ascending}': '${Descending}' }}"></i>
+               </th>
+               <th class="text-nowrap th-title">
+                  Comments
+               </th>
+            </tr>
+         </thead>
+         <tbody>
+            <tr ng-repeat="item in data.list track by item.sys_id">
+               <!--Add action buttons to each table row -->
+               <td>
+                  <div class="buttonwrapper">
+                     
+                     <a href="?id=discovertasker_taskdetails&sys_id={{item.sys_id}}&table=x_153465_discovert_route_task_instance" target="_blank">
+                     <span class="glyphicon glyphicon-new-window" aria-hidden="true" title="Open task in new tab"></span>
+                     </a>
+                    
+                     <a href='#' ng-click="c.quickView(item.sys_id,'discovertasker-formtab',item.number.display_value,item.short_description.display_value)">
+                     <span class="glyphicon glyphicon-modal-window" aria-hidden="true" title="Open task in modal"></span>
+                     </a>
+                    
+                  </div>
+               </td>
+               <td role="text" aria-label="{{item[field].display_value}}" class="tableContent" ng-class="{selected: item.selected}" ng-click="" ng-repeat="field in ::data.fields_array" 
+                   data-field="{{::field}}" data-th="{{::data.column_labels[field]}}">
+                  <span ng-if="field == 'state'" ng-class="{'badge': field == 'state', unassigned: item[field].display_value == 'Unassigned', assigned: item[field].display_value == 'Assigned', accepted: item[field].display_value == 'Accepted', rejected: item[field].display_value == 'Rejected', workscheduled : item[field].display_value == 'Work Scheduled', rework : item[field].display_value == 'Rework', workinprogress : item[field].display_value == 'Work in Progress', inreview : item[field].display_value == 'In Review', completed : item[field].display_value == 'Completed', cancelled : item[field].display_value == 'Cancelled', waiting : item[field].display_value == 'Waiting', closedincomplete : item[field].display_value == 'Closed Incomplete'}">{{::item[field].display_value}}</span>
+                  <span id="short" ng-if="field == 'short_description'" ng-mousemove="c.openPopover($event, item.sys_id)" ng-mouseleave="c.closePopover()" >{{::item[field].display_value}}</span>
+                  <span ng-if="field != 'short_description' && field != 'state' " >{{::item[field].display_value}}</span>
+               </td>
+               <td role="text" class="pointer sp-list-cell">
+                  <span ng-if="data.popOverRecord[item.sys_id].numComments > 0" >
+                  <a class="btn btn-primary" aria-label="Left Align"	class="glyphicon glyphicon glyphicon-comment pointer" aria-hidden="true" title="View task comments" 
+                     ng-click="c.quickView(item.sys_id, 'tasker_stream_widget',data.popOverRecord[item.sys_id].number,data.popOverRecord[item.sys_id].short_description)">
+                    <span style="font-family:SourceSansPro, Helvetica, Arial, sans-serif; font-size: 14px;">{{data.popOverRecord[item.sys_id].numComments}}</span> 
+                  </a>
+                  </span>
+               </td>
+            </tr>
+         </tbody>
+      </table>
+      <div ng-class="{'pruned-msg-filter-pad': (!options.show_breadcrumbs || !data.filter) && !data.list.length}" class="pruned-msg" ng-if="rowsWerePruned()">
+         <span ng-if="rowsPruned == 1">${{{rowsPruned}} row removed by security constraints}</span>
+         <span ng-if="rowsPruned > 1">${{{rowsPruned}} rows removed by security constraints}</span>
+      </div>
+   </div>
+   <!-- footer -->
+   <div class="panel-footer" ng-hide="options.hide_footer" ng-if="data.row_count">
+      <div class="btn-toolbar m-r pull-left">
+         <div class="btn-group">
+            <a ng-disabled="data.p == 1" href="javascript:void(0)" ng-click="setPageNum(data.p - 1)" class="btn btn-default"  aria-label="${Previous page}"><i class="fa fa-chevron-left"></i></a>
+         </div>
+         <div ng-if="data.num_pages > 1 && data.num_pages < 20" class="btn-group">
+            <a ng-repeat="i in getNumber(data.num_pages) track by $index" ng-click="setPageNum($index + 1)" href="javascript:void(0)" ng-class="{active: ($index + 1) == data.p}" type="button" class="btn btn-default" aria-label="${Page} {{$index + 1}}">{{$index + 1}}</a>
+         </div>
+         <div class="btn-group">
+            <a ng-disabled="data.p == data.num_pages" href="javascript:void(0)" ng-click="setPageNum(data.p + 1)" class="btn btn-default" aria-label="${Next page}"><i class="fa fa-chevron-right"></i></a>
+         </div>
+      </div>
+      <div class="m-t-xs panel-title pull-left">${Rows {{data.window_start + 1}} - {{ mathMin(data.window_end,data.row_count) }} of {{data.row_count}}}</div>
+      <!--
+				<div class="pull-right ">
+         <a class="btn btn-default" type="button">VIEW ALL</a>
+      </div>
+			-->
+      <span class="clearfix"></span>
+   </div>
+</div>
+<div id="floaty">
+<div class="modal-content ">
+   <div class="modal-header " ng-class="{unassigned: c.state == 'Unassigned', assigned: c.state == 'Assigned', accepted: c.state == 'Accepted', rejected: c.state == 'Rejected', workscheduled : c.state == 'Work Scheduled', rework : c.state == 'Rework', workinprogress : c.state == 'Work in Progress', inreview : c.state == 'In Review', completed : c.state == 'Completed', cancelled : c.state == 'Cancelled', waiting : c.state == 'Waiting', closedincomplete : c.state == 'Closed Incomplete'}">
+      <button data-dismiss="modal" class="btn-icon close icon-cross">
+      </button>
+      <h5 class="modal-title modal-title-manual">{{c.title}}</h5>
+   </div>
+   <div class="modal-body">
+      <div class="row">
+         <div class="col-sm-12">
+            <p class="badge rejected">{{c.classification}}</p>
+            <p class="badge assigned">{{c.status}}</p>
+            <p class="taskertype">{{c.taskType}}</p>
+         </div>
+      </div>
+      <div class="row">
+         <div class="col-sm-12 ">
+           <label for="instructions"><h4>Objective:</h4></label><br />
+            <p id="objective">{{c.objective}}</p>
+         </div>
+      </div>
+   </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

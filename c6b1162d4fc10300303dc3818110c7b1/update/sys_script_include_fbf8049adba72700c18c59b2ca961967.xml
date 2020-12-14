@@ -1,0 +1,1069 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.uiConditionCheck</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>v2.5.3&#13;
+STRY0073605 - top task Assigneed Member can also enable and disable Shared docuements and shared attachments&#13;
+STRY0083547 - FIX- STRETCH: Task Form - "Create Subtasks for each Sub OU" on Task form Context Menu enabled based on tasker Roles and Task States&#13;
+STRY0085434 - Assigned Member can mark as complete - UI MODAL - (Portal &amp; Platform) Modal for Review Comments - "Mark Complete" UI Action - as Assigned Member&#13;
+STRY0085333 - UI MODAL - (Portal &amp; Platform) Modal for Send to Review  - Response Comments - "Reviewer" field Editable&#13;
+STRY0085338 - UI MODAL - (Portal &amp; Platform) Modal for Send to Review - Response Comments - "Reviewer" field Read-Only&#13;
+STRY0082305 - UI MODAL - (Portal &amp; Platform) Modal for Rework Comments - "Send to Rework" UI Action &#13;
+STRY0082933 - FIX- STRETCH: Task Form - "Create Subtasks for each OU Member" on Task form Context Menu enabled based on tasker Roles and Task States&#13;
+STRY0085827 - CMS: Users can deactivate "Template Tasks", but the task is still created when the template is started/task tree is created&#13;
+STRY0088624 - Extension Response Breaks when there's no suspense date on the task&#13;
+&#13;
+v2.5.16&#13;
+- STRY0079327 - Issue - run template was not working from Platform pages&#13;
+&#13;
+Includes for UI Action Conditions:&#13;
+v2.5.13&#13;
+- Issue with Template OU rights corrected&#13;
+&#13;
+v2.5.10 | 05.27.20&#13;
+- Update on Who can Response Clarification&#13;
+&#13;
+v2.5.4 | 05/01/2020&#13;
+&#13;
+- Who can Request Reassignment&#13;
+- Who can Reassignment Response&#13;
+- Who can Request Extension&#13;
+- Who can Extension Response&#13;
+- Who can Request Clarification&#13;
+- Who can Send Clarification&#13;
+- Who can Save a Task Tree as a Template&#13;
+- Who can Run a Template from a Task&#13;
+&#13;
+v2.5.0 | 04/09/2020&#13;
+&#13;
+- Who can Run Template&#13;
+- Who can Enable/Disable Shared Attachments&#13;
+- Who can Enable/Disable Shared Documents&#13;
+- Who can Send Task As Email&#13;
+&#13;
+v2.2.23 | Mar-2020 | 2.2 Patch 9&#13;
+&#13;
+- Who can Cancel a Task&#13;
+- Who can Mark as Complete on time&#13;
+- Who  can Request Extension&#13;
+- Who can modify Suspense Date (tasking authority or task owner etc)&#13;
+- Who can MarkCompletedOnTimeLateUIAction&#13;
+- Who can Open a Completed or Cancelled task&#13;
+- Who has Organizational Admin or Is a Member of OU</description>
+        <name>uiConditionCheck</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var uiConditionCheck = Class.create();
+uiConditionCheck.prototype = {
+	initialize: function() {
+		
+	},
+
+	// v2.5 P3 - STRY0082305
+	canSendToRework: function(gr){
+		// used to be this
+//current.canRead() && current.state == 14 &&  ( current.u_task_requester == gs.getUserID() || current.u_reviewer == gs.getUserID() )  && new TaskerTypeActions().IsActionAllowed(current.tasker_type,'Send to Rework')
+
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var isTaskeOwner = current.u_task_requester == gs.getUserID();
+		var isReviewer = current.u_reviewer == gs.getUserID();
+
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		//var isStateAllowedForTaskType = new TaskerTypeActions().IsActionAllowed(gr.tasker_type,'Send to Review');
+		var isStateAllowedForTaskType = new TaskerTypeActions().IsActionAllowed(current.tasker_type,'Send to Rework');
+		var	inReview = (gr.state == "14");
+
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && (isReviewer || isTaskeOwner) && (inReview));
+		
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},	
+
+// v2.5 P3 - STRY0085434 
+	canSendToReview: function(gr){
+		// used to be this
+		//current.canRead() && current.state == 13  && (current.assigned_to == gs.getUserID())  && (current.tasker_type.getDisplayValue() != "Acknowledgement"  && current.tasker_type.getDisplayValue() != "Information Only")
+		// && new TaskerTypeActions().IsActionAllowed(current.tasker_type,'Mark Complete')
+
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		//var isStateAllowedForTaskType = new TaskerTypeActions().IsActionAllowed(gr.tasker_type,'Send to Review');
+		var isStateAllowedForTaskType = (gr.tasker_type.getDisplayValue() == "Standard");
+		var	assigned = (gr.state == "1");
+		var	accepted = (gr.state == "10");
+		var	workInProgress = (gr.state == "13");
+		var	inReview = (gr.state == "14");
+		var	reWork = (gr.state == "15");
+
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && (currentUserIsAssignedMember) && (assigned || accepted || workInProgress || reWork));
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},	
+	// v2.5 P3 - STRY0085434 
+	canMarkComplete: function(gr){
+		// used to be this
+		//current.canRead()  && current.state == 14 &&  ( current.u_task_requester == gs.getUserID() || current.u_reviewer == gs.getUserID() )
+		// && new TaskerTypeActions().IsActionAllowed(current.tasker_type,'Mark Complete')
+
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+
+		var currentUserIsTaskOwner = (gr.u_task_requester == currentUser);
+		var currentUserIsReviewer = (gr.u_reviewer == currentUser);
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var isReviewRequired = (gr.provide_response + '' == 'true');
+		var isStateAllowedForTaskType = new TaskerTypeActions().IsActionAllowed(gr.tasker_type,'Mark Complete');
+		
+		var	assigned = (gr.state == "1");
+		var	accepted = (gr.state == "10");
+		var	workInProgress = (gr.state == "13");
+		var	inReview = (gr.state == "14");
+		var	reWork = (gr.state == "15");
+
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && (currentUserIsAssignedMember && !isReviewRequired) && (assigned || accepted || workInProgress || inReview || reWork));
+		
+		var inStateAllowedReviewer = (isStateAllowedForTaskType && currentUserIsReviewer && inReview);
+		var inStateAllowedTaskOwner = (isStateAllowedForTaskType && currentUserIsTaskOwner && inReview);
+		
+		if( canRead && isActive && (inStateAllowedAssignedMember || inStateAllowedReviewer || inStateAllowedTaskOwner) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.5.3
+	canCreateTasksForAllMembersInOU: function(gr){
+		var answer = false;
+		var currentUser = gs.getUserID();
+		var canCreate = gr.canCreate();
+		var isNotNew = gr.sys_id != -1;
+		var isActive = gr.active;
+		var isNotRestricted = !gr.assignment_group;
+		var ouIsAssigned = gr.getValue('primary_assignee')!='';
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var currentUserIsTaskOwner = (gr.u_task_requester == currentUser);
+		var isGlobalTA_OR_OUTA = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, currentUser);
+		
+		var unassigned = (gr.state == "-5");
+		var	assigned = (gr.state == "1");
+		var	accepted = (gr.state == "10");
+		// STRY0082933 
+		var	rejected = (gr.state == "11");
+		var	workInProgress = (gr.state == "13");
+		var	inReview = (gr.state == "14");
+		var	reWork = (gr.state == "15");
+		var inStateAllowed = (unassigned ||	assigned ||	rejected || accepted ||	workInProgress || inReview || reWork);
+
+		
+		if(canCreate && isNotNew && isActive && inStateAllowed && isNotRestricted && ouIsAssigned && isGlobalTA_OR_OUTA && (currentUserIsAssignedMember || currentUserIsTaskOwner) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.5.3
+	canCreateTasksForAllSubOU: function(gr){
+		var answer = false;
+		var currentUser = gs.getUserID();
+		var canCreate = gr.canCreate();
+		var isNotNew = gr.sys_id != -1;
+		var isActive = gr.active;
+		var isNotRestricted = !gr.assignment_group;
+		var ouIsAssigned = gr.getValue('primary_assignee')!='';
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var currentUserIsTaskOwner = (gr.u_task_requester == currentUser);
+		var isGlobalTA_OR_OUTA = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, currentUser);
+		var isOpenSystem = new tasking_System_Settings_Scripts().systemControlSetting.Open;
+		
+		if(canCreate && isNotNew && isActive && isNotRestricted && ouIsAssigned && (isGlobalTA_OR_OUTA || isOpenSystem) && (currentUserIsAssignedMember || currentUserIsTaskOwner) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+		
+	
+	//v2.5.10
+	//-----------------------------------------------------------------------------------------------------------------
+	//KT: REQUEST TYPE
+	//-----------------------------------------------------------------------------------------------------------------
+	SubmitTaskerRequest: function(current){
+		
+		//KT: current is from Request table: We don't have a way to restrict the UI Action on the client
+		var canCreate = current.canCreate();
+		
+		if (canCreate) {
+			return true;
+		} else{
+			return false;
+		}
+	},
+	
+	RequestReassignment: function(current){
+		
+		var currentUser = gs.getUserID();
+		//KT: current is from Task table: uses current directly
+		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
+			var canRead = current.canRead();
+			var isActive = current.active;
+			var state = current.state;
+			var reassignment_requested = current.reassignment_requested;
+			var assignedTo = current.assigned_to;
+			
+			if(canRead && isActive == true && state == 13 && reassignment_requested == false &&
+				assignedTo == currentUser){
+				return true;
+			} else{
+				return false;
+			}
+		}
+		
+		//KT: current is from Request table: We don't have a way to restrict the UI Action on the client
+		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+			return true;
+		} else{
+			return false;
+		}
+	},
+	
+	
+	RespondReassignment: function(current){
+		
+		var canRead;
+		var isActive;
+		var state;
+		var reassignment_requested;
+		var isTaskingAuthority;
+		
+		//KT: current is from Task table: uses current directly
+		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
+			canRead = current.canRead();
+			isActive = current.active;
+			state = current.state;
+			reassignment_requested = current.reassignment_requested;
+			isTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(current.primary_assignee, gs.getUserID());
+		}
+		
+		//KT: current is from Request table: uses current.parent -> Task
+		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+			canRead = current.parent.canRead();
+			isActive = current.parent.active;
+			state = current.parent.state;
+			reassignment_requested = current.parent.reassignment_requested;
+			isTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(current.parent.primary_assignee, gs.getUserID());
+		}
+		
+		if(canRead && isActive == true && state == 13 && reassignment_requested == true && isTaskingAuthority == true){
+			return true;
+		} else{
+			return false;
+		}
+	},
+	
+	
+	RequestExtension: function(current){
+		var canRead = current.canRead();
+		var newRecord = current.sys_id;
+		var isActive = current.active;
+		var state = current.state;
+		var extension_requested  = current.extension_requested;
+		var assignedTo = current.assigned_to;
+		var reviewer = current.u_reviewer;
+		var task_owner = current.u_task_requester;
+		var originator = current.originator;
+		var currentUser = gs.getUserID();
+		// STRY0088624 
+		var isSuspenseDateSet = (current.getDisplayValue('suspense_date') != '');
+		if((isSuspenseDateSet && canRead && (newRecord != -1) && isActive == true && state == 13 && (extension_requested == false) && (assignedTo == gs.getUserID())) && !(currentUser == task_owner && currentUser == reviewer && currentUser == assignedTo)){
+			
+			return true;
+			
+		} else{
+			return false;
+		}
+		
+	},
+	
+	RespondExtension: function(current){
+		
+		var canRead;
+		var isActive;
+		var state;
+		var extension_requested;
+		var taskOwner;
+		var currentUser = gs.getUserID();
+		
+		//KT: current is from Task table: uses current directly
+		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
+			canRead = current.canRead();
+			isActive = current.active;
+			state = current.state;
+			extension_requested = current.extension_requested;
+			taskOwner = current.u_task_requester;
+		}
+		
+		//KT: current is from Request table: uses current.parent -> Task
+		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+			canRead = current.parent.canRead();
+			isActive = current.parent.active;
+			state = current.parent.state;
+			extension_requested = current.parent.extension_requested;
+			taskOwner = current.parent.u_task_requester;
+		}
+		
+		if(canRead && isActive == true && state == 13 && extension_requested == true && taskOwner == currentUser){
+			return true;
+		} else{
+			return false;
+		}
+	},
+	
+	
+	RequestClarification: function(current){
+		
+		var currentUser = gs.getUserID();
+		var clarificationRequested;
+		var canRead;
+		//if task is in any of the below states
+		var unassigned;
+		var assigned;
+		var accepted;
+		var workInProgress;
+		var inReview;
+		var reWork;
+		//check the to see if the current logged in user has any of the following tasker roles
+		var currentUserIsTaskOwner;
+		var currentUserIsAssignedMember;
+		var currentUserIsReviewer;
+		
+		
+		//KT: gr is from Task table: uses gr directly
+		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
+			
+			clarificationRequested = current.u_clarification_requested;
+			canRead = current.canRead();
+			//if task is in any of the below states
+			unassigned = (current.state == "-5");
+			assigned = (current.state == "1");
+			accepted = (current.state == "10");
+			workInProgress = (current.state == "13");
+			inReview = (current.state == "14");
+			reWork = (current.state == "15");
+			//check the to see if the current logged in user has any of the following tasker roles
+			currentUserIsTaskOwner = (current.u_task_requester == currentUser);
+			currentUserIsAssignedMember = (current.assigned_to == currentUser);
+			currentUserIsReviewer = (current.u_reviewer == currentUser);
+			
+			//NOTE EXCEPTION: If the (Task Owner), (Assigned Member) and (Reviewer) are the same person on the task form he/she should not be able request clarification (current behavior STRY0024957)
+			if ( clarificationRequested == false && currentUserIsTaskOwner == true && currentUserIsAssignedMember == true && currentUserIsReviewer == true) {
+				return false;
+			}
+			else  {
+				//KT - STRY0050724
+				var arrayUtil = new global.ArrayUtil();
+				var arrayPrimaryAssigneeOUTAs = [];
+				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
+				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
+				
+				//As an Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
+				if ( canRead && clarificationRequested == false  &&
+					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA ) &&
+					(unassigned || assigned || accepted || workInProgress || inReview || reWork )){
+					return true;
+				}else{
+					return false;
+				}
+			}
+		}
+		//else return false;
+		
+		//KT: current is from Request table: uses current.parent -> Task
+		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+			
+			clarificationRequested = current.parent.u_clarification_requested;
+			canRead = current.parent.canRead();
+			//if task is in any of the below states
+			unassigned = (current.parent.state == "-5");
+			assigned = (current.parent.state == "1");
+			accepted = (current.parent.state == "10");
+			workInProgress = (current.parent.state == "13");
+			inReview = (current.parent.state == "14");
+			reWork = (current.parent.state == "15");
+			//check the to see if the current logged in user has any of the following tasker roles
+			currentUserIsTaskOwner = (current.parent.u_task_requester == currentUser);
+			currentUserIsAssignedMember = (current.parent.assigned_to == currentUser);
+			currentUserIsReviewer = (current.parent.u_reviewer == currentUser);
+			
+			//NOTE EXCEPTION: If the (Task Owner), (Assigned Member) and (Reviewer) are the same person on the task form he/she should not be able request clarification (current behavior STRY0024957)
+			if (canRead && clarificationRequested == false && currentUserIsTaskOwner == true && currentUserIsAssignedMember == true && currentUserIsReviewer == true) {
+				return false;
+			}
+			else  {
+				//KT - STRY0050724
+				var arrayUtil = new global.ArrayUtil();
+				var arrayPrimaryAssigneeOUTAs = [];
+				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
+				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
+				
+				//As an Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
+				if ( canRead && clarificationRequested == false && 
+					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA ) &&
+					(unassigned || assigned || accepted || workInProgress || inReview || reWork )){
+					return true;
+				}else{
+					return false;
+				}
+			}
+		}
+			
+	},
+	
+	
+	RespondClarification: function(current){
+		
+		//KT - STRY0050725
+		var arrayUtil = new global.ArrayUtil();
+		
+		var canRead;
+		var currentUser =  gs.getUserID();
+		var clarificationRequested;
+		var isTopTask;
+		//if task is in any of the below states
+		var unassigned;
+		var assigned;
+		var accepted;
+		var workInProgress;
+		var inReview;
+		var reWork;
+		//check the to see if the current logged in user has any of the following tasker roles
+		var taskOwner;
+		var currentUserIsAssignedMember;
+		
+		var arrayPrimaryOfficeOUTAs = [];
+		var listOfPrimaryOfficeOUTAs;
+		var isPrimaryOfficeOUTA;
+		
+		var arrayPrimaryAssigneeOUTAs = [];
+		var listOfPrimaryAssigneeOUTAs;
+		var isPrimaryAssigneeOUTA;
+		
+		//KT: current is from Task table: uses current directly
+		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
+			
+			canRead = current.canRead();
+			clarificationRequested = current.u_clarification_requested;
+			isTopTask = current.parent.nil();
+			//if task is in any of the below states
+			unassigned = (current.state == "-5");
+			assigned = (current.state == "1");
+			accepted = (current.state == "10");
+			workInProgress = (current.state == "13");
+			inReview = (current.state == "14");
+			reWork = (current.state == "15");
+			//check the to see if the current logged in user has any of the following tasker roles
+			taskOwner = (current.u_task_requester == currentUser);
+			currentUserIsAssignedMember = (current.assigned_to == currentUser);
+
+			//Top Task
+			if(isTopTask == true){
+				//KT - STRY0050725: if this is not a subtask get the list of primary office outas and check that the current user is in the list
+				listOfPrimaryOfficeOUTAs  =  current.primary_office.tasking_authorities;
+				arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
+				isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser); 
+			}
+			//Sub Task
+			if(isTopTask == false){
+				//KT - STRY0050725: if this is a subtask get the list of primary assignee outas and check that the current user is in the list
+				listOfPrimaryAssigneeOUTAs  =  current.parent.primary_assignee.tasking_authorities;
+				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+				isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+			}
+		}
+		
+		//KT: current is from Request table: uses current.parent -> Task
+		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+			
+			canRead = current.parent.canRead();
+			clarificationRequested = current.parent.u_clarification_requested;
+			isTopTask = current.parent.parent.nil();
+			//if task is in any of the below states
+			unassigned = (current.parent.state == "-5");
+			assigned = (current.parent.state == "1");
+			accepted = (current.parent.state == "10");
+			workInProgress = (current.parent.state == "13");
+			inReview = (current.parent.state == "14");
+			reWork = (current.parent.state == "15");
+			//check the to see if the current logged in user has any of the following tasker roles
+			taskOwner = (current.parent.u_task_requester == currentUser);
+			currentUserIsAssignedMember = (current.parent.assigned_to == currentUser);
+			
+			//Top Task
+			if(isTopTask == true){
+				//KT - STRY0050725: if this is not a subtask get the list of primary office outas and check that the current user is in the list
+				listOfPrimaryOfficeOUTAs  =  current.parent.primary_office.tasking_authorities;
+				arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
+				isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser); 
+			}
+			//Sub Task
+			if(isTopTask == false){
+				//KT - STRY0050725: if this is a subtask get the list of primary assignee outas and check that the current user is in the list
+				listOfPrimaryAssigneeOUTAs  =  current.parent.parent.primary_assignee.tasking_authorities;
+				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+				isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+			}
+		}
+		
+		//KT: gr is from Task table: uses gr directly
+		if (canRead && clarificationRequested == true) {
+						
+			//if clarification requested is true and any of the above states is true
+			if((unassigned || assigned || accepted || workInProgress || inReview  || reWork)){
+				//Top Task //05.27.20: Condition fixed 
+				if(isTopTask == true){ 
+					
+					if(taskOwner == true || isPrimaryOfficeOUTA == true){ 
+						return true;
+					}else{
+						return false;
+					}
+				}
+				//Sub Task //05.27.20: Condition fixed 
+				if(isTopTask == false){
+					
+					if(taskOwner == true || isPrimaryAssigneeOUTA == true){
+						return true;
+					}else{
+						return false;
+					}
+				}
+			}
+		}
+		else return false;
+	},
+	
+	
+	//-----------------------------------------------------------------------------------------------------------------
+	//KT: END REQUEST TYPE
+	//-----------------------------------------------------------------------------------------------------------------
+	
+	// STRY0065020 user can run a template
+	// This controls running a template from the Template area as a new task tree
+	// This function expects to receive the Template record
+	runTemplateUIAction: function(gr)
+	{
+		var canRead = gr.canRead();
+		var newRecord = gr.sys_id;
+		var isActive;
+		
+		// STRY0074534 Template Admins can read any template
+		var grTemplate;
+		var grTemp;
+		if (gr.getTableName() == "x_153465_discovert_discover_routing_template") {
+			isActive = gr.u_active;
+			grTemplate = gr;
+		} else if (gr.getTableName() == "x_153465_discovert_route_tasks") {
+			isActive = gr.active;
+			grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+			if(grTemp.get(gr.tasker_process_definition)){
+				grTemplate = grTemp;
+			} else return false;
+		// STRY0075793 - TUP-Run Template from Task in the Platform Pages
+		} else if (gr.getTableName() == "x_153465_discovert_discover_routing_runtime") {
+			// STRY0079327 - fixed... this had the Template Instance  table name instead of the Template table name
+			grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+			if(grTemp.get(gr.routing_template_ref)){
+				isActive = gr.u_active;
+				grTemplate = grTemp;
+			} else return false;
+		} else return false;
+		
+		var isProcessOwner = grTemplate.getValue('process_owner') == gs.getUserID();
+		var processLevel = grTemplate.getValue('process_level');
+		var UserPermissions  = new UserInfoScripts();
+		// STRY0085827
+		if(canRead && (newRecord != -1) && isActive == true ){
+			if (processLevel == 'global_process') {
+				var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+				return userIsTaskAdministrator;
+			} else if (processLevel == 'ou_process') {
+				var isOUTA = UserPermissions.IsUserTaskingAuthority(grTemplate.getValue('process_ou'),gs.getUserID());
+				return isOUTA;
+			} else if (processLevel == 'my_process'){
+				return grTemplate.getValue('process_owner') == gs.getUserID();
+			} else {
+				return false;
+			}
+		} else 
+			return false;
+	},
+
+	// This controls running a template from a Task 
+	// This function expects to receive the Task record
+	runTemplateFromTaskUIAction: function(gr)
+	{
+		// use the standard UserInfo scripts to check user permissions
+		var UserPermissions  = new UserInfoScripts();
+		//var tasker_process_template_global = UserPermissions.userHasGlobalProcessRights();
+		var tasker_process_template_global = UserPermissions.IsUserTaskAdministrator();
+		
+		var task_process_template_ou = false;
+		if(gr.getValue('primary_assignee') + '' != ''){
+			task_process_template_ou = UserPermissions.IsUserTaskingAuthority(gr.getValue('primary_assignee'), gs.getUserID());
+		}
+		var tasker_process_template_user = UserPermissions.userHasPersonalProcessRights();
+		// STRY0074534 - Process Template Admin Rights do not have the authority to task individuals.  
+		// As a result, they can only run personal templates or templates where tehy have other permissions.
+		//var task_process_template_admin = UserPermissions.userHasProcessTemplateAdminRights();
+
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var arrayUtil = new global.ArrayUtil();
+		var canRead = current.canRead();
+		var currentUser =  gs.getUserID();
+		var clarificationRequested;
+		var isTopTask;
+		//if task is in any of the below states
+		var unassigned = (current.state == "-5");
+		var assigned  = (current.state == "1");
+		var accepted = (current.state == "10");
+		var workInProgress = (current.state == "13");
+		var inReview = (current.state == "14");
+		var reWork = (current.state == "15");
+		//check the to see if the current logged in user has any of the following tasker roles
+		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+		var taskOwner = (current.u_task_requester == currentUser);
+		var currentUserIsAssignedMember = (current.assigned_to == currentUser);
+		var currentUserIsReviewer = (current.u_reviewer == currentUser);
+		//var arrayTaskingAuthorityOUTAs = [];
+		//var listOfTaskingAuthorityOUTAs;
+		//var isTaskingAuthorityOUTA;
+		//var arrayPrimaryOfficeOUTAs = [];
+		//var listOfPrimaryOfficeOUTAs;
+		//var isPrimaryOfficeOUTA;
+		//var arrayPrimaryAssigneeOUTAs = [];
+		//var listOfPrimaryAssigneeOUTAs;
+		//var isPrimaryAssigneeOUTA;
+		//
+		//if(current.tasking_authority + '' != ''){
+		//	listOfTaskingAuthorityOUTAs = current.tasking_authority.tasking_authorities;
+		//	arrayTaskingAuthorityOUTAs = listOfTaskingAuthorityOUTAs.toString().split(",");
+		//	isTaskingAuthorityOUTA = arrayUtil.contains(arrayTaskingAuthorityOUTAs, currentUser);
+		//}
+		//
+		//if(current.primary_office + '' != ''){
+		//	listOfPrimaryOfficeOUTAs = current.primary_office.tasking_authorities;
+		//	arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
+		//	isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser);
+		//}
+		//if(current.primary_assignee + '' != ''){
+		//	listOfPrimaryAssigneeOUTAs = current.primary_assignee.tasking_authorities;
+		//	arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+		//	isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+		//}
+		//if(canRead && !isNewRecord &&(task_process_template_admin || tasker_process_template_global || task_process_template_ou || tasker_process_template_user)){
+		// STRY0085827
+		if(isActive && canRead && !isNewRecord &&(tasker_process_template_global || task_process_template_ou || tasker_process_template_user)){
+			if(taskOwner && (unassigned || assigned)){
+				return true;
+			} else if(currentUserIsAssignedMember && (accepted || workInProgress || reWork)){
+				return true;
+			} else if (currentUserIsReviewer && inReview){
+				return true;
+			} else return false;
+		}
+		else return false;
+	},
+	
+	
+	CancelUIAction: function(gr){
+		var canRead = gr.canRead();
+		var isActive = gr.active;
+		var isGlobalTA_OR_OUTA = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, gs.getUserID());
+		var task_owner = gr.u_task_requester;
+		
+		if( ((isActive && (isGlobalTA_OR_OUTA || (gs.getUserID() == task_owner))))){
+			return true;
+		}else{
+			return false;
+		}
+	},
+	
+	
+	
+	
+	//STRY0017099 KB 2019-05-08 Updated to add TaskOwner and other checks
+	IsUserTaskingAuthorityOrReviewer: function(taskRecord) {
+		if(taskRecord.isNewRecord()) {
+			return true;
+		}
+		try{
+			var user = gs.getUserID();
+			var uis = new UserInfoScripts();
+			var taskOwner = taskRecord.u_task_requester;
+			var taskOwnerAllowed = (taskOwner == user);
+			var isTaskOwnerOUTA = uis.IsUserOUTAOfAnotherUser(taskOwner, user);
+			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+			var onBehalfOfAllowed = ((taskRecord.parent && taskRecord.parent.on_behalf_of == user) || (!taskRecord.parent && taskRecord.on_behalf_of == user));
+			
+			if(globalTAAllowed || isTaskOwnerOUTA || taskOwnerAllowed || onBehalfOfAllowed ) {
+				return true;
+			}
+		}catch(e) {
+			gs.error(e);
+		}
+		
+		return false;
+	},
+	//STRY0031122 KB 2019-05-08 Added to provide support for Risk Flag ACL
+	IsAssigneeTaskOwnerOrTA: function(taskRecord) {
+		if(taskRecord.isNewRecord()) {
+			return true;
+		}
+		try{
+			var user = gs.getUserID();
+			var ous = new OrganizationalScripts();
+			var taskOwner = taskRecord.u_task_requester;
+			var taskOwnerAllowed = (taskOwner == user);
+			var assignee = taskRecord.assigned_to;
+			var assigneeAllowed = (assignee == user);
+			var assigneeOU = ous.GetUserDefaultOU(assignee);
+			var isAssigneeOUTA = new UserInfoScripts().IsUserTaskingAuthority(assigneeOU, user);
+			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+			
+			if(globalTAAllowed || isAssigneeOUTA || taskOwnerAllowed || assigneeAllowed ) {
+				return true;
+			}
+		}catch(e) {
+			gs.error(e);
+		}
+		
+		return false;
+	},
+	MarkCompletedOnTimeLateUIAction: function(gr){
+		var canRead = gr.canRead();
+		var isCompleted = gr.state;
+		var isGlobalTA_OR_OUTA = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, gs.getUserID());
+		var taskOwner = gr.u_task_requester;
+		var state = gr.state;
+		
+		
+		if ( isCompleted == '3' && (isGlobalTA_OR_OUTA || (gs.getUserID() == taskOwner)) ){
+			return true;
+			
+		}else{
+			return false;
+			
+		}
+	},
+	UserCanReopenCompletedTask: function(task) {
+		var user = gs.getUser();
+		var userId = user.getID();
+		return task.u_task_requester == userId ||
+		task.u_reviewer == userId ||
+		task.assigned_to == userId ||
+		(task.parent.on_behalf_of && task.parent.on_behalf_of == userId) ||
+		user.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+	},
+	// gets the user from the saved user preferences, a temporary variable containing the current ou
+	getOuFromSessionIfNotPresent: function(ouId) {
+		var ou = ouId;
+		if(ouId) {
+			return ouId;
+		}
+		try {
+			// grab and clear the value of the current ou from the user's preferences
+			ou = gs.getUser().getPreference("CurrentOU");
+			gs.getUser().savePreference("CurrentOU", "");
+		} catch (e) {
+			gs.warn(e);
+		}
+		return ou;
+	},
+	
+	// get the user from the uri if not present on the record
+	getOuFromUriIfNotPresent: function(ouId) {
+		var ou = ouId;
+		if(ouId) {
+			return ouId;
+		}
+		try{
+			var uri = gs.action.getGlideURI().get("query");
+			if(uri) {
+				var eqIdex = uri.indexOf("=");
+				ou = uri.substring(eqIdex+1);
+			}
+		}catch(e){
+			ou = ouId;
+		}
+		
+		return ou;
+	},
+	
+	saveTaskAsProcessTemplate: function(gr){
+		// use the standard UserInfo scripts to check user permissions
+		var UserPermissions  = new UserInfoScripts();
+		var tasker_process_template_global = UserPermissions.userHasGlobalProcessRights();
+		// v2.5.13 - STRY0073150 - the template is saved as a Personal Template.
+		// The user does not need OU Template rights to do that.
+		//var task_process_template_ou = UserPermissions.userHasOUProcessRightsOnAnOU();
+		var tasker_process_template_user = UserPermissions.userHasPersonalProcessRights();
+		var task_process_template_admin = UserPermissions.userHasProcessTemplateAdminRights();
+
+		var isNewRecord = gr.isNewRecord();
+		var arrayUtil = new global.ArrayUtil();
+		var canRead = current.canRead();
+		var currentUser =  gs.getUserID();
+		var clarificationRequested;
+		var isTopTask;
+		//if task is in any of the below states
+		var unassigned = (current.state == "-5");
+		var assigned  = (current.state == "1");
+		var accepted = (current.state == "10");
+		var workInProgress = (current.state == "13");
+		var inReview = (current.state == "14");
+		var reWork = (current.state == "15");
+		//check the to see if the current logged in user has any of the following tasker roles
+		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+		var taskOwner = (current.u_task_requester == currentUser);
+		var currentUserIsAssignedMember = (current.assigned_to == currentUser);
+		var currentUserIsReviewer = (current.u_reviewer == currentUser);
+		var arrayTaskingAuthorityOUTAs = [];
+		var listOfTaskingAuthorityOUTAs;
+		var isTaskingAuthorityOUTA;
+		var arrayPrimaryOfficeOUTAs = [];
+		var listOfPrimaryOfficeOUTAs;
+		var isPrimaryOfficeOUTA;
+		var arrayPrimaryAssigneeOUTAs = [];
+		var listOfPrimaryAssigneeOUTAs;
+		var isPrimaryAssigneeOUTA;
+
+		if(current.tasking_authority + '' != ''){
+			listOfTaskingAuthorityOUTAs = current.tasking_authority.tasking_authorities;
+			arrayTaskingAuthorityOUTAs = listOfTaskingAuthorityOUTAs.toString().split(",");
+			isTaskingAuthorityOUTA = arrayUtil.contains(arrayTaskingAuthorityOUTAs, currentUser);
+		}
+
+		if(current.primary_office + '' != ''){
+			listOfPrimaryOfficeOUTAs = current.primary_office.tasking_authorities;
+			arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
+			isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser);
+		}
+		if(current.primary_assignee + '' != ''){
+			listOfPrimaryAssigneeOUTAs = current.primary_assignee.tasking_authorities;
+			arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
+			isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+		}
+		// v2.5.13 - STRY0073150 - removed task_process_template_ou 
+		// The template is saved as a Personal Template, the user does not need OU Template rights to do that.
+		if(canRead && !isNewRecord &&(task_process_template_admin || tasker_process_template_global || tasker_process_template_user)){
+			if(userIsTaskAdministrator || taskOwner || isTaskingAuthorityOUTA || isPrimaryOfficeOUTA || isPrimaryAssigneeOUTA){
+				return true;
+			} else if(currentUserIsAssignedMember && !unassigned && !assigned){
+				return true;
+			} else if (currentUserIsReviewer && !unassigned && !assigned && !accepted && !workInProgress && !reWork){
+				return true;
+			} else return false;
+		}
+		else return false;
+	},
+	
+	/* START  OF PROCESS ENABLE/DISABLE DOC SHARING */	
+	// RAJ 2020.03.18  STRY0063547
+	processEnableSharedAttachments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,false,'attachment');		
+	},
+	
+	// RAJ 2020.03.18  STRY0063547
+	processDisableSharedAttachments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,true,'attachment');
+	},
+	
+	// RAJ 2020.03.18  STRY0063747
+	processEnableSharedDocuments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,false,'document');
+	},
+	
+	// RAJ 2020.03.18  STRY0063747
+	processDisableSharedDocuments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,true,'document');
+	},
+	/* END OF PROCESS ENABLE/DISABLE DOC SHARING */	
+	
+	// RAJ 2020.03.18  STRY0063747
+	// All of the states for documents being enabled or disabled are contained in this function
+	// checkSharedEnabled will be what the calling function is asking
+	// When called from an "Enable" UI action, false should be passed b/c that ui action if on if sharing is currently disabled.
+	// When calling from a "disable" UI action, true should be passed b/c that ui action is on if sharing is currently enabled
+	validAttachmentOrDocumentRecord: function(gr, checkSharedEnabled, docsOrAttachmentCheck){
+		var canRead = gr.canRead();
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var recordTable = gr.getTableName();
+		var isNotShared;
+		var userInfo = new UserInfoScripts();
+		var tDS = new taskerDocumentScripts();
+		
+		var userHasPermissions = false;
+		var correctRecordLevel = false;
+		var currentUserID = gs.getUserID();
+		if (recordTable == 'x_153465_discovert_route_task_instance'){
+			// is the current user the task owner?
+			var taskOwner = gr.u_task_requester == currentUserID;
+			// enable/disable are only on the top task
+			correctRecordLevel =  gr.parent.nil();  
+			// STRY0073605 - top task Assigneed Member can also enable and disable Shared docuements and shared attachments
+			var assignedTo = gr.assigned_to == currentUserID;
+			// who can enable, only OUTA of the Primary Office or the Task Owner
+			userHasPermissions = taskOwner || assignedTo;  
+		} else if (recordTable == 'x_153465_discovert_discover_routing_template'){
+			// this is the process template.  So, the table is the correct level
+			correctRecordLevel = true;
+			userHasPermissions = userInfo.userHasProcessRights(gr);
+		} else if(recordTable == 'x_153465_discovert_route_tasks'){
+			// enable/disable are only on the top Process Template Task
+			correctRecordLevel =  gr.parent.nil();  
+			userHasPermissions = userInfo.userHasProcessRights(gr);
+		}
+		var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(gr);
+
+		var isShareinRightState = false;
+		if(docsOrAttachmentCheck == 'attachment'){
+			isShareinRightState = (checkSharedEnabled==currentAttachDocSettings.sharingAttachments && currentAttachDocSettings.sNOWAttachmentsOn);
+		} else if (docsOrAttachmentCheck == 'document'){
+			isShareinRightState = (checkSharedEnabled==currentAttachDocSettings.sharingDocuments && currentAttachDocSettings.docIntDocumentsOn);
+		}
+		if(canRead && !isNewRecord && correctRecordLevel && isShareinRightState && userHasPermissions){
+			return true;
+		}else{
+			return false;
+		}
+		
+	},
+
+	// RAJ 2020.02.17  STRY0060676
+	enableSharedAttachments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,false,'attachment');
+	},
+	
+	// RAJ 2020.02.17  STRY0060676
+	disableSharedAttachments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,true, 'attachment');
+	},
+	
+	// RAJ 2020.02.22  STRY0059166
+	enableSharedDocuments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,false,'document');
+	},
+	
+	// RAJ 2020.02.22  STRY0059166
+	disableSharedDocuments: function(gr){
+		return this.validAttachmentOrDocumentRecord(gr,true,'document');
+	},
+	
+	//check if member has organizational admin or is in ou (for acl)
+	MemberHasOrgAdminOrInOU: function(ouMember) {
+		try {
+			var currentUser = gs.getUser();
+			var userId = currentUser.getID();
+			// first check if the hierarchy is on record (does not work for new records [its blank])
+			var ouId = ouMember.discover_office_hierarchy;
+			// workaround if we still dont have a current ou
+			ouId = this.getOuFromUriIfNotPresent(ouId);
+			// workaround for new records if the hierarchy doesn't contain value and if uri is not available
+			ouId = this.getOuFromSessionIfNotPresent(ouId);
+			var result = false;
+			if(ouId) {
+				gs.getUser().savePreference("CurrentOU", ouId.toString());
+				var uis = new UserInfoScripts();
+				var userIsInOu = uis.IsUserInOU(ouId, userId);
+				var userHasGlobalRole = currentUser.hasRole("x_153465_discovert.tasker_organizational_admin");
+				
+				
+				if(userHasGlobalRole || userIsInOu) {
+					result = true;
+				}
+			}
+			return result;
+		} catch(e) {
+			gs.warn("[New OU Member ACL] exception occurred: " + e);
+			return false;
+		}
+		
+		
+	},
+	
+	
+	displaySendTaskAsEmailUIAction: function(current){
+	
+		//HT -STRY0058721
+		//get the disableExportTaskFunction system property, it defaults to false
+		
+		var isTaskAsEmailFunctionDisabled = gs.getProperty("x_153465_discovert.#DisableExportTaskToEmailFunction");	
+		
+		var canRead = (current.canRead() == true);
+	
+		//if the above system property is set to false the export functionality is NOT disabled
+		if(canRead && isTaskAsEmailFunctionDisabled == "false"){
+		
+			//check to see if the current task is in a restricted group
+			//if the task is in a restricted group do not should the export task as email UI Action
+			if(current.assignment_group.nil() && current.assignment_group == ""){
+		
+				return true;
+			}else{
+			
+				return false;
+			}
+		}
+		
+		if(isTaskAsEmailFunctionDisabled == true){
+		
+			return false;
+		}	
+	},
+	
+	type: 'uiConditionCheck'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>aalzyoud</sys_created_by>
+        <sys_created_on>2019-02-12 18:46:09</sys_created_on>
+        <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
+        <sys_mod_count>363</sys_mod_count>
+        <sys_name>uiConditionCheck</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-12-08 06:23:01</sys_updated_on>
+    </sys_script_include>
+</record_update>

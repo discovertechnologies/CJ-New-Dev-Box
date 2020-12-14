@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>v 2.5 P3 &#13;
+STRY0084270 - Restricted Group - Task Form - OU, Member and Contact fields should filter based on "Restricted Group" selected&#13;
+STRY0084273 - Restricted Group - Template - OU, Member and Contact Field Filters based on "Restricted Group" selected&#13;
+v 2.5.16 P2&#13;
+- STRY0078831 - Added getAllMembersSysIdsInGroup: function(groupName) to address issue with Get subtask members for Administrator users&#13;
+v2.5.13 &#13;
+- Get Contacts for OU based on whether it is internal or external OU.</description>
+        <name>taskerDynamicFilters</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+var taskerDynamicFilters = Class.create();
+taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+
+	// STRY0075850 load contacts for task and template forms based on the selected OUs
+	getExternalContacts: function(gr) {
+		var returnfilter = 'sys_id IN ';
+		
+		if(gr.getRecordClassName() == 'x_153465_discovert_route_task_instance'){
+			if(gr.tasking_authority && gr.parent.nil() && gr.tasking_authority.u_external_flag){
+					returnfilter = this.getContactsForOu(gr.getValue('assignment_group'), gr.getValue('tasking_authority'));
+			} else if(gr.u_external_ou) {
+				returnfilter = this.getContactsForOu(gr.getValue('assignment_group'), gr.getValue('u_external_ou'));
+			}
+		}
+		if(gr.getRecordClassName() == 'x_153465_discovert_route_tasks'){
+			if(gr.tasking_authority && gr.parent.nil() && gr.tasking_authority.u_external_flag){
+					returnfilter = this.getContactsForOu(gr.getValue('assigned_to_group'), gr.getValue('tasking_authority'));
+			} else if(gr.u_external_ou) {
+				returnfilter = this.getContactsForOu(gr.getValue('assigned_to_group'), gr.getValue('u_external_ou'));
+			}
+		}
+		if(gr.getRecordClassName() == 'x_153465_discovert_discover_routing_template' ||
+		  gr.getRecordClassName() == 'x_153465_discovert_discover_routing_runtime'){
+			if(gr.u_tasking_authority && gr.u_tasking_authority.u_external_flag){
+					returnfilter = this.getContactsForOu(gr.getValue('u_restricted_group'), gr.getValue('u_tasking_authority'));
+			} else if(gr.u_external_ou) {
+				returnfilter = this.getContactsForOu(gr.getValue('u_restricted_group'), gr.getValue('u_external_ou'));
+			} 
+		}
+		return returnfilter;
+	},
+		
+	// STRY0074595 - loads Members for Internal OU and Contacts for External OU
+	getPrimaryContactFilterForOu: function(gr) {
+		var contacts = [];
+		var sOU = gr.getUniqueValue();
+		if(gr.u_external_flag==true){
+			var grContacts = new GlideRecordSecure('x_153465_discovert_organizational_contacts');
+			grContacts.addQuery('u_contact_ou', sOU);
+			grContacts.query();
+			while(grContacts.next()){
+				contacts.push(grContacts.getValue('u_user_information'));
+			}
+		}else{
+			var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+			grMembers.addQuery('discover_office_hierarchy', sOU);
+			grMembers.query();
+			while(grMembers.next()){
+				contacts.push(grMembers.getValue('office_member'));
+			}
+		}
+		return 'sys_id IN ' + contacts.join(',');  	
+	},
+
+	// STRY0074671 - Display all the active Contacts for the OU provided
+	getContactsForOu: function(restrictedGroup, sOU) {
+		var ouMemArr = [];
+		var contacts = [];
+		var grContacts = new GlideRecordSecure('x_153465_discovert_organizational_contacts');
+		grContacts.addQuery('u_contact_ou', sOU);
+		if(restrictedGroup != null && restrictedGroup != ''){
+			ouMemArr = new UserInfoScripts().getAllMembersSysIdsInGroup(restrictedGroup);
+			grContacts.addQuery('u_user_information', 'IN', ouMemArr.join(','));
+		}
+		grContacts.query();
+		while(grContacts.next()){
+			contacts.push(grContacts.getValue('u_user_information'));
+		}
+		return 'sys_id IN ' + contacts.join(',');  	
+	},
+	
+	//Display all the  active OU's where the current user is an OU Process Template Admin
+	getMyOUProcessTemplateAdminOUs: function() {	
+			var user = gs.getUserID();
+			var offices = [];
+			var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+			grOUs.addQuery('has_ou_process_rights', 'true');
+			grOUs.addQuery('office_member', user);
+			grOUs.query();
+			
+			
+			while(grOUs.next()){
+					   offices.push(grOUs.getValue('discover_office_hierarchy'));    
+			}
+		//  STRY0068500
+		return 'sys_id IN ' + offices.join(',');  	
+	},
+
+	getSubTaskMembers: function() {
+		// STRY0064991 - get users for members
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		// STRY0079512
+		var restrictedGroup = '';
+		if(current.getTableName() == 'x_153465_discovert_route_task_instance'){
+			restrictedGroup = current.assignment_group + '';
+		} else{
+			var templateData = {};
+			templateData = this.getTemplateInfo();
+			restrictedGroup = templateData.restricted_group == null ? '': templateData.restricted_group;
+		}
+		
+		var ouMemArr = [];
+		var strArrOUs = [];
+		// if user is a Task Administrator, return all users
+		if (UserPermissions.IsUserTaskAdministrator()){
+			// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+			// STRY0078831 - fixed issue where Adminstrators would see all users when a restricted group was selected.
+			if (restrictedGroup != '') {
+				ouMemArr = UserPermissions.getAllMembersSysIdsInGroup(restrictedGroup);
+				return 'sys_id IN ' + ouMemArr.join(',')  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 				
+			} else{
+				return '^roles=x_153465_discovert.tasker_user^active=true';
+			}
+		}
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		else {
+			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+			strArrOUs = taskingScripts.getMyOUTaskManagers(gs.getUserID());
+			if (strArrOUs.length > 0 ){
+				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{  // if the user has no members returned from the taking management role, just set add the user
+				ouMemArr.push(gs.getUserID());
+			}			
+		}
+		// now limit to restricted group, if necessary
+		if (restrictedGroup != '') 
+			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, restrictedGroup);
+		// turn array into a comma delimitted string.
+		var sMems = ouMemArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+	},
+	
+	// STRY0065017 - get members in Template Screens
+	getOUMembersInTemplates: function() {
+		var templateData = {};
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var ouMemArr = [];
+		var strArrOUs = [];
+		templateData = this.getTemplateInfo();
+
+		// handle my-template first as it is the easiest
+		if (templateData.template_level == 'my_process'){
+			// the rules for my template level are the same as the rules for the user.  return getOUMembers
+			return this.privategetOUMembers(templateData.primary_assignee, templateData.restricted_group);
+		} else if (templateData.template_level == 'ou_process') {
+			// handle OU level next it is more complex
+			if (UserPermissions.userHasOUProcessRights(templateData.template_ou)) {
+				// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+				// for the template, the selected OU selected for the process also has match the primary assignee for the user to be able to 
+				// select users from the OU.
+				if (templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
+					strArrOUs.push(templateData.primary_assignee);
+					// based on note above, if this isn't limitted to primary assignee, just return that load
+					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+				} else{
+					// If no Primary assignee set, then return no records
+					ouMemArr = ['none'];
+				}	
+			}
+		} else if (templateData.template_level == 'global_process') {
+			if (UserPermissions.userHasGlobalProcessRights()){
+				if (templateData.primary_assignee != ''){
+					strArrOUs.push(templateData.primary_assignee);
+					// member field is limtted to the selected Primary Assignee
+					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+				} else{
+					// If no Primary assignee set, then return no records
+					ouMemArr = ['none'];
+				}
+			}
+		}		
+		// now limit to restricted group, if necessary
+		if ( templateData.restricted_group != '') 
+			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, templateData.restricted_group);
+		// turn array into a comma delimitted string.
+		var sMems = ouMemArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+	},
+
+	// STRY0079512 - fixed an issue loading members for getting members when createing multi sub tasks.  It was limited to just the Primary Assignee OU selected. 
+	getOUSubTaskMembersInTemplates: function() {
+		var templateData = {};
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var ouMemArr = [];
+		var strArrOUs = [];
+		templateData = this.getTemplateInfo();
+
+		// handle my-template first as it is the easiest
+		if (templateData.template_level == 'my_process'){
+			return this.getSubTaskMembers();
+		} else if (templateData.template_level == 'ou_process') {
+			// handle OU level next it is more complex
+			if (UserPermissions.userHasOUProcessRights(templateData.template_ou)) {
+				// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+				// for the template, the selected OU selected for the process also has match the primary assignee for the user to be able to 
+				// select users from the OU.
+				if (templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
+					strArrOUs.push(templateData.primary_assignee);
+					// based on note above, if this isn't limitted to primary assignee, just return that load
+					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+				} else{
+					// If no Primary assignee set, then return no records
+					ouMemArr = ['none'];
+				}	
+			}
+		} else if (templateData.template_level == 'global_process') {
+			if (UserPermissions.userHasGlobalProcessRights()){
+				if (templateData.restricted_group != '') {
+					ouMemArr = UserPermissions.getAllMembersSysIdsInGroup(templateData.restricted_group);
+					return 'sys_id IN ' + ouMemArr.join(',')  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 				
+				} else{
+					return '^roles=x_153465_discovert.tasker_user^active=true';
+				}
+			}
+		}		
+		// now limit to restricted group, if necessary
+		if ( templateData.restricted_group != '') 
+			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, templateData.restricted_group);
+		// turn array into a comma delimitted string.
+		var sMems = ouMemArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+	},
+	
+	getOUMembers: function() {
+		return this.privategetOUMembers(current.getValue('primary_assignee'), current.getValue('assignment_group'));
+	},
+	
+	// task is a single table, template is 3 different tables 
+	// using the same routine, but different fields are coming from diffent tables
+	privategetOUMembers: function(primary_assignee, assignment_group) 
+	{
+		// STRY0064991 - get users for members
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var ouMemArr = [];
+		var strArrOUs = [];
+		// if user is a Task Administrator, return all users
+		if (UserPermissions.IsUserTaskAdministrator()){
+			if (primary_assignee != ''){
+				strArrOUs.push(primary_assignee);
+				// based on note above, if this isn't limitted to primary assignee, just return that load
+				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{
+				// If no Primary assignee set, then return no records
+				ouMemArr = ['none'];
+			}
+		}
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		else if(UserPermissions.IsUserTaskingAuthority(primary_assignee,gs.getUserID())){
+			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+			if (primary_assignee != ''){
+				strArrOUs.push(primary_assignee);
+				// based on note above, if this isn't limitted to primary assignee, just return that load
+				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{
+				// If no Primary assignee set, then return no records
+				ouMemArr = ['none'];
+			}
+		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
+		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
+		// Return this user only as they can work on behalf of
+		} else { //} if(UserPermissions.IsUserInOU(primary_assignee,gs.getUserID())){
+			if (UserPermissions.IsUserInOU(primary_assignee,gs.getUserID())){
+				ouMemArr.push(gs.getUserID());
+			} else {
+				// If user is not in ou, then return no records
+				ouMemArr = ['none'];
+			}
+		}			
+		// now limit to restricted group, if necessary
+		if ( assignment_group != '') 
+			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, assignment_group);
+		// turn array into a comma delimitted string.
+		var sMems = ouMemArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+		
+	},
+getOfficePicker : function()
+{
+	var UserPermissions  = new UserInfoScripts();
+	//if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
+		
+		var currentPrimmaryAssignee = current.primary_assignee;//'5ecc47ed4fca0300303dc3818110c7af';// J1
+		var ouOfficePickerArr = '';
+		var ouDownOfficePickerArr = '';
+		var grParentOffice = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+	if(grParentOffice.get(currentPrimmaryAssignee)){
+		
+		
+		//KTORRES: GET SAME LEVEL OFFICES, BASED ON THE SAME PARENT OFFICE
+		ouOfficePickerArr = this.getOfficePickerBasedonParent(grParentOffice.parent);
+		
+		//KTORRES: GET THEIR OWN CHAIN OFFICES
+		ouDownOfficePickerArr = this.getOfficePickerBasedonParent(currentPrimmaryAssignee);
+		
+		if (ouDownOfficePickerArr != '')
+			ouOfficePickerArr += (',' +  ouDownOfficePickerArr);
+	}
+		return 'sys_id IN' + ouOfficePickerArr+'';
+		
+		//}
+	},
+	
+	getOfficePickerBasedonParent : function(parent)
+	{
+		var ouChildOfficePickerArr = ' ';
+		//KTORRES: GET SAME LEVEL OFFICES, BASED ON THE SAME PARENT OFFICE
+		var grOffice = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		grOffice.addQuery('parent', parent);
+		grOffice.orderBy('office_abbreviation');
+		grOffice.query();
+		
+		while(grOffice.next()){
+			if (ouChildOfficePickerArr == ' '){
+				ouChildOfficePickerArr += ( grOffice.sys_id);
+			}
+			else {
+				ouChildOfficePickerArr += (',' + grOffice.sys_id);
+			}
+		}
+		
+		return ouChildOfficePickerArr;
+		
+	},
+	
+	// STRY0064996 - load the list of Primary Offices on the TAsk for based on user permissions and system settings
+	// STRY0080468 - oType added, Filter OUs internal/external/all
+	getTaskingOfficeList: function(oType) {
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var ArrOUs = [];
+		var strArrOUs = '';
+		// STRY0078831
+		var ArrRestrictedOUs = [];
+		var restrictedGroup = current.assignment_group + '';
+		// STRY0078831 - fixed issue where OUs were not restricted to groups containing members of the restricted group
+		if (restrictedGroup != '') {
+			ArrRestrictedOUs = UserPermissions.getOUsForRestrictedGroup(restrictedGroup);
+		}
+		if (UserPermissions.IsUserTaskAdministrator()){
+			// do not add any groups restricting permissions
+			if(ArrRestrictedOUs.length > 0) {
+				strArrOUs = 'sys_id IN ' + ArrRestrictedOUs.join(',');
+			}
+		} else {
+			ArrOUs = taskingScripts.retrieveTaskOUs(gs.getUserID());
+		}
+		if(ArrOUs.length > 0) {
+			// OUs found for this user found, not all ous
+			if(ArrRestrictedOUs.length > 0){
+				// restricted group ou's found, union with ou's found for htis user
+				var au = new global.ArrayUtil();
+				var ArrResrictIntersect = au.intersect(ArrOUs,ArrRestrictedOUs);
+				strArrOUs = 'sys_id IN ' + ArrResrictIntersect.join(',');
+			}else {  // no restricted group set, provide OUs back to user
+				strArrOUs = 'sys_id IN ' + ArrOUs.join(',');
+			}
+		}
+		strArrOUs = strArrOUs + '^active=true';
+		// STRY0080468 - oType added, Filter OUs internal/external/all
+		switch(oType){
+			case 'internal':
+				strArrOUs = strArrOUs + '^u_external_flag=false';
+				break;
+			case 'external':
+				strArrOUs = strArrOUs + '^u_external_flag=true';
+				break;
+			case 'all':
+				break;
+		}
+
+		return strArrOUs; 
+	},
+
+	// STRY0065017 - this information is needed in multiple places in the Template Screens for permissions
+	getTemplateInfo: function() {
+		var templateData = {};
+		var restrictedGroup = '';
+		var primaryAssignee = '';
+		var templateLevel = '';
+		var templateOU = '';
+		var tempDef = '';
+		var grTempDef = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		var recordTable = current.getTableName();
+
+		if(recordTable == 'x_153465_discovert_discover_routing_template'){
+			templateLevel = current.getValue('process_level');
+			if(templateLevel == 'ou_process'){
+				templateOU = current.getValue('process_ou');
+			}
+			primaryAssignee = current.getValue('u_primary_assignee');
+			restrictedGroup = current.getValue('u_restricted_group');
+		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
+			tempDef = current.getValue('tasker_process_definition');
+			if(grTempDef.get(tempDef)){
+				templateLevel = grTempDef.getValue('process_level');
+				if(templateLevel == 'ou_process'){
+					templateOU = grTempDef.getValue('process_ou');
+				}
+			}
+			primaryAssignee = current.getValue('primary_assignee');
+			restrictedGroup = current.getValue('assigned_to_group'); 
+		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
+			tempDef = current.getValue('routing_template_ref');
+			if(grTempDef.get(tempDef)){
+				templateLevel = grTempDef.getValue('process_level');
+				if(templateLevel == 'ou_process'){
+					templateOU = grTempDef.getValue('process_ou');
+				}
+			}
+			primaryAssignee = current.getValue('u_primary_assignee');
+			restrictedGroup = current.getValue('u_restricted_group');
+		}
+		// STRY0079512 3
+		restrictedGroup = restrictedGroup == null ? '': restrictedGroup;
+		
+		templateData.template_level = templateLevel;  
+		templateData.template_ou = templateOU;  
+		templateData.primary_assignee = primaryAssignee;  
+		templateData.restricted_group = restrictedGroup;  			
+		
+		return templateData;
+		
+	},
+	// STRY0065247 - load the list of offices for template design fields
+	// STRY0080468 - oType added, Filter OUs internal/external/all
+	getTemplateOfficeList: function(oType) {
+		var templateData = {};
+
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var ArrOUs = [];
+		var strArrOUs = '';
+		// STRY0078831
+		var ArrRestrictedOUs = [];
+		var restrictedGroup = '';
+		var recordTable = current.getTableName();
+		if(recordTable == 'x_153465_discovert_discover_routing_template'){
+			restrictedGroup = current.getValue('u_restricted_group');
+		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
+			restrictedGroup = current.getValue('assigned_to_group'); 
+		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
+			restrictedGroup = current.getValue('u_restricted_group');
+		}
+		if (restrictedGroup != '') {
+			ArrRestrictedOUs = UserPermissions.getOUsForRestrictedGroup(restrictedGroup);
+		}		
+		// Get the Template Level, need to check if this object is a Template or a Template Task and grab the Template information based on where coming from
+		templateData = this.getTemplateInfo();
+		ArrOUs = taskingScripts.retrieveTemplateOUs(gs.getUserID(), templateData.template_level, templateData.template_ou);
+		if(ArrOUs.length > 0){
+			// OUs found for this user found, not all ous
+			if(ArrRestrictedOUs.length > 0){
+				// restricted group ou's found, union with ou's found for htis user
+				var au = new global.ArrayUtil();
+				var ArrResrictIntersect = au.intersect(ArrOUs,ArrRestrictedOUs);
+				strArrOUs = 'sys_id IN ' + ArrResrictIntersect.join(',');
+			}else {  // no restricted group set, provide OUs back to user
+				strArrOUs = 'sys_id IN ' + ArrOUs.join(',');
+			}
+		} else {
+			if(ArrRestrictedOUs.length > 0){
+				// restricted group ou's found and no other OU's found, put only the restricted groups in here
+				strArrOUs = 'sys_id IN ' + ArrRestrictedOUs.join(',');
+			}
+		}
+		strArrOUs = strArrOUs + '^active=true';
+		// STRY0080468 - oType added, Filter OUs internal/external/all
+		switch(oType){
+			case 'internal':
+				strArrOUs = strArrOUs + '^u_external_flag=false';
+				break;
+			case 'external':
+				strArrOUs = strArrOUs + '^u_external_flag=true';
+				break;
+			case 'all':
+				break;
+		}
+		
+		return strArrOUs; 
+	},
+
+	getOnBehalfOf: function() {
+		// STRY0064991 - get users for onBehalfOf
+		// TODO NOTE: if we remove the dependency on Prmiary Assignee, then we will need to get All OUs for Task Administrator
+		//            and all members for all ous (set return value to all).  If Task manager of multiple OUs, then 
+		//            get all OUs where user is a Task Manager and pull all members from all of them.
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		var onBehalfArr = [];
+		var strArrOUs = [];
+
+		// if user is a Task Administrator, return all users
+		if (UserPermissions.IsUserTaskAdministrator()){
+			if (current.getValue('primary_assignee') != ''){
+				strArrOUs.push(current.getValue('primary_assignee'));
+				// based on note above, if this isn't limitted to primary assignee, just return that load
+				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{
+				// If no Primary assignee set, then return no records
+				onBehalfArr = [];
+			}
+		}
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		else if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
+			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+			if (current.getValue('primary_assignee') != ''){
+				strArrOUs.push(current.getValue('primary_assignee'));
+				// based on note above, if this isn't limitted to primary assignee, just return that load
+				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{
+				// If no Primary assignee set, then return no records
+				onBehalfArr = [];
+			}
+		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
+		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
+		// Return this user only as they can work on behalf of
+		} else { //} if(UserPermissions.IsUserInOU(current.primary_assignee,gs.getUserID())){
+			onBehalfArr.push(gs.getUserID());
+		}			
+		// now limit to restricted group, if necessary
+		if ( current.getValue('assignment_group') != '') 
+			onBehalfArr = this.limitUsersToRestrictedGroup(onBehalfArr, current.getValue('assignment_group'));
+		// turn array into a comma delimitted string.
+		var sOnBehalfOf = onBehalfArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sOnBehalfOf  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+	},	
+	
+	// receives memberArr and restricted group
+	// returnes a memberArr restricted to people in the restricted group
+	limitUsersToRestrictedGroup: function(userArr, restricted_group) {
+		if (restricted_group == null  || restricted_group == '') {
+			/// this should be checked before entering, but if not, just send same array back out
+			return userArr;
+		}else {
+			var UserPermissions  = new UserInfoScripts();
+			var restrictedMemArr = [];
+			for (i=0; i<userArr.length; i++) {
+				if  (UserPermissions.checkMemberinInGroup(userArr[i],restricted_group)) {
+					restrictedMemArr.push(userArr[i]);
+				}
+			}
+			return restrictedMemArr;
+		}
+		
+	},
+
+	type: 'taskerDynamicFilters'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-01-17 04:32:11</sys_created_on>
+        <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
+        <sys_mod_count>258</sys_mod_count>
+        <sys_name>taskerDynamicFilters</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2020-11-19 11:18:38</sys_updated_on>
+    </sys_script_include>
+</record_update>
