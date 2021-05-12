@@ -14,110 +14,54 @@
         <kb_topic/>
         <label>Awaiting Assignment Overdue</label>
         <order>210</order>
-        <record_script><![CDATA[	// Menu Item Label
-	var label = 'Awaiting Assignment Overdue';
-    var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
-	var max = 5;
-	var filter ='u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11';
-    var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+        <record_script><![CDATA[var bannerAwaitingAssignmentOverdue = function(data){
+  var u = gs.getUser().getID();
 
-	var t = data;
+  var DaysSinceTaskWasUnassignedOrRejectedWarning = gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
+  //------------------------------------------------------------------------------------------------------------------
+  // Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
+  // Get the list of OUs where the current user is a Task Manager
+  var primary_assigneeFilter = "primary_assigneeIN";
+  var taskSystemSettings = new tasking_System_Settings_Scripts();
+  primary_assigneeFilter += taskSystemSettings.getMyOUTaskManagers(u).join(",");
 
-	t.items = [];
-	var u = gs.getUser().getID();
-	
-	t.record_watchers = [];
-	t.record_watchers.push({
-							'table':'x_153465_discovert_route_task_instance',
-							'filter':filter
-							});
+  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+  if(isGTA)
+    primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY"
 
-   //KTORRES: BASED ON PRIMARY ASSIGNEE TA
-   //------------------------------------------------------------------------------------------------------------------
-   var primary_assigneeFilter = "primary_assigneeIN";
-   var grPrimaryAssigneeTA = new GlideRecord('x_153465_discovert_discover_office_members');
-   grPrimaryAssigneeTA.addQuery('office_task_authority', 'true');
-   grPrimaryAssigneeTA.addEncodedQuery('office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe');
-   grPrimaryAssigneeTA.orderByDesc('sys_updated_on');
-   grPrimaryAssigneeTA.query();
+  var filter ='u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11';
+  if(!isGTA){
+    filter += '^' + primary_assigneeFilter;
+  }
+  filter += '^u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+DaysSinceTaskWasUnassignedOrRejectedWarning; 
 
-   while (grPrimaryAssigneeTA.next()) {
-          primary_assigneeFilter += (',' + grPrimaryAssigneeTA.discover_office_hierarchy.toString());
-        }
-    //------------------------------------------------------------------------------------------------------------------
-   //if(isGTA){
-   //   primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY";
-   //}
+  var tbf = new TaskerBannerFilters();
 
+  tbf.label = 'Awaiting Assignment Overdue';
+  tbf.table = 'x_153465_discovert_route_task_instance';
+  tbf.filter = filter;
+  tbf.orderDesc = 'sys_updated_on';
+  tbf.idField = 'sys_id';
+  tbf.displayFieldName = 'task_name';
+  tbf.linkView = 'sp';
+  tbf.pageId = 'discovertasker_taskdetails';
+  tbf.viewAllLinkTitle = gs.getMessage('View all requests');
+  tbf.viewAllLinkPageId = 'discovertasker_detailsdrilldown';
+  tbf.viewAllLinkView = 'Unassigned';
+  if(!isGTA){
+    tbf.viewAllLinkFilter = primary_assigneeFilter+'^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + DaysSinceTaskWasUnassignedOrRejectedWarning; 
+  } else {
+    tbf.viewAllLinkFilter = 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + DaysSinceTaskWasUnassignedOrRejectedWarning; 
+  }
 
-	var a = new GlideAggregate('x_153465_discovert_route_task_instance');
-	a.addEncodedQuery(filter);
-	if(!isGTA){
-    	a.addEncodedQuery(primary_assigneeFilter);
-    }
-	a.addAggregate("COUNT");
-    a.addEncodedQuery('u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+daysBeforeTaskAcceptanceIsOverdue); 
-	a.query();
-	
-	var totcount = 0;
+  tbf.createBanner();
+  data.items = tbf.items;
+  data.record_watchers = tbf.record_watchers;
+  data.count = tbf.count;
 
-	if(a.next()){
-		totcount = a.getAggregate("COUNT");
-	}
+}
 
-	var z = new GlideRecord('x_153465_discovert_route_task_instance');
-	z.addActiveQuery();
-	if(!isGTA){
-    	z.addEncodedQuery(primary_assigneeFilter);
-    }
-	z.addEncodedQuery(filter);
-    z.addEncodedQuery('u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+daysBeforeTaskAcceptanceIsOverdue); 
-	z.orderByDesc('sys_updated_on');//STRY0050767 //z.orderByDesc('u_last_unassigned_date'); 
-	z.setLimit(max);
-	z.query();
-
-		   
-	while (z.next()) {    
-	   t.items.push({
-					title: z.getValue('task_name') ,
-					type: 'link',
-					href: '?sys_id='+ z.getValue('sys_id') + '&view=sp&id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance'
-	  }); 
-	  
-	  if (!z.canRead())
-		continue;
-	  
-	     var a = {};
-	        if (z.short_description.nil())
-		       a.short_description = "(No description)";
-	        a.__table = z.getTableName();
-	        a.type = 'record';  
-	}
-
-	t.items.sort(function(a, b) {
-	  return b.sortOrder - a.sortOrder;
-	});
-
-	t.items = t.items.slice(0, max); 
-	t.count = totcount;
-
-	var link = {};
-	if(!isGTA){
-      link = {
-        title: gs.getMessage('View all requests'), 
-        type: 'link', 
-        href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='  + primary_assigneeFilter+'^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + daysBeforeTaskAcceptanceIsOverdue +'&label=' + label, 
-        items: []
-      };
-    } else {
-      link = {
-        title: gs.getMessage('View all requests'), 
-        type: 'link', 
-        href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='  + 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + daysBeforeTaskAcceptanceIsOverdue +'&label=' + label, 
-        items: []
-      };
-    }
-	t.items.push(link);]]></record_script>
+bannerAwaitingAssignmentOverdue(data);]]></record_script>
         <sc_cat_item/>
         <sc_category/>
         <short_description/>
@@ -128,14 +72,14 @@
         <sys_created_by>ktorres</sys_created_by>
         <sys_created_on>2019-10-08 19:00:15</sys_created_on>
         <sys_id>1ea7f93a1b588c10888aebde6e4bcb93</sys_id>
-        <sys_mod_count>117</sys_mod_count>
+        <sys_mod_count>119</sys_mod_count>
         <sys_name>Awaiting Assignment Overdue</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_rectangle_menu_item_1ea7f93a1b588c10888aebde6e4bcb93</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-12-13 21:03:24</sys_updated_on>
+        <sys_updated_on>2021-01-27 13:24:44</sys_updated_on>
         <table/>
         <type>scripted</type>
         <url/>

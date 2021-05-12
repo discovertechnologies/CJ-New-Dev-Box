@@ -1,27 +1,64 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+        <client_script><![CDATA[function ($scope, $rootScope, amb, spUtil) {
+// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
 // Script Continued Below
 //------------------------------------------------------------------------------------------------------------------------
 // COMPANY: DISCOVER TECHNOLOGIES
 // WIDGET BASE: FIELDS
 //------------------------------------------------------------------------------------------------------------------------
-function ($scope, spUtil) {
 var c = this;
 	c.comments_count = 0;
-	spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id); 
-	var onListClick = $scope.$on('$sp.list.click', refreshWidget);
-	var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	
+	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+	var watcher;
+	initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				refreshWidget();
+			});
+		}
+	}
+
+	//var onListClick = $scope.$on('$sp.list.click', refreshWidget);
+	//var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
 	// determines if there are any comments for this task
 	for(var x = 0; x < $scope.data.stream.entries.length; x++){
 		if($scope.data.stream.entries[x].element == 'comments'){
 			c.comments_count++;
 		}
 	}
-
+	
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		c.data.table = parms.table;
+		c.data.sys_id = parms.sys_id;
+		refreshWidget();
+	});
+	$rootScope.$on('$sp.list.click', function(e, parms) {
+		c.data.sys_id = parms.sys_id;
+		c.data.table = parms.table;
+		refreshWidget();
+	});
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		c.data.sys_id = parms.sys_id;
+		c.data.table = parms.table;
+		refreshWidget();
+	});
+	
 	function refreshWidget() {
-		$scope.server.update();
+		$scope.server.update().then(function(){
+			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+			initRecordWatcher(c.data.table, c.data.filter);
+		});
 	}
 	
 }
@@ -89,9 +126,18 @@ var c = this;
 // COMPANY: DISCOVER TECHNOLOGIES
 // WIDGET BASE: FIELDS
 //------------------------------------------------------------------------------------------------------------------------
-(function(){
+(function(input){
 	
-	var gr = $sp.getRecord();
+	var gr;
+	if(input){
+		gr = new GlideRecordSecure(input.table);
+		if(!gr.get(input.sys_id)){
+			return;
+		}
+	}	else{
+		gr = $sp.getRecord();
+	}
+	
 	if (gr == null)
 		return;
 	
@@ -102,6 +148,12 @@ var c = this;
 	data.table = gr.getTableName();
 	data.sys_id = gr.getUniqueValue();
 	data.stream = $sp.getStream(data.table, data.sys_id);
+	data.comments_count=0;
+	for(var x = 0; x < data.stream.entries.length; x++){
+		if(data.stream.entries[x].element == 'comments'){
+			data.comments_count++;
+		}
+	}	
 })();
 
 ]]></script>
@@ -110,22 +162,22 @@ var c = this;
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-01-24 01:03:52</sys_created_on>
         <sys_id>19b02233db8beb00bb8ee536ca9619d0</sys_id>
-        <sys_mod_count>158</sys_mod_count>
+        <sys_mod_count>170</sys_mod_count>
         <sys_name>Tasker Stream Widget</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_19b02233db8beb00bb8ee536ca9619d0</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-09-03 01:08:49</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-27 16:37:05</sys_updated_on>
         <template><![CDATA[<div ng-if="data.canRead" class="panel b">
    <div class="panel-heading bg-primary">
       <div ng-init="spSearch.targetRequests()">
          <sp-c-link target="form" table="data.table" id="data.sys_id"/>
       </div>
-      <i class="glyphicon glyphicon-comment pull-right"></i>${Comments}: {{c.comments_count}}
+      <i class="glyphicon glyphicon-comment pull-right"></i>${Comments}: {{c.data.comments_count}}
    </div>
-   <div class="panel-body comments_body" ng-if="c.comments_count > 0"> <!-- ng-class="{count: c.comments_count < 5}" -->
+   <div class="panel-body comments_body" ng-if="c.data.comments_count > 0"> <!-- ng-class="{count: c.data.comments_count < 5}" -->
       <div ng-repeat="field in data.stream.entries">
          <div ng-if="field.element == 'comments'">
             <span><strong><span class="glyphicon glyphicon-user" aria-hidden="true"></span>{{field.name}}:</strong></span>

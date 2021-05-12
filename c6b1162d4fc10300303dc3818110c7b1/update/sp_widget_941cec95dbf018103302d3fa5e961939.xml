@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function ($scope, $http, $location, $rootScope, spUtil, $interpolate) {
+	//------------------------------------------------------------------------------------------------------------------------
+	// COMPANY: DISCOVER TECHNOLOGIES
+	// CUSTOMIZED BY: KARINA TORRES
+	// RECURSIVE GRAPHICAL TREE FOR PROCESS INSTANCE
+	// HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
+	//------------------------------------------------------------------------------------------------------------------------
+	
+	var onListClick = $scope.$on('$sp.list.click', refreshWidget);
+	var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	
+	// refresh the widget after a refrence record has been updated
+	function refreshWidget(evt,arg) {
+		$scope.server.update();
+		// recreate the list after a record has been updated; wait 2 seconds for server delays
+		setTimeout(function(){
+			getMap();
+		}, 2000);
+	}
+	function nodeSelectionChanged(node) {
+		var evt = {};
+			var d = node.data;
+			evt.sys_id = d.sys_id;
+			if (evt.sys_id == display_id)  // get called twice by gojs
+				return;
+			evt.table = d.sys_class_name || d.table;
+			display_id = evt.sys_id;
+			//$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+			$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
+			
+			$rootScope.$broadcast('$sp.list.click', evt);
+			
+		}
+		var display_id = $location.search().sys_id;
+		$scope.page = {
+			displayValue: $scope.data.title,
+			value: $scope.data.id,
+			name: 'page'
+		};
+		
+		
+		
+		$scope.$on("field.change", function(evt, parms) {
+			if (parms.field.name == 'page')
+				changePage(parms.newValue);
+		});
+		
+		function changePage(p){
+			var path = $location.path();
+			var searchParms = $location.search();
+			$location.search({id: searchParms.id, p: p});
+			}
+			
+			/*$scope.$on("sp.form.record.updated", function(evt) {
+				loadPage();
+			});*/
+			$scope.getMap = function(){
+				loadPage();
+			}
+			function loadPage(){
+				if ($scope.data.id) {
+					var $go = go.GraphObject.make;  // for conciseness in defining templates
+					var node_id = "page_map";
+					var diagram =
+					$go(go.Diagram, node_id, {
+						initialAutoScale: go.Diagram.UniformToFill,
+						//initialContentAlignment: go.Spot.Default,
+						allowZoom: true,
+						// define the layout for the diagram
+						layout: $go(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 60 })
+						});
+						
+						diagram.model = new go.TreeModel($scope.data.map);
+						var fontStyle = "13px Segoe UI";
+						//var fontStyle = "13px 'Lato', sans-serif";
+						//var fontStyle = "13px Open Sans";
+						
+						// Define a simple node template consisting of text followed by an expand/collapse button
+						diagram.nodeTemplate = $go(go.Node, "Horizontal",
+						{
+							selectionAdorned: false,
+							selectionChanged: nodeSelectionChanged,
+							isTreeExpanded: true,
+							isTreeLeaf: true
+						},  // this event handler is defined below
+						$go(go.Panel, "Auto",
+						$go(go.Shape, "RoundedRectangle", { strokeWidth: 3 }, { fill: "Gray" },
+							
+							new go.Binding("stroke", "isSelected", function(s){
+								if (s)
+									return "lightblue"; //"#FFFF00"; ////#00A9C9";//"#DEFA07";//#FFD247"; //"#fff";//#2E3C54";
+								else
+									return null;
+							}).ofObject(""),
+							
+							new go.Binding("strokeWidth", "isSelected", function(s){
+								if (s)
+									return "4";
+								else
+									return null;
+							}).ofObject(""),
+							
+							new go.Binding("strokeDashArray", "isSelected", function(s){
+								if (s)
+									return "dash";
+								else
+									return null;
+							}).ofObject(""),
+							
+							
+							new go.Binding("fill", "state", function(t){
+								switch(t){
+									case ("Critical"): return "#FF6B61";
+									case ("Upcoming"): return "#F8D347";
+									case ("Warning"): return "#F8D347";
+									case ("Projected on time"): return "#37C1C3";
+									
+									case ("-5"):	return "#F6C716";
+									case ("1"):		return "#4D8FAC"; //"#808080";
+									case ("3"):		return "#37C1C3";
+									case ("4"):		return "#37C1C3";
+									case ("7"):		return "#37C1C3";
+									
+									case ("10"):	return "#A0D468";
+									case ("11"):	return "#FF6B61";
+									case ("12"):	return "#2E3C54";
+									case ("13"):	return "#2E3C54";
+									case ("14"):	return "#9A59B5";
+									case ("15"):	return "#2E3C54";
+									
+									default:			return "Grey";
+								}
+							})
+							),
+							
+							$go(go.TextBlock, {
+								font: fontStyle,
+								stroke: "white",
+								margin: 3,
+								text: "verticalAlignment: Center",
+								width: 400,
+								wrap: go.TextBlock.WrapFit
+							},
+							
+							new go.Binding("text", "name"))
+							),
+							$go("TreeExpanderButton") // this was overkill for small diagrams
+							);
+							
+							diagram.select(diagram.findNodeForKey(display_id));
+							diagram.initialAutoScale= go.Diagram.Uniform;
+							// Define a trivial link template with no arrowhead
+							diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
+								
+								// Resize the graph container height when the graph changes size
+								diagram.addDiagramListener('DocumentBoundsChanged', function(){
+									var diagramHeight = parseInt(diagram.documentBounds.height);
+									jQuery("#" + node_id).height(diagramHeight);
+								});
+								// Select the node using the sys_id parameter supplied.
+								//var node_select = diagram.findNodeForKey(d.sys_id);
+								//diagram.select(node_select);
+							}
+						}
+					}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>/*.#accordionTaskerGraphical &gt; div &gt; div.panel-heading &gt; h4 &gt; a {
+  background-color: red;
+}*/
+
+.div.panel.panel-default {
+  background-color: #F5F5F5!important;
+}
+
+.panel-heading .accordion-toggle:after {
+    /* symbol for "opening" panels */
+    font-family: 'Glyphicons Halflings';  /* essential for enabling glyphicon */
+    content: "\e114";    /* adjust as needed, taken from bootstrap.css */
+    float: right;        /* adjust as needed */
+    color: grey;         /* adjust as needed */
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    /* symbol for "collapsed" panels */
+    content: "\e080";    /* adjust as needed, taken from bootstrap.css */
+}
+
+.panel-heading .accordion-toggle-bottom:after {
+    /* symbol for "opening" panels */
+    font-family: 'Glyphicons Halflings';  /* essential for enabling glyphicon */
+    content: "\e113";    /* adjust as needed, taken from bootstrap.css */
+    float: right;        /* adjust as needed */
+    color: grey;         /* adjust as needed */
+}
+.panel-heading .accordion-toggle-bottom.collapsed:after {
+    /* symbol for "collapsed" panels */
+    content: "\e114";     /* adjust as needed, taken from bootstrap.css */
+}
+
+.page-map {
+  margin-top: .5em;
+  margin-bottom: .5em;
+  //border: 1px solid #ddd;
+  width:100%;
+  //height:120px;
+  background-color: white;
+}
+
+.designer-link {
+  margin-top: .5em;
+  margin-bottom: .5em;
+  padding-left: 8px;  
+}
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// BY STATE
+//------------------------------------------------------------------------------------------------------------------------
+
+//State = Unassigned
+span.label.label-Unassigned,
+span.label.label-pill.label-Unassigned {
+	background-color: #F6C716!important;
+}
+
+//State = Assigned
+span.label.label-Assigned,
+span.label.label-pill.label-Assigned {
+	background-color: #4D8FAC;//#808080!important;  
+}
+
+//State = Accepted
+span.label.label-Accepted,
+span.label.label-pill.label-Accepted {
+	background-color: #A0D468!important;
+}
+
+//State = Rejected
+span.label.label-Rejected,
+span.label.label-pill.label-Rejected {
+	background-color: #FF6B61!important;
+}
+
+//State = Work in Progress
+span.label.label-Work.in.Progress,
+span.label.label-pill.label-Work.in.Progress {
+	background-color: #2E3C54!important;
+}
+
+//State = Work in Progress
+span.label.label-Work.Scheduled,
+span.label.label-pill.label-Work.Scheduled {
+	background-color: #2E3C54!important;
+}
+
+
+//State = In Review
+span.label.label-InReview,
+span.label.label-pill.label-In.Review {
+	background-color: #9A59B5!important;
+}
+
+//State = Rework
+span.label.label-Rework,
+span.label.label-pill.label-Rework {
+	background-color: #2E3C54!important;
+}
+
+//State = Close Complete
+span.label.label-Completed,
+span.label.label-pill.label-Completed {
+	background-color: #37C1C3!important;
+}
+
+//State = Close Incomplete
+span.label.label-Closed.Incomplete,
+span.label.label-pill.label-Closed.Incomplete {
+	background-color: #37C1C3!important;
+}
+
+//State = Close Skipped
+span.label.label-Cancelled ,
+span.label.label-pill.label-Cancelled {
+	background-color: #37C1C3!important;
+}
+</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tasker_graph_task_tree_mobile</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Tasker Graph Task Tree Mobile</name>
+        <option_schema/>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES & BRIAN KEENER
+// RECURSIVE GRAPHICAL TASK TREE
+//------------------------------------------------------------------------------------------------------------------------
+
+(function() {
+	//data.placeholderMsg = gs.getMessage("Select Task...");
+	if ($sp.getParameter('table') != "x_153465_discovert_route_task_instance") return;
+		
+	var sys_id_topparenttask = null;
+	var sys_id_currenttask = null;
+	sys_id_currenttask = $sp.getParameter('sys_id');
+	var id = getTopParent(sys_id_currenttask);
+	sys_id_topparenttask = id;
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	if (!id) {
+		data.id = null;
+		return;
+	}
+	
+	var map = data.map = [];
+	var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+	gr.addQuery('sys_id', id);
+	gr.query();
+	gr.next();
+	data.id = gr.getValue('sys_id');
+	// STRY0051139 - use task_name instead of 'number'
+	data.title = gr.getValue('task_name') // gr.getValue('number');
+	
+	var m = getO(gr);
+	// STRY0051139 - use task_name instead of 'number'
+	m.name = gr.getValue('task_name'); // gr.getValue('number') + ": " + gr.getValue('short_description') + ": " + gr.primary_assignee.getDisplayValue().toString() + " ";
+	if (gr.assigned_to.getDisplayValue().toString().length > 0) m.name += "(" + gr.assigned_to.getDisplayValue().toString()+ ") "
+		m.name += gr.state.getDisplayValue().toString();
+	m.state = gr.state.toString();
+	map.push(m);
+	getLevel1(map, gr.getValue('sys_id'));
+	
+	//------------------------------------------------------------------------------------------------------------------------
+	function getLevel1(map, sys_id) {
+		var t = getGR('x_153465_discovert_route_task_instance', 'parent', data.id);
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			// STRY0051139 - use task_name instead of 'number'
+			c.name = t.task_name.toString();
+			//c.name = t.number.toString() + ": ";
+			//c.name += t.short_description.toString() + ": " + t.primary_assignee.getDisplayValue().toString() + " ";
+			
+			if (t.task_order > 0)			c.name = t.task_order.toString() + ". "+ c.name; // NEW
+				if (t.assigned_to.getDisplayValue().toString().length > 0) c.name += "(" + t.assigned_to.getDisplayValue().toString()+ ") "
+				c.name += t.state.getDisplayValue().toString();
+			c.status = t.status.toString();
+			c.state = t.state.toString();
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'));
+		}
+	}
+	
+	function getLeveln(map, sys_id) {
+		var t = getGR('x_153465_discovert_route_task_instance', 'parent', sys_id);
+		while (t.next()) {
+			var c = getO(t, sys_id);
+			// STRY0051139 - use task_name instead of 'number'
+			c.name = t.task_name.toString();
+			//c.name = t.number.toString() + ": ";
+			//c.name += t.short_description.toString() + ": " + t.primary_assignee.getDisplayValue().toString() + " ";
+			if (t.task_order > 0)			c.name = t.task_order.toString() + ". "+ c.name; // NEW
+				if (t.assigned_to.getDisplayValue().toString().length > 0) c.name += "(" + t.assigned_to.getDisplayValue().toString()+ ") "
+				c.name += t.state.getDisplayValue().toString();
+			c.status = t.status.toString();
+			c.state = t.state.toString();
+			map.push(c);
+			getLeveln(map, t.getValue('sys_id'));
+		}
+	}
+	
+	function getGR(table, parentField, parentID) {
+		var t = new GlideRecordSecure(table);
+		t.addQuery(parentField, parentID);
+		t.orderBy('order');
+		t.orderBy('number');
+		t.query();
+		return t;
+	}
+	
+	// object that goes in the array
+	// common vars table, key, sys_id
+	function getO(gr, parent) {
+		var c = {};
+			c.table = gr.getTableName();
+			c.key = gr.getValue('sys_id');
+			c.sys_id = gr.getValue('sys_id');
+			c.status = gr.getValue('status');
+			if (parent)
+				c.parent = parent;
+			return c;
+		}
+		
+		//------------------------------------------------------------------------------------------------------------------------
+		// GET THE TOP PARENT FOR THE CURRENT SYS_ID
+		//------------------------------------------------------------------------------------------------------------------------
+		function getTopParent(sys_id_currenttask) {
+			
+			var hasParent;
+			var parentID;
+			
+			var parentGR = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			parentGR.addQuery('sys_id', sys_id_currenttask);
+			parentGR.query();
+			parentGR.next();
+			
+			if (parentGR.parent){
+				hasParent = true;
+				parentID = parentGR.getValue('parent');
+				
+				while(hasParent){
+					var gp = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+					gp.addQuery('sys_id', parentID);
+					gp.query();
+					gp.next();
+					
+					if(gp.parent){
+						parentID = gp.getValue('parent');
+					}
+					else{
+						hasParent = false;
+					}
+				}
+			}
+			else{
+				parentID = sys_id_currenttask;
+			}
+			
+			return parentID;
+			
+		}
+		//------------------------------------------------------------------------------------------------------------------------
+		
+	})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>ehatfield</sys_created_by>
+        <sys_created_on>2020-05-14 14:21:38</sys_created_on>
+        <sys_id>941cec95dbf018103302d3fa5e961939</sys_id>
+        <sys_mod_count>6</sys_mod_count>
+        <sys_name>Tasker Graph Task Tree Mobile</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_941cec95dbf018103302d3fa5e961939</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-08 15:19:25</sys_updated_on>
+        <template><![CDATA[<!-- <div class="m-t-sm">  -->
+  <!--sn-record-picker field="page" table="'x_153465_discovert_discover_routing_runtime'" display-field="'discover_template_name'" value-field="'sys_id'"
+                    display-fields="'sys_id'" search-fields="'sys_id,discover_template_name'" page-size="100" placeholder="{{data.placeholderMsg}}"></sn-record-picker-->
+  <!--div ng-if="data.title" class="designer-link"><a ng-href="$spd.do#/{{portal.url_suffix}}/editor/{{data.id}}/" target="_spd">({{data.title}} ({{data.id}})</b></a></div-->
+  <!-- <div id="page_map" class="page-map" ng-show="data.id"></div>
+</div> -->
+
+<!--
+<div id="collapseOne" class="panel-collapse collapse in">
+  
+<div class="collapse" id="collapseExample">
+  <div class="card card-body">
+    Anim pariatur cliche reprehenderit, enim eiusmod high life accusamus terry richardson ad squid. Nihil anim keffiyeh helvetica, craft beer labore wes anderson cred nesciunt sapiente ea proident.
+  </div>
+</div>
+-->
+  
+
+<div class="panel-group">
+	<div class="panel panel-default">
+		<div class="panel-heading">
+		</div>
+		<div class="page-map" id="page-map><!-- in-->
+			<div class="m-t-sm">
+        <div id="legend" class="panel-heading" style="text-align:right;"><span style="text-align:right; color:white;">Task State Legend: </span>
+          <span class="label label-Unassigned">Unassigned</span> <span class="label label-Assigned">Assigned</span> <span class="label label-Accepted">Accepted</span> <span class="label label-Rejected">Rejected</span> 
+          <span class="label label-Work in Progress">Work in Progress</span> <span class="label label-InReview">In Review</span> <span class="label label-Rework">Rework</span> 
+          <span class="label label-Completed">Completed</span> <!--span class="label label-Closed.Incomplete">Closed Incomplete</span> <span class="label label-Cancelled">Cancelled</span-->
+        </div>
+        
+				<div id="page_map" class="page-map" ng-show="data.id"/>
+			</div>
+      <div class="panel-heading">
+      </div>
+		</div>
+    <!--
+		<div class="panel-heading">
+			<h4 class="panel-title">
+				<a class="accordion-toggle" data-toggle="collapse" data-parent="#accordionTaskerGraphical" href="#collapseTaskerGraphical">&nbsp;
+				</a>
+			</h4>
+		</div>
+		-->
+	</div>
+</div>
+
+
+]]></template>
+    </sp_widget>
+</record_update>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, spUtil) {
+        <client_script><![CDATA[function ($scope, $rootScope, amb, spUtil) {
 // Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
 // Script Continued Below
 //------------------------------------------------------------------------------------------------------------------------
@@ -9,12 +9,55 @@
 // COMPANY: DISCOVER TECHNOLOGIES
 // CUSTOMIZED BY: KARINA TORRES
 //------------------------------------------------------------------------------------------------------------------------			
-	spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id); 
-	var onListClick = $scope.$on('$sp.list.click', refreshWidget);
-	var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	var c = this;
+	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+	var watcher;
+	initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				$scope.server.update();
+			});
+		}
+	}
+	
+	var onListClick = $rootScope.$on('$sp.list.click', function(e, parms) {
+		// if the event was not raised on the table associated with this widget, ignore the click
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});
+	// because of the record watcher above, this scope click event might reload the data 2 times instead of 1
+	//var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		// if the event was not raised on the table associated with this widget, ignore the click
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		// if the item is already selected ignore the click
+		if(c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});			
 
 	function refreshWidget() { 
-		$scope.server.update();
+		$scope.server.update().then(function(){
+			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+			initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+		});
 	}
 }
 
@@ -108,10 +151,29 @@
 		else data.show_systemfields = options.show_systemfields;
 
     data.pickupMsg = gs.getMessage(options.pickup_msg);
-    var gr = $sp.getRecord();
-    if (gr == null)
-        return;
-
+	
+    // DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+		var gr;
+		if(input){
+			data.table = input.table;
+			data.sys_id = input.sys_id;
+			gr = new GlideRecordSecure(data.table);
+			if(!gr.get(data.sys_id)){
+				return;
+			}
+		} else {
+			gr = $sp.getRecord();
+			if (gr == null)
+				return;
+		}
+	
+	
+	
+	
+	
+	
+	
+	
     data.canRead = gr.canRead();
     if (!data.canRead)
         return;
@@ -160,7 +222,7 @@
     if ($sp.getParameter("table") == "x_153465_discovert_route_task_instance" && data.dynamic_tree != 'true') {
         if (gr.getValue('parent') != null) {
 
-            var grParent = new GlideRecord(($sp.getParameter("table")));
+            var grParent = new GlideRecordSecure(($sp.getParameter("table")));
             if (grParent.get(gr.getValue('parent'))) {
                 if (grParent.assigned_to != null) {
                     data.parent_assigned_to = grParent.getDisplayValue('assigned_to');
@@ -238,14 +300,14 @@
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2017-12-19 16:30:04</sys_created_on>
         <sys_id>432f2c8f4f8b0300303dc3818110c7d2</sys_id>
-        <sys_mod_count>617</sys_mod_count>
+        <sys_mod_count>629</sys_mod_count>
         <sys_name>Tasker Summary Card</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_432f2c8f4f8b0300303dc3818110c7d2</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-12-07 10:32:50</sys_updated_on>
+        <sys_updated_on>2021-04-27 16:23:06</sys_updated_on>
         <template><![CDATA[<div ng-if="data.canRead" class="panel b">
    <div class="panel-heading bg-primary">
       <div ng-init="spSearch.targetRequests()">

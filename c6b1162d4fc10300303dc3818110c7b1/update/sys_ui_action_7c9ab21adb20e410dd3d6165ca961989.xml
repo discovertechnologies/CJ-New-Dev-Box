@@ -6,8 +6,8 @@
         <client_script_v2><![CDATA[function onClick(g_form) {
 
 }]]></client_script_v2>
-        <comments/>
-        <condition>current.canRead() &amp;&amp; (current.assigned_to == gs.getUserID())  &amp;&amp; current.state == 14 &amp;&amp; new TaskerTypeActions().IsActionAllowed(current.tasker_type,'Abstain')</condition>
+        <comments>v2.6 - change the condition to use uiConditioncheck</comments>
+        <condition> new uiConditionCheck().canActionReviewTask(current,'Abstain')</condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -30,65 +30,70 @@
         <onclick/>
         <order>200</order>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
-// Script Continued Below
-// RAJ changes for closing children
-closeTask("Abstained");
 
-function closeTask(DecisionToClose){
- //var dialog = new GlideDialogWindow(""CloseChildrenCheck"");
- //dialog.setTitle(""Cancel All Children?"");
- //dialog.render();
- 
- var blnClose = true;
- 
- if  (current.calchaschildren > 0 &&
-  current.progress_of_sub_tasks != 3 &&
-  current.progress_of_sub_tasks != 4 &&
-  current.progress_of_sub_tasks != 7){
-    
-  // TODO - this needs to become a dialog and push language somewhere to be read back
-  //blnClose = confirm('TODO this Message needs to be changed into a dialog so users can make a choice and the text is read from a language table.             This Tasker has Sub Tasks that are not closed.  Do you want to ' + current.state + ' this Tasker and all sub taskers?  If yes, theclose note will be pushed to all open subtaskers.');
-  blnClose = true;
- }
- if (blnClose){
-  // NOTE: the updates happen on the server in a business rule.
-  // So, in the client script, we just need to deal with the user cancelling the update
-  // reset the assigned members to the previous value on cancel
-	// STRY0079375
-	var stateClosedFrom = current.state;
+// using a function keeps the code and variables from being global
+closeTask();
 
-  current.decision = DecisionToClose;
-  current.work_notes = "Reviewer Decision: " + current.decision + " by " +   current.assigned_to.getDisplayValue().toString();
- 
-  current.state = 3;
-  current.active = 'false';
-  var gdt = new GlideDateTime();
-  current.work_end = gdt.getValue();
-  current.update();
- }
-	// STRY0079375
-	var isTaskeOwner = current.u_task_requester == gs.getUserID();
-	var isReviewer = current.u_reviewer == gs.getUserID();
-	var isAssignedMember = current.assigned_to == gs.getUserID();
-	var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-	
-	grResponseLog.initialize();
-	grResponseLog.u_task_tree = current.u_task_tree;
-	grResponseLog.u_task = current.getUniqueValue();
-	grResponseLog.u_task_number = current.number;
-	grResponseLog.u_responded_by = gs.getUserID();
-	grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-	grResponseLog.response = current.comments_dt;
-	grResponseLog.u_action_taken = 'abstain';
-	var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-	if (grOU.get(current.primary_assignee)){
-		grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-		grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+function closeTask(){
+	// TODO - multilanguage
+	new Task_uiAction().uiAction_Abstain("Abstained", current);  
+	// Redirect platform to stay on task
+	if (typeof spModal == 'undefined' ) {
+		// action.setRedirectURL(task);
+		action.setRedirectURL(current);
 	}
-	grResponseLog.insert();
-
-	gs.addInfoMessage(current.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed')); 
 }
+
+
+// NOTE: TODO - Children - the children check needs to happen in the client script before it gets to the server
+/*
+var blnClose = true;
+
+if  (task.calchaschildren > 0 &&
+	 task.progress_of_sub_tasks != 3 &&
+	 task.progress_of_sub_tasks != 4 &&
+	 task.progress_of_sub_tasks != 7){
+
+	// TODO - this needs to become a dialog and push language somewhere to be read back
+	// TODO - multilanguage
+	//blnClose = confirm('TODO this Message needs to be changed into a dialog so users can make a choice and the text is read from a language table.             This Tasker has Sub Tasks that are not closed.  Do you want to ' + task.state + ' this Tasker and all sub taskers?  If yes, theclose note will be pushed to all open subtaskers.');
+	blnClose = true;
+}
+		if (blnClose){
+			var stateClosedFrom = task.state;
+			task.decision = DecisionToClose;
+			// TODO - multilanguage
+			task.work_notes = "Reviewer Decision: " + task.decision + " by " +   task.assigned_to.getDisplayValue().toString();
+			task.state = 3;
+			task.active = 'false';
+			var gdt = new GlideDateTime();
+			task.work_end = gdt.getValue();
+			task.update();
+		}
+		// STRY0079375
+		var isTaskeOwner = task.u_task_requester == gs.getUserID();
+		var isReviewer = task.u_reviewer == gs.getUserID();
+		var isAssignedMember = task.assigned_to == gs.getUserID();
+		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+
+		grResponseLog.initialize();
+		grResponseLog.u_task_tree = task.u_task_tree;
+		grResponseLog.u_task = task.getUniqueValue();
+		grResponseLog.u_task_number = task.number;
+		grResponseLog.u_responded_by = gs.getUserID();
+		grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+		grResponseLog.response = task.comments_dt;
+		grResponseLog.u_action_taken = 'abstain';
+		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		if (grOU.get(task.primary_assignee)){
+			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+		}
+		grResponseLog.insert();
+
+		gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));		
+*/
+
 ]]></script>
         <show_insert>false</show_insert>
         <show_multiple_update>false</show_multiple_update>
@@ -100,7 +105,7 @@ function closeTask(DecisionToClose){
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>7c9ab21adb20e410dd3d6165ca961989</sys_id>
-        <sys_mod_count>6</sys_mod_count>
+        <sys_mod_count>14</sys_mod_count>
         <sys_name>Abstain</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -108,7 +113,7 @@ function closeTask(DecisionToClose){
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_action_7c9ab21adb20e410dd3d6165ca961989</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-12-08 06:41:28</sys_updated_on>
+        <sys_updated_on>2021-03-04 13:37:52</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <ui11_compatible>true</ui11_compatible>
         <ui16_compatible>false</ui16_compatible>

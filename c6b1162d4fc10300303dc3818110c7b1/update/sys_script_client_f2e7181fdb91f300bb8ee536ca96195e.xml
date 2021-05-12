@@ -10,173 +10,25 @@
         <messages/>
         <name>Task - onLoad Enable Instr Set TaskOwner</name>
         <order/>
-        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 function onLoad() {
 	
 	var state = (g_form.isNewRecord()) ? "New" : g_form.getValue("state");
 	
 	if (state == "New"){
-		setOwnerEnableInstructions();
-	}else {
-		//KT - STRY0063639 - Mar-16-2020
-		setInstructionsUpdateState();
-	}
-	
-	function setInstructionsUpdateState(){
-		/*
-		Complete, Cancelled:
-		Others: Read-only
- 		*/
-		if (state == "3" || state == "4" || state == "7"){
-			g_form.setReadOnly('instructions', true);
-		} else {
-			/*
-			State: Unassigned, Assigned, Accepted, Work in Progress, Reject for Prim Assign, Rejected Assignment, In Review, Rework:
-			Task Owner: Edit
-			Others: Read-only
- 			*/
-			var currentUser = g_user.userID;
-			var taskOwnerId = g_form.getValue('u_task_requester');
-			
-			if (currentUser == taskOwnerId)
-				g_form.setReadOnly('instructions', false);
-			else
-				g_form.setReadOnly('instructions', true);
+		var taskPermissions = JSON.parse(g_scratchpad.taskPermissions);
+		taskPermissions.isSubTask;
+		if(taskPermissions.isSubTask){		
+			var task_owner = (g_scratchpad.parentTaskAssignedMember + '' != '') ? g_scratchpad.parentTaskAssignedMember : g_scratchpad.parentTaskOwner;
+			g_form.setValue('u_task_requester', task_owner);
 		}
-	}
-	
-	function setOwnerEnableInstructions(){
-		//HT - STRY0048914
-		//KT - STRY0058367 (Mo)
-		var isSubTask = g_form.getValue("parent") != undefined && g_form.getValue("parent") != "";
-		var currentUser = g_user.userID;
 		
-		//Is TopTask, this is not a subtask
-		if(!isSubTask){
-			var taskOwner = g_form.getValue('u_task_requester');
-			
-			if((taskOwner  == currentUser)){
-				//if the current user is the task owner set to editable
-				g_form.setReadOnly('instructions', false);
-			}else{
-				//if the current user is not the task owner set to read only
-				g_form.setReadOnly('instructions', true);
-			}
-			
-		}else{
-			// IsSubTask
-			setSubTaskOwner();
-			enableSubTaskInstructions();
-		}
-	}
-	
-	function enableSubTaskInstructions(){
-		//KT - STRY0048914
-		// IsSubTask
-		var parent_sys_id = g_form.getValue('parent');
-		
-		var ajax = new GlideAjax('ClientTaskInfo');
-		ajax.addParam('sysparm_name', 'checkUserIsAssignedMemberORTaskOwner');
-		ajax.addParam('sysparm_parent', parent_sys_id);
-		ajax.getXML(getresponse);
-		
-		function getresponse(response){
-			
-			var UserIsAssignedMemberORTaskOwner = response.responseXML.documentElement.getAttribute('answer');
-			
-			if (UserIsAssignedMemberORTaskOwner)
-				g_form.setReadOnly('instructions', false);
-			else
-				g_form.setReadOnly('instructions', true);
-		}
-	}
-	
-	function setSubTaskOwner(){
-		
-		var parent_sys_id = g_form.getValue('parent');
-		
-		var ajax = new GlideAjax('ClientTaskInfo');
-		ajax.addParam('sysparm_name', 'setSubTaskTaskOwner');
-		ajax.addParam('sysparm_parent', parent_sys_id);
-		ajax.getXML(function(response){
-			try{
-				var subTaskTaskOwner = response.responseXML.documentElement.getAttribute('answer');
-				g_form.setValue('u_task_requester', subTaskTaskOwner);
-				
-			} catch(e) {
-				jslog(e);
-			}
-		});
-	}
-	
-	
-	
-	
-	
-	
-	/*
-	//g_form.addInfoMessage('u_task_requester: ' + newTaskOwner);
-	
-	var subtask = g_form.getValue("parent") != undefined && g_form.getValue("parent") != "";
-	
-	
-	if (!subtask){
-		//	g_form.addInfoMessage('parent');
-		
-		var ga = new GlideAjax('ClientOrganizationalScripts');
-		ga.addParam('sysparm_name', 'GetUserDefaultOU');
-		ga.addParam('UserId', task_owner);
-		
-		if(task_owner != '' && task_owner != undefined ){
-			ga.getXML(getAjax);
-		}else return;
-	}
-	
-	else{
-		//	g_form.addInfoMessage('else');
-		var newtaskOwner = g_form.getValue('u_task_requester');
-		//	g_form.addInfoMessage("newtaskOwner : " + newtaskOwner);
-		
-		/*if(g_form.getValue('u_task_requester') == g_user.userID){
-			g_form.setReadOnly('instructions', false);
-		}
-		if(task_owner == g_user.userID){
-			g_form.setReadOnly('instructions', false);
-		}
-	}
-	
-	
-	var array_default_TA;
-	function getAjax(response){
-		var answer = response.responseXML.documentElement.getAttribute("answer");
-		if (answer != '' && answer != undefined){
-			ou = answer;
-		}
-		var default_TA;
-		var ga2 = new GlideAjax('ClientOrganizationalScripts');
-		ga2.addParam('sysparm_name', 'getOrganizationalUnitTaskingAuthorities');
-		ga2.addParam('OU', ou);
-		if(ou != '' && ou != undefined ){
-			ga2.getXML(getAjax2);
-		}else return;
-		
-		
-		function getAjax2(response){
-			var answer2 = response.responseXML.documentElement.getAttribute("answer");
-			default_TA  = answer2;
-			array_default_TA = default_TA.split(',');
-			//	g_form.addInfoMessage(' array:' + array_default_TA);
-			for(var i=0; i < array_default_TA.length; i++){
-				if(currentUser == array_default_TA[i] || currentUser == task_owner){
-					g_form.setReadOnly('instructions','false');
-				}
-			}
-		}
-	}
-	
- 	*/
-	
+	} 
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
@@ -184,15 +36,15 @@ function onLoad() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>f2e7181fdb91f300bb8ee536ca96195e</sys_id>
-        <sys_mod_count>118</sys_mod_count>
+        <sys_mod_count>120</sys_mod_count>
         <sys_name>Task - onLoad Enable Instr Set TaskOwner</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_f2e7181fdb91f300bb8ee536ca96195e</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-11-19 10:23:59</sys_updated_on>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2021-04-29 15:55:44</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onLoad</type>
         <ui_type>10</ui_type>

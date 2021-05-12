@@ -26,7 +26,7 @@ If you find yourself unable to import your repository due to the presence of fil
    Currently listed dependencies:
    * State Flows
    * Process Flow Formatter
-   * Task table schema
    * Text Index
-   * System Import Sets
    * Service Management Basics
+   * Task table schema
+   * System Import Sets
