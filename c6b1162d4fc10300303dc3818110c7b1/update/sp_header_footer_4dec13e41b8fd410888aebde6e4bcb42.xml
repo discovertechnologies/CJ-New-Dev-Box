@@ -1,9 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_header_footer">
     <sp_header_footer action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function() {
-  /* widget controller */
-  var c = this;
+        <client_script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+function taskerFooterCtrl($scope, spModal, $window, $location) {
+    /* widget controller */
+    var c = this;
+
+    showLegalNotice();
+
+    function showLegalNotice() {
+
+        if (c.data.showLegalNotice == true || c.data.showAcknowledgement == true) {
+            spModal.open({
+                backdrop: 'static',
+                title: c.data.lnCaption,
+                message: c.data.lnModalMessage,
+                buttons: [{
+                    label: c.data.lnModalOkButton,
+                    primary: true
+                }],
+                size: 'lg'
+            }).then(function() {
+                c.data.answer = true;
+                c.data.saveLegalNotice = c.data.showLegalNotice;
+                c.data.saveAcknowledgement = c.data.showAcknowledgement;
+                refreshWidget();
+
+            }, function() {
+                c.data.answer = false;
+                $window.location = "discovertaskerportal";
+            });
+        }
+    }
+
+    function refreshWidget(evt, arg) {
+        //c.server.refresh(); 
+        c.server.update();
+    }
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------&#13;
@@ -16,7 +49,8 @@
 //------------------------------------------------------------------------------------------------------------------------&#13;
 &#13;
 .legalFooter {&#13;
-  padding-bottom : 20px; &#13;
+  padding-bottom : 6px; &#13;
+  padding-top : 6px; &#13;
   color: $accessible-placeholder-gray; &#13;
 }&#13;
 </css>
@@ -26,7 +60,7 @@
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
-        <id>DTechApps-Tasker-Footer</id>
+        <id>dtechapps-tasker-footer</id>
         <internal>false</internal>
         <link><![CDATA[function link(scope, element, attrs, controller) { 
 
@@ -35,31 +69,207 @@
         <option_schema/>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[(function() {
-  /* populate the 'data' object */
-  /* e.g., data.table = $sp.getValue('table'); */
+        <script><![CDATA[(function($sp, input, data) {
+    // Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+    //------------------------------------------------------------------------------------------------------------------------
+    // 02.24.2021 | mmcc | Customizable process for any customer admin to setup a legal notice or Acknowledgement
+    // 10.02.2020 | KT | Updated ONLY for DIA
+    //------------------------------------------------------------------------------------------------------------------------
 
-})();]]></script>
+    // Always use the most recent timestamp
+    var gdtNewUserPreference = new GlideDateTime();
+
+    // User Preferences name where the last legal notice UTC date-time is stored as a string
+    var strPreferenceNameLegalNotice = 'DTechApps.Tasker.AccessAcknowledgementLegal';
+
+    // User Preferences name where the last acknowledgement UTC date-time is stored as a string
+    var strPreferenceNameAcknowledgement = 'DTechApps.Tasker.AccessAcknowledgement';
+    var strUserAcknowledgementValue = gs.getUser().getPreference(strPreferenceNameAcknowledgement);
+    var gdtCurrentAcknowledgement = getCurrentAcknowledgementDateTime(strUserAcknowledgementValue);
+
+    main();
+
+
+    function main() {
+
+        if (input) {
+            if (input.answer == true) {
+                if (input.saveLegalNotice) {
+                    // Save the Legal NOtice string version of the DateTime
+                    gs.getUser().savePreference(strPreferenceNameLegalNotice, gdtNewUserPreference.getValue());
+                    // gs.info('  *** Footer save Legal Notice Preference gdtNewUserPreference: {0}', gdtNewUserPreference.getValue());
+                }
+
+                if (input.saveAcknowledgement) {
+                    // Save the Acknowledgement string version of the DateTime
+                    gs.getUser().savePreference(strPreferenceNameAcknowledgement, gdtNewUserPreference.getValue());
+                    gs.getSession().putClientData('user_pref_ack', gdtNewUserPreference.getValue());
+                    // gs.info('  *** Footer save Acknowledgement Preference gdtNewUserPreference: {0}', gdtNewUserPreference.getValue());
+                }
+            }
+        } else {
+            if (isAnyEventShown()) {
+                getTaskerSettingsForModal();
+            }
+        }
+    }
+
+    function isAnyEventShown() {
+        data.showLegalNotice = isLegalNoticeMessageShown();
+        data.showAcknowledgement = isAcknowledgementMessageShown();
+
+        return (data.showLegalNotice || data.showAcknowledgement);
+    }
+
+    function isAcknowledgementMessageShown() {
+        // Get the Choices: Never=0, Daily=1, Per log in=2, First log in=3
+        var acknowledgementEvent = +gs.getProperty('x_153465_discovert.AcknowledgementEvent');
+        var showAcknowledgementMessage = false;
+
+        switch (acknowledgementEvent) {
+            case 3:
+                // First log in
+                showAcknowledgementMessage = showFirstLogIn('ackno');
+                break;
+            case 2:
+                // Per log in
+                showAcknowledgementMessage = showPerLogInAcknowledgement();
+                break;
+            case 1:
+                // Daily
+                showAcknowledgementMessage = showDailyAcknowledgement();
+                break;
+            default:
+                // case Never
+                showAcknowledgementMessage = false;
+        }
+
+        return showAcknowledgementMessage;
+    }
+
+    function isLegalNoticeMessageShown() {
+        // Get the Choices: Never, First log in
+        var legalNoticeEvent = gs.getProperty('x_153465_discovert.LegalNoticeEvent').replace(/ /g, '').toUpperCase();
+
+        var showLegalNoticeMessage = false;
+
+        if (legalNoticeEvent === 'FIRSTLOGIN') {
+            showLegalNoticeMessage = showFirstLogIn('legal');
+        }
+
+        return showLegalNoticeMessage;
+    }
+
+    function getTaskerSettingsForModal() {
+        data.lnCaption = gs.getMessage('Tasker - AcknowledgementCaption');
+        data.lnModalOkButton = gs.getMessage('Tasker - AcknowledgementModalOkButton');
+        data.lnModalMessage = '';
+
+        // build up the html for showing the logo; best practice is to use HTML Semantic Elements, no div's
+        var logoPart1 = '<section><img src="';
+        var logoPart2 = gs.getProperty('x_153465_discovert.AcknowledgementLogo');
+        var logoPart3 = '" class="img-responsive center-block"/></section><br>';
+
+        // Should look like: <section><img src="tasker_logo.png" class="img-responsive center-block"/></section>
+        var fullLogo = logoPart1.concat(logoPart2, logoPart3);
+        // if a logo was not selected then do not add it to the output
+        if (logoPart2 && logoPart2.length > 0) {
+            data.lnModalMessage = data.lnModalMessage.concat(fullLogo);
+        }
+
+        if (data.showLegalNotice) {
+            data.lnModalMessage = data.lnModalMessage.concat(gs.getMessage('Tasker - LegalNoticeModalMessage'));
+        }
+
+        if (data.showAcknowledgement) {
+            data.lnModalMessage = data.lnModalMessage.concat(gs.getMessage('Tasker - AcknowledgementModalMessage'));
+        }
+    }
+
+    function showDailyAcknowledgement() {
+        var isShowing = false;
+
+        var gdToday = new GlideDate();
+        gdToday = gdtNewUserPreference.getDate();
+
+        // Get User Preference date part as UTC
+        var gdPrefDate = new GlideDate();
+        gdPrefDate = gdtCurrentAcknowledgement.getDate();
+
+        // Compare the 2 date parts
+        if (gdPrefDate.equals(gdToday) == false) {
+            isShowing = true;
+        }
+
+        return isShowing;
+    }
+
+    function showPerLogInAcknowledgement() {
+        var isShowing = true;
+
+        if (gs.getSession().getClientData('user_pref_ack')) {
+            isShowing = false;
+        }
+
+        return isShowing;
+    }
+
+    function showFirstLogIn(promptType) {
+        var isShowing = false;
+        var strUserPreferenceValue = gs.getUser().getPreference(strPreferenceNameAcknowledgement);
+
+        if (promptType === 'legal') {
+            strUserPreferenceValue = gs.getUser().getPreference(strPreferenceNameLegalNotice);
+        }
+
+        var gdtCurrentPreference = new GlideDateTime();
+        gdtCurrentPreference.setValue(strUserPreferenceValue);
+
+        // Check for bad data since the Admin can edit it - make blank, any free text or missed typed DateTime
+        if (gdtCurrentPreference.isValid() == false || (gdtCurrentPreference.hasDate() == false)) {
+            isShowing = true;
+        } else if (gdtCurrentPreference.onOrAfter(gdtNewUserPreference)) {
+            // Case when Admin sets a DateTime in the future
+            isShowing = true;
+        }
+
+        return isShowing;
+    }
+
+    function getCurrentAcknowledgementDateTime(strUserPref) {
+        var gdtCurrPref = new GlideDateTime();
+        gdtCurrPref.setValue(strUserPref);
+
+        // Check for bad data since the Admin can edit it - make blank, any free text or missed typed DateTime
+        if (gdtCurrPref.isValid() == false || (gdtCurrPref.hasDate() == false)) {
+            gdtCurrPref.setValue(gs.yesterday());
+        }
+
+        return gdtCurrPref;
+    }
+
+})($sp, input, data);]]></script>
         <servicenow>false</servicenow>
         <static>false</static>
         <sys_class_name>sp_header_footer</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-09-01 15:40:45</sys_created_on>
         <sys_id>4dec13e41b8fd410888aebde6e4bcb42</sys_id>
-        <sys_mod_count>4</sys_mod_count>
+        <sys_mod_count>545</sys_mod_count>
         <sys_name>DTechApps Tasker Footer</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_header_footer_4dec13e41b8fd410888aebde6e4bcb42</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-09-11 14:14:26</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-03-03 19:20:12</sys_updated_on>
         <template><![CDATA[<div class="container">
     <div class="row">
       <div class="col-xs-12 text-center legalFooter">
         ${Discover Technologies LLC Confidential. © Discover Technologies LLC. All rights reserved.}
       </div>
     </div>
-  </div>]]></template>
+<div>
+]]></template>
     </sp_header_footer>
 </record_update>

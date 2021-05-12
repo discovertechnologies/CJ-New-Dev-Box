@@ -2,30 +2,188 @@
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function clientController($scope, $rootScope, $http, $location, spUtil, $interpolate, $log, spAriaUtil) {
-    //------------------------------------------------------------------------------------------------------------------------
-    // COMPANY: DISCOVER TECHNOLOGIES
-    // CUSTOMIZED BY: KARINA TORRES
-    // RECURSIVE LIST TREE
-    //------------------------------------------------------------------------------------------------------------------------
-    var c = this;
-	spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id);
-    var onListClick = $scope.$on('$sp.list.click', refreshWidget);
-    var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	//------------------------------------------------------------------------------------------------------------------------
+	// COMPANY: DISCOVER TECHNOLOGIES
+	// CUSTOMIZED BY: KARINA TORRES
+	// RECURSIVE LIST TREE
+	//------------------------------------------------------------------------------------------------------------------------
+	var c = this;
 
-    function refreshWidget() {
-        $scope.server.update();
-    }
+	//spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id);
+	// NOTE: record watcher accounts for the form save change, no need to reload on form change
+	// var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+	spUtil.recordWatch($scope, $scope.data.table, "u_task_tree=" + $scope.data.task_tree, function(name) {
+		var changes = name.data.changes;
+		var sys_id = name.data.sys_id.toString();
+		switch (name.data.operation){
+			case "update":
+				var arrItemChanged = c.data.tasks.filter(function(item) { return item.key === sys_id; });
+				if(arrItemChanged[0]){
+					var itemChanged = arrItemChanged[0];
+					var itemDataChanged = false;
+					for (var change in changes) {
+						if(c.data.fieldsInModel[changes[change]]){
+							itemDataChanged = true;
+						}
+					}
+					if(itemDataChanged){
+						updateTaskData(itemChanged, name.data.record);	
+					}
+				}
+				break;
+			case "insert":
+				if(name.data.record.parent){
+					c.data.tasks.push(createTaskData(sys_id,name.data.record));
+				}
+				break;
+			case "delete":
+				if(c.data.tasks.indexOf(sys_id) > -1) {
+					c.data.tasks.splice(c.data.tasks.indexOf(sys_id), 1);
+				}
+		}
+	});
+	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+	function createTaskData(sys_id, record){
+		var newTaskData = {};
+		newTaskData.key = sys_id;
+		newTaskData.sys_id = sys_id;
+		for (var key in record){
+			var displayValue = '';
+			var fieldLabel = '';
+			var field = c.data.fieldsInModel[key];
+			if(field){
+				fieldLabel = field.fieldLabel; 
+				if(field.keyUsesDisplayOnly){
+					newTaskData[key] = record[key].display_value;
+				}
+				if(field.hasValue){
+					newTaskData[key] = record[key].value;
+				}
+				if(field.hasDiplayValue){
+					newTaskData[key + '_DisplayValue'] = record[key].display_value;
+				}
+				if(field.hasDisplayAndLabel){
+					displayValue = fieldLabel + ': ' +  record[key].display_value;
+					newTaskData[key + '_DisplayText'] = displayValue;
+				}
+				if(field.type=='date'){
+					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+					newTaskData[key] = date_number;
+				}
+			}  //if field wasn't found do nothing
+		}
+		
+		// These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
+		var iLevel=0;
+		if (newTaskData.parent != null){
+			var arrParentItem = c.data.tasks.filter(function(item) { return item.key === newTaskData.parent;});
+			iLevel = parseInt(arrParentItem[0].level);
+		}
+		newTaskData.level = iLevel;
+		newTaskData.text = getTaskTreeListTitleNode(newTaskData, newTaskData.parent, newTaskData.task_name, newTaskData.primary_assignee, newTaskData.assigned_to, newTaskData.state, newTaskData.order);
+		// we will expand all on initial page load
+		newTaskData.expanded = true;
+		// NOTE you are here, there is an issue with leaf nodes having the down chevron when they should not	
+		// this should be removed
+		newTaskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + newTaskData.sys_id +'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ newTaskData['state']+'&order='+ newTaskData['order'];
+		return newTaskData;
+	}
+	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+	function updateTaskData(taskData, record){
+		for (var key in record){
+			var displayValue = '';
+			var fieldLabel = '';
+			var field = c.data.fieldsInModel[key];
+			if(field){
+				fieldLabel = field.fieldLabel; 
+				if(field.keyUsesDisplayOnly){
+					taskData[key] = record[key].display_value;
+				}
+				if(field.hasValue){
+					taskData[key] = record[key].value; // this is the default value to key match
+				}
+				if(field.hasDiplayValue){
+					taskData[key + '_DisplayValue'] = record[key].display_value;
+				}
+				if(field.hasDisplayAndLabel){
+					displayValue = fieldLabel + ': ' +  record[key].display_value;
+					taskData[key + '_DisplayText'] = displayValue;
+				}
+				if(field.type=='date'){
+					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+					taskData[key] = date_number;
+				}
+			}  //if field wasn't found do nothing
+		}
+		// These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
+		taskData.text = getTaskTreeListTitleNode(taskData, taskData.parent, taskData.task_name, taskData.primary_assignee, taskData.assigned_to, taskData.state, taskData.order);
+		// we will expand all on initial page load
+		taskData.expanded = true;
+		taskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + taskData.sys_id +'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ taskData['state']+'&order='+ taskData['order'];
+		return taskData;
+	}	
 
-	c.openLink = function(href){
-	$location.url(href);
+	function getTaskTreeListTitleNode (newTaskData, parent, TaskNameNumber, Primary_Assignee, Assigned_To, State, Order) {
+		var taskText = {};
+		if (parent != null) TaskNameNumber = Order + ". " + TaskNameNumber; // NEW
+		newTaskData.TaskNameNumber = TaskNameNumber;
+		taskText = {TaskNameNumber: TaskNameNumber, primary_assignee: Primary_Assignee,assigned_to: Assigned_To, State: State, Order: Order};
+		// STRY0099313 - When adding tasks that are unassigned, the user shows "undefined" instead of nothing.  This story fixes that as well.
+		if (Assigned_To != '' && Assigned_To != undefined) 
+			taskText.assigned_to = '(' + Assigned_To + ')';
+		else
+			taskText.assigned_to = '';
+		
+		var badgeclass = "label label-"+State;
+		taskText.state = State;
+		return taskText;
+	}
+	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		setAndExpandSelected(parms.sys_id);
+	})
+	$rootScope.$on('$sp.list.click', function(e, parms) {
+		setAndExpandSelected(parms.sys_id);
+	})
+	// NOTE you are here, you need to expand/collaps	
+	function extendAllAncestors(parent) {
+		var itemParent = c.data.tasks.filter(function(item) { return item.key === parent; });
+		if(itemParent.parent){
+			extendAllAncestors(itemParent.parent);
+			itemParent.expanded = true;
+			c.expand(itemParent.key);
+		}
+	}
+
+	function setAndExpandSelected(sys_id){
+		c.data.sys_id = sys_id;
+		// TODO - ON CHANGE EXPAND ALL NODES UP THE TREE FROM SELECTED NODE
+		extendAllAncestors(sys_id);
+	}
+
+	//function refreshWidget() {
+	//	$scope.server.update();
+	//}
+	
+	c.openLink = function(href, sys_id){
+		//$location.url(href);
+		if (c.data.sys_id == sys_id) // get called twice by gojs
+			return;
+		c.data.sys_id = sys_id;
+		var evt = {};
+		evt.sys_id = sys_id;
+		evt.table = c.data.table;
+		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
+		$rootScope.$broadcast('$TaskerTaskList.click', evt);
 	};
+
 	c.findChildren = function(id){
 		var taskChildren =[];
 		for (var i = 0; i < c.data.tasks.length; i++) {
 			if(c.data.tasks[i].parent == id){
 				taskChildren.push(c.data.tasks[i]);
 			}
-	}
+		}
 		return taskChildren;
 	};
 	c.findCurrentTask = function(id){
@@ -40,10 +198,10 @@
 	c.collapse= function(id,event){
 		var currentTask = c.findCurrentTask(id);
 		var taskChildren = c.findChildren(id);
-		
+
 		if($("#span" + currentTask.sys_id).hasClass( "glyphicon-chevron-down" )){
-				c.collapse_1 (id);
-			
+			c.collapse_1 (id);
+
 		} 
 		else if($("#span" + currentTask.sys_id).hasClass( "glyphicon-chevron-right" )){
 			c.expand(id);
@@ -58,39 +216,33 @@
 		}
 	};
 	c.collapse_1 = function(id){
-		
 		var currentTask = c.findCurrentTask(id);
 		var taskChildren = c.findChildren(id);
-		
-		
-			for(var x=0; x < taskChildren.length; x++){
-				$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-down" );
-				$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-right" );
+		for(var x=0; x < taskChildren.length; x++){
+			$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-down" );
+			$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-right" );
 			//	$( "#" + taskChildren[x].sys_id ).css("background-color",color)
-				$( "#" + taskChildren[x].sys_id ).css("display","none");
+			$( "#" + taskChildren[x].sys_id ).css("display","none");
 			c.collapse_1(taskChildren[x].sys_id );
-			}
+		}
 	};
-	
+
 	c.expand = function(id){
 		var currentTask = c.findCurrentTask(id);
 		var taskChildren = c.findChildren(id);
 
-			for(var x=0; x < taskChildren.length; x++){
-				$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-right" );
-				$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-down" );
-				var color = 'red';
-				//$( "#" + taskChildren[x].sys_id ).css("background-color",color)
-				$( "#" + taskChildren[x].sys_id ).css("display","block");
+		for(var x=0; x < taskChildren.length; x++){
+			$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-right" );
+			$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-down" );
+			var color = 'red';
+			//$( "#" + taskChildren[x].sys_id ).css("background-color",color)
+			$( "#" + taskChildren[x].sys_id ).css("display","block");
 
 			c.expand(taskChildren[x].sys_id );
-			
+
 		}
 	};
-		
 
-
-	
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
@@ -262,7 +414,7 @@ span.label.label-pill.label-Cancelled {
       "hide_xs" : false
    }
 }</demo_data>
-        <description/>
+        <description>2.6 updates for post back removal</description>
         <docs/>
         <field_list>glyph,color</field_list>
         <has_preview>true</has_preview>
@@ -284,260 +436,37 @@ span.label.label-pill.label-Cancelled {
 //------------------------------------------------------------------------------------------------------------------------
 (function() {
 	data.results = [];
-	
-	var sys_id_topparenttask = null;
-	data.sys_id_currenttask = null;
-	
-	if ($sp.getParameter("table") == 'x_153465_discovert_route_task_instance') {
-		data.sys_id_currenttask = $sp.getParameter("sys_id");
-		sys_id_topparenttask = $sp.getParameter("sys_id");
-	} else return;
+	data.table = $sp.getParameter("table");
+	data.sys_id =  $sp.getParameter("sys_id");
 
-	if (!data.sys_id_currenttask) {
+	if ((data.table != 'x_153465_discovert_route_task_instance') || (!data.sys_id)){
 		data.id = null;
+		return;		
+	}
+
+	var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+	if(!gr.get(data.sys_id)){
 		return;
 	}
-	
-	data.sys_id =  $sp.getParameter("sys_id");
-	
-	sys_id_topparenttask = getTopParent(data.sys_id_currenttask);
-		
-	data.results.push(getParentDetails(sys_id_topparenttask));
 
-  data.table = $sp.getParameter("table");
+	var sys_id_topparenttask = gr.getValue("u_top_task");
+	var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+	if(!grTopTask.get(sys_id_topparenttask)){
+		return;
+	}
+	data.task_tree = grTopTask.getValue('u_task_tree');
+
+	var taskWidgetData = new TaskWidgetData();
+	data.fieldsInModel = taskWidgetData.loadTaskListTreeFieldsInModelAndFieldLabels(grTopTask);
+	taskWidgetData.buildTaskMap('discovertasker-recursivetasktreelist', data.results, grTopTask, data.fieldsInModel)
 	data.sc_catalog = $sp.getValue('x_153465_discovert_route_task_instance');
-  data.tasks = getTasks(sys_id_topparenttask, 1);
-	
-  data.title = gs.getMessage(options.title);
+
+	data.tasks = data.results;
+	data.title = gs.getMessage(options.title);
 	//data.page = "discovertasker_processdetails"; //before
 	data.page = $sp.getParameter("id");
-	
-	
-	// Ayman's custom starts here...
-	
-	data.topTask = getTopParent(data.sys_id_currenttask);
-	
-	
+
 })();
-function getParentDetails(topParent){
-	var result;
-		var gr = new GlideRecord('x_153465_discovert_route_task_instance');
-			gr.addQuery('sys_id',topParent);
-			gr.orderBy('order');
-			gr.orderBy('number');
-			gr.query();
-			if(gr.next()){
-				// STRY0051139 - change field to a configurable field.  For now, leave Primary Assignee even though it is on the Tasker Nubmner.  Also leave assigned to, state and work notes, we may make this also configurable, but for now, this works.
-				// was text: getTaskTitle(gr.getValue('number'), gr.getValue('short_description'), gr.primary_assignee.getDisplayValue().toString(), gr.assigned_to.getDisplayValue().toString(), gr.state.getDisplayValue(), 0),
-				result={
-						level : 0,
-            sys_id: gr.getValue('sys_id'),
-						text: getTaskTitle(gr.getValue('parent'), gr.getValue('task_name'), gr.primary_assignee.getDisplayValue().toString(), gr.assigned_to.getDisplayValue().toString(), gr.state.getDisplayValue(), gr.order.getDisplayValue()),
-						state: getStateNode(topParent, 'top'),
-					href: '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + gr.getValue('sys_id')+'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ gr.state+'&order='+ gr.order
-        };
-			}
-	return result;
-}
-//------------------------------------------------------------------------------------------------------------------------
-// GET THE TOP PARENT FOR THE CURRENT SYS_ID
-//------------------------------------------------------------------------------------------------------------------------
-function getTopParent(sys_id_currenttask) {
-
-	var hasParent;
-	var parentID;
-	
-	var parentGR = new GlideRecord('x_153465_discovert_route_task_instance');
-	parentGR.addQuery('sys_id', sys_id_currenttask);
-	parentGR.orderBy('order');
-  parentGR.orderBy('number');
-	parentGR.query();
-	parentGR.next();
-	
-	if (parentGR.parent){
-			hasParent = true;
-			parentID = parentGR.getValue('parent');
-
-			while(hasParent){
-				var gp = new GlideRecord('x_153465_discovert_route_task_instance');
-				gp.addQuery('sys_id', parentID);
-				gp.orderBy('order');
-				gp.orderBy('number');
-				gp.query();
-				gp.next();
-
-				if(gp.parent){
-					parentID = gp.getValue('parent');
-				}
-				else{
-					hasParent = false;
-				}
-			}
-	}
-	else{
-		parentID = sys_id_currenttask;
-	}
-	
-	return parentID;
-
-}
-
-//------------------------------------------------------------------------------------------------------------------------
-// GET TOP PARENT INFORMATION
-// Before: Get Routes. Catalog = Template Process
-//------------------------------------------------------------------------------------------------------------------------
-function getTasks(sys_id_topparenttask,_count) { 
-
-		var result = [];
-		var count = _count;
-    var parentGR = new GlideRecord('x_153465_discovert_route_task_instance');
-    parentGR.addQuery('parent',sys_id_topparenttask);
-		parentGR.orderBy('order');
-		parentGR.orderBy('number');	
-    parentGR.query();
-	
-    while (parentGR.next()) {
-        if (!$sp.canReadRecord("x_153465_discovert_route_task_instance", parentGR.getUniqueValue())) {
-            continue;
-        }
-			
-				// STRY0051139 - change field to a configurable field.  For now, leave Primary Assignee even though it is on the Tasker Nubmner.  Also leave assigned to, state and work notes, we may make this also configurable, but for now, this works.
-				// was text: text: getTaskTitle(parentGR.getValue('number'), parentGR.getValue('short_description'), parentGR.primary_assignee.getDisplayValue().toString(), parentGR.assigned_to.getDisplayValue().toString(), parentGR.state.getDisplayValue(), 0),
-        data.results.push({
-						level: count,
-						parent: parentGR.getValue('parent'),
-            sys_id: parentGR.getValue('sys_id'),
-						hasChildren: parentGR.getValue('calchaschildren'),
-						text: getTaskTitle(parentGR.getValue('parent'), parentGR.getValue('task_name'), parentGR.primary_assignee.getDisplayValue().toString(), parentGR.assigned_to.getDisplayValue().toString(), parentGR.state.getDisplayValue(), parentGR.order.getDisplayValue()),
-						state: getStateNode(sys_id_topparenttask, 'top'),
-			href: '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + parentGR.getValue('sys_id')+'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ parentGR.state+'&order='+ parentGR.order
-        });
-			if(parentGR.calchaschildren){
-				getTasks(parentGR.getValue('sys_id'),count + 1);
-			}
-    }
-    return data.results;
-}
-
-//------------------------------------------------------------------------------------------------------------------------
-// GET TASKS RECURSIVELY
-//------------------------------------------------------------------------------------------------------------------------
-function getTaskRecursive(task) { 
-
-	var sc = new GlideRecord('x_153465_discovert_route_task_instance');
-		sc.addQuery('parent',task.sys_id);
-		sc.orderBy('order');
-    sc.orderBy('number');
-    sc.query();
-
-	while (sc.next()) {
-		if (!$sp.canReadRecord("x_153465_discovert_route_task_instance", sc.getUniqueValue())) {
-            continue;
-        }
-        
-        if (!task.nodes) {
-            task.nodes = [];
-        }
-		
-				// STRY0051139 - change field to a configurable field.  For now, leave Primary Assignee even though it is on the Tasker Nubmner.  Also leave assigned to, state and work notes, we may make this also configurable, but for now, this works.
-				// was text: text: text: getTaskTitle(sc.getValue('number'), sc.getValue('short_description'), sc.primary_assignee.getDisplayValue().toString(), sc.assigned_to.getDisplayValue().toString(), sc.state.getDisplayValue(), sc.task_order),
-        task.nodes.push(getTaskRecursive({
-            sys_id: sc.getValue('sys_id'),
-            text: getTaskTitle(sc.getValue('parent'), sc.getValue('task_name'), sc.primary_assignee.getDisplayValue().toString(), sc.assigned_to.getDisplayValue().toString(), sc.state.getDisplayValue(), sc.task_order),
-			parent: sc.getValue('parent'),
-						state: getStateNode(sc.getValue('sys_id')),
-						href: '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + sc.getValue('sys_id')+'&table='+'x_153465_discovert_route_task_instance&view=sp'+'&state='+ sc.state	
-        }));
-    }
-    return task;
-}
-
-
-//------------------------------------------------------------------------------------------------------------------------
-// GET COLLAPSE/EXPAND
-//------------------------------------------------------------------------------------------------------------------------
-function getStateNode(taskSysId,type) {
-    var currentSysId = $sp.getParameter("sys_id"); 
-	var parents = getAllParents(taskSysId);
-		
-		if (type == 'top' && taskSysId == currentSysId) {
-        return {
-            selected: true,
-            expanded: true
-        };
-    }
-		
-		if (parents.indexOf(taskSysId) > -1 || type == 'top'){
-				return {
-            expanded: true
-        };
-    }
-
-    if (taskSysId == currentSysId) {
-        return {
-            selected: true,
-            expanded: true
-        };
-    }else {
-			return {
-            selected: false,
-            expanded: false
-        };
-		}
-    return {};
-}
-
-function getAllParents(taskSysId) {
-  var result = [];
-	var allParents = "";
-	var parent;
-	
-  var sc = new GlideRecord('x_153465_discovert_route_task_instance');
-	sc.addQuery('sys_id',taskSysId);
-	sc.orderBy('order');
-  sc.orderBy('number');
-  sc.query();
-
-	while (sc.next()) {
-		parent = sc.getValue('parent');
-        if (parent) {
-						allParents += " | " + parent.toString();
-        }
-	}
-	return allParents;
-}
-
-
-
-//------------------------------------------------------------------------------------------------------------------------
-
-// STRY0051139 - change field to a configurable field.  For now, leave Primary Assignee even though it is on the Tasker Nubmner.  Also leave assigned to, state and work notes, we may make this also configurable, but for now, this works.
-// was function getTaskTitle(TaskNumber, Short_Description, Primary_Assignee, Assigned_To, State, Order) {
-//------------------------------------------------------------------------------------------------------------------------
-// GET TASK TITLE
-//------------------------------------------------------------------------------------------------------------------------
-function getTaskTitle(parent, TaskNameNumber, Primary_Assignee, Assigned_To, State, Order) {
-	var task = {};
-	// was - task = {tasknumber: TaskNumber, short_description: Short_Description, primary_asssignee: Primary_Assignee,assigned_to: Assigned_To, State: State, Order: Order};
-	if (parent != null) TaskNameNumber = Order + ". " + TaskNameNumber; // NEW
-	task = {TaskNameNumber: TaskNameNumber, primary_asssignee: Primary_Assignee,assigned_to: Assigned_To, State: State, Order: Order};
-
-	/*
-	if (Order > 0)
-		task.Order = Order.toString();
-		
-	if (Primary_Assignee.length > 0) 
-		task.primary_assignee = Primary_Assignee ;
-	*/
-	
-	if (Assigned_To.length > 0) 
-		task.assigned_to = '(' + Assigned_To + ')';
-
-  var badgeclass = "label label-"+State;
-	task.state = State;
-	
-	return task;
-}
 
 
 ]]></script>
@@ -546,14 +475,14 @@ function getTaskTitle(parent, TaskNameNumber, Primary_Assignee, Assigned_To, Sta
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-02-13 22:40:38</sys_created_on>
         <sys_id>890dd6cd4f589b00303dc3818110c70e</sys_id>
-        <sys_mod_count>942</sys_mod_count>
+        <sys_mod_count>998</sys_mod_count>
         <sys_name>Tasker List Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_890dd6cd4f589b00303dc3818110c70e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-11-20 21:29:35</sys_updated_on>
+        <sys_updated_on>2021-04-27 16:38:53</sys_updated_on>
         <template><![CDATA[<div ng-class="::{'hidden-xs' : options.hide_xs}" class="panel panel-{{::options.color}} b">
    <div class="panel-heading">
       <span>Task List View</span>
@@ -566,13 +495,14 @@ function getTaskTitle(parent, TaskNameNumber, Primary_Assignee, Assigned_To, Sta
   
    <div class="treeview" >
       <ul class="list-group" ng-repeat="task in data.tasks"  id="{{task.sys_id}}">
-       <div ng-click="c.openLink(task.href)" ng-class="{selected: task.sys_id == data.sys_id_currenttask}">    <li class="list-group-item node-task-tree" ng-class="{selected: task.sys_id == data.sys_id_currenttask}"  style="padding-left: {{task.level}}em">
-             	 <span ng-if="task.hasChildren != '0'" ng-click="c.collapse(task.sys_id, $event)" id="span{{task.sys_id}}" class="icon expand-icon glyphicon glyphicon-chevron-down" ></span>
-               <span class="icon glyphicon"></span>
-               <span class="icon node-icon"></span>
-              <span class="nav-label"> {{task.text.TaskNameNumber}}. {{task.text.primary_assignee}} {{task.text.assigned_to}} <span class="label label-{{task.text.state}} pull-right">{{task.text.state}}</span></span> 
-           
-         </li> </div>  
+       <div ng-click="c.openLink(task.href, task.sys_id)" ng-class="{selected: task.sys_id == data.sys_id}">    
+         <li class="list-group-item node-task-tree" ng-class="{selected: task.sys_id == data.sys_id}"  style="padding-left: {{task.level}}em">
+           	 <span ng-if="task.calchaschildren != '0'" ng-click="c.collapse(task.sys_id, $event)" id="span{{task.sys_id}}" class="icon expand-icon glyphicon glyphicon-chevron-down" ></span>
+             <span class="icon glyphicon"></span>
+             <span class="icon node-icon"></span>
+            <span class="nav-label"> {{task.text.TaskNameNumber}}. {{task.text.primary_assignee}} {{task.text.assigned_to}} <span class="label label-{{task.state}} pull-right">{{task.text.state}}</span></span> 
+         </li>
+       </div>  
       </ul>
 
     

@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>v 2.5 P3 &#13;
+        <description>v 2.6&#13;
+STRY0099013 - change filter for Task Owner&#13;
+v 2.5 P3 &#13;
 STRY0084270 - Restricted Group - Task Form - OU, Member and Contact fields should filter based on "Restricted Group" selected&#13;
 STRY0084273 - Restricted Group - Template - OU, Member and Contact Field Filters based on "Restricted Group" selected&#13;
 v 2.5.16 P2&#13;
@@ -13,11 +15,70 @@ v 2.5.16 P2&#13;
 v2.5.13 &#13;
 - Get Contacts for OU based on whether it is internal or external OU.</description>
         <name>taskerDynamicFilters</name>
-        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 var taskerDynamicFilters = Class.create();
 taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
-
+	// STRY0099013 - change filter for Task Owner
+	getTaskOnwers: function() {
+		return this.getAllMembersCurrentUserCanTask();
+	},
+	getSubTaskMembers: function() {
+		return this.getAllMembersCurrentUserCanTask();
+	},
+	
+	// STRY0099013 - change filter for Task Owner
+	getAllMembersCurrentUserCanTask: function() {
+		// STRY0064991 - get users for members
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		var UserPermissions  = new UserInfoScripts();
+		// STRY0079512
+		var restrictedGroup = '';
+		if(current.getTableName() == 'x_153465_discovert_route_task_instance'){
+			restrictedGroup = current.assignment_group + '';
+		} else{
+			var templateData = {};
+			templateData = this.getTemplateInfo();
+			restrictedGroup = templateData.restricted_group == null ? '': templateData.restricted_group;
+		}
+		
+		var ouMemArr = [];
+		var strArrOUs = [];
+		// if user is a Task Administrator, return all users
+		if (UserPermissions.IsUserTaskAdministrator()){
+			// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+			// STRY0078831 - fixed issue where Adminstrators would see all users when a restricted group was selected.
+			if (restrictedGroup != '') {
+				ouMemArr = UserPermissions.getAllMembersSysIdsInGroup(restrictedGroup);
+				return 'sys_id IN ' + ouMemArr.join(',')  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 				
+			} else{
+				return '^roles=x_153465_discovert.tasker_user^active=true';
+			}
+		}
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		// now determine if user is a the Task Manager for the selected Primary Assignee
+		else {
+			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+			strArrOUs = taskingScripts.getMyOUTaskManagers(gs.getUserID());
+			if (strArrOUs.length > 0 ){
+				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			} else{  // if the user has no members returned from the taking management role, just set add the user
+				ouMemArr.push(gs.getUserID());
+			}			
+		}
+		// now limit to restricted group, if necessary
+		if (restrictedGroup != '') 
+			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, restrictedGroup);
+		// turn array into a comma delimitted string.
+		var sMems = ouMemArr.join(',');
+		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+	},
+	
 	// STRY0075850 load contacts for task and template forms based on the selected OUs
 	getExternalContacts: function(gr) {
 		var returnfilter = 'sys_id IN ';
@@ -37,7 +98,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 			}
 		}
 		if(gr.getRecordClassName() == 'x_153465_discovert_discover_routing_template' ||
-		  gr.getRecordClassName() == 'x_153465_discovert_discover_routing_runtime'){
+			gr.getRecordClassName() == 'x_153465_discovert_discover_routing_runtime'){
 			if(gr.u_tasking_authority && gr.u_tasking_authority.u_external_flag){
 					returnfilter = this.getContactsForOu(gr.getValue('u_restricted_group'), gr.getValue('u_tasking_authority'));
 			} else if(gr.u_external_ou) {
@@ -97,57 +158,10 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 			
 			
 			while(grOUs.next()){
-					   offices.push(grOUs.getValue('discover_office_hierarchy'));    
+				offices.push(grOUs.getValue('discover_office_hierarchy'));    
 			}
 		//  STRY0068500
 		return 'sys_id IN ' + offices.join(',');  	
-	},
-
-	getSubTaskMembers: function() {
-		// STRY0064991 - get users for members
-		var taskingScripts = new tasking_System_Settings_Scripts();
-		var UserPermissions  = new UserInfoScripts();
-		// STRY0079512
-		var restrictedGroup = '';
-		if(current.getTableName() == 'x_153465_discovert_route_task_instance'){
-			restrictedGroup = current.assignment_group + '';
-		} else{
-			var templateData = {};
-			templateData = this.getTemplateInfo();
-			restrictedGroup = templateData.restricted_group == null ? '': templateData.restricted_group;
-		}
-		
-		var ouMemArr = [];
-		var strArrOUs = [];
-		// if user is a Task Administrator, return all users
-		if (UserPermissions.IsUserTaskAdministrator()){
-			// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
-			// STRY0078831 - fixed issue where Adminstrators would see all users when a restricted group was selected.
-			if (restrictedGroup != '') {
-				ouMemArr = UserPermissions.getAllMembersSysIdsInGroup(restrictedGroup);
-				return 'sys_id IN ' + ouMemArr.join(',')  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 				
-			} else{
-				return '^roles=x_153465_discovert.tasker_user^active=true';
-			}
-		}
-		// now determine if user is a the Task Manager for the selected Primary Assignee
-		// now determine if user is a the Task Manager for the selected Primary Assignee
-		else {
-			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
-			strArrOUs = taskingScripts.getMyOUTaskManagers(gs.getUserID());
-			if (strArrOUs.length > 0 ){
-				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-			} else{  // if the user has no members returned from the taking management role, just set add the user
-				ouMemArr.push(gs.getUserID());
-			}			
-		}
-		// now limit to restricted group, if necessary
-		if (restrictedGroup != '') 
-			ouMemArr = this.limitUsersToRestrictedGroup(ouMemArr, restrictedGroup);
-		// turn array into a comma delimitted string.
-		var sMems = ouMemArr.join(',');
-		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
-		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
 	},
 	
 	// STRY0065017 - get members in Template Screens
@@ -578,13 +592,13 @@ getOfficePicker : function()
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>258</sys_mod_count>
+        <sys_mod_count>260</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-11-19 11:18:38</sys_updated_on>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2021-04-29 15:55:47</sys_updated_on>
     </sys_script_include>
 </record_update>

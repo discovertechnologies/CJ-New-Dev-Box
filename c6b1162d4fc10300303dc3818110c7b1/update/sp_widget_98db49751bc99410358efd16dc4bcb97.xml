@@ -1,21 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function($scope, spModal, $rootScope, spUtil) {
-	var c = this;
-	
-	// STRY0088168 - DTLV has a scroll bar that does not allow printing to be displayed correctly
-	$scope.printReport = function(){
-    var originalContents = document.body.innerHTML;
-    var printReport= document.getElementById('printDiv').innerHTML;
-    document.body.innerHTML = printReport;
-    window.print();
-		// window.print()
-	window.location.reload();
-    //document.body.innerHTML = originalContents;
-	}	
-}
-]]></client_script>
+        <client_script><![CDATA[function dtlvCtrl($scope, spModal, $rootScope, spUtil, $timeout) {
+    var c = this;
+
+    // STRY0088168 - DTLV has a scroll bar that does not allow printing to be displayed correctly
+    $scope.printReport = function() {
+        var originalContents = document.body.innerHTML;
+        var printReport = document.getElementById('printDiv').innerHTML;
+        document.body.innerHTML = printReport;
+        window.print();
+        // window.print()
+        window.location.reload();
+        //document.body.innerHTML = originalContents;
+    };
+
+    // 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View
+    $scope.printPreviewToggle = function() {
+
+        c.data.isPrint = !c.data.isPrint;
+    };
+
+    $scope.previewPrint = function() {
+
+        window.print();
+    };
+}]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
 // NAME: DYNAMIC TREE LEVEL SUMMARY
@@ -37,9 +47,8 @@
     border-width: .2rem;
 }
 
-
 .spybody {
-	height: 500px;
+	//height: 500px;
   overflow-y: scroll;
   //padding: 10px;
 }
@@ -120,20 +129,35 @@
 // WIDGET BASE: N/A.
 // LAST UPDATE: 08.25.20
 //------------------------------------------------------------------------------------------------------------------------
-// form functionality - URL parameter driven
+//
+// 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View
+// 2.6.0 | 2021-03-12 | mmcc | STRY0095573 Remove Response Column from DTLV Sub Task List View
+// 2.6.0 | 2021-03-18 | raj  | STRY0095956 - Tree Level Print Report:  Navigation- Return to DTLV, corrected spelling and made all text multilingual in HTML
+// 2.6.0 | 2021-03-25 | mmcc | STRY0096103 Tree Level Print Report: Activity Log
+// 2.6.0 | 2021-04-27 | raj  | STRY0100645 - GlideRecord functions do not enforce ACLs. Please use GlideRecordSecure wherever possible to enforce ACLs
+//------------------------------------------------------------------------------------------------------------------------
+
 (function($sp, input, data, options, gs) {
-    /* populate the 'data' object */ /* e.g., data.table = $sp.getValue('table'); */
+    /* populate the 'data' object */
+    /* e.g., data.table = $sp.getValue('table'); */
 
     data.sys_id = $sp.getParameter("sys_id");
     data.table = $sp.getParameter("table");
     data.view = 'sp';
-    data.showFormView = "true";
 
-    var gr = new GlideRecord('x_153465_discovert_route_task_instance');
+    // mmcc STRY0092273 - Default row size or Admin settable value
+    data.defaultRowSize = 20;
+    data.rowSize = gs.getProperty('x_153465_discovert.DynamicTreeLevelRowsPerPagePrint');
+
+    // mmcc STRY0092273 - used in HTML to show hide div's
+    data.isPrint = false;
+
+	// STRY0100645
+    var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
     if (gr.get(data.sys_id)) data.task_tree_sys_id = gr.u_task_tree.sys_id.toString();
 
-  
-	//------------------------------------------------------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------------------------------------------------------
     //  DOC. INT INTEGRATION - INITIALIZING VARIABLES 
     //------------------------------------------------------------------------------------------------------------------------
     var tDS = new taskerDocumentScripts();
@@ -145,23 +169,27 @@
     // Box 1:  Objective | Instructions
     //------------------------------------------------------------------------------------------------------------------------
     data.task_name = gr.task_name.toString();
-		data.calchaschildren = gr.calchaschildren.toString();
-    data.objective = gr.u_objective.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, "") + "" + gr.u_objective_sub_task.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, "");
-    data.instructions = gr.instructions.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, ""); //gr.instructions.toString();
-		
+    data.calchaschildren = gr.calchaschildren.toString();
+	
+		// mmcc STRY0092273 Removed regex that was striping the HTML tags and now let ng-bind-html show the styled web page
+    // data.objective = gr.u_objective.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, "") + "" + gr.u_objective_sub_task.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, "");
+		data.objective = gr.u_objective.getHTMLValue(4000) + "" + gr.u_objective_sub_task.getHTMLValue(4000);
+    //data.instructions = gr.instructions.getHTMLValue(4000).replace(/<\/?[^>]+(>|$)/g, ""); //gr.instructions.toString();
+		data.instructions = gr.instructions.getHTMLValue(4000);
 
     //------------------------------------------------------------------------------------------------------------------------
     // Box 10: Task Tree Graph
     //------------------------------------------------------------------------------------------------------------------------
 
-    var tasktreeGraph_Options = {
-        table: data.table,
-        sys_id: data.sys_id
-    };
+    // mmcc STRY0092273 commented out to getwidget() as not used in HTML
+    //     var tasktreeGraph_Options = {
+    //         table: data.table,
+    //         sys_id: data.sys_id
+    //     };
 
-    data.tasktreeGraph = $sp.getWidget('discovertasker-recursivetasktreegraph', tasktreeGraph_Options);
+    //     data.tasktreeGraph = $sp.getWidget('discovertasker-recursivetasktreegraph', tasktreeGraph_Options);
 
-	
+
     //------------------------------------------------------------------------------------------------------------------------
     // Box 3: Summary Card
     //------------------------------------------------------------------------------------------------------------------------
@@ -179,8 +207,8 @@
     //------------------------------------------------------------------------------------------------------------------------
     // Box 3: Sub Tasks
     //------------------------------------------------------------------------------------------------------------------------
-	var filter = 'u_all_ancestors_tasksLIKE' + data.sys_id;
-	var o = "number";
+    var filter = 'u_all_ancestors_tasksLIKE' + data.sys_id;
+    var o = "number";
     var d = "asc";
 
     var subTasks_Options = {
@@ -193,8 +221,13 @@
         show_breadcrumbs: false,
 
         //view: 'SubTasks',
-        fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision,response', //,comments_and_work_notes',
-        maximum_entries: 1000,
+        // mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
+        //fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision,response', //,comments_and_work_notes',
+        fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.defaultRowSize,
+
         display_field: 'number',
         glyph: 'pencil-square-o', //bell-slash-o',
         open_row_details_in_modal: true,
@@ -204,6 +237,36 @@
     };
 
     data.subTasks = $sp.getWidget('discovertasker-widget-data-table', subTasks_Options); //widget-data-table //discovertasker-widget-data-table
+
+    // mmcc STRY0092273 - Created Print options for subTasks
+    var subTasksPrint_Options = {
+        title: 'Subtasks',
+        table: data.table,
+        filter: filter,
+
+        enable_filter: false,
+        show_keywords: false,
+        show_breadcrumbs: false,
+
+        //view: 'SubTasks',
+        // mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
+        // mmcc STRY0092273 - Reduced which columns are used in printing
+        //fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
+        fields: 'number,short_description,state,status,suspense_date,primary_assignee,assigned_to',
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.rowSize,
+
+        display_field: 'number',
+        glyph: 'pencil-square-o', //bell-slash-o',
+        open_row_details_in_modal: true,
+        o: o,
+        d: d,
+        color: 'primary'
+    };
+
+    // mmcc STRY0092273 - Created widget using Print options for subTasks
+    data.subTasksPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksPrint_Options);
 
     //------------------------------------------------------------------------------------------------------------------------
     // Box 3.5: Response Log
@@ -222,11 +285,13 @@
         enable_filter: false,
         show_keywords: false,
         show_breadcrumbs: false,
-
-        // Parent Task,Tasker Number, Number,Task Name,  Request Number, Request Type
+        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
         //view: 'ActivityLog',
         fields: 'u_task.parent,u_task.taskernumber,u_task_number,u_task.short_description,sys_created_on,u_primary_assignee,u_responded_by,u_role,u_action_taken',
-        maximum_entries: 1000,
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.defaultRowSize,
+
         //display_field: 'number',
         glyph: 'bullhorn',
         open_row_details_in_modal: true,
@@ -234,9 +299,39 @@
         d: d_responseLog,
         color: 'primary'
     };
-	
-		data.subResponseLog = $sp.getWidget('discovertasker-widget-data-table', responseLog_Options); //widget-data-table //discovertasker-widget-data-table
-	
+
+    data.subResponseLog = $sp.getWidget('discovertasker-widget-data-table', responseLog_Options); //widget-data-table //discovertasker-widget-data-table
+
+    // mmcc STRY0092273 - Created Print options for Response Log
+    var responseLogPrint_Options = {
+        title: 'Response Log',
+        table: data.table_responseLog,
+        filter: filter_responseLog,
+
+        enable_filter: false,
+        show_keywords: false,
+        show_breadcrumbs: false,
+        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+        //view: 'ActivityLog',
+
+        // mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name and response
+        //fields: 'u_task.parent,u_task.taskernumber,u_task_number,u_task.short_description,sys_created_on,u_primary_assignee,u_responded_by,u_role,u_action_taken',
+        fields: 'u_task.task_name,u_task_number,u_primary_assignee,u_responded_by,u_role,u_action_taken,response',
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.rowSize,
+
+        //display_field: 'number',
+        glyph: 'bullhorn',
+        open_row_details_in_modal: true,
+        o: o_responseLog,
+        d: d_responseLog,
+        color: 'primary'
+    };
+
+    // mmcc STRY0092273 - Created widget using Print options for Response Log
+    data.subResponseLogPrint = $sp.getWidget('discovertasker-widget-data-table', responseLogPrint_Options);
+
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Request Log
     //------------------------------------------------------------------------------------------------------------------------
@@ -255,10 +350,13 @@
         show_keywords: false,
         show_breadcrumbs: false,
 
-        // Parent Task,Tasker Number, Number,Task Name,  Request Number, Request Type
+        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
         //view: 'ActivityLog',
         fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
-        maximum_entries: 1000,
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.defaultRowSize,
+
         //display_field: 'number',
         glyph: 'bullhorn',
         open_row_details_in_modal: true,
@@ -268,6 +366,37 @@
     };
 
     data.subTasksRequests = $sp.getWidget('discovertasker-widget-data-table', subTasksRequests_Options); //widget-data-table //discovertasker-widget-data-table
+
+    // mmcc STRY0092273 - Created Print options for Requests
+    var subTasksRequestsPrint_Options = {
+        title: 'Requests',
+        table: data.table_request,
+        filter: filter_request,
+
+        enable_filter: false,
+        show_keywords: false,
+        show_breadcrumbs: false,
+
+        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+        //view: 'ActivityLog',
+
+        // mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name
+        //fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
+        fields: 'parent.task_name,parent.number,u_request_type,u_requested_by,u_requested,u_status,u_responded_by,u_responded',
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.rowSize,
+
+        //display_field: 'number',
+        glyph: 'bullhorn',
+        open_row_details_in_modal: true,
+        o: o_request,
+        d: d_request,
+        color: 'primary'
+    };
+
+    // mmcc STRY0092273 - Created widget using Print options for Requests
+    data.subTasksRequestsPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksRequestsPrint_Options);
 
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Activity Log
@@ -290,7 +419,10 @@
 
         //view: 'ActivityLog',
         fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
-        maximum_entries: 1000,
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.defaultRowSize,
+
         //display_field: 'number',
         glyph: 'comment-o',
         open_row_details_in_modal: false,
@@ -300,6 +432,33 @@
     };
 
     data.subTasksActivity = $sp.getWidget('discovertasker-widget-data-table', subTasksActivity_Options); //widget-data-table //discovertasker-widget-data-table
+
+    // mmcc STRY0092273 - Created Print options for Activity Log
+    var subTasksActivityPrint_Options = {
+        title: 'Activity Log',
+        table: data.table_audit,
+        filter: filter_audit,
+
+        enable_filter: false,
+        show_keywords: false,
+        show_breadcrumbs: false,
+
+        //view: 'ActivityLog',
+        fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
+
+        // mmcc STRY0092273 - Default row size or Admin settable value
+        window_size: data.rowSize,
+
+        //display_field: 'number',
+        glyph: 'comment-o',
+        open_row_details_in_modal: false,
+        o: o_audit,
+        d: d_audit,
+        color: 'primary'
+    };
+
+    // mmcc STRY0092273 - Created widget using Print options for Activity Log
+    data.subTasksActivityPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksActivityPrint_Options);
 
 
     //------------------------------------------------------------------------------------------------------------------------
@@ -317,7 +476,7 @@
         table: data.table,
         filter: filter + '^status=Projected on time',
         color: 'success',
-				glyph: 'bell-o'
+        glyph: 'bell-o'
     };
 
     data.countStatusOnTime = $sp.getWidget('tasker_count', countStatusOnTime_Options);
@@ -328,7 +487,7 @@
         table: data.table,
         filter: filter + '^status=Warning',
         color: 'warning',
-				glyph: 'calendar-o'
+        glyph: 'calendar-o'
     };
 
     data.countStatusWarning = $sp.getWidget('tasker_count', countStatusWarning_Options);
@@ -339,7 +498,7 @@
         table: data.table,
         filter: filter + '^status=Critical',
         color: 'danger',
-				glyph: 'bell-slash-o'
+        glyph: 'bell-slash-o'
     };
 
     data.countStatusCritical = $sp.getWidget('tasker_count', countStatusCritical_Options);
@@ -394,191 +553,389 @@
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-05-28 16:13:02</sys_created_on>
         <sys_id>98db49751bc99410358efd16dc4bcb97</sys_id>
-        <sys_mod_count>570</sys_mod_count>
+        <sys_mod_count>813</sys_mod_count>
         <sys_name>Dynamic Tree Level Summary</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_98db49751bc99410358efd16dc4bcb97</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-11-20 23:10:26</sys_updated_on>
-        <template><![CDATA[<div id='dtlv'>
+        <sys_updated_on>2021-04-27 14:00:49</sys_updated_on>
+        <template><![CDATA[<div id='dtlv' ng-show="!data.isPrint">
 
-<nav id="navbar-dtlv" class="navbar navbar-light bg-light">
-   <!--<a class="navbar-brand" href="javascript:void(0)">Navbar</a>-->
-   <ul class="nav nav-pills">
+  <nav id="navbar-dtlv" class="navbar navbar-light bg-light hidden-print">
+    <!--<a class="navbar-brand" href="javascript:void(0)">Navbar</a>-->
+    <ul class="nav nav-pills">
       <li class="nav-item">
-         <a class="nav-link" href="#GeneralObjective">General Objective</a>
+        <a class="nav-link" href="#GeneralObjective">${General Objective }</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#Instructions">Instructions</a>
+        <a class="nav-link" href="#Instructions">${Instructions}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#SubTasksState">Subtasks by State</a>
+        <a class="nav-link" href="#SubTasksState">${Subtasks by State}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#SubTasksStatus">Subtasks by Status</a>
+        <a class="nav-link" href="#SubTasksStatus">${Subtasks by Status}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#SummaryCard">Summary Card</a>
+        <a class="nav-link" href="#SummaryCard">${Summary Card}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#SubTasks">Subtasks</a>
+        <a class="nav-link" href="#SubTasks">${Subtasks}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#ResponseLog">Response Log</a>
+        <a class="nav-link" href="#ResponseLog">${Response Log}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#TaskRequests">Task Requests</a>
+        <a class="nav-link" href="#TaskRequests">${Task Requests}</a>
       </li>
       <li class="nav-item" ng-if="::(data.SNAttachmentsON)">
-         <a class="nav-link" href="#SharedAttachments">Shared Attachments</a>
+        <a class="nav-link" href="#SharedAttachments">${Shared Attachments}</a>
       </li>
       <li class="nav-item" ng-if="::(data.DocIntON)">
-         <a class="nav-link" href="#SharedDocuments">Shared Documents</a>
+        <a class="nav-link" href="#SharedDocuments">${Shared Documents}</a>
       </li>
       <li class="nav-item">
-         <a class="nav-link" href="#ActivityLog">Activity Log</a>
+        <a class="nav-link" href="#ActivityLog">${Activity Log}</a>
       </li>
-   </ul>
-</nav>
-<div class="spybody" data-spy="scroll" data-target="#navbar-dtlv" data-offset="0">
-   <div ng-class="::{'hidden-xs' : options.hide_xs}" class="panel panel-default b">
+    </ul>
+  </nav>
+  <!--<div class="spybody" data-spy="scroll" data-target="#navbar-dtlv" data-offset="0">-->
+  <div data-spy="scroll" data-target="#navbar-dtlv" data-offset="0">
+    <div ng-class="::{'hidden-xs' : options.hide_xs}" class="panel panel-default b">
       <div class="panel-heading">
-         <h4 class="panel-title"><span>{{data.task_name}}</span> </h4>
-         <p align="right">
-           	<!-- // STRY0088168 - DTLV has a scroll bar that does not allow printing to be displayed correctly -->
-            <a target=""_blank"" ng-href="?id=discovertasker_taskdetails&&table={{data.table}}&sys_id={{data.sys_id}}" class="glyphicon glyphicon-edit ng-scope" title="Go to Task Details page to edit Task" role="link"></a> &nbsp;&nbsp;
-            <button class="btn btn-primary"  ng-click="printReport();"> <i class="glyphicon glyphicon-print"></i>
-            &nbsp;&nbsp;Print&nbsp;&nbsp; </button>
-         </p>
+        <h4 class="panel-title"><span>{{data.task_name}}</span> </h4>
+        <p align="right" class="hidden-print">
+          <!-- // STRY0088168 - DTLV has a scroll bar that does not allow printing to be displayed correctly -->
+          <a target=""_blank"" ng-href="?id=discovertasker_taskdetails&&table={{data.table}}&sys_id={{data.sys_id}}" class="glyphicon glyphicon-edit ng-scope" title="Go to Task Details page to edit Task" role="link"></a> &nbsp;&nbsp;
+          <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
+          <!--<button class="btn btn-primary"  ng-click="printReport();"> <i class="glyphicon glyphicon-print"></i>
+&nbsp;&nbsp;Print&nbsp;&nbsp; </button>-->
+          <button class="btn btn-primary"  ng-click="printPreviewToggle();"> <i class="glyphicon glyphicon-print"></i>
+            &nbsp;&nbsp;${Print Preview}&nbsp;&nbsp; </button>
+        </p>
       </div>
-     
+
       <div id='printDiv' class="container-fluid">
-         <div class="row">
-            <div class="col-md-12">
-               <br>
-               <!--<sp-widget widget="data.tasktreeGraph"></sp-widget>-->
-               <br>
-               <h4 id="GeneralObjective"></h4>
-               <div class="panel-heading bg-primary">${General Objective }</div>
-               <div class="content">
-                  <br>
-                  <p>{{data.objective}}</p>
-               </div>
-               <br>
-               <h4 id="Instructions"></h4>
-               <div class="panel-heading bg-primary">${Instructions} </div>
-               <div class="content">
-                  <br>
-                  <p>{{data.instructions}}</p>
-               </div>
-               <br>
+        <div class="row">
+          <div class="col-md-12">
+            <br>
+            <!--<sp-widget widget="data.tasktreeGraph"></sp-widget>-->
+            <br>
+            <h4 id="GeneralObjective"></h4>
+            <div class="panel-heading bg-primary">${General Objective}</div>
+            <div class="content">
+              <br>
+              <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
+              <!--<p>{{data.objective}}</p>-->
+              <p ng-bind-html="data.objective"></p>
             </div>
-         </div>
-         <div class="row">
-            <div class="col-md-9">
-               <h4 id="SubTasksState"></h4>
-               <div class="row" style="margin-left: 1px;">
-                  <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-dashboard"></i>${Subtasks by State} </div>
-                  <div class="row">
-                     <br>
-                  </div>
-                  <div class="col-md-12">
-                     <sp-widget widget="data.progressBar"></sp-widget>
-                  </div>
-               </div>
-               <div class="row">
-                  <br>
-               </div>
-               <h4 id="SubTasksStatus"></h4>
-               <div class="row" style="margin-left: 1px;">
-                  <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-time"></i>${Subtasks by Status} </div>
-                  <div class="row">
-                     <br>
-                  </div>
-                  <div class="col-md-12" ng-if="::(data.calchaschildren > 0)">
-                     <div class="col-md-4">
-                        <sp-widget widget="data.countStatusOnTime"></sp-widget>
-                     </div>
-                     <div class="col-md-4">
-                        <sp-widget widget="data.countStatusWarning"></sp-widget>
-                     </div>
-                     <div class="col-md-4">
-                        <sp-widget widget="data.countStatusCritical"></sp-widget>
-                     </div>
-                  </div>
-                  <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
-                     <!--<em>${This Task has no Subtasks}</em>-->
-                     <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
-                        ${This Task has no Subtasks}
-                     </div>
-                  </div>
-                  <div class="row">
-                     <br>
-                  </div>
-               </div>
+            <br>
+            <h4 id="Instructions"></h4>
+            <div class="panel-heading bg-primary">${Instructions} </div>
+            <div class="content">
+              <br>
+              <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
+              <!--<p>{{data.instructions}}</p>-->
+              <p ng-bind-html="data.instructions"></p>
             </div>
-            <h4 id="SummaryCard"></h4>
-            <div class="col-md-3">
-               <sp-widget widget="data.summarycard"></sp-widget>
+            <br>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-9">
+            <h4 id="SubTasksState"></h4>
+            <div class="row" style="margin-left: 1px;">
+              <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-dashboard"></i>${Subtasks by State} </div>
+              <div class="row">
+                <br>
+              </div>
+              <div class="col-md-12">
+                <sp-widget widget="data.progressBar"></sp-widget>
+              </div>
             </div>
-         </div>
-         <div class="row"></div>
-         <h4 id="SubTasks"></h4>
-         <div class="row">
-            <div class="col-md-12" ng-if="::(data.calchaschildren > 0)">
-               <sp-widget widget="data.subTasks"></sp-widget>
+            <div class="row">
+              <br>
             </div>
-            <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
-               <div class="panel-heading bg-primary">${Subtasks} </div>
-               <div><br></div>
-               <!--<em>${This Task has no Subtasks}</em>-->
-               <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
+            <h4 id="SubTasksStatus"></h4>
+            <div class="row" style="margin-left: 1px;">
+              <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-time"></i>${Subtasks by Status} </div>
+              <div class="row">
+                <br>
+              </div>
+              <div class="col-md-12" ng-if="::(data.calchaschildren > 0)">
+                <div class="col-md-4">
+                  <sp-widget widget="data.countStatusOnTime"></sp-widget>
+                </div>
+                <div class="col-md-4">
+                  <sp-widget widget="data.countStatusWarning"></sp-widget>
+                </div>
+                <div class="col-md-4">
+                  <sp-widget widget="data.countStatusCritical"></sp-widget>
+                </div>
+              </div>
+              <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
+                <!--<em>${This Task has no Subtasks}</em>-->
+                <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
                   ${This Task has no Subtasks}
-               </div>
-               <div><br></div>
+                </div>
+              </div>
+              <div class="row">
+                <br>
+              </div>
             </div>
-         </div>
-         <h4 id="ResponseLog"></h4>
-         <div class="row">
-            <div class="col-md-12">
-               <sp-widget widget="data.subResponseLog"></sp-widget>
+          </div>
+          <h4 id="SummaryCard"></h4>
+          <div class="col-md-3">
+            <sp-widget widget="data.summarycard"></sp-widget>
+          </div>
+        </div>
+        <div class="row"></div>
+        <h4 id="SubTasks"></h4>
+        <div class="row">
+          <div class="col-md-12" ng-if="::(data.calchaschildren > 0)">
+            <sp-widget widget="data.subTasks"></sp-widget>
+          </div>
+          <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
+            <div class="panel-heading bg-primary">${Subtasks} </div>
+            <div><br></div>
+            <!--<em>${This Task has no Subtasks}</em>-->
+            <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
+              ${This Task has no Subtasks}
             </div>
-         </div>
-         <h4 id="TaskRequests"></h4>
-         <div class="row">
-            <div class="col-md-12">
-               <sp-widget widget="data.subTasksRequests"></sp-widget>
+            <div><br></div>
+          </div>
+        </div>
+        <h4 id="ResponseLog"></h4>
+        <div class="row">
+          <div class="col-md-12">
+            <sp-widget widget="data.subResponseLog"></sp-widget>
+          </div>
+        </div>
+        <h4 id="TaskRequests"></h4>
+        <div class="row">
+          <div class="col-md-12">
+            <sp-widget widget="data.subTasksRequests"></sp-widget>
+          </div>
+        </div>
+        <h4 id="SharedAttachments"></h4>
+        <div class="row">
+          <div class="col-md-12" ng-if="::(data.SNAttachmentsON)">
+            <sp-widget widget="data.sharedAttachment"></sp-widget>
+          </div>
+        </div>
+        <h4 id="SharedDocuments"></h4>
+        <div class="row">
+          <div class="col-md-12" ng-if="::(data.DocIntON)">
+            <div class="panel-heading bg-primary"> 
+              <i class="glyphicon glyphicon-file"></i>${Shared Documents} 
             </div>
-         </div>
-         <h4 id="SharedAttachments"></h4>
-         <div class="row">
-            <div class="col-md-12" ng-if="::(data.SNAttachmentsON)">
-               <sp-widget widget="data.sharedAttachment"></sp-widget>
-            </div>
-         </div>
-         <h4 id="SharedDocuments"></h4>
-         <div class="row">
-            <div class="col-md-12" ng-if="::(data.DocIntON)">
-               <div class="panel-heading bg-primary"> 
-                  <i class="glyphicon glyphicon-file"></i>${Shared Documents} 
-               </div>
-               <div class="clearfix"></div>
-               <sp-widget widget="data.sharedDocuments"></sp-widget>
-            </div>
-         </div>
-         <h4 id="ActivityLog"></h4>
-         <div class="row">
-            <div class="col-md-12">
-               <sp-widget widget="data.subTasksActivity"></sp-widget>
-            </div>
-            <div class="col-md-12"> </div>
-         </div>
+            <div class="clearfix"></div>
+            <sp-widget widget="data.sharedDocuments"></sp-widget>
+          </div>
+        </div>
+        <h4 id="ActivityLog"></h4>
+        <div class="row">
+          <div class="col-md-12">
+            <sp-widget widget="data.subTasksActivity"></sp-widget>
+          </div>
+          <div class="col-md-12"> </div>
+        </div>
       </div>
-   </div>
+    </div>
+  </div>
+
 </div>
-  
+
+<!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View; new div -->
+<div id='dtlv-print' ng-show="data.isPrint">
+
+  <!--<nav ng-if=false id="navbar-dtlv-print" class="navbar navbar-light bg-light hidden-print">
+    <ul class="nav nav-pills">
+      <li class="nav-item">
+        <a class="nav-link" href="#GeneralObjective">General Objective</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#Instructions">Instructions</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#SubTasksState">Subtasks by State</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#SubTasksStatus">Subtasks by Status</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#SummaryCard">Summary Card</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#SubTasks">Subtasks</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#ResponseLog">Response Log</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#TaskRequests">Task Requests</a>
+      </li>
+      <li class="nav-item" ng-if="::(data.SNAttachmentsON)">
+        <a class="nav-link" href="#SharedAttachments">Shared Attachments</a>
+      </li>
+      <li class="nav-item" ng-if="::(data.DocIntON)">
+        <a class="nav-link" href="#SharedDocuments">Shared Documents</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#ActivityLog">Activity Log</a>
+      </li>
+    </ul>
+  </nav>-->
+  <div data-spy="scroll" data-target="#navbar-dtlv-print" data-offset="0">
+    <div ng-class="::{'hidden-xs' : options.hide_xs}" class="panel panel-default b">
+      <div class="panel-heading">
+        <h4 class="panel-title"><span>{{data.task_name}}</span> </h4>
+        <p align="right" class="hidden-print">
+          <button class="btn btn-secondary"  ng-click="printPreviewToggle();">
+            <!-- RJ - Typo STRY0095956 -->
+            ${Show Original}
+          </button>
+          <button class="btn btn-primary"  ng-click="previewPrint();"> <i class="glyphicon glyphicon-print"></i>
+            &nbsp;&nbsp;${Print}&nbsp;&nbsp; </button>
+        </p>
+      </div>
+
+      <!-- 2.6.0 | 2021-03-25 | mmcc | STRY0096103 Tree Level Print Report: Activity Log; was class container -->
+      <div id='new-print-div' class="container-fluid">
+        <div class="row print-better">
+          <div class="col-md-12">
+            <h4 id="GeneralObjective"></h4>
+            <div class="panel-heading bg-primary">${General Objective }</div>
+            <div class="content">
+              <br>
+              <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
+              <!--<p>{{data.objective}}</p>-->
+              <p ng-bind-html="data.objective"></p>
+            </div>
+            <br>
+          </div>
+        </div>
+        <div class="row print-better">
+          <div class="col-md-12">
+            <h4 id="Instructions"></h4>
+            <div class="panel-heading bg-primary">${Instructions} </div>
+            <div class="content">
+              <br>
+              <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
+              <!--<p>{{data.instructions}}</p>-->
+              <p ng-bind-html="data.instructions"></p>
+            </div>
+            <br>
+          </div>
+        </div>
+        <div class="row print-better">
+          <div class="col-md-12">
+            <h4 id="SubTasksState"></h4>
+            <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-dashboard"></i>${Subtasks by State} </div>
+            <div class="row">
+              <br>
+            </div>
+            <div class="col-md-12">
+              <sp-widget widget="data.progressBar"></sp-widget>
+            </div>
+            <div class="row">
+              <br>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <h4 id="SubTasksStatus"></h4>
+          <div class="col-md-7 print-better">
+            <div class="panel b">
+              <div class="panel-heading bg-primary"> <i class="glyphicon glyphicon-time"></i>${Subtasks by Status} </div>
+              <div class="panel-body">
+                <div class="col-md-12" ng-if="::(data.calchaschildren > 0)">
+
+                  <div class="wrapper-xs">
+                    <sp-widget widget="data.countStatusOnTime"></sp-widget>
+                  </div>
+
+                  <div class="wrapper-xs">
+                    <sp-widget widget="data.countStatusWarning"></sp-widget>
+                  </div>
+
+                  <div class="wrapper-xs">
+                    <sp-widget widget="data.countStatusCritical"></sp-widget>
+                  </div>
+                </div>
+
+                <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
+                  <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
+                    ${This Task has no Subtasks}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h4 id="SummaryCard"></h4>
+          <div id="summary-card-print" class="col-md-5">
+            <sp-widget widget="data.summarycard"></sp-widget>
+          </div>
+        </div>
+
+        <div class="row"></div>
+        <h4 id="SubTasks"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better" ng-if="::(data.calchaschildren > 0)">
+            <sp-widget widget="data.subTasksPrint"></sp-widget>
+          </div>
+          <div class="col-md-12" ng-if="::(data.calchaschildren == 0)">
+            <div class="panel-heading bg-primary">${Subtasks} </div>
+            <div><br></div>
+            <!--<em>${This Task has no Subtasks}</em>-->
+            <div class="alert alert-info ng-binding ng-scope" ng-if="::(data.calchaschildren == 0)">
+              ${This Task has no Subtasks}
+            </div>
+            <div><br></div>
+          </div>
+        </div>
+        <h4 id="ResponseLog"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better">
+            <sp-widget widget="data.subResponseLogPrint"></sp-widget>
+          </div>
+        </div>
+        <h4 id="TaskRequests"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better">
+            <sp-widget widget="data.subTasksRequestsPrint"></sp-widget>
+          </div>
+        </div>
+        <h4 id="SharedAttachments"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better" ng-if="::(data.SNAttachmentsON)">
+            <sp-widget widget="data.sharedAttachment"></sp-widget>
+          </div>
+        </div>
+        <h4 id="SharedDocuments"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better" ng-if="::(data.DocIntON)">
+            <div class="panel-heading bg-primary"> 
+              <i class="glyphicon glyphicon-file"></i>${Shared Documents} 
+            </div>
+            <div class="clearfix"></div>
+            <sp-widget widget="data.sharedDocuments"></sp-widget>
+          </div>
+        </div>
+        <h4 id="ActivityLog"></h4>
+        <div class="row">
+          <div class="col-md-12 print-better">
+            <sp-widget widget="data.subTasksActivityPrint"></sp-widget>
+          </div>
+          <div class="col-md-12"> </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>]]></template>
     </sp_widget>
 </record_update>

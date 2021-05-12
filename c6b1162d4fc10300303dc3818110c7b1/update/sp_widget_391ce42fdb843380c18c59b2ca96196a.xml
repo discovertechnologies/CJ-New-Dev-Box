@@ -4,20 +4,58 @@
         <client_script><![CDATA[function ($scope, $rootScope,spAriaFocusManager, $http, amb,$timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
 	/* widget controller */
 	var c = this;
-	
+
+	angular.element('.modal-footer').css({display:'none'});
+
+	$scope.initiatingTemplate = false;
+	$scope.templateStarted = false;
 	$scope.btnCancelClick = function(){
 		// close modal window
 		$scope.$parent.buttonClicked($scope.$parent.options.buttons[0]);
 	}
 
+	$scope.lnkTaskOpenClick = function(){
+		// close modal window
+		$scope.$parent.buttonClicked($scope.$parent.options.buttons[0]);
+	}
+
 	$scope.btnStartButton = function(){
+		$scope.initiatingTemplate = true;
 		$(".showAlert").hide().show('medium');
 		c.data.currentStep = 'StartTemplate';
+		var table = 'x_153465_discovert_route_task_instance';
+		var filter = 'u_parent_template='+ c.data.process_template_sys_id + '^parentISEMPTY';
+		// Start watching for task looking for an event for the Template ID before starting the template
+		if (c.watcher)
+			c.watcher.unsubscribe();
+		c.watcher = watcher(table, filter, taskFromTemplateStarted);
+		
 		c.server.update();
 	}
 	
-	angular.element('.modal-footer').css({display:'none'});  
+	// Make sure to include amb as a provider in your client controller
+	// function to setup a watcher
+	function watcher(table, filter, callback){
+		var channel = amb.getChannelRW(table, filter);
+		amb.connect();
+		var watch = channel.subscribe(callback)
+		return watch;
+	}
+
+	function taskFromTemplateStarted(message){
+		c.data.linkToTopTaskForTemplateStarted = '../discovertaskerportal?id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance&sys_id=' + message.data.sys_id + '&spa=1';
+		c.data.taskDisplayValue = message.data.display_value;
+		$scope.initiatingTemplate = false;
+		$scope.templateStarted = true;
+		// done with record watcher unsubscribe	
+		c.watcher.unsubscribe();
+	}
 	
+	// remove record watcher when form closes
+	$scope.$on('$destroy', function() {
+		if (c.watcher)
+			c.watcher.unsubscribe();
+	});
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
@@ -266,12 +304,16 @@ label{
 (function($sp, input, data, options, gs) {
 	/* populate the 'data' object */
 	
+	// STRY0098385 - remove Cancel button from Mobile 
+	data.page_id = $sp.getParameter("id");
 	
 	// rebuild the widget to run using template instance
-	// RJ - TUP - STRY0068618
-	data.process_template_sys_id = (input || {}).process_template_sys_id || (options || {}).process_template_sys_id;	
+	// RJ - TUP - STRY0068618 
+	// STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
+	data.process_template_sys_id = (input || {}).process_template_sys_id || (options || {}).process_template_sys_id || $sp.getParameter('process_template_sys_id');	
 	var tTH = new TaskTemplateHelpers();
-	if(input.currentStep == undefined){
+	// STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
+	if(input == undefined || input.currentStep == undefined){
 		data.canAttach = false;
 		// build the Template Instance Form here
 		widgetParams = {
@@ -299,30 +341,35 @@ label{
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-03-13 14:58:39</sys_created_on>
         <sys_id>391ce42fdb843380c18c59b2ca96196a</sys_id>
-        <sys_mod_count>183</sys_mod_count>
+        <sys_mod_count>210</sys_mod_count>
         <sys_name>Tasker Modal - Run Template</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_391ce42fdb843380c18c59b2ca96196a</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-09-10 04:37:03</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-05 20:08:45</sys_updated_on>
         <template><![CDATA[<div class="iconlink" style="cursor:pointer;">
   <!--// Top Icon -->
-  <div ng-if="data.currentStep=='StartTemplate'" class="alert alert-success alert-dismissable showAlert">
+  <div ng-if="templateStarted" class="alert alert-info alert-dismissable showAlert">
     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-    Success! Tasker is starting the selected template.
+    ${Tasker - Success! Your Template started} <a data-dismiss="modal" ng-click="lnkTaskOpenClick()" href="{{data.linkToTopTaskForTemplateStarted}}">[ {{data.taskDisplayValue}} ]</a>
   </div>
+  <div class="alert alert-info" ng-if="initiatingTemplate">
+    <fa name="spinner" spin="true"></fa> ${Tasker - Starting Template}...
+  </div>
+
   <span ng-if="data.currentStep=='enterInfo'">
     <sp-widget ng-if="data.templateFormWidget" widget="data.templateFormWidget"></sp-widget>
   </span>
   <div class="modal-body text-right">
     <div class="row">
       <div class="col-sm-6 text-left">
-        <button type="button" ng-if="data.currentStep=='enterInfo'" class="btn btn-secondary" data-dismiss="modal"   ng-click="btnCancelClick()">Cancel</button>
+        <!-- STRY0098385 - remove Cancel button from Mobile -->        
+        <button type="button" ng-if="data.currentStep=='enterInfo' && data.page_id!='start_template_from_mobile'" class="btn btn-secondary" data-dismiss="modal"   ng-click="btnCancelClick()">${Cancel}</button>
       </div>
       <div class="col-sm-6 text-right">
-        <button type="button" ng-if="data.currentStep=='enterInfo'" class="btn btn-primary" ng-click="btnStartButton()">Start Template</button>
+        <button type="button" ng-if="data.currentStep=='enterInfo'" class="btn btn-primary" ng-click="btnStartButton()">${Start Template}</button>
       </div>
     </div>
   </div>

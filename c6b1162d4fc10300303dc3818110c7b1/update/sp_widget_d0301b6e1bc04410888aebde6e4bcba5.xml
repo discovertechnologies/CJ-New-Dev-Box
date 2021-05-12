@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($rootScope, $scope, $timeout, $location, $log, $window, spUtil, nowAttachmentHandler, spAriaUtil, spNavStateManager) {	
+        <client_script><![CDATA[function ($rootScope, $scope, $timeout, $location, $log, $window, spUtil, spModal, nowAttachmentHandler, spAriaUtil, spNavStateManager) {	
 	//------------------------------------------------------------------------------------------------------------------------
 	// COMPANY: DISCOVER TECHNOLOGIES
 	// CUSTOMIZED BY: ROB JOY
@@ -143,12 +143,27 @@
 		// STRY0089452, STRY0089339, STRY0089338, STRY0089337, STRY0089336
 		// if form action is '' or 'none' then the user is closing without taking an action
 		if(($scope.formAction == undefined || $scope.formAction == 'none')){
-			 if((g_form.serialize(true).length>0) && confirm(c.data.saveChangesMessage)){
-				 g_form.submit('save_and_stay');
-			 }
-		}
-		
-    deregister()
+			// If the form is dirty, ask the user if they would like to save the record
+			var fMsg = '';
+			var serializeChanges = g_form.serialize(true);
+			if(serializeChanges.length>0){
+				var changeFieldList = [];
+				for (var field in serializeChanges) {
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+				fMsg = changeFieldList.join(', ');
+				spModal.confirm("${Tasker - Modal Save Changes Message}  "+ fMsg).then(function(confirmed) {
+					if(confirmed){
+						g_form.save();
+					}
+			    deregister();
+				});
+				
+			}else{
+			    deregister();
+			}
+
+    }
   });
 
   $scope.triggerUIAction = function(action) {
@@ -167,27 +182,28 @@
 				// *************** Customization Start ***************************
 				// RAJ - Added below to close window when finished
 				$scope.formAction = action.action_name;
-				
-        if (!g_form.submit($scope.formAction || action.sys_id))
+				if (!g_form.submit($scope.formAction || action.sys_id))
           $scope.submitting = false;
 				// *************** Customization End ***************************
 				
 			}
-			// *************** Customization Start ***************************
-			// RAJ - Added below to close window when finished
-			// STRY0074663
-			if ($scope.submitting == true && c.data.isModal) {
-				$scope.$parent.$parent.$dismiss();
-			} // 09.10
-			// *************** Customization End ***************************
     });
   }
 
   $scope.$on("spModel.uiActionComplete", function(evt, response) {
     $scope.submitting = false;
     if (response.isActionAborted)
-	return;
-    var sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
+			return;
+		
+		// *************** Customization Start ***************************
+		// RAJ - Added below to close window when finished
+		// STRY0074663
+		if (c.data.isModal) {
+			$scope.$parent.$parent.$dismiss();
+		} // 09.10
+		// *************** Customization End ***************************
+    
+		var sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
     loadForm($scope.data.table, sysID).then(constructResponseHandler(response));
   });
 
@@ -702,7 +718,8 @@ label{
 	// RAJ - Removed from Standard form widget as this doesn't work in scoped app
 	//	data.canAttach = hasRecordAccess && gs.hasRole(gs.getProperty('glide.attachment.role')) && !GlideTableDescriptor.get(data.table).getED().getBooleanAttribute("no_attachment");
 	// *************** Customization End ***************************
-	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view, isPopup);
+//	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view, isPopup);
+	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view);	
 
 	// *************** Customization Start ***************************
 	// RAJ - Removed from Standard form widget as this doesn't work in scoped app
@@ -750,14 +767,14 @@ label{
         <sys_created_by>htapias</sys_created_by>
         <sys_created_on>2019-09-25 20:32:52</sys_created_on>
         <sys_id>d0301b6e1bc04410888aebde6e4bcba5</sys_id>
-        <sys_mod_count>111</sys_mod_count>
+        <sys_mod_count>135</sys_mod_count>
         <sys_name>Tasker Modal Additional Information </sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d0301b6e1bc04410888aebde6e4bcba5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-12-07 23:01:44</sys_updated_on>
+        <sys_updated_on>2021-03-17 13:57:26</sys_updated_on>
         <template><![CDATA[<div ng-if="::!data.isValid && !data.emptyStateTemplate" class="panel panel-default">
   <div class="panel-body wrapper-lg text-center">
     <span ng-if="!data.tableUnsupported">${Record not found}</span>
@@ -872,9 +889,9 @@ label{
     </div>
 
     <div class="panel-footer">
+      <button ng-if="getPrimaryAction() && data.sys_id.length > 2" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-default action-btn" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">Update<span ng-if="saveButtonSuffix"></span></button>      
       <button ng-click="triggerUIAction(action)" ng-disabled="submitting" ng-repeat="action in getUIActions('button')" class="btn action-btn" ng-class="::getButtonClass(action)" gsft_id="{{::action.sys_id}}">{{action.name}}</button>
       <span>{{status}}</span>
-      <button ng-if="getPrimaryAction()" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-primary action-btn pull-right" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">${Save} <span ng-if="saveButtonSuffix">(${{{saveButtonSuffix}}})</span></button>
       <div style="clear: both;"></div>
       <div ng-if="mandatory.length" class="alert alert-info" style="margin-top: .5em" aria-live="polite" aria-atomic="true">
         <span ng-if="mandatory.length > 0">${Required information} </span>

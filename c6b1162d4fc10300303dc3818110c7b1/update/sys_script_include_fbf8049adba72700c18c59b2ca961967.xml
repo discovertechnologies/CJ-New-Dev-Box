@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.uiConditionCheck</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>v2.5.3&#13;
+        <description>v2.6&#13;
+Updated to put all UI Actions condition checks into this file&#13;
+&#13;
+v2.5.3&#13;
 STRY0073605 - top task Assigneed Member can also enable and disable Shared docuements and shared attachments&#13;
 STRY0083547 - FIX- STRETCH: Task Form - "Create Subtasks for each Sub OU" on Task form Context Menu enabled based on tasker Roles and Task States&#13;
 STRY0085434 - Assigned Member can mark as complete - UI MODAL - (Portal &amp; Platform) Modal for Review Comments - "Mark Complete" UI Action - as Assigned Member&#13;
@@ -54,7 +57,11 @@ v2.2.23 | Mar-2020 | 2.2 Patch 9&#13;
 - Who can Open a Completed or Cancelled task&#13;
 - Who has Organizational Admin or Is a Member of OU</description>
         <name>uiConditionCheck</name>
-        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 var uiConditionCheck = Class.create();
 uiConditionCheck.prototype = {
@@ -62,6 +69,378 @@ uiConditionCheck.prototype = {
 		
 	},
 
+	// v2.6
+	canAcceptAssignment: function(gr){
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var inAssigned = (gr.state == 1);
+		
+		var isActionAllowedForTaskType = (gr.tasker_type.getDisplayValue() != "Acknowledgement"  && gr.tasker_type.getDisplayValue() != "Information Only");
+				
+		var inStateAllowedCurrentUser = (isActionAllowedForTaskType && currentUserIsAssignedMember && inAssigned);
+		
+		
+		if(canRead && isActive && inStateAllowedCurrentUser){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	canAcknowledgeTask: function(gr){
+		// current.canRead() && current.state == 1 && (current.assigned_to == gs.getUserID()) &&current.tasker_type.getDisplayValue() == "Acknowledgement"
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var inAssigned = (gr.state == 1);
+		
+		var isActionAllowedForTaskType = gr.tasker_type.getDisplayValue() == "Acknowledgement";
+				
+		var inStateAllowedCurrentUser = (isActionAllowedForTaskType && currentUserIsAssignedMember && inAssigned);
+		
+		
+		if(canRead && isActive && inStateAllowedCurrentUser){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canActivateTemplateTask: function(gr){
+		// !current.active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
+		var answer = false;
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && !isActive && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6
+	canActivateTemplate: function(gr){
+		// !current.u_active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
+		var answer = false;
+		var isActive = gr.u_active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && !isActive && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6
+	canActivateOU: function(gr){
+		// !current.isNewRecord() && !current.active && new MarkInactiveConditionalMethods().checkOrgHierarchyPermission(current.sys_id)
+		var answer = false;
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasOURights = new MarkInactiveConditionalMethods().checkOrgHierarchyPermission(gr.sys_id);
+		
+		if(canRead && !isActive && !isNewRecord && currentUserHasOURights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canAssignTaskToSelf: function(gr){
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		
+		var inUnassigned = (gr.state == -5);		
+		var inAssignmentRejected = (gr.state == 11);
+		
+		var uis = new UserInfoScripts();
+		
+		var isUserInOu = uis.IsUserInOU(gr.primary_assignee, currentUser);
+		var inStateAllowedCurrentUser = (isUserInOu && (inUnassigned || inAssignmentRejected));
+		
+		if(canRead && isActive && (inStateAllowedCurrentUser) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canAssignTask: function(gr){
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		
+		var inUnassigned = (gr.state == -5);		
+		var inAssignmentRejected = (gr.state == 11);
+		
+		var isUserTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, currentUser);
+		var inStateAllowedCurrentUser = (isUserTaskingAuthority && (inUnassigned || inAssignmentRejected));
+		
+		if(canRead && isActive && (inStateAllowedCurrentUser) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canCancelSuggestedTask: function(gr){
+		// current.canRead() && (current.u_created_task.nil()) && current.active 
+		var answer = false;
+		var isActive = gr.active;
+		var canRead = gr.canRead();
+		var taskNotCreated = gr.u_created_task.nil();
+		// NOTE: there was no user in this, but probably should check for admin or the user on the email
+		
+		if(canRead && isActive && taskNotCreated ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6
+	canCreateSuggestedTask: function(gr){
+		// current.canCreate() && (current.u_created_task.nil()) && current.active 
+		var answer = false;
+		var isActive = gr.active;
+		var canRead = gr.canRead();
+		var canCreate = gr.canCreate();
+		var taskNotCreated = gr.u_created_task.nil();
+		// NOTE: there was no user in this, but probably should check for admin or the user on the email
+		
+		if(canRead && canCreate && isActive && taskNotCreated ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canDeactivateTemplateTask: function(gr){
+		// current.active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
+		var answer = false;
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && isActive && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6
+	canDeactivateTemplate: function(gr){
+		// current.u_active && new UserInfoScripts().userHasProcessRights(current)
+		var answer = false;
+		var isActive = gr.u_active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && isActive && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6
+	canDeactivateOU: function(gr){
+		// current.active == true && new MarkInactiveConditionalMethods().checkOrgHierarchyPermission(current.sys_id)
+		var answer = false;
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasOURights = new MarkInactiveConditionalMethods().checkOrgHierarchyPermission(gr.sys_id);
+		
+		if(canRead && isActive && !isNewRecord && currentUserHasOURights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;		
+	},
+	
+	// v2.6 - STRY0093759
+	canRejectAssignment: function(gr){
+		// used to be this
+		//current.canRead() && current.state == 1 && (current.assigned_to == gs.getUserID()) && (current.tasker_type.getDisplayValue() != "Acknowledgement"  && current.tasker_type.getDisplayValue() != "Information Only")
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		
+		var isStateAllowedForTaskType = (gr.tasker_type.getDisplayValue() != "Acknowledgement"  && gr.tasker_type.getDisplayValue() != "Information Only");
+
+		// Assigned {1}, Accepted {10}
+		var	inAssigned = (gr.state == "1");
+		
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && currentUserIsAssignedMember && inAssigned);
+		
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6 - STRY0093759
+	canRejectTaskForPrimaryAssignee: function(gr){
+		// used to be this
+		// current.canRead()   &&  !current.primary_assignee.nil() && (current.state ==-5 ) && new UserInfoScripts().IsUserTaskingAuthority(current.primary_assignee, gs.getUserID())
+		
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+
+		var isPrimaryAssigneePopulated = !gr.primary_assignee.nil();
+		var inUnassigned = (gr.state == "-5");
+		var isUserTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, currentUser);
+		
+		if(canRead && isActive && isPrimaryAssigneePopulated && inUnassigned && isUserTaskingAuthority){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
+	// v2.6
+	canActionReviewTask: function(gr, action){
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		
+		var isStateAllowedForTaskType = new TaskerTypeActions().IsActionAllowed(gr.tasker_type, action);
+		var	inReview = (gr.state == 14);
+		
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && currentUserIsAssignedMember && inReview);
+		
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	// v2.6 - STRY0093759
+	canStartWork: function(gr){
+		// used to be this
+		//current.canRead() && current.state ==10 && (current.assigned_to == gs.getUserID())
+		
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var isStateAllowedForTaskType = (gr.tasker_type.getDisplayValue() == "Standard");
+
+		// Assigned {1}, Accepted {10}
+		var	inAssigned = (gr.state == "1");
+		var	inAccepted = (gr.state == "10");
+		
+		var inStateAllowedAssignedMember = (isStateAllowedForTaskType && currentUserIsAssignedMember && (inAssigned || inAccepted));
+		
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},	
+
+	// v2.6
+	canStartScheduledWork: function(gr){
+		// used to be this
+		// current.canRead() && current.state==12  && (current.assigned_to == gs.getUserID()) 
+		
+		var answer = false;
+		var isActive = gr.active;
+		var isNewRecord = gr.isNewRecord();
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var isActionAllowedForTaskType = (gr.tasker_type.getDisplayValue() != "Acknowledgement"  && gr.tasker_type.getDisplayValue() != "Information Only");
+
+		// Scheduled Work {12}
+		var	inScheduledWork = (gr.state == "12");
+		var inStateAllowedAssignedMember = (isActionAllowedForTaskType && currentUserIsAssignedMember && inScheduledWork);
+
+		if(canRead && isActive && !isNewRecord && inStateAllowedAssignedMember ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},	
+
+	// v2.6 - STRY0093759
+	canSetReworkInProgress: function(gr){
+		// used to be this
+		//current.canRead()  && current.state==15  && (current.assigned_to == gs.getUserID())
+		
+		var answer = false;
+		var isActive = gr.active;
+		var currentUser = gs.getUserID();
+		var canRead = gr.canRead();
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+
+		// Assigned {1}, Accepted {10}
+		var	inRework = (gr.state == "15");
+		
+		var inStateAllowedAssignedMember = (currentUserIsAssignedMember && inRework);
+		
+		if(canRead && isActive && (inStateAllowedAssignedMember) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},	
+		
 	// v2.5 P3 - STRY0082305
 	canSendToRework: function(gr){
 		// used to be this
@@ -615,7 +994,7 @@ uiConditionCheck.prototype = {
 				var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
 				return userIsTaskAdministrator;
 			} else if (processLevel == 'ou_process') {
-				var isOUTA = UserPermissions.IsUserTaskingAuthority(grTemplate.getValue('process_ou'),gs.getUserID());
+				var isOUTA = UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemplate.getValue('process_ou'));
 				return isOUTA;
 			} else if (processLevel == 'my_process'){
 				return grTemplate.getValue('process_owner') == gs.getUserID();
@@ -647,22 +1026,22 @@ uiConditionCheck.prototype = {
 		var isActive = gr.active;
 		var isNewRecord = gr.isNewRecord();
 		var arrayUtil = new global.ArrayUtil();
-		var canRead = current.canRead();
+		var canRead = gr.canRead();
 		var currentUser =  gs.getUserID();
 		var clarificationRequested;
 		var isTopTask;
 		//if task is in any of the below states
-		var unassigned = (current.state == "-5");
-		var assigned  = (current.state == "1");
-		var accepted = (current.state == "10");
-		var workInProgress = (current.state == "13");
-		var inReview = (current.state == "14");
-		var reWork = (current.state == "15");
+		var unassigned = (gr.state == "-5");
+		var assigned  = (gr.state == "1");
+		var accepted = (gr.state == "10");
+		var workInProgress = (gr.state == "13");
+		var inReview = (gr.state == "14");
+		var reWork = (gr.state == "15");
 		//check the to see if the current logged in user has any of the following tasker roles
 		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
-		var taskOwner = (current.u_task_requester == currentUser);
-		var currentUserIsAssignedMember = (current.assigned_to == currentUser);
-		var currentUserIsReviewer = (current.u_reviewer == currentUser);
+		var taskOwner = (gr.u_task_requester == currentUser);
+		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
+		var currentUserIsReviewer = (gr.u_reviewer == currentUser);
 		//var arrayTaskingAuthorityOUTAs = [];
 		//var listOfTaskingAuthorityOUTAs;
 		//var isTaskingAuthorityOUTA;
@@ -784,14 +1163,25 @@ uiConditionCheck.prototype = {
 			
 		}
 	},
+	
 	UserCanReopenCompletedTask: function(task) {
+		var isNewRecord = task.isNewRecord();
+		var canRead = task.canRead();
+		var isActive = task.active;
+		
 		var user = gs.getUser();
 		var userId = user.getID();
-		return task.u_task_requester == userId ||
-		task.u_reviewer == userId ||
-		task.assigned_to == userId ||
-		(task.parent.on_behalf_of && task.parent.on_behalf_of == userId) ||
-		user.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+		var isTaskOwner = (task.u_task_requester == userId);
+		var isReviewer = (task.u_reviewer == userId);
+		var isAssignedMember = (task.assigned_to == userId);
+		
+		var isOnBehalfOf = (task.on_behalf_of && task.on_behalf_of == userId);
+		var isTaskAdministrator = user.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+		
+		var userCanReOpen = (isTaskOwner || isOnBehalfOf || isReviewer || isAssignedMember || isTaskAdministrator);
+		var answer = canRead && !isNewRecord && !isActive && userCanReOpen;
+		
+		return answer;
 	},
 	// gets the user from the saved user preferences, a temporary variable containing the current ou
 	getOuFromSessionIfNotPresent: function(ouId) {
@@ -1057,13 +1447,13 @@ uiConditionCheck.prototype = {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>363</sys_mod_count>
+        <sys_mod_count>398</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-12-08 06:23:01</sys_updated_on>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2021-04-29 16:03:51</sys_updated_on>
     </sys_script_include>
 </record_update>

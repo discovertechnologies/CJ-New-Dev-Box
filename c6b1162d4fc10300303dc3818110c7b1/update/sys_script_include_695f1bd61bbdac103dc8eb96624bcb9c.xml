@@ -1,0 +1,1033 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerTaskACLs</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This file was created to handle Task ACLs for the Tasker App.</description>
+        <name>TaskerTaskACLs</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+g_taskPermissions = {};
+var TaskerTaskACLs = Class.create();
+TaskerTaskACLs.prototype = {
+    initialize: function(grTask) {
+		//this.taskPermissions = {};
+		var UserPermissions = new UserInfoScripts();	
+		
+		if(typeof g_taskPermissions != undefined){
+			if (typeof g_taskPermissions.number != undefined){
+				if(g_taskPermissions.number == grTask.getValue("number")){
+					return g_taskPermissions;
+				}
+			}
+		}
+		
+		var currentUser= gs.getUserID();
+		var primary_assignee = '';
+		var tasking_authority = '';
+		var reviewer = '';
+		var isTAExternal = false;
+		var isExternalOutbound = false;
+		var isExternal = false;
+		var isSubTask = false;
+		var parentTaskOwner = '';
+		var parentTaskAssignedMember = '';
+		var on_behalf_of = '';
+		var isReviewRequired = false;
+		var taskOwner = '';
+		var assignedMember = '';
+		var state = '';
+
+		primary_assignee = grTask.getValue("primary_assignee") + '';
+		tasking_authority = grTask.getValue("tasking_authority") + '';
+		reviewer = grTask.getValue("u_reviewer") + '';
+		isSubTask = grTask.parent + '' != '';
+		on_behalf_of = grTask.on_behalf_of + '';
+		isReviewRequired = (grTask.provide_response+''=='true');
+		taskOwner = grTask.u_task_requester+'' != '' ? grTask.u_task_requester+'' : grTask.originator + '';
+		assignedMember = grTask.assigned_to+'';
+		state = (grTask.isNewRecord()) ? "New" : grTask.getValue("state") + '';
+
+		if (tasking_authority != ''){
+			// get Tasking Authority External flag
+			var grTAOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+			if(grTAOU.get(tasking_authority))
+				isTAExternal =  grTAOU.getValue('u_external_flag')+'';
+		}
+		isExternalOutbound = grTask.getValue('outbound') + '' == 'true';
+		
+		// get parent information
+		if(isSubTask){
+			var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParent.get(grTask.getValue('parent'))){
+				parentTaskOwner = grParent.u_task_requester + '';
+				parentTaskAssignedMember = grParent.assigned_to + '';
+			}
+		}
+
+		if (state == "11") {
+			state = (primary_assignee == undefined || primary_assignee === "") ?
+				"RejectedPrimaryAssignee" : "RejectedAssignment";
+		}
+		var stateNumeric = parseInt(state);
+		state = isNaN(stateNumeric) ? state : stateNumeric;
+
+		g_taskPermissions.number = grTask.getValue("number");
+		g_taskPermissions.isTaskManagerOUTA = UserPermissions.IsUserOUTA(gs.getUserID(),primary_assignee);		
+		g_taskPermissions.reviewerInOUTA_OU = UserPermissions.IsUserInOU(primary_assignee, reviewer);
+		g_taskPermissions.isTAExternal = isTAExternal !='0';
+		g_taskPermissions.isExternalOutbound = isExternalOutbound;
+		g_taskPermissions.isExternal = isExternalOutbound || isTAExternal;
+		g_taskPermissions.isSubTask = isSubTask;
+		g_taskPermissions.isReviewRequired = isReviewRequired;
+		g_taskPermissions.state = state;
+		
+		g_taskPermissions.isTaskerApplicationAdmin = gs.getUser().hasRole("x_153465_discovert.tasker_application_admin");
+		g_taskPermissions.isTaskAdministratorGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+		var OrgScripts = new ClientOrganizationalScripts();
+		g_taskPermissions.isUserOUTAOfAnotherUserBasedOnDefaultOu = OrgScripts.isUserOUTAOfAnotherUserBasedOnDefaultOu(gs.getUserID(), taskOwner);
+		g_taskPermissions.isTaskerUser = gs.getUser().hasRole("x_153465_discovert.tasker_user");
+		g_taskPermissions.isParentTaskOwner = parentTaskOwner == currentUser;
+		g_taskPermissions.isParentTaskAssignedMember = parentTaskAssignedMember == currentUser;
+		g_taskPermissions.isUserInPrimaryAssigneeOU = UserPermissions.IsUserInOU(primary_assignee, gs.getUserID());
+		g_taskPermissions.isOnBehalfOf = on_behalf_of == currentUser;
+		g_taskPermissions.isReviewer = reviewer == currentUser;
+		g_taskPermissions.isTaskOwner = taskOwner == currentUser;
+		g_taskPermissions.isAssignedMember = assignedMember == currentUser;
+		g_taskPermissions.primaryOUMustMatchInternalTAOU = (gs.getProperty('x_153465_discovert.primary_office_must_match_Internal_tasking_authority') == 'true');
+		
+		var taskType = grTask.getDisplayValue("tasker_type");
+		g_taskPermissions.isReviewType = (taskType == 'Concur with signature' 
+						|| taskType == 'Approval without signature' 
+						|| taskType == 'Approval with signature' 
+						|| taskType == 'Concur without signature');
+		g_taskPermissions.isStandardType = (taskType == 'Standard');
+    },
+	
+	setParentPermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+				// New, Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4}, Cancelled {7}
+			case 'New': case -3: case -5: case 1: case 10: case 13: case 14: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setClassificationPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			// New, Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Cancelled {7}, Completed Incomplete {4}
+			case 'New': case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15: case 3: case 7: case 4: 
+				answer = true;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setTaskerTypePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			// New,  
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1},
+			case -3: case -5: case 1: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = ((g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			// Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4}, Cancelled {7}
+			case 10: case 13: case 14: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setTaskNamePermissions: function(){
+		// originatorISEMPTY^on_behalf_ofISEMPTY^NQoriginatorDYNAMIC90d1921e5f510100a9ad2572f2b477fe^ORon_behalf_ofDYNAMIC90d1921e5f510100a9ad2572f2b477fe^EQ
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1},
+			case -3: case -5: case 1: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = ((g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			//  Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 10: case 13: case 14: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setObjectivePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = !g_taskPermissions.isSubTask;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (!g_taskPermissions.isSubTask && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setSubTaskObjectivePermissions: function(){
+		var answer = false;
+		// subtask objective is display only
+		return answer;
+	},
+
+	setInstructionsPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setSignatureInstructionsPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setReviewSignedPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = false;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//In Review {14}
+			case 14:
+				// technically they should both be the same person
+				answer = (g_taskPermissions.isReviewer || g_taskPermissions.isAssignedMember);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setPriorityPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setUrgencyPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setCategoryPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setSubCategoryPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 15:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setWaitFlagPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, 
+			case -3: case -5: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Assigned {1}, Accepted {10},
+			case 1: case 10: 
+				answer = (g_taskPermissions.isAssignedMember || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  In Review {14}
+			case 14:
+				answer = (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired) || (g_taskPermissions.isReviewType || g_taskPermissions.isStandardType) && (g_taskPermissions.isReviewer || g_taskPermissions.isTaskOwner);
+				break;
+			//  Work in Progress {13}, Rework {15} Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 13: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setOrderPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}
+			case -3: case -5: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Assigned {1}, Accepted {10},
+			case 1: case 10: 
+				answer = (g_taskPermissions.isAssignedMember || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  In Review {14}
+			case 14:
+				answer = (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired) || (g_taskPermissions.isReviewType || g_taskPermissions.isStandardType) && (g_taskPermissions.isReviewer || g_taskPermissions.isTaskOwner);
+				break;
+			//  Work in Progress {13}, Rework {15} Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 13: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setSuspenseDatePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 14: case 15: case 'RejectedAssignment':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setWarningDaysPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 14: case 15: case 'RejectedAssignment':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setExpectedStartDatePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Assigned {1}, Accepted {10},
+			case -3: case 1: case 10: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Unassigned {-5}
+			case -5: case 'RejectedAssignment':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Work in Progress {13},  In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 13: case 14: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setEstimatedDurationPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}
+			case -3:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Assigned {1}, Accepted {10},
+			case 1: case 10: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isAssignedMember);
+				break;
+			// Unassigned {-5}
+			case -5: 
+				answer = (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Work in Progress {13},  In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 13: case 14: case 15: case 3: case 4: case 7: case 'RejectedPrimaryAssignee': case 'RejectedAssignment':
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setReviewRequiredPermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}
+			case -3: case -5: case 1: case 10: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+				
+			// Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 13: case 14: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;		
+	},
+	
+	setResponsePermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			// Waiting {-3}, Unassigned {-5}, In Review {14}, Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 'New': case -3: case -5: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 14: case 3: case 4: case 7:
+				answer = false;
+				break;
+			// Assigned {1}, Accepted {10}, Work in Progress {13}, Rework {15}
+			case 1: case 10: case 13: case 15:
+				answer = (g_taskPermissions.isAssignedMember && g_taskPermissions.isStandardType);
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;		
+	},
+	
+	setReworkCommentsPermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			// Accepted {10}
+			case 'New': case -3: case 10:
+				answer = false;
+				break;
+			// Unassigned {-5}, Assigned {1}, In Review {14}
+			case -5: case 1: case 14: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isStandardType) && (g_taskPermissions.isReviewer || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Work in Progress {13}, Rework {15}
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 13: case 15: case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setReviewerCommentsPermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}, Accepted {10}, Work in Progress {13}, Rework {15}
+			case 'New': case 10: case 13: case 15: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 3: case 4: case 7:
+				answer = false;
+				break;
+			// Unassigned {-5}, Assigned {1}
+			case -5: case 1: 
+				// who can edit comments_dt (reviewer Response) - if not standard type or Reviewer Type && isReviewer, isOnBehalfOf, isTaskOwner
+				answer = (g_taskPermissions.isReviewType || g_taskPermissions.isStandardType) && (g_taskPermissions.isReviewer || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+
+			// In Review {14}
+			case 14:
+				// who can edit comments_dt (reviewer comments)-Standard Type && Assigned Member && Review not Required || Standard Type or Review Type && isReviewer, isOnBehalfOf, isTaskOwner
+				answer = (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired) || (g_taskPermissions.isReviewType || g_taskPermissions.isStandardType) && (g_taskPermissions.isReviewer || g_taskPermissions.isTaskOwner);
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setRestrictedGroupPermissions: function (){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = !g_taskPermissions.isSubTask;
+				break;
+			// for now, this can only be set on a new top task.
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setTaskingAuthorityPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = !g_taskPermissions.isSubTask;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}
+			case -3: case -5: case 1: case 'RejectedAssignment':
+				// who can edit Tasking Authority - NOT on subtask, && isOnBehalfOf, isTaskOwner, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = (!g_taskPermissions.isSubTask && (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			case 'RejectedPrimaryAssignee':
+				// who can edit Tasking Authority - NOT on subtask, && isOnBehalfOf, isTaskOwner, isTaskAdministratorGTA
+				answer = (!g_taskPermissions.isSubTask && (g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			// Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case 10: case 13: case 14: case 15:
+				answer = (!g_taskPermissions.isSubTask && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+				
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:				
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setPrimaryOfficePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				// STRY0094481  - new record will not refresh the ACL on change
+				answer = (!g_taskPermissions.isSubTask); // && (g_taskPermissions.isTAExternal || !g_taskPermissions.primaryOUMustMatchInternalTAOU));
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}
+			case -3: case -5: case 1: case 'RejectedAssignment':
+				// who can edit Primary Office - NOT on subtask, && isOnBehalfOf, isTaskOwner, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = ((!g_taskPermissions.isSubTask && (g_taskPermissions.isTAExternal || !g_taskPermissions.primaryOUMustMatchInternalTAOU)) && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA));
+				break;
+			case 'RejectedPrimaryAssignee':
+				// who can edit Primary Office - NOT on subtask, && isOnBehalfOf, isTaskOwner, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = ((!g_taskPermissions.isSubTask && (g_taskPermissions.isTAExternal || !g_taskPermissions.primaryOUMustMatchInternalTAOU)) && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskAdministratorGTA));
+				break;
+			// Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case 10: case 13: case 14: case 15:
+				// who can edit Primary Office - NOT on subtask, && isOnBehalfOf, isTaskOwner, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = ((!g_taskPermissions.isSubTask && (g_taskPermissions.isTAExternal || !g_taskPermissions.primaryOUMustMatchInternalTAOU)) && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner));
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setPrimaryAssigneePermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case -5: case 1: case 10: case 13: case 15: case 'RejectedAssignment':
+				// who can edit Primary Assignee - isOnBehalfOf, isTaskOwner, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			case 'RejectedPrimaryAssignee':
+				// who can edit Primary Assignee - isOnBehalfOf, isTaskOwner, isTaskAdministratorGTA
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			case 14:
+				// who can edit assigned_to (Assigned Member) - isTaskManagerOUTA, isTaskAdministratorGTA
+				if(g_taskPermissions.isReviewType){
+					answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);					
+				} else {
+					answer = false;
+				}
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setAssignedMemberPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New':
+				answer = true;
+				break;
+			// Waiting {-3}
+			case -3: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Unassigned {-5}
+			case -5: case 'RejectedAssignment':
+				// who can edit assigned_to (Assigned Member) - isUserInPrimaryAssigneeOU, isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = (g_taskPermissions.isUserInPrimaryAssigneeOU || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Assigned {1}, Accepted {10}, Work in Progress {13}, Rework {15}
+			case 1: case 10: case 13: case 15:
+				// who can edit assigned_to (Assigned Member) - isTaskManagerOUTA, isTaskAdministratorGTA
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);				
+				break;
+			case 14:
+				// who can edit assigned_to (Assigned Member) - isTaskManagerOUTA, isTaskAdministratorGTA
+				if(g_taskPermissions.isReviewType){
+					answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);					
+				} else {
+					answer = false;
+				}
+				
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7}
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setReviewerPermissions: function(){
+		var answer = false;
+		if(g_taskPermissions.isStandardType){
+			switch(g_taskPermissions.state){
+				case 'New':
+					answer = true;
+					break;
+					// Waiting {-3}, Unassigned {-5}, In Review {14}
+				case -3: case -5: case 'RejectedAssignment': case 14:
+					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskAdministratorGTA) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU);
+					break;
+				case 'RejectedPrimaryAssignee':
+					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+					break;
+					// Assigned {1}, Rework {15}
+				case 1:  case 15:
+					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU && g_taskPermissions.isReviewRequired) || (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
+					break;
+				// Accepted {10}
+				case 10:
+					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU && !g_taskPermissions.isReviewRequired) || (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
+					break;
+				// Work in Progress {13}
+				case 13:
+					answer = (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
+					break;
+				// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+				case 3: case 4: case 7:
+					answer = false;
+					break;
+				default:
+					answer = false;
+					break;
+			}
+		}
+		return answer;
+	},
+	
+	setTaskOwnerPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -3: case 1: case 10: case 13: case 14: case 15: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Unassigned {-5},
+			case -5:	
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setOnBehalfOfPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Unassigned {-5}, Waiting {-3}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case -5: case -3: case 1: case 10: case 13: case 14: case 15: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+				
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setInternalContactPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Unassigned {-5}, Waiting {-3}, Assigned {1}, Rework {15}
+			case -5: case -3: case 1: case 15: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Accepted {10}, Work in Progress {13}
+			case 10: case 13: 
+				answer = g_taskPermissions.isAssignedMember;
+				break;
+			// In Review {14}
+			case 14:
+				answer = (g_taskPermissions.isStandardType && (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA)) || (g_taskPermissions.isReviewType && g_taskPermissions.isAssignedMember);
+				break;
+				
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setCreateMultipleSubTaskPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setRiskPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}
+			case -3: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Unassigned {-5}
+			case -5: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isReviewer);
+				break;
+				
+			// Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+			case 1: case 10: case 13: case 14: case 15: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isReviewer || g_taskPermissions.isAssignedMember);
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setChangeExternalPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1},
+			case -3: case -5: case 1: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Accepted {10}, Work in Progress {13}
+			case 10: case 13:
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  In Review {14}
+			case 14: 
+				if(g_taskPermissions.isReviewType){
+					answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				} else {
+					answer = false;
+				}
+				break;
+			//  Rework {15}
+			case 15: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+
+	setExternalFieldsPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}, Unassigned {-5}, Assigned {1},
+			case -3: case -5: case 1: case 'RejectedAssignment': case 'RejectedPrimaryAssignee':
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA);
+				break;
+			// Accepted {10},  Work in Progress {13},
+			case 10: case 13: 
+				answer = (g_taskPermissions.isAssignedMember || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			//  In Review {14}, Rework {15}
+			case 14: case 15:
+				if(g_taskPermissions.isReviewType){
+					answer = (g_taskPermissions.isAssignedMember || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				} else {
+					answer = false;
+				}
+				break;
+			// Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case 3: case 4: case 7:
+				answer = false;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},
+	
+	setCommentsPermissions: function(){
+		var answer = false;
+		switch(g_taskPermissions.state){
+			case 'New': 
+				answer = true;
+				break;
+			// Waiting {-3}
+			case -3: 
+				answer = (g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskOwner);
+				break;
+			// Unassigned {-5}, Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}, Completed {3}, Completed Incomplete {4},Cancelled {7} 
+			case -5: case 1: case 10: case 13: case 14: case 15: case 'RejectedAssignment': case 'RejectedPrimaryAssignee': case 3: case 4: case 7:
+				answer = g_taskPermissions.isTaskerUser;
+				break;
+			default:
+				answer = false;
+				break;
+		}
+		return answer;
+	},	
+	type: 'TaskerTaskACLs'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-01-21 19:16:45</sys_created_on>
+        <sys_id>695f1bd61bbdac103dc8eb96624bcb9c</sys_id>
+        <sys_mod_count>81</sys_mod_count>
+        <sys_name>TaskerTaskACLs</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_695f1bd61bbdac103dc8eb96624bcb9c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2021-04-29 15:55:46</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, $location, $rootScope, spUtil, $interpolate, spModal) {
+        <client_script><![CDATA[function ($scope, $location, $rootScope, amb, spUtil, $interpolate, spModal) {
 	var c = this;
 
 	this.data.filterText = "";
@@ -30,12 +30,55 @@
 			$location.search('sl_sys_id', evt.sys_id);
 			$location.search('sl_table', evt.table);
 			$location.search('spa', 1); // spa means "I've got this"
-			$rootScope.$broadcast('$sp.list.click', evt);
+			// this is not used to tie to other widgets in Tasker, only used for related list
+			//$rootScope.$broadcast('$sp.list.click', evt);
 		}
 	};
 
+	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+	var watcher;
 	if (c.options.table)
-		spUtil.recordWatch($scope, c.options.table, c.options.filter);
+		initRecordWatcher(c.options.table, c.data.filter);
+	
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				$scope.server.update();
+			});
+		}
+	}	
+	function refreshWidget() { 
+		c.server.update().then(function(){
+			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+			initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+		});
+	}
+	
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});
+	$rootScope.$on('$sp.list.click', function(e, parms) {
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			refreshWidget();
+		}
+	});
 
 	this.getMaxShownLabel = function(maxEntries, totalCount) {
 		if (totalCount == c.data.maxCount)
@@ -71,7 +114,7 @@
 			title: "Related Task",
 		  backdrop:'static',
 			widget: 'discovertasker-formtab', 
-			widgetInput: {table: mytable, sys_id: mysys_id},
+			widgetInput: {table: mytable, sys_id: mysys_id, isModal: true},
 			buttons: []
 			
 		}).then( function(){
@@ -172,6 +215,7 @@ IMG.img-sm {
 	data.filterMsg = gs.getMessage("Filter...");
 	data.page = $sp.getParameter('id');
 	data.table = $sp.getParameter('table');
+	data.filter = options.filter;
 	 
 	if(gs.nil(options.hide_footer))
 	    options.hide_footer = false;
@@ -180,6 +224,7 @@ IMG.img-sm {
 	if (!options.table)
 		return;
 
+	
 	var gr = new GlideRecordSecure(options.table); // does ACL checking for us
 	if(!gr.isValid()) {
 		data.isValid = false;
@@ -199,7 +244,9 @@ IMG.img-sm {
 	} 
 	//KTorres: ---------------------------------------------------------------------------------------------------------------
 	data.sys_id = $sp.getParameter("sys_id");
-	
+	if(input && input.sys_id){
+		data.sys_id = input.sys_id;
+	}
 	// For Retricted Tasks (ACLS)
 	data.hasRecordReadAccess = true;
 	if (data.table == "x_153465_discovert_route_task_instance"){
@@ -217,6 +264,7 @@ IMG.img-sm {
 	var queryString = "";
 	if (options.table == "x_153465_discovert_m2m_tasker_instance"){
 		queryString = "tasker_instance_from=" + data.sys_id;
+		data.filter = queryString;
 		gr.addEncodedQuery(queryString);
 		data.relatedtaskpageurl = "discovertaskerportal?id=discovertasker_relatedtasks&sys_id="+data.sys_id+"&table=x_153465_discovert_route_task_instance";
 	}
@@ -352,14 +400,14 @@ IMG.img-sm {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-09-18 18:43:14</sys_created_on>
         <sys_id>e3a7cfbadb686b04c18c59b2ca9619ad</sys_id>
-        <sys_mod_count>234</sys_mod_count>
+        <sys_mod_count>241</sys_mod_count>
         <sys_name>Tasker Simple List</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_e3a7cfbadb686b04c18c59b2ca9619ad</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-09-09 18:50:26</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-16 17:37:51</sys_updated_on>
         <template><![CDATA[
 <div class="panel panel-{{::c.options.color}} b" ng-if="c.data.isValid && (c.options.always_show || c.data.filterText || c.data.list.length)">
   <div class="panel-heading" ng-if="::!c.options.hide_header">

@@ -14,117 +14,51 @@
         <kb_topic/>
         <label>Acceptance Overdue</label>
         <order>200</order>
-        <record_script><![CDATA[//AA -STRY0033865
-//KT - STRY0033865 Fix from AGO to AHEAD
+        <record_script><![CDATA[var bannerAcceptanceOverdue = function(data){
+  var u = gs.getUser().getID();
 
-var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+  var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
 
-var assignedMembers ="^assigned_toIN";
+  //------------------------------------------------------------------------------------------------------------------
+  // Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
+  // Get the list of OUs where the current user is a Task Manager
+  var primary_assigneeFilter = "primary_assigneeIN";
+  var taskSystemSettings = new tasking_System_Settings_Scripts();
+  primary_assigneeFilter += taskSystemSettings.getMyOUTaskManagers(u).join(",");
 
-// Menu Item Label
-var label = 'Acceptance Overdue';
+  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+  if(isGTA)
+    primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY"
 
-// Read application property
-var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+  var filter = 'state=1^' + primary_assigneeFilter + '^suspense_dateRELATIVELE@dayofweek@ahead@'+daysBeforeTaskAcceptanceIsOverdue;
 
-// maximum number of entries in this Menu
-var max = 5;
-var filter = 'state=1';
+  var tbf = new TaskerBannerFilters();
 
-var t = data;  // shortcut
-t.items = [];
+  tbf.label = 'Acceptance Overdue';
+  tbf.table = 'x_153465_discovert_route_task_instance';
+  tbf.filter = filter;
+  tbf.orderDesc = 'sys_updated_on';
+  tbf.idField = 'sys_id';
+  tbf.displayFieldName = 'task_name';
+  tbf.linkView = 'sp';
+  tbf.pageId = 'discovertasker_taskdetails';
+  tbf.viewAllLinkTitle = gs.getMessage('View all requests');
+  tbf.viewAllLinkPageId = 'discovertasker_detailsdrilldown';
+  tbf.viewAllLinkView = 'Unassigned';
+  tbf.viewAllLinkFilter = filter;
 
-var u = gs.getUser().getID();
-// use record watchers to tell header when to update dropdown counts
-t.record_watchers = [];
+  tbf.createBanner();
+  data.items = tbf.items;
+  data.record_watchers = tbf.record_watchers;
+  data.count = tbf.count;
 
-//HT - STRY0058891
-//gs.info("record watching" + t.record_watchers);
-t.record_watchers.push({'table':'x_153465_discovert_route_task_instance','filter':filter});
-
-//KTORRES: BASED ON PRIMARY ASSIGNEE TA
-//------------------------------------------------------------------------------------------------------------------
-var primary_assigneeFilter = "primary_assigneeIN";
-var grPrimaryAssigneeTA = new GlideRecord('x_153465_discovert_discover_office_members');
-grPrimaryAssigneeTA.addQuery('office_task_authority', 'true');
-grPrimaryAssigneeTA.addEncodedQuery('office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe');
-grPrimaryAssigneeTA.orderByDesc('sys_updated_on');
-grPrimaryAssigneeTA.query();
-
-var memberOUs = [];
-
-while (grPrimaryAssigneeTA.next()) {
-  memberOUs.push(grPrimaryAssigneeTA.getValue('discover_office_hierarchy'));
 }
 
-primary_assigneeFilter+= memberOUs.toString();
-
-
-//------------------------------------------------------------------------------------------------------------------
-
-//count via aggregate
-
-if(isGTA)
-  primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY"
-
-var a = new GlideAggregate('x_153465_discovert_route_task_instance');
-a.addEncodedQuery(filter);
-//a.addEncodedQuery('assigned_toDYNAMIC90d1921e5f510100a9ad2572f2b477fe');
-a.addEncodedQuery(primary_assigneeFilter);
-a.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@'+daysBeforeTaskAcceptanceIsOverdue);
-a.addAggregate("COUNT");
-a.query();
-
-var totcount=0;
-if(a.next()){
-totcount = a.getAggregate("COUNT");
-}
-
-var z = new GlideRecord('x_153465_discovert_route_task_instance');
-z.addEncodedQuery(filter);
-z.addEncodedQuery(primary_assigneeFilter);
-z.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@'+daysBeforeTaskAcceptanceIsOverdue);
-z.orderByDesc('sys_updated_on');
-z.setLimit(max);
-z.query();
-       
-while (z.next()) {  
-   t.items.push({
-    title: z.getValue('task_name') ,
-    type: 'link',
-    href: '?sys_id='+ z.getValue('sys_id') + '&view=sp&id=discovertasker_taskdetails&table=x_153465_discovert_route_task_instance'
-  }); 
-  
-  if (!z.canRead()){
-    continue;
-  }
-  var a = {};
-  if (z.short_description.nil()){
-    a.short_description = "(No description)";
-  }
-  a.__table = z.getTableName();
-  a.type = 'record';
-}
-
-
-t.items.sort(function(a, b) {
-  return b.sortOrder - a.sortOrder;
-});
-
-t.items = t.items.slice(0, 5); 
-
-t.count = totcount;
+bannerAcceptanceOverdue(data);
 
 
 
-//var link = {title: gs.getMessage('View all requests'), type: 'link', href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='+primary_assigneeFilter+'%5EstateIN1%5Esuspense_date<javascript:gs.beginningOfNextWeek()', items: []};
-var link = {
-            title: gs.getMessage('View all requests'), 
-            type: 'link', 
-            href: '?id=discovertasker_detailsdrilldown&view=Unassigned&table=x_153465_discovert_route_task_instance&filter='+ filter+ '^'+primary_assigneeFilter+'^suspense_dateRELATIVELE@dayofweek@ahead@'+daysBeforeTaskAcceptanceIsOverdue +'&label='+label, 
-            items: []                                                                                                               
-           };
-t.items.push(link); // put 'View all requests' first]]></record_script>
+]]></record_script>
         <sc_cat_item/>
         <sc_category/>
         <short_description/>
@@ -135,14 +69,14 @@ t.items.push(link); // put 'View all requests' first]]></record_script>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-05-17 17:26:13</sys_created_on>
         <sys_id>1b20d40fdb069f00bb8ee536ca9619bb</sys_id>
-        <sys_mod_count>130</sys_mod_count>
+        <sys_mod_count>133</sys_mod_count>
         <sys_name>Acceptance Overdue</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_rectangle_menu_item_1b20d40fdb069f00bb8ee536ca9619bb</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-06-10 22:32:04</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-01-27 13:14:17</sys_updated_on>
         <table/>
         <type>scripted</type>
         <url/>

@@ -1,0 +1,1675 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function ($scope, $rootScope, spAriaFocusManager, $http, amb, $timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
+// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+  spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id); 
+	var c = this;
+		// STRY0076291
+    //c.allowSubTask = false;
+    $scope.submitting = false;
+    $scope.mandatory = [];
+    $scope.errorMessages = [];
+    $scope.data.show_sql = false;
+    $scope.saveButtonSuffix = spUtil.getAccelerator('s');
+    $scope.isPageReady = false;
+    $scope.adminMenu = {
+        encodedPageUrl: encodeURIComponent($location.url()),
+        getClientScriptCount: function() {
+            var count = 0;
+            if ($scope.data.f.client_script) {
+                count += $scope.data.f.client_script.onChange.length;
+                count += $scope.data.f.client_script.onLoad.length;
+                count += $scope.data.f.client_script.onSubmit.length;
+            }
+            return count;
+        }
+    };
+		var tableId = $scope.data.sys_id != -1 ? $scope.data.sys_id : ($scope.data.f ? $scope.data.f._attachmentGUID : -1);
+		spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + tableId, function (response, data) {
+			$scope.attachmentHandler.getAttachmentList();
+			if (response.data) {
+					var options = {};
+					options.operation = response.data.operation;
+					options.filename = response.data.display_value;
+		options.sys_id = tableId;
+		options.table = $scope.data.table;
+					options.state = (response.data.record && response.data.record.state) ? response.data.record.state.value : "";
+					if (options.operation === 'update' && options.state === 'not_available')
+					 $rootScope.$broadcast("attachment.updated", options);
+			}
+		});
+	
+		afterLoadFormReturns();
+	
+		// STRY0069986- RJ - Cert Push - Template DocInt Fix
+		function loadDocIntWidgets() {
+			// STRY0086644 - added check for DocId not provided
+			if (c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
+					(c.data.table == 'x_153465_discovert_route_task_instance' ||
+           c.data.table == 'x_153465_discovert_discover_routing_template' ||
+           c.data.table == 'x_153465_discovert_route_tasks')) {
+				if (c.data.table != "x_153465_discovert_discover_routing_template") {
+								c.data.widgetDocIntegration=null;								
+								spUtil.get('docint-list-items', {
+									vw: c.data.DocIntViewSysID,
+									mapRowSysId: c.data.sys_id + "",
+									readonly_flag: c.data.isActive,
+									lw_name: 'widgetDocIntegration'
+								}).then(function(response) {
+									c.data.widgetDocIntegration = response;
+								});								
+								
+        }
+        if (c.data.DocIntShareFolderON) {
+					c.data.widgetDocIntegrationSharedDocs = null;
+					spUtil.get('docint-list-items', {
+						vw: c.data.DocIntSharedDocsViewSysID,
+						mapRowSysId: c.data.sharedDocSys_ID + "",
+						readonly_flag: c.data.isActive,
+						lw_name: 'widgetDocIntegrationSharedDocs'
+					}).then(function(response) {
+						c.data.widgetDocIntegrationSharedDocs = response;
+					});								
+        }
+			}
+			
+		}
+
+    function addActiveCssClass() {
+			var resetActiveTabe = false;
+			if ((c.data.table == 'x_153465_discovert_discover_office_hierarchy' && 
+					 $scope.data.page_id == 'discovertasker_officehierarchy') ||
+					(c.data.table == 'x_153465_discovert_route_tasks' && 
+					 $scope.data.page_id == 'discovertasker_processtemplatedetails')) {
+				resetActiveTabe = true;
+			}
+			if ($scope.data.page_id == 'discovertasker_detailsdrilldown' || 
+					$scope.data.page_id == 'discovertasker_taskdetails') {
+				resetActiveTabe = true;
+			}
+			if(resetActiveTabe == true){
+				$(".nav-tabs li")
+					.removeClass("active");
+				$(".nav-tabs li:first-child")
+					.addClass("active");
+				$(".tab-content div")
+					.removeClass("active");
+				$(".tab-content div:first-child")
+					.addClass("active");
+			}
+    }
+	
+		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count
+    $rootScope.$on("sp.DiscoverListItem.Deleted", function(event, params) {
+			updateRelatedListcount("sp.DiscoverListItem.Deleted", params);
+		});
+							 
+		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count
+		$rootScope.$on("sp.DiscoverListItem.Added", function(event, params) {
+			updateRelatedListcount("sp.DiscoverListItem.Added", params);
+		});
+	
+		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
+		function updateRelatedListcount(action, params) {
+			for (var i in c.data.f._related_lists) {
+				var rl = c.data.f._related_lists[i];
+				if(rl.table == params.table && rl.filter == params.filter ){
+					if(action == 'sp.DiscoverListItem.Added'){
+						// add 1 to the count
+						rl.count = rl.count + 1;
+					} else if(action == 'sp.DiscoverListItem.Deleted'){
+						// subtract 1 from the count
+						rl.count = rl.count - 1;
+					}
+				}
+			}
+		}
+				
+    // STRY0059178 | Shared Documents Folder
+    $scope.$on("tasker_task_attachments.count", function(event, e) {
+
+        if (e) {
+            if (e.source == 'sharedAttachmentWidget') {
+                if (e.count) {
+                    $scope.data.sharedAttachmentWidgetCount = e.count;
+                } else {
+                    $scope.data.sharedAttachmentWidgetCount = 0;
+                }
+            }
+            if (e.source == 'myAttachmentWidget') {
+                if (e.count) {
+                    $scope.data.myAttachmentWidgetCount = e.count;
+                } else {
+                    $scope.data.myAttachmentWidgetCount = 0;
+                }
+
+            }
+        }
+    });
+
+
+    //STRY0042748 | DI Integration: Tab Count for DocIntegrator List View provided
+    //STRY0059178 | Shared Documents Folder  YOU ARE HERE!  nEED TO FIGURE OUT HOW TO ADD ANOTHER TAB.  ALSO NEED TO FIGURE OUT HOW TO GET THE DOCUMENT COUNT BELOW
+    $scope.$on("docint.update_count", function(event, e) {
+        if (e) {
+            if (e.source == 'widgetDocIntegrationSharedDocs') {
+                if (e.count) {
+                    $scope.data.docintSharedCount = e.count;
+                } else {
+                    $scope.data.docintSharedCount = 0;
+                }
+            }
+            if (e.source == 'widgetDocIntegration') {
+                if (e.count) {
+                    $scope.data.docintCount = e.count;
+                } else {
+                    $scope.data.docintCount = 0;
+                }
+            }
+        }
+    });
+
+    // FOR THE RELATED LIST TO REFRESH THE URL
+    $scope.$on('data_table.click', function(e, parms) {
+			if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+				$rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+				$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
+			}
+
+			onListClick(e, parms);
+    });
+
+    $scope.openNewModal = function(table, title, view, query, sys_id) {
+			// If the form is dirty, ask the user if they would like to save the record
+			var fMsg = '';
+			var serializeChanges = g_form.serialize(true);
+			if(serializeChanges.length>0){
+				var changeFieldList = [];
+				for (var field in serializeChanges) {
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+				fMsg = changeFieldList.join(', ');
+				
+				spModal.confirm("${Tasker - Modal Save Changes Message}  "+ fMsg).then(function(confirmed) {
+						g_form.save();
+						open_New_Modal(table, title, view, query, sys_id);
+				});
+			}else{
+				open_New_Modal(table, title, view, query, sys_id);
+			}
+
+    };
+	
+		function open_New_Modal(table, title, view, query, sys_id) {
+			var formQuery = query + sys_id;
+			spModal.open({
+				title: title,
+				backdrop:'static',
+				widget: 'discovertasker-formtab',
+				widgetInput: {
+					table: table,
+					sys_id: "-1",
+					view: view,
+					query: formQuery,
+					// STRY0040294 - added isModal - added closing of open modal
+					isModal: true //,
+				},
+				size: 'lg',
+				buttons: []
+			});
+		}
+
+    $scope.$on("spModel.uiActionComplete", function(evt, response) {
+		// START - RAJ Remove post back on Modals
+		// after reviewing this, there is nothing in here that is required.
+		// If a uiaction needs to redirect or refresh the form, it should be done in the UI Action
+		// The only thing I noticed that needed to be updated upon removing this is the Create Task UI Action.
+		// Every other UI Action opens in a modal and closes then allows the form to refresh using record watchers.
+		// NOTE: All of the new item screens use the new task screen.  The OU, Member and Contact always open in a modal.  So, they do not need to refresh the base form.
+		//       The Template and the Task screen redirect to a new page and do not open in a modal
+		if ($scope.data.page_id == 'discovertasker_newtask'){
+			var sysID;
+			var redirectUrlNew;
+			switch ($scope.data.table) {
+				case 'x_153465_discovert_route_task_instance':
+					sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
+					redirectUrlNew = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + $scope.data.table + "&sys_id=" + sysID;
+					$location.url(redirectUrlNew);
+					break;
+				// STRY0093947
+				case 'x_153465_discovert_discover_routing_template':
+					sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
+					redirectUrlNew = "../discovertaskerportal?id=discovertasker_processtemplatedetails&table=" + $scope.data.table + "&sys_id=" + sysID + "&spa=1";
+					$location.url(redirectUrlNew);
+					break;					
+			}
+		}
+		// STRY0093904 - "UI Actions" on Task Form are NOT responsive
+		$scope.submitting = false;
+/*
+        var sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
+        var error;
+        if (response.$$uiNotification[0]) {
+            if (response.$$uiNotification[0].type == "error") {
+                error = true;
+            } else {
+                error = false;
+            }
+        }
+
+				// START - RAJ Remove post back on Modals
+				if (!c.data.isModal){
+					if (!response.isInsert) {
+						loadForm($scope.data.table, sysID).then(constructResponseHandler(response)); //+
+					}
+				}
+
+				// ************************************************************************
+				// START - RAJ Remove post back on Modals
+				// ************************************************************************
+        if (response.isInsert && (!error) && ($scope.data.query == undefined || $scope.data.query.length == 0)) { //
+            var redirectUrlNew;
+            var parentSysID;
+						if (!c.data.isModal){
+             switch ($scope.data.table) {
+                 //REQUEST TYPE
+        //         case 'x_153465_discovert_tasker_requests':
+        //             parentSysID = $scope.data.parent;
+        //             redirectUrlNew = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + "x_153465_discovert_route_task_instance" + "&sys_id=" + parentSysID + "&view=sp";
+        //             $location.url(redirectUrlNew);
+        //             break;
+        //             //STRY0066042 - redirect closing of Task Email modal to push it to Parent Tasker Details
+                 case 'x_153465_discovert_tasker_email':
+                     parentSysID = $scope.data.parent;
+                     redirectUrlNew = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + "x_153465_discovert_route_task_instance" + "&sys_id=" + parentSysID + "&view=sp";
+                     $location.url(redirectUrlNew);
+                     break;
+                 case 'x_153465_discovert_route_task_instance':
+                     redirectUrlNew = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + $scope.data.table + "&sys_id=" + sysID;
+                     $location.url(redirectUrlNew);
+                     break;
+						 }
+						}
+        }
+        if (!c.data.isModal && response.isInsert && $scope.data.query.length > 0) {
+					var parentSysID;
+					var redirectUrl;
+					//if ($scope.data.table == 'x_153465_discovert_route_task_instance'){
+					//	parentSysID = $scope.data.query.replace("parent=", "");
+					//	redirectUrl = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + $scope.data.table + "&sys_id=" + sysID + "&view=sp";
+					//	$location.url(redirectUrl);
+					//}
+
+             switch ($scope.data.table) {
+        //         case 'x_153465_discovert_route_tasks':
+        //             parentSysID = $scope.data.query.replace("parent=", "");
+        //             redirectUrl = "../discovertaskerportal?id=discovertasker_processtemplatedetails&table=" + $scope.data.table + "&sys_id=" + sysID + "&spa=1";
+        //             $location.url(redirectUrl);
+        //             break;
+        //         case 'x_153465_discovert_tasker_schedule':
+        //             // STRY0040294 the trapping of the form update closes this.
+        //             break;
+                 case 'x_153465_discovert_route_task_instance':
+                     parentSysID = $scope.data.query.replace("parent=", "");
+                     redirectUrl = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + $scope.data.table + "&sys_id=" + sysID + "&view=sp";
+                     $location.url(redirectUrl);
+                     break;
+        //             // STRY0074663
+        //         case 'x_153465_discovert_discover_office_members':
+        //             break;
+        //         case 'x_153465_discovert_discover_office_hierarchy':
+        //             break;
+        //         case 'x_153465_discovert_discover_routing_template':
+        //             break;
+        //         case 'x_153465_discovert_suggested_taskers':
+        //             break;
+        //             // STRY0074663
+        //         case 'x_153465_discovert_organizational_contacts':
+        //             // Task passes in the Parent gUID
+        //             parentSysID = $scope.data.parent;
+        //             if (parentSysID) {
+        //                 redirectUrl = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + "x_153465_discovert_route_task_instance" + "&sys_id=" + parentSysID + "&view=sp";
+        //                 $location.url(redirectUrl);
+        //             } 
+        //             break;
+        //             // STRY0074663
+        //         case 'x_153465_discovert_external_poc_info':
+        //             break;
+        //             //STRY0066042 - redirect closing of Task Email modal to push it to Parent Tasker Details
+                 case 'x_153465_discovert_tasker_email':
+                     parentSysID = $scope.data.query.replace("parent=", "");
+                     redirectUrl = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + "x_153465_discovert_route_task_instance" + "&sys_id=" + parentSysID + "&view=sp";
+                     $location.url(redirectUrl);
+                     break;
+        //         default:
+        //             loadForm($scope.data.table, sysID).then(constructResponseHandler(response));
+             }
+        }
+				// ************************************************************************
+				// END - RAJ Remove post back on Modals
+				// ************************************************************************
+*/
+    });
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // END CUSTOM
+    //------------------------------------------------------------------------------------------------------------------------
+
+    $rootScope.$on('$sp.html.editor.progress', function(e, conf) {
+        $scope.submitting = conf.state;
+    });
+
+    $rootScope.$broadcast('sp.update.breadcrumbs', $scope.data.breadcrumbs);
+
+    $scope.getUIActions = function(type) {
+        if ($scope.data.disableUIActions)
+            return [];
+        if (type) {
+            return $scope.data.f._ui_actions.filter(function(action) {
+                //We handle the primary action button separately.
+                return !action.primary && action['is_' + type];
+            });
+        } else {
+            return $scope.data.f._ui_actions;
+        }
+    };
+
+    c.thisPage = $location.search()['id'];
+    $scope.getPrimaryAction = function() {
+        var primaryActions = $scope.data.f._ui_actions.filter(function(action) {
+
+            return action.primary;
+        });
+        return (primaryActions.length) ? primaryActions[0] : null;
+    };
+
+    $scope.getUIActionContextMenu = function(event) {
+        var menu = [];
+        if (event.ctrlKey)
+            return menu;
+
+        var contextActions = $scope.getUIActions('context');
+        contextActions.forEach(function(action) {
+            menu.push([action.name, function() {
+                $scope.triggerUIAction(action);
+            }]);
+        });
+
+        if (contextActions.length > 0)
+            menu.push(null);
+        menu.push([$scope.data.exportPDFMsg, function() {
+            exportPDF("");
+        }]);
+        menu.push([$scope.data.exportPDFLandMsg, function() {
+            exportPDF('true');
+        }]);
+
+        return menu;
+    };
+
+    function exportPDF(landscape) {
+        $window.open("/" + $scope.data.f.table + ".do?PDF&landscape=" + landscape + "&sys_id=" + $scope.data.sys_id + "&sysparm_view=" + $scope.data.f.view);
+    }
+
+    //trigger the primary UI Action on save (if there is one)
+    var deregister = $scope.$on('$sp.save', function() {
+        var primaryAction = $scope.getPrimaryAction();
+        if (primaryAction)
+            $scope.triggerUIAction(primaryAction);
+    });
+    $scope.$on('$destroy', function() {
+        deregister();
+    });
+
+    $scope.triggerUIAction = function(action) {
+        if ($scope.data.disableUIActions && !action.primary) {
+            return;
+        }
+        $rootScope.$broadcast('sp.form.ui_action.triggered');
+        if (action.action_name == 'createSchedule') {
+            $('button[gsft_id="9a33e9b6db6e6380bb8ee536ca96190d"]').remove();
+        }
+
+        var activeElement = document.activeElement;
+        if (activeElement) {
+            activeElement.blur();
+        }
+        //-----------------------------
+        $scope.$evalAsync(function() {
+
+            if (g_form) {
+                $scope.submitting = true;
+                if (!g_form.submit(action.action_name || action.sys_id)) {
+                    $scope.submitting = false;
+                    $rootScope.$broadcast('sp.form.submit.failed', action);
+                }
+							
+							// STRY0074663
+								if ($scope.submitting == true && c.data.isModal) {
+										$scope.$parent.$parent.$dismiss();
+								} // 09.10
+            } 
+        });
+        
+    };
+
+    function constructResponseHandler(response) {
+        var showUpdate = true;
+        var notifications = response['$$uiNotification'];
+        // STRY0040294 - added .length > 0.  This was erroring b/c notificatoins was not null, it was an empty array.
+        // I looked in the root form.  It has this same problem.
+        if (notifications && notifications.length > 0 && notifications[0].type == 'error') {
+            showUpdate = false;
+        }
+        return function() {
+            $rootScope.$broadcast("sp.form.submitted", {
+                sys_id: (response.isInsert) ? response.sys_id : $scope.data.sys_id
+            });
+            var message;
+            var eventName = "sp.form.record.updated";
+            if (response.isInsert) {
+                message = $scope.data.recordAddedMsg;
+                var search = $location.search();
+                search.sys_id = response.sys_id;
+                search.spa = 1;
+                $location.search(search).replace();
+            } else if (showUpdate == true) {
+                message = $scope.data.updatedMsg;
+            }
+            $scope.data.hideRelatedLists = hideRelatedLists();
+            $scope.$emit(eventName, $scope.data.f._fields);
+            $rootScope.$broadcast(eventName, $scope.data.f._fields);
+            $scope.status = message;
+            spUtil.addTrivialMessage(message);
+            $timeout(clearStatus, 2000);
+        };
+    }
+
+    var ctrl = this;
+    // switch forms
+    var unregister = $rootScope.$on('$sp.list.click', onListClick);
+	
+    $scope.$on("$destroy", function() {
+        unregister();
+    });
+
+    function _save() {
+        var primaryAction = $scope.getPrimaryAction();
+        if (primaryAction)
+            $scope.triggerUIAction(primaryAction);
+    }
+
+	function onListClick(evt, arg) {
+		if(c.data.sys_id != arg.sys_id){
+			loadForm(arg.table, arg.sys_id);
+		}
+	}
+
+    function loadForm(table, sys_id) {
+        c.data.table = table;
+        c.data.sys_id = sys_id;
+        c.data.view = $scope.data.view;
+			
+        return $scope.server.update().then(afterLoadFormReturns);
+    }
+	
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		var p = $scope.data.page_id;
+		if (p == 'discovertasker_taskdetails') {
+			onListClick(e, parms);
+		}
+	});
+	
+    function openRelatedList(e, queryString) {
+        $location.search(queryString);
+        e.preventDefault();
+    }
+
+    $scope.$on('spModel.fields.rendered', function() {
+        if (ctrl.panels)
+            ctrl.panels.removeClass('shift-out').addClass('shift-in');
+    });
+
+    var g_form;
+
+    function initForm(gFormInstance) {
+
+        if (gFormInstance.getTableName() == $scope.data.f.table) {
+            g_form = gFormInstance;
+            spNavStateManager.register($scope.data.table, _save, g_form);
+            $scope.isPageReady = true;
+            $timeout(function() {
+                $rootScope.$emit('spModel.gForm.rendered', g_form);
+            }, 175);
+        }
+    }
+
+    $scope.$on('spModel.gForm.initialized', function(e, gFormInstance) {
+        initForm(gFormInstance);
+        //STRY0056591: Get parent from the table calling the modal
+        if ($scope.data.parent != undefined)
+            if ($scope.data.parent.length > 0) {
+                g_form.setValue('parent', $scope.data.parent);
+            }
+        //REQUEST TYPE
+        if ($scope.data.u_request_type != undefined && $scope.data.u_request_type.length > 0) {
+            g_form.setValue('u_request_type', $scope.data.u_request_type);
+        }
+    });
+
+    $scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
+        initForm(gFormInstance);
+    });
+
+    // update the comments or worknotes based on activity stream
+    $scope.$on("activity_stream_is_changed", function(event, data) {
+        if (g_form && g_form.hasField(data.fieldName)) {
+            g_form.setValue(data.fieldName, data.input);
+            if (data.fieldToClear != "" && g_form.hasField(data.fieldToClear))
+                g_form.setValue(data.fieldToClear, "");
+        }
+    });
+
+    // Show or hide related lists
+    $scope.$watch('data.f._related_lists', function() {
+        $scope.data.hideRelatedLists = hideRelatedLists();
+
+    }, true);
+
+    function hideRelatedLists() {
+        if (!$scope.data.f._related_lists)
+            return true;
+        if ($scope.options.hideRelatedLists == true)
+            return true;
+        if ($scope.data.sys_id == '-1')
+            return true;
+        // If all related lists are visible=false then hide
+        if ($scope.data.f._related_lists.length > 0) {
+            for (var i in $scope.data.f._related_lists) {
+                var list = $scope.data.f._related_lists[i];
+                if (list.visible) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function clearStatus() {
+        $scope.status = "";
+    }
+
+    function setupAttachmentHandler() {
+        $scope.attachmentHandler = new nowAttachmentHandler(appendDone, appendError);
+
+        $scope.$evalAsync(function() {
+            $scope.attachmentHandler.setParams($scope.data.table, $scope.data.f._attachmentGUID, 1024 * 1024 * $scope.data.maxAttachmentSize);
+        });
+
+        $scope.$on('dialog.upload_too_large.show', function(e) {
+            $log.error($scope.data.largeAttachmentMsg);
+            spUtil.addErrorMessage($scope.data.largeAttachmentMsg);
+        });
+    }
+	
+		function afterLoadFormReturns(){
+			loadDocIntWidgets();
+			addActiveCssClass();
+			setupAttachmentHandler();
+			// Changed from page.title to data.f.title to remove post back
+			if(c.data.sys_id != '-1'){
+				top.document.title = c.data.f.title;
+				$rootScope.$broadcast('sp.update.breadcrumbs', c.data.breadcrumbs);				
+			}
+
+		}
+
+    function appendDone() {
+        $scope.$broadcast("sp.attachments.update", $scope.data.f._attachmentGUID);
+        spAriaUtil.sendLiveMessage($scope.data.attachmentSuccessMsg);
+    }
+
+    function appendError(error) {
+        $scope.errorMessages.push(error);
+        spUtil.addErrorMessage(error.msg + error.fileName);
+    }
+
+    if ($scope.data.f.title) {
+        $scope.$emit('sp.widget-modal.set-aria-label', $scope.data.f.title);
+    }
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES 
+//------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------
+// 2.5.21 | 09.10.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+//------------------------------------------------------------------------------------------------------------------------
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// CUSTOM
+//------------------------------------------------------------------------------------------------------------------------
+
+
+
+/* SECTIONS &amp; FORMS */
+//------------------------------------------------------------------------------------------------------------------------
+.ng-isolate-scope .h4.ng-binding{
+  font-weight: 400 !important;
+  font-family: "SourceSansPro", Helvetica, Arial, sans-serif; //'Lucida Sans Unicode';
+  padding-left: 5px;
+	border-left-style: solid;
+	border-left-color: $primary;
+	border-left-width: 5px;
+	color: $primary;
+	padding-top: 8px;
+	padding-bottom: 5px;
+}
+
+fieldset.ng-scope{
+  margin-top: 5px;
+}
+
+label{
+	//font-weight: 100!important;
+  color: $primary;
+}
+
+
+/* DURATION */
+//------------------------------------------------------------------------------------------------------------------------
+
+#dur-minutes,
+#dur-seconds { 
+  visibility: hidden!important;
+}
+
+#dur-days,
+#dur-hours { 
+  width: 40px!important
+}
+
+
+
+/*
+#sp_formfield_status[title^='Critical']::before{
+  background-color: red!important;
+}
+*/
+
+
+/* CLASSIFICATION */
+//------------------------------------------------------------------------------------------------------------------------
+
+.taskform-classification-banner {
+  padding: 5px 10px 5px 10px; //before padding: 5px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  margin-right: 5px; //new
+	display: table-cell; border-radius: 8px; border: 3px solid white; //new
+
+}
+
+
+
+/*  ASSIGNMENT  */
+//------------------------------------------------------------------------------------------------------------------------
+
+//Assignment Group
+.assignmentgroup-banner {
+  background-color: $danger;
+	color: $brand-danger-text;
+  padding: 5px 10px 5px 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  margin-right: 15px;
+  display: table-cell; border-radius: 8px; border: 3px solid white; 
+}
+
+
+//------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// OOTB FORM WIDGET
+//------------------------------------------------------------------------------------------------------------------------
+
+
+.btn-form-menu {
+	vertical-align: inherit;
+  padding: inherit;
+  background: none;
+}
+
+.panel-title {
+  word-wrap: break-word;
+}
+
+.panel-heading {
+  .dropdown-menu {
+    a {
+      white-space: normal;
+    }
+  }
+}
+
+.sc-field-error-label {
+  margin-right: .5em;
+  display: inline-block;
+  background-color: $sc-field-error-color;
+}
+
+.comment {
+	font-weight: bold;
+	margin-top: 2px;
+	margin-bottom: 2px;
+}
+.mce-panel, .mce-btn {
+	background-image: none;
+	background-color: #f0f3f4;
+}
+
+.action-btn {
+  margin-right: 5px;
+}
+
+.timeline-container {
+   max-height: 50vh;
+   height: 100%;
+   overflow-y: auto;
+}
+
+.panel .panel {
+    height: auto !important;
+}
+
+.attachment-button {
+  .glyphicon-paperclip {
+    font-size: 18px;
+  }
+}
+
+.dropdown {
+  .glyphicon-menu-hamburger:focus {
+ 		outline: thin dotted;
+		outline: 5px auto $input-border-focus;
+		outline-offset: -2px; 
+	}
+}
+
+.empty-state-wrapper {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 10vh 20px 20px;
+
+  .empty-state {
+    border: 1px solid #e7e9eb;
+    border-radius: 10px;
+    max-width: 700px;
+    padding: 30px 40px 20px;
+    position: relative;
+
+    .empty-state-badge {
+      top: -36px;
+      left: 50%;
+      position: absolute;
+      height: 72px;
+      width: 72px;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
+      align-items: center;
+      border-radius: 100%;
+      color: #ffffff;
+      display: -webkit-flex;
+      display: -ms-flexbox;
+      display: flex;
+      font-size: 40px;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      margin-left: -36px;
+      text-align: center;
+    }
+
+    .empty-state-header {
+      font-size: 30px;
+      text-align: center;
+      color: #343d47;
+    }
+
+    .empty-state-content {
+      ul {
+        list-style: disc outside;
+        margin: 0 0 10px 0;
+        padding: 0 0 0 30px;
+      }
+    }
+  }
+}
+
+.text-success-alt {
+	background-color: $state-success-text;
+}
+
+.text-info-alt {
+	background-color: $state-info-text;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tasker_mobile_documents</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Tasker Mobile Documents</name>
+        <option_schema>[{"name":"disableUIActions","label":"Disable UI Actions on Form","type":"boolean"},{"name":"showFormView","label":"Display current form view","type":"boolean"},{"name":"omitHeaderOptions","label":"Omit header options icon","type":"boolean"}]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+// WIDGET BASE: FORM
+//------------------------------------------------------------------------------------------------------------------------
+// form functionality - URL parameter driven
+(function($sp, input, data, options, gs) {
+    /* "use strict"; -linter issues */
+    // populate the 'data' variable
+    data.attachmentUploadSuccessMsg = gs.getMessage("Attachment upload was successful");
+    data.recordAddedMsg = gs.getMessage("Record Added");
+    data.updatedMsg = gs.getMessage("updated_uppercase");
+    data.exportPDFMsg = gs.getMessage("Export to PDF");
+    data.exportPDFLandMsg = gs.getMessage("Export to PDF (landscape)");
+    data.addAttachmentMsg = gs.getMessage("Add an attachment");
+    data.maxAttachmentSize = parseInt(gs.getProperty("com.glide.attachment.max_size", 1024));
+    if (isNaN(data.maxAttachmentSize))
+        data.maxAttachmentSize = 24;
+    data.largeAttachmentMsg = gs.getMessage("Attached files must be smaller than {0} - please try again", "" + data.maxAttachmentSize + "MB");
+    data.attachmentSuccessMsg = gs.getMessage("Attachment successfully uploaded");
+
+    data.isAdmin = gs.hasRole('x_153465_discovert.tasker_user'); //data.isAdmin = gs.hasRightsTo('sp/configure.all/execute', null); //for GLOBAL app
+    data.emptyStateTemplate = options.empty_state_template;
+    data.disableUIActions = options.disableUIActions === "true";
+    data.hideRelatedLists = options.hideRelatedLists || false;
+    //------------------------------------------------------------------------------------------------------------------------
+    // CUSTOM
+    //------------------------------------------------------------------------------------------------------------------------
+		// START - RAJ Remove post back on Modals
+		data.isModal = (input || {}).isModal || (options || {}).isModal;
+	
+		data.page_id = $sp.getParameter("id");
+    data.sys_id = $sp.getParameter("sys_id");
+    data.view = $sp.getParameter("view") || "sp"; // SP default
+    data.filter = $sp.getParameter("filter") || $sp.getValue('filter');
+    data.isValid = true;
+    data.current_user = gs.getUserID();
+    if (!options.showFormView) {
+        options.showFormView = "false";
+    }
+    //------------------------------------------------------------------------------------------------------------------------
+
+    if (input) {
+        var myUserObject = gs.getUser();
+        var currentUser = myUserObject.getDisplayName();	
+			
+        data.table = input.table;
+        data.sys_id = input.sys_id;
+        data.view = input.view;
+
+			  //STRY0056591
+				if(input.parent)
+					data.parent = input.parent;
+				//KT REQUEST TYPE
+				data.u_request_type = input.u_request_type;
+			
+        var result = {};
+        if (input._fields) {
+            result = $sp.saveRecord(input.table, input.sys_id, input._fields);
+            data.sys_id = result.sys_id;
+        }
+
+        if (input.sys_id == '-1')
+            data.isNewRecord = true;
+    } else {
+        data.table = options.table || $sp.getParameter("t") || $sp.getParameter("table") || $sp.getParameter("sl_table");
+        data.sys_id = options.sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
+        //STRY0065050
+        //data.view = options.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
+    }
+
+    if (input) {
+        data.query = $sp.getParameter("query") || options.query || input.query;
+    } else {
+        data.query = $sp.getParameter("query") || options.query || "";
+    }
+    data.f = {};
+    if (!data.table)
+        return;
+
+    // Form widget is not a supported way to view an attachment
+    if (data.table == "sys_attachment") {
+        data.tableUnsupported = true;
+        return;
+    }
+
+    if (gs.tableExists(data.table) == false) //if (!GlideTableDescriptor.isValid(data.table)) //for GLOBAL app
+        return;
+
+    if (!data.sys_id)
+        return;
+
+    //Possible Disabled for Restricted Tasks
+    var rec = new GlideRecordSecure(data.table);
+    //var rec = new GlideRecordSecure(data.table); //var rec = $sp.getRecord(data.table, data.sys_id);  //for GLOBAL app
+		//STRY0071033: 4. GlideRecord's get() function should be enclosed in an if() statement
+    if (rec.get(data.sys_id))
+	    data.isValid = rec.isValid() || data.sys_id == "-1";
+	
+    if (!data.isValid)
+        return;
+
+    // STRY0063746 - this function takes different glide record types and returns the documents, attachments and shared values for that object
+    var tDS = new taskerDocumentScripts();
+    var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(rec);
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // CUSTOM: DOC. INT INTEGRATION - INITIALIZING VARIABLES 
+    //------------------------------------------------------------------------------------------------------------------------
+    //STRY0063746 - this function takes different glide record types and returns the documents, attachments and shared values for that object
+    data.SNAttachmentsON = currentAttachDocSettings.sNOWAttachmentsOn;
+    data.DocIntON = currentAttachDocSettings.docIntDocumentsOn;
+    //STRY0059178 | Shared Documents Folder
+    data.DocIntShareFolderON = currentAttachDocSettings.sharingDocuments;
+    data.AttachmentSharedFolderON = currentAttachDocSettings.sharingAttachments;
+
+    data.table = rec.getRecordClassName();
+    //data.tableHierarchy = GlideDBObjectManager.getTables(data.table).toArray().join(); //for GLOBAL app
+    var table = new GlideTableHierarchy(data.table);
+    data.tableHierarchy = table.getTables();
+    data.canWrite = rec.canWrite();
+		// STRY0050440
+		data.canCreate = rec.canCreate();
+    var hasRecordAccess = data.sys_id == "-1" ? rec.canCreate() : data.canWrite;
+
+    //STRY0014160: If user doesn't have Read access, stop here.
+    data.hasRecordReadAccess = true;
+    if (data.table == "x_153465_discovert_route_task_instance") {
+        data.hasRecordReadAccess = rec.canRead();
+        if (!data.hasRecordReadAccess) {
+            var link = '<a href="../discovertaskerportal">Tasker Portal</a>';
+            var message = 'You do not have permission to view this Task. ' + link + ' .<br/>';
+            gs.addErrorMessage(message);
+            return;
+        }
+    }
+
+    //data.canAttach = data.canWrite && gs.hasRole(gs.getProperty('glide.attachment.role')) && !GlideTableDescriptor.get(data.table).getED().getBooleanAttribute("no_attachment"); //for GLOBAL app
+    //var gtd = new GlideTableDescriptor(data.table);
+    //&& !gtd.get(data.table).getED().getBooleanAttribute("no_attachment"); 
+    data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view);
+
+    // STRY0063505 | in debugging the process docs story, we realized data.isActive was only set if the field was on the form.
+    data.isActive = false;
+    if (data.f._fields.active) {
+        data.isActive = data.f._fields.active.value;
+    } else {
+        // STRY0063505 |	NOTE: if the active field exists, use it.  If not, look for u_active, if neither, accept the default setting of false
+        if (rec.isValidField('active')) {
+            data.isActive = rec.active;
+        } else if (rec.isValidField('u_active')) {
+            data.isActive = rec.u_active;
+        } // otherwise will default to false setting above.
+    }
+
+    data.canAttach = data.canWrite && gs.hasRole(gs.getProperty('glide.attachment.role')) //&& (data.isActive == 'true')
+
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // BEGING CUSTON
+    //------------------------------------------------------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 1. CUSTOM: CLASSIFICATION BAR
+    //------------------------------------------------------------------------------------------------------------------------
+    // STRY0063505 | Include Attachments since we dropped attachment properties
+    // The fitler needs the "sys_id" of the object for attachments and Shared Attachments
+    // get those sys_ids based on the table, then use it to set the filter
+    // Needed this additional If statement b/c Task instances users task tree object
+    // Process Template is just that rec sys_id
+    // Process Task Template is the Process Template sys_id as the filter
+    var myAttachSys_ID = data.sys_id; // set to the defualt
+    var sharedAttachSys_ID = data.sys_id; // set to the defualt
+    var sharedAttachTableName = '';
+
+    if (data.table == "x_153465_discovert_route_task_instance") {
+        sharedAttachSys_ID = rec.u_task_tree.sys_id;
+        sharedAttachTableName = 'x_153465_discovert_task_tree';
+    }
+    if (data.table == "x_153465_discovert_discover_routing_template") {
+        sharedAttachSys_ID = data.sys_id;
+        sharedAttachTableName = 'x_153465_discovert_discover_routing_template';
+    }
+    if (data.table == "x_153465_discovert_route_tasks") {
+        // STRY0063505 | This table points at the Process Template Table instead of the Process Template Task table for the shared attachments
+        sharedAttachSys_ID = rec.tasker_process_definition.sys_id;
+        sharedAttachTableName = 'x_153465_discovert_discover_routing_template';
+    }
+
+    if (data.table == "x_153465_discovert_war_sar_reporting" && data.sys_id != -1){
+			 if (data.f._fields.classification) data.f.classification = data.f._fields.classification.displayValue;
+		}
+	
+		//In preparation to go-live with Delivery Customization: 04.18.20
+    if (data.table == "x_153465_discovert_route_task_instance" && data.sys_id != -1) {
+				if (data.f._fields.number) data.number = data.f._fields.number.displayValue;
+				// STRY0051139
+        data.task_name = rec.task_name; //data.number + ": " + data.f._fields['short_description']["displayValue"];
+        data.f.task_instance__state = '';
+        if (data.f._fields.classification) data.f.classification = data.f._fields.classification.displayValue;
+				if (data.f._fields.assignment_group) data.f.assignment_group = data.f._fields.assignment_group.displayValue;
+		
+
+        if (!rec.u_task_tree) {
+            gs.error('The Task Tree was not created for Task: ' + rec.number + '.  Please contact your Tasker administrator to check on the fix script.');
+        }
+        setBreadcrumbs(data.page_id, data.task_name);
+    }
+
+    if (data.table == "x_153465_discovert_discover_routing_template" & data.sys_id != -1) {
+				if (data.f._fields.template_name) data.f.template_name = data.f._fields.template_name.displayValue;
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 2. CUSTOM: TABS
+    //------------------------------------------------------------------------------------------------------------------------
+    for (var i in data.f._related_lists) {
+        var rl = data.f._related_lists[i];
+
+        // STRY0059424 | Include Attachments since we dropped attachment properties
+        if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments")) {
+            if ((data.AttachmentSharedFolderON == false) || (data.SNAttachmentsON == false)) {
+                // shared attachments or SNOW attachments are off, skip adding
+                continue;
+            }
+        }
+        if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
+            if (data.SNAttachmentsON == false) {
+                // shared attachments or SNOW attachments are off, skip adding
+                continue;
+            } else if (data.table == "x_153465_discovert_discover_routing_template" && data.AttachmentSharedFolderON == false) {
+                // STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the process Tree
+                // NOTE: TODO - if we are able to change the label on the native pages, then we would not need this statement here.
+                // The backend will be show "Attachments" until we can figure it out 
+                continue;
+            }
+        }
+
+   
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.1. CUSTOM: RELATED LIST DETAIL OPEN MODE: MODAL OR REDIRECT?
+				//------------------------------------------------------------------------------------------------------------------------
+			
+        var open_row_details_in_modal = false;
+       
+				if (data.page_id == "discovertasker_taskdetails" && data.table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_tasker_requests") open_row_details_in_modal = true;
+				if (rl.table == "x_153465_discovert_tasker_email") open_row_details_in_modal = true;
+        if (data.page_id == "discovertasker_processtemplatedetails" && data.table == "x_153465_discovert_route_tasks") open_row_details_in_modal = true;
+        if (data.page_id == "discovertasker_detailsdrilldown" && data.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+        if (data.page_id == "discovertasker_officehierarchy" && data.table == "x_153465_discovert_discover_office_hierarchy" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+        if (data.page_id == undefined && data.table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+        if (data.table == "x_153465_discovert_discover_routing_template") open_row_details_in_modal = true;
+        if (rl.table == "x_153465_discovert_discover_office_members") open_row_details_in_modal = true;
+        if (data.page_id == "discovertasker_customtasker_details" && data.table == "x_153465_discovert_war_sar_reporting") open_row_details_in_modal = true;
+				// STRY0074663
+        if (rl.table == "x_153465_discovert_organizational_contacts") open_row_details_in_modal = true;			
+				
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.2. CUSTOM: RELATED LIST SORT AND DIRECTION
+				//------------------------------------------------------------------------------------------------------------------------
+			
+				var o = "";
+        var d = "";
+			
+				//2.5.13 | KT | REQ | STRY0073625
+        if (rl.table == "x_153465_discovert_tasker_requests") {
+            o = "number";
+            d = "desc";
+        }
+			
+        if (rl.table == "x_153465_discovert_tasker_schedule") {
+            o = "next_run_date";
+            d = "asc";
+        }
+
+        if (rl.table == "x_153465_discovert_discover_office_members") {
+            o = "office_member";
+            d = "asc";
+        }
+
+				// STRY0074663
+				if (rl.table == "x_153465_discovert_organizational_contacts") {
+            o = "u_user_information";
+            d = "asc";
+        }
+
+				if (rl.table == "x_153465_discovert_route_task_instance") {
+            o = "task_order";
+            d = "asc";
+        }
+
+				// STRY0092475
+				var rlView = data.view;
+				var rlTitle = getTabTitle(rl.table, rl.label);
+				// STRY0092475 - this is a special case as we want to order the list to put the newest ask at the top instead of listing them by task order
+				if (rl.table == "x_153465_discovert_route_task_instance"  && data.table == "x_153465_discovert_discover_routing_template") {
+            rlView = "tasks_on_template";
+						rlTitle = rl.label;
+						o = "number";
+            d = "desc";
+						// STRY0092475 - related list uses a relationshiop and for some reason the rl.field value is undefined for relationships
+						rl.field = 'u_parent_template';
+        }
+			
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.4. CUSTOM: RELATED LIST FILTER
+				//------------------------------------------------------------------------------------------------------------------------
+        var filter = rl.field + "=" + data.sys_id;
+        // STRY0059424 | Include Attachments since we dropped attachment properties
+        if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments") && (data.AttachmentSharedFolderON == true)) {
+            // STRY0063505 |	Modified to set this above based on table
+            filter = 'table_sys_id' + "=" + sharedAttachSys_ID;
+        } else {
+            if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
+                // STRY0063505 |	Modified to set this above based on table
+                filter = 'table_sys_id' + "=" + myAttachSys_ID;
+            }
+        }
+				// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
+				rl.filter = filter;
+
+
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.5. CUSTOM: WIDGET PARAMETERS
+				//------------------------------------------------------------------------------------------------------------------------
+        
+        var params = {
+            o: o,
+            d: d,
+            table: rl.table,
+            filter: filter,
+            //STRY0092475: 04/01/2020
+            view: rlView,
+            title: rlTitle,
+            open_row_details_in_modal: open_row_details_in_modal
+            //show_breadcrumbs: true
+        };
+
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.5. CUSTOM: RELATED LIST CALL WIDGET 
+				//------------------------------------------------------------------------------------------------------------------------
+        rl.widget = $sp.getWidget('discovertasker-widget-data-table', params);
+        // STRY0059145 | The previous implementation was using just rl.table for the target inthe HTML for loading data and counts.
+        // Any time the same table is added 2 times in the HTML, the target will be the same for both tables.  
+        // a new field was created, rl.targetId, by concatenating rl.table with rl.label(without spaces).
+        // this new field will be used instead of rl.table in the target fields of the HTML
+        rl.targetId = rl.table + rl.label.replace(/ /g, "_");
+			
+				// STRY0046028 - determine if user can create for the related list
+				var userInfoScript = new UserInfoScripts();
+				switch (rl.table) {
+					case "x_153465_discovert_discover_office_members":
+						rl.canCreate =  userInfoScript.userCanCreateMem(data.sys_id);
+						break;
+					case "x_153465_discovert_discover_office_hierarchy":
+						rl.canCreate =  userInfoScript.userCanCreateOU(data.sys_id);	
+						break;
+					case "x_153465_discovert_route_tasks":
+						rl.canCreate = userInfoScript.userHasProcessRights(rec);
+						break;
+					case "x_153465_discovert_discover_routing_template":	
+						rl.canCreate = userInfoScript.userHasProcessRights(rec);
+						break;
+					case "x_153465_discovert_tasker_schedule":	
+						rl.canCreate = userInfoScript.userHasProcessRights(rec);
+						break;
+					case "x_153465_discovert_organizational_contacts":	
+						rl.canCreate = true;
+						break;
+					case "x_153465_discovert_route_task_instance":	
+						// STRY0076291
+						rl.canCreate = (((rec.u_task_requester == data.current_user) || (rec.assigned_to == data.current_user)) && rec.active == true);
+						break;
+						
+					default:
+						rl.canCreate = false;
+						
+				}
+    }
+	
+    // STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
+    if (options.page) {
+        var page = new GlideRecord('sp_page');
+        if (page.get(options.page))
+            data.page = page.getDisplayValue('id');
+    }
+    if (!data.page) {
+        data.page = "form";
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // CUSTOM: ATTACHMENTS AND SHARED ATTACHMENTS
+    //------------------------------------------------------------------------------------------------------------------------
+    // STRY0059424 | Include Attachments since we dropped attachment properties
+		// STRY0061245 | Include Attachments since we dropped attachment properties
+    // STRY0063505 | The data.task_sysid field was used only below.  
+    data.sharedAttachmentWidgetCount = 0;
+    if ((data.AttachmentSharedFolderON == true) && (data.SNAttachmentsON == true)) {
+        data.sharedAttachmentWidget = $sp.getWidget('tasker_task_attachments', {
+            record_table: sharedAttachTableName,
+            record_id: sharedAttachSys_ID + "",
+            record_name: 'sharedAttachmentWidget'
+        });
+    }
+
+    data.myAttachmentWidgetCount = 0;
+    if (data.SNAttachmentsON == true) {
+        // STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the Process Tree
+        if (data.table != "x_153465_discovert_discover_routing_template" || data.AttachmentSharedFolderON == true) {
+            data.myAttachmentWidget = $sp.getWidget('tasker_task_attachments', {
+                record_table: data.table,
+                record_id: data.sys_id,
+                record_name: 'myAttachmentWidget'
+            });
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 3. CUSTOM: N TAB: PROGRESS BAR & AUDIT WIDGET 
+    //------------------------------------------------------------------------------------------------------------------------
+    data.widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
+        table: data.table,
+        sys_id: data.sys_id
+    });
+
+    data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
+        table: data.table,
+        sys_id: data.sys_id,
+        includeExtended: true,
+        title: "${Activity}",
+        use_dynamic_placeholder: true,
+        btnLabel: "${Post}"
+    });
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 4. DOC. INT INTEGRATION
+    //------------------------------------------------------------------------------------------------------------------------
+    //STRY0042042: DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments
+    //STRY0046049: DI Integration: Enable/Disable upload document feature to SharePoint
+		// STRY0086644 - added check for DocId not provided	
+    if (data.DocIntON && (data.sys_id !=-1 && data.sys_id !='') &&
+        (data.table == 'x_153465_discovert_route_task_instance' ||
+            data.table == 'x_153465_discovert_discover_routing_template' ||
+            data.table == 'x_153465_discovert_route_tasks')) {
+        // STRY0063505
+        var DocIntViewSysID = '';
+        var DocIntSharedDocsViewSysID = '';
+        var sharedMappedTableName = '';
+
+        // STRY0063505
+        var sharedDocSys_ID = data.sys_id; // set to the defualt
+        if (data.table == "x_153465_discovert_route_task_instance") {
+            sharedMappedTableName = data.table;
+            sharedDocSys_ID = data.sys_id;
+            DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntViewSysIDTasks');
+            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks');
+        }
+
+        if (data.table == "x_153465_discovert_discover_routing_template") {
+            sharedDocSys_ID = data.sys_id;
+            // STRY0063505
+            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessSharedDocumentsViewSysIDTasks');
+            sharedMappedTableName = 'x_153465_discovert_discover_routing_template';
+        }
+
+        if (data.table == "x_153465_discovert_route_tasks") {
+            DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessTaskViewSysIDTasks');
+            // STRY0063505
+            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessSharedDocumentsViewSysIDTasks');
+            // Use .dot walking in the code to keep from needing 2 different DocInt views for Process Shared Documents
+            sharedDocSys_ID = rec.tasker_process_definition.sys_id;
+            sharedMappedTableName = 'x_153465_discovert_discover_routing_template';
+        }
+
+        // STRY0063505 | Added a check for both boolean and string value of true
+        if (data.isActive == "true" || data.isActive == true) data.isActive = true;
+        else data.isActive = false;
+
+        // STRY0063505 |	The only table we will not share DocIntegration "My Documents" on is the Process Template table.  
+        // It only needs the shared documents folder.
+			
+				// ******************************************************
+				// BEGIN STRY0069986- RJ - Cert Push - Template DocInt Fix
+				// ******************************************************
+				// To enable refreshing the widget without a post back, 
+				// the widget creation 
+        //if (data.table != "x_153465_discovert_discover_routing_template") {
+				//
+				//	if(!data.widgetDocIntegration){
+				//			data.widgetDocIntegration = $sp.getWidget('docint-list-items', {
+				//					vw: DocIntViewSysID,
+				//					mapRowSysId: data.sys_id + "",
+				//					readonly_flag: data.isActive,
+				//					lw_name: 'widgetDocIntegration'
+				//			});
+				//	}
+        //}
+        // STRY0059178 | Shared Documents Folder
+        //if (data.DocIntShareFolderON) {
+				//	if(!data.widgetDocIntegrationSharedDocs){
+				//			data.widgetDocIntegrationSharedDocs = $sp.getWidget('docint-list-items', {
+				//					vw: DocIntSharedDocsViewSysID,
+				//					mapRowSysId: sharedDocSys_ID + "",
+				//					readonly_flag: data.isActive,
+				//					lw_name: 'widgetDocIntegrationSharedDocs'
+				//			});
+				//	}
+        //}
+				// STRY0069986
+				data.DocIntSharedDocsViewSysID = DocIntSharedDocsViewSysID;
+				data.DocIntViewSysID = DocIntViewSysID;
+				data.sharedDocSys_ID = sharedDocSys_ID + "";
+				// ******************************************************
+				// END STRY0069986- RJ - Cert Push - Template DocInt Fix
+				// ******************************************************
+			
+    }
+
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 5. CUSTOM: GET TABTITLE
+    //------------------------------------------------------------------------------------------------------------------------
+    function getTabTitle(table_name, related_table_name) {
+        var tabTitle = '';
+
+        switch (table_name) {
+            case "x_153465_discovert_route_task_instance":
+                tabTitle = 'Subtasks';
+                break;
+            case "x_153465_discovert_route_tasks":
+                tabTitle = 'Subtasks';
+                break;
+            case "x_153465_discovert_discover_office_hierarchy":
+                tabTitle = 'Sub OUs';
+                break;
+            case "x_153465_discovert_discover_office_members":
+                tabTitle = 'OU Members';
+                break;
+            case "x_153465_discovert_discover_routing_template":
+                tabTitle = 'Template Instances';
+                break;
+						// STRY0074663
+            case "x_153465_discovert_organizational_contacts":
+                tabTitle = 'Contacts';
+                break;
+						default:
+                tabTitle = related_table_name;
+
+        }
+        return tabTitle;
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // 6. CUSTOM: SET BREADCRUMNS
+    //------------------------------------------------------------------------------------------------------------------------
+    function setBreadcrumbs(page_id, task_name) {
+        var title = ""; //"Task Details: ";
+        if (page_id == "discovertasker_taskdetails") {
+            data.breadcrumbs = [{
+                    label: title + task_name,
+                    url: "#"
+                } //parent
+            ]; //this
+        }
+
+        if (page_id == "discovertasker_relatedtasks") {
+            data.breadcrumbs = [{
+                    label: title + task_name,
+                    url: "?id=discovertasker_taskdetails&table=" + data.table + "&sys_id=" + data.sys_id
+                }, //parent
+                {
+                    label: "Related Tasks",
+                    url: '#'
+                }
+            ]; //this
+        }
+        if (page_id == "discovertasker_newtask") {
+            data.breadcrumbs = [{
+                    label: "New Item",
+                    url: '#'
+                }
+            ]; //this
+        }
+	
+    }
+    //----------------------------------test prompt for instance notation
+
+
+    if (input) {
+        if (input.processInstanceName != undefined) {
+            data.processInstanceName = input.processInstanceName;
+            data.test = new RunProcessTemplate().runProcessTemplate(data.sys_id, data.processInstanceName);
+        }
+    }
+
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // END CUSTON
+    //------------------------------------------------------------------------------------------------------------------------
+
+    // Activity formatter is hardcoded to set specific options
+    for (var f in data.f._formatters) {
+        var fm = data.f._formatters[f];
+        if (fm.formatter == "activity.xml") {
+            fm.hardcoded = true;
+            fm.widgetInstance = $sp.getWidget('widget-ticket-conversation', {
+                table: data.table,
+                sys_id: data.sys_id,
+                includeExtended: true,
+                title: 'Audit/Notes', //"${Activity}",
+                use_dynamic_placeholder: true,
+                btnLabel: "${Post}"
+            });
+        } else if (fm.formatter == "com_glideapp_servicecatalog_veditor" || fm.formatter == "com_glideapp_questionset_default_question_editor") {
+            var qsConfig = $sp.getValue('quick_start_config');
+            if (qsConfig)
+                qsConfig = JSON.parse(qsConfig)[0];
+            fm.widgetInstance = $sp.getWidget(fm.widget, {
+                table: data.table,
+                sys_id: data.sys_id,
+                readonly_variable_editor: qsConfig ? qsConfig.readonly_variable_editor : 'false'
+            });
+        } else
+            fm.widgetInstance = $sp.getWidget(fm.widget, data);
+    }
+
+
+})($sp, input, data, options, gs);
+
+
+//-----------------------end of create suggested task
+//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+// WIDGET BASE: FORM
+//------------------------------------------------------------------------------------------------------------------------]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-03-18 02:11:38</sys_created_on>
+        <sys_id>31ae08581b0be8d03dc8eb96624bcb52</sys_id>
+        <sys_mod_count>7</sys_mod_count>
+        <sys_name>Tasker Mobile Documents</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_31ae08581b0be8d03dc8eb96624bcb52</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-27 16:24:52</sys_updated_on>
+        <template><![CDATA[<div ng-if="!data.isValid && !data.emptyStateTemplate" class="panel panel-default">
+  <div class="panel-body wrapper-lg text-center">
+
+    <span ng-if="!data.tableUnsupported">${Record not found or record not selected}</span> 
+    <!--<span ng-if="!data.tableUnsupported">Please make a selection</span>-->
+    <span ng-if="data.tableUnsupported">${Form view not supported for requested table}</span>
+
+  </div>
+</div>
+
+<div ng-if="!data.isValid && data.emptyStateTemplate" class="panel-shift">
+  <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
+</div>
+
+<div ng-if="data.isValid" class="panel-shift">
+  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && data.emptyStateTemplate">
+    <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
+  </div>
+  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && !data.emptyStateTemplate">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <span ng-if="data.page_id != 'discovertasker_officehierarchy' && data.sys_id.length > 2" class="panel-title">{{data.f.title}}<span ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view] </span></span>
+        <span ng-if="data.page_id == 'discovertasker_officehierarchy' && !data.sys_id" class="panel-title">Organizational Unit</span>
+      </div>
+      <div class="panel-body wrapper-lg text-center">
+        <div ng-if="!data.sys_id && data.page_id == 'discovertasker_officehierarchy'" class="col-md-12 text-center placeholder-right-pane ng-scope">
+          <i class="fa fa-gears" aria-hidden="true"></i> 
+          <p class="m-t-lg">Select an item from the left</p>
+        </div>
+        <div ng-if="data.hasRecordReadAccess == false"><br>You do not have permission to view this Task<br></div> 
+        <div ng-if="data.sys_id && data.page_id != 'discovertasker_officehierarchy'">
+          ${No elements to display}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists" >
+    <div class="panel-heading" ng-if="data.f.title.length" sp-context-menu="getUIActionContextMenu(event)">
+      <div class="banners">
+        <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}" ng-show="data.f.classification.length > 0"> 
+          <span class="glyphicon glyphicon-tag" title="Classification: {{data.f.classification}}"></span>&nbsp;&nbsp;<span title="Classification: {{data.f.classification}}">{{data.f.classification}}</span>
+        </div>
+        <div class="assignmentgroup-banner" ng-show="data.f.assignment_group.length > 0"> 
+          <span class="glyphicon glyphicon-lock" title="Restricted Group:{{data.f.assignment_group}}"></span>&nbsp;&nbsp;<span title="Restricted Group: {{data.f.assignment_group}}">{{data.f.assignment_group}}</span>
+        </div>
+      </div>
+
+      <span class="panel-title" aria-label="{{data.f.title}}">
+        <span ng-if="(data.number.length > 0)"> &nbsp;{{data.number}}: </span>
+        {{data.f.title}} 
+      </span>  
+
+    </div>
+
+    <div class="panel-body">
+
+
+      <!-- RELATED LIST -->
+      <!--div class="panel-body"-->
+      <div ng-if="!data.hideRelatedLists">
+        <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
+
+          <ul class="nav nav-tabs" role="tablist">
+
+            <li class="active">
+              <a ng-class='active' data-target="#Information" aria-controls="Information" role="tab" data-toggle="tab">Information</a> <!-- href="#Information"  -->
+            </li>
+
+            <!-- STRY0042042 | DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments -->
+            <!-- STRY0063505 | Add My Documents on the Process Template Task -->
+            <!-- STRY0063505 | NOTE: the only table we won't show "My Documents on is the Process Template object.  It is a shared only table -->
+            <!-- STRY0086644 - added check for DocId not provided -->
+            <li ng-if="data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks')">
+              <!-- STRY0061245 | In the My Documents and Shared Documents tabs, the information message will state "Documents are stored in SharePoint via Doc. Integrator" -->
+              <!-- RJ TODO, INTERNATIONALIZATION CHECK OUT THIS LINK https://www.yansa.io/yds/#tooltip_uib -->
+              <a data-target="#DocIntDocuments" aria-controls="DocIntDocuments" title="Documents are stored in SharePoint via Doc. Integrator" data-toggle="tab">My Documents
+                <!-- STRY0082941 - Task form - Icon with value "-1" appears by default for all tasks in "My Documents" and "Shared Documents" tab of the task form -->
+                <span class="label label-as-badge label-primary" ng-if="data.docintCount && data.docintCount!=-1">{{data.docintCount}}</span>
+                <span class="fa fa-exclamation-circle" ng-if="data.docintCount==-1" ></span>
+              </a>
+            </li>
+            <!-- STRY0059178 | Add Shared Documents if enabled -->
+            <!-- STRY0063505 | Add Shared Attachments on the Process Template, and Process Template Task -->
+            <!-- STRY0086644 - added check for DocId not provided -->
+            <li ng-if="data.DocIntShareFolderON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks')">
+              <a data-target="#DocIntSharedDocuments" aria-controls="DocIntSharedDocuments" title="Documents are stored in SharePoint via Doc. Integrator" data-toggle="tab">Shared Documents
+                <!-- STRY0059178 | DocInt Shared Folder - get the count   -->
+                <!-- STRY0082941 - Task form - Icon with value "-1" appears by default for all tasks in "My Documents" and "Shared Documents" tab of the task form -->
+                <span class="label label-as-badge label-primary" ng-if="data.docintSharedCount && data.docintSharedCount!=-1">{{data.docintSharedCount}}</span>
+                <span class="fa fa-exclamation-circle" ng-if="data.docintSharedCount==-1" ></span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="tab-content">
+
+        <div class="tab-pane ng-scope active in" id="Information"> <!--instead: tab-pane fade in active -->
+          <div>
+            <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
+          </div>
+        </div>
+
+        <!-- STRY0042042 | DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments -->
+        <!-- STRY0063505 | Add My Documents on the Process Template, and Process Template Task -->
+        <div ng-if="data.widgetDocIntegration && data.DocIntON == true && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks')" class="tab-pane" id="DocIntDocuments">
+          <div style="margin-top: -1px;">
+            <sp-widget widget="data.widgetDocIntegration"></sp-widget>
+          </div>
+        </div>
+        <!-- STRY0059178 | Add Shared Documents if enabled -->
+        <!-- STRY0063505 | Add Shared Attachments on the Process Template, and Process Template Task -->
+        <div ng-if="data.widgetDocIntegrationSharedDocs && data.DocIntShareFolderON == true && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks')" class="tab-pane" id="DocIntSharedDocuments">
+          <div style="margin-top: -1px;">
+            <!-- STRY0059178  -->
+            <sp-widget widget="data.widgetDocIntegrationSharedDocs"></sp-widget>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="panel-footer">
+      <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}" ng-show="data.f.classification.length > 0"> 
+        <span class="glyphicon glyphicon-tag" title="Classification"></span>&nbsp;&nbsp;<span title="Classification">{{data.f.classification}}</span><br>
+      </div>
+
+      <button ng-if="getPrimaryAction() && data.sys_id.length > 2" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-default action-btn" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">Update<span ng-if="saveButtonSuffix"></span></button>
+
+      <button ng-click="triggerUIAction(action)" ng-disabled="submitting" ng-repeat="action in getUIActions('button')" class="btn btn-primary action-btn" gsft_id="{{::action.sys_id}}">{{action.name}}</button>
+      <span>{{status}}</span>
+      <!-- STRY0074663 - CONTACTS -->
+      <button ng-if="data.table == 'x_153465_discovert_organizational_contacts'" class="btn btn-success action-btn"  ng-click="openNewModal('x_153465_discovert_external_poc_info','New Contact','','', '');">Create Contact</button>
+      <div style="clear: both;"></div>
+      <div ng-if="mandatory.length" class="alert alert-info" style="margin-top: .5em" aria-live="polite" aria-atomic="true">
+        <span ng-if="mandatory.length > 0">${Required information} </span>
+        <span ng-repeat="f in mandatory" class="label label-danger" style="margin-right: .5em; display: inline-block;" ng-bind="f.label"></span>
+      </div>
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

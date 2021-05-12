@@ -1,16 +1,70 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, nowAttachmentHandler, $rootScope, spUtil, spModal, $log, spAriaUtil) {
-	
+        <client_script><![CDATA[function ($scope, nowAttachmentHandler, $rootScope,amb, spUtil, spModal, $log, spAriaUtil) {
+	var c = this;
 	$scope.errorMessages = [];
 	$scope.attachmentHandler = new nowAttachmentHandler(setAttachments, appendError);
 	$scope.data.action = "";
+	function resetAttachments(){
+			// reset the attachment handler
+			$scope.attachmentHandler.setParams(c.data.table, c.data.sys_id, 1024 * 1024 * $scope.data.maxAttachmentSize);
+			$scope.attachmentHandler.getAttachmentList();
+	}
 
-	spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + $scope.data.sys_id, function(name, data) {
-		$scope.attachmentHandler.getAttachmentList();
+	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+	var watcher;
+	initRecordWatcher(c.data.table, "table_sys_id=" + c.data.sys_id);
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				$scope.server.update();
+			});
+		}
+	}
+
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		// only process this event when the table's are equivalent
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			$scope.server.update().then(function(){
+				// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+				resetAttachments();
+				initRecordWatcher(c.data.table, "table_sys_id=" + c.data.sys_id);
+			});
+		}
 	});
-
+	
+	$rootScope.$on('$sp.list.click', function(e, parms) {
+		// only process this event when the table's are equivalent
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			$scope.server.update().then(function(){
+				// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+				resetAttachments();
+				initRecordWatcher(c.data.table, "table_sys_id=" + c.data.sys_id);
+			});
+		}
+	});
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		// only process this event when the table's are equivalent
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			c.data.sys_id = parms.sys_id;
+			$scope.server.update().then(function(){
+				// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+				resetAttachments();
+				initRecordWatcher(c.data.table, "table_sys_id=" + c.data.sys_id);
+			});
+		}
+	});
+	
 	$scope.$evalAsync(function() {
 		$scope.attachmentHandler.setParams($scope.data.table, $scope.data.sys_id, 1024 * 1024 * $scope.data.maxAttachmentSize);
 		$scope.attachmentHandler.getAttachmentList();
@@ -150,6 +204,9 @@
 		gr.comments = input.action + " an attachment";
 		gr.update();
 	}
+	if(input){
+		data.sys_id = input.sys_id;
+	}
 
 	//STRY0072011 | 2.5.13
 	if (data.table == 'x_153465_discovert_route_task_instance'){	
@@ -193,14 +250,14 @@
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-04-22 17:25:45</sys_created_on>
         <sys_id>5a5d0f5cdb81b300bb8ee536ca96193f</sys_id>
-        <sys_mod_count>117</sys_mod_count>
+        <sys_mod_count>154</sys_mod_count>
         <sys_name>Tasker Attachments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5a5d0f5cdb81b300bb8ee536ca96193f</sys_update_name>
-        <sys_updated_by>KTorres</sys_updated_by>
-        <sys_updated_on>2020-09-03 22:21:37</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-04-16 17:13:07</sys_updated_on>
         <template><![CDATA[<div ng-if="data.SNAttachmentsON == 'true'">
   <div ng-if="data.canRead" class="panel panel-primary b">
     <div class="panel-heading padder-b-none">

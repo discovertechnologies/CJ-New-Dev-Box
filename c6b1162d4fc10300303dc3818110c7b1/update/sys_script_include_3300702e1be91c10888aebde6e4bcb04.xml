@@ -1,88 +1,107 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
     <sys_script_include action="INSERT_OR_UPDATE">
         <access>package_private</access>
-        <active>false</active>
-        <api_name>x_153465_discovert.DEPRECATED - TaskerAttachmentScripts</api_name>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerDurationCalculator</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>The Tasker application throughout checks &#13;
-&#13;
-2.5.13:&#13;
-- CanUploadAttachments: Is the Task active and ServiceNow Attachments on&#13;
+        <description>2.6&#13;
+NOTE: The initial implementation uses a system property and all templates will use that schedule to block days.&#13;
+In this function we will be able to set the schedule based on any values passed in the current record.&#13;
+If we want to set it based on the user, we could look at the sys_user table to find their default schedule.&#13;
+If we want to use the Primary Office, Tasking Authority or Primary Assignee, we could set a default schedule and pull here.&#13;
+We could also allow each Template to set a schedule.  Or, we could allow each Template Task to overide/set their own schedule.&#13;
+Finally, if we want to allow users to select a schedule when creating a schedule, we could grab it from there too.&#13;
 </description>
-        <name>DEPRECATED - TaskerAttachmentScripts</name>
-        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+        <name>TaskerDurationCalculator</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-var taskerDocumentScripts = Class.create();
-taskerDocumentScripts.prototype = {
-	initialize: function() {
-	},
-	
-	
-	getAttachmentAndDocumentSettings: function(gr){
-		var taskerDocumentSettings = {};
-		taskerDocumentSettings.sNOWAttachmentsOn = false;
-		taskerDocumentSettings.docIntDocumentsOn = false;
-		taskerDocumentSettings.sharingAttachments = false;
-		taskerDocumentSettings.sharingDocuments = false;
+var TaskerDurationCalculator = Class.create();
+TaskerDurationCalculator.prototype = {
+    initialize: function() {
+		this.dc = new Tasker_Copy_DurationCalculator();
+		this.hoursInBusinessDay = 9;
+		// default is "8-5 weekdays excluding holidays";
+		this.taskerDefaultscheduleName = gs.getProperty("x_153465_discovert.Global Template Default Schedule") + '';
+    },
+
+	// find the number of business days in the duration assuming 9 hour day TODO: determine how to find the number of hours per day in the schedule.
+	calculateBusinessDays: function(d){
+		// Divide the duration from milliseconds to hours - 60x60x1000
+		var hoursCalc = d/(60*60*1000); 
+		// Find # of business days by rounding down the number of days into 24 hour blocks (ignoring additional hours for now)
+		var businessDays = Math.floor(hoursCalc / 24); 
+		// Establish whether the rounding has removed any "whole hours" by calculating the difference between rounded business days and total duration.
+		var hoursDiff = d - businessDays*60*60*24*1000;
 		
-		if (gr.sys_id != -1){
-			var useAttachmentsorDocuments = gs.getProperty("x_153465_discovert.UseAttachmentsorDocuments");
-			taskerDocumentSettings.sNOWAttachmentsOn = (useAttachmentsorDocuments.startsWith("1") || useAttachmentsorDocuments.startsWith("3"));
-			taskerDocumentSettings.docIntDocumentsOn = (useAttachmentsorDocuments.startsWith("2") || useAttachmentsorDocuments.startsWith("3"));
-			
-			var tableName = gr.getRecordClassName();
-			// if the glide record is a Task Instance, get the Shared Settings from the top task
-			if (tableName == "x_153465_discovert_route_task_instance"){
-				taskerDocumentSettings.sharingAttachments = (gr.u_top_task.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
-				taskerDocumentSettings.sharingDocuments = (gr.u_top_task.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
-			}
-			if (tableName == "x_153465_discovert_task_tree"){
-				taskerDocumentSettings.sharingAttachments = (gr.u_task_ref.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
-				taskerDocumentSettings.sharingDocuments = (gr.u_task_ref.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
-			}
-			// if the glide record is a Process Template, get the Shared Settings from the Process Template
-			if (tableName == "x_153465_discovert_discover_routing_template"){
-				taskerDocumentSettings.sharingAttachments = (gr.u_shared_attachments == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
-				taskerDocumentSettings.sharingDocuments = (gr.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
-			}
-			// if the glide record is a Process Template Task, get the Shared Settings from the Process Template Task's - Process Template
-			if (tableName == "x_153465_discovert_route_tasks"){
-				taskerDocumentSettings.sharingAttachments = (gr.tasker_process_definition.u_shared_attachments  == true && taskerDocumentSettings.sNOWAttachmentsOn == true);
-				taskerDocumentSettings.sharingDocuments = (gr.tasker_process_definition.u_shared_documents  == true && taskerDocumentSettings.docIntDocumentsOn == true);
-			}
-			// RJ - PSD - STRY0064692 - first try to save documents to the Shared Documents folder for the Task Tree.
-			if (tableName == "x_153465_discovert_suggested_taskers"){
-				// just return value of sNOWAttachmentsOn for Suggested Taskers
-				taskerDocumentSettings.sharingAttachments = taskerDocumentSettings.sNOWAttachmentsOn == true;
-				// just return value of docIntDocumentsOn for Suggested Taskers
-				taskerDocumentSettings.sharingDocuments = taskerDocumentSettings.docIntDocumentsOn == true;
-			}
-			// RJ first try to save documents to the Shared Documents folder for the Task Tree.
-			if (tableName == "x_153465_discovert_discover_routing_runtime"){
-				// just return value of sNOWAttachmentsOn for Suggested Taskers
-				taskerDocumentSettings.sharingAttachments = taskerDocumentSettings.sNOWAttachmentsOn == true;
-				// just return value of docIntDocumentsOn for Suggested Taskers
-				taskerDocumentSettings.sharingDocuments = taskerDocumentSettings.docIntDocumentsOn == true;
-			}
-			
+		// Set the amount for the duration calculation based on business days in MS + the difference in hours.
+		var durCalc = businessDays*(60*60*this.hoursInBusinessDay*1000)+hoursDiff;
+		
+		return durCalc;
+	},
+
+	
+	// NOTE: The initial implementation uses a system property and all templates will use that schedule to block days.
+	//       In this function we will be able to set the schedule based on any values passed in the current record.
+	//       If we want to set it based on the user, we could look at the sys_user table to find their default schedule.
+	//       If we want to use the Primary Office, Tasking Authority or Primary Assignee, we could set a default schedule and pull here.
+	//       We could also allow each Template to set a schedule.  Or, we could allow each Template Task to overide/set their own schedule.
+	//       Finally, if we want to allow users to select a schedule when creating a schedule, we could grab it from there too.
+
+	// gr:  Glide record - for initial implementation it will be Template task. (today ignored)
+	//      This could be any Tasker Object and we would need to determine how to get the schedule
+	//      for that object in the future.
+	// d:   duration object - Duration between start and end dateTime
+	// std: Start Date Time - glide date time - the start date time to add the duration to
+	calculateEndDate: function(gr, d, std) {
+		this.setDurationCaluclationSchedule(gr,this.dc);
+		this.dc.setStartDateTime(std);
+		if(this.taskerDefaultscheduleName != ''){
+			// convert days to business days
+			var businessDuration = this.calculateBusinessDays(d);
+
+			// convert duration to seconds by dividing by 1000
+			this.dc.calcDuration(businessDuration/1000);
+			return this.dc.getEndDateTime();
+		} else {
+			std.add(d);
+			return std.getValue();
 		}
-		return taskerDocumentSettings;
 	},
 	
-		type: 'taskerDocumentScripts'
-	};]]></script>
+	// gr: Glide record - for initial implementation it will be Template task. (today ignored)
+	//     This could be any Tasker Object and we would need to determine how to get the schedule
+	//     for that object in the future.
+	// dc: Duration Calculator - this is the duration calculator object from ServiceNow
+	setDurationCaluclationSchedule: function(gr, dc){
+		// Load the schedule set in the system property.  See note above for future options.
+		var grSched = new GlideRecord('cmn_schedule');
+		grSched.addQuery('name', this.taskerDefaultscheduleName);
+		grSched.query();
+		if(!grSched.next()){
+			gs.warn('*** Could not find schedule "'+ this.taskerDefaultscheduleName +'"');
+			return;
+		}
+		dc.setSchedule(grSched.getUniqueValue());
+	},
+	
+    type: 'TaskerDurationCalculator'
+};]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-06-24 18:38:34</sys_created_on>
         <sys_id>3300702e1be91c10888aebde6e4bcb04</sys_id>
-        <sys_mod_count>3</sys_mod_count>
-        <sys_name>DEPRECATED - TaskerAttachmentScripts</sys_name>
+        <sys_mod_count>21</sys_mod_count>
+        <sys_name>TaskerDurationCalculator</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3300702e1be91c10888aebde6e4bcb04</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2020-11-05 04:52:35</sys_updated_on>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2021-04-29 15:55:46</sys_updated_on>
     </sys_script_include>
 </record_update>
