@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sysevent_script_action">
+    <sysevent_script_action action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <condition_script/>
+        <description/>
+        <event_name>x_153465_discovert.Tasker_Send_Email</event_name>
+        <name>Tasker_Send_Email_Event</name>
+        <order>100</order>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+
+// STRY0101213 - - Modify Email send with attachments to Asyncrhonous call
+taserSendEmailEvent(current);
+// RAJ NOTE: just call the UI Action script include already in 2.6 here instead of having the code in the event.
+function taserSendEmailEvent(taskerEmail){
+	var status;
+	var writeToErroLog;
+	try {		
+		if(taskerEmail.u_export_task_information == true){
+			// STRY0101213
+			taskerEmail.u_status = 'generating_email';
+			taskerEmail.update();
+
+			var instance = gs.getProperty("glide.servlet.uri");
+			var recordSys_Id = taskerEmail.parent;
+			var fileName = taskerEmail.parent.task_name;
+			var taskTable = 'x_153465_discovert_route_task_instance';
+
+			// STRY0101213
+			taskerEmail.u_status = 'loading_task_pdf';
+			taskerEmail.update();
+
+			// EXP - STRY0069767
+			var r = new sn_ws.RESTMessageV2('x_153465_discovert.Email Task Information', 'Email Task Information POST');
+			r.setStringParameterNoEscape('record_sys_id', recordSys_Id);
+			r.setStringParameterNoEscape('instance', instance);
+			r.setStringParameterNoEscape('taskTable', 'x_153465_discovert_route_task_instance');
+			// EXP - STRY0069767
+			r.saveResponseBodyAsAttachment('x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"), fileName+".pdf");
+			var response = r.execute();
+
+			// STRY0101213
+			var httpResponseStatus = response.getStatusCode();
+			if(httpResponseStatus != 200 && httpResponseStatus !=201){
+				var responseBody = response.haveError() ? response.getErrorMessage() : '';
+				responseBody = (responseBody != '' && responseBody != null) ? gs.getMessage('Error Message: ') + responseBody : '';
+gs.info('RJ - Testing - responseBody: ' + responseBody);
+				taskerEmail.u_message = gs.getMessage('Email Information Error') + ' [' + taskerEmail.u_status.getDisplayValue() + ']  ' + gs.getMessage('Error Code: ') + ' (' + httpResponseStatus + ')  ' + responseBody;
+				taskerEmail.u_status = 'error';
+				taskerEmail.update();
+				return;
+			}
+			//  if check attachemnts check call glidesystem and pass table = task tree and pass current.parent.U_top_task.U_task_tree.sys_id
+		}
+		//if the export my attachments checkbox is checked attach all my attachments
+		if(taskerEmail.u_export_my_attachments == true){
+			// STRY0101213
+			taskerEmail.u_status = 'loading_my_attachments';
+			taskerEmail.update();
+			// EXP - STRY0069767
+			GlideSysAttachment.copy('x_153465_discovert_route_task_instance', taskerEmail.parent, 'x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"));
+		}
+		//if the export all shared attachments checkbox is checked attach all shared attachments
+		if(taskerEmail.u_export_all_shared_attachments == true){
+			// STRY0101213
+			taskerEmail.u_status = 'loading_shared_attachments';
+			taskerEmail.update();
+			// EXP - STRY0069767
+			GlideSysAttachment.copy('x_153465_discovert_task_tree',  taskerEmail.parent.u_top_task.u_task_tree, 'x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"));
+		}
+		//if the export my documents checkbox is checked , attach my documents
+		if(taskerEmail.u_export_my_documents == true){
+			// STRY0101213
+			taskerEmail.u_status = 'loading_my_documents';
+			taskerEmail.update();
+			var DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntViewSysIDTasks');
+			var cmd = new x_dtll2_contentint.CopyAndMoveDocuments();
+			// EXP - STRY0069767
+			var eventArgs = {
+				"sourceTable" : "x_153465_discovert_route_task_instance",
+				"sourceTableItemID" : taskerEmail.getValue('parent'),
+				"isAsync" :false,
+				"event" : "x_dtll2_contentint.SPtoSN",
+				"sourceView": DocIntViewSysID,
+				"targetTableName" : "x_153465_discovert_tasker_email",
+				"targetTableItemID" :  taskerEmail.getValue("sys_id")
+			};
+			cmd.createEvent(eventArgs);
+			
+			// NOTE: remove this when a method for checking status is available and use the DocInt status api call here
+			status = new Tasker_DocInt_API().getStatus('x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"), DocIntViewSysID);
+			if(status.displayValue != 'Completed'){
+				// STRY0101213
+				taskerEmail.u_message = gs.getMessage('Email Information Error occured while ') + ' [' + taskerEmail.u_status.getDisplayValue() + ']  ' + gs.getMessage('Error: Failed adding My Documents to email ') + '  ' + gs.getMessage('Additional information is available in the DocIntegrator Job logs and System Logs.  Please contact your application administrator to resolve the issue.');
+				taskerEmail.u_status = 'error';
+				taskerEmail.update();
+				
+				writeToErroLog =  taskerEmail.u_message + gs.getMessage(' DocIntegrator Log state: ') + status.displayValue + gs.getMessage(' DocIntegrator Log Message:') + status.message;
+				gs.error(gs.getMessage('Tasker Error: ') + writeToErroLog);
+				return;
+			}
+		}
+		//if the export all shared documents checkbox is checked, attach all shared documents
+		if(taskerEmail.u_export_all_shared_documents == true){
+			// STRY0101213
+			taskerEmail.u_status = 'loading_shared_documents';
+			taskerEmail.update();
+			var DocIntSharedViewSysID = gs.getProperty('x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks');
+			var cmd2 = new x_dtll2_contentint.CopyAndMoveDocuments();
+			// EXP - STRY0069767
+			var eventArgs2 = {
+				"sourceTable" : "x_153465_discovert_route_task_instance",
+				"sourceTableItemID" : taskerEmail.getValue('parent'),
+				"isAsync" : false,
+				"event" : "x_dtll2_contentint.SPtoSN",
+				"sourceView": DocIntSharedViewSysID,
+				"targetTableName" : "x_153465_discovert_tasker_email",
+				"targetTableItemID" : taskerEmail.getValue("sys_id")
+			};
+			cmd2.createEvent(eventArgs2);
+			// NOTE: remove this when a method for checking status is available and use the DocInt status api call here
+			status = new Tasker_DocInt_API().getStatus('x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"), DocIntSharedViewSysID);
+			if(status.displayValue != 'Completed'){
+				// STRY0101213
+				taskerEmail.u_message = gs.getMessage('Email Information Error occured while ') + ' [' + taskerEmail.u_status.getDisplayValue() + ']  ' + gs.getMessage('Error: Failed adding Shared Documents to email ') + '/n' + gs.getMessage('Additional information is available in the DocIntegrator Job logs and System Logs.  Please contact your application administrator to resolve the issue.');
+				taskerEmail.u_status = 'error';
+				taskerEmail.update();
+				
+				writeToErroLog =  taskerEmail.u_message + gs.getMessage(' DocIntegrator Log state: ') + status.displayValue + gs.getMessage(' DocIntegrator Log Message:') + status.message;
+				gs.error(gs.getMessage('Tasker Error: ') + writeToErroLog);
+				return;
+			}
+
+			
+		}
+
+		// STRY0101213
+		taskerEmail.u_status = 'sending_email';
+		taskerEmail.update();
+		//HT - STRY0058721
+		//collect the list of recipients
+		var recipientList = taskerEmail.u_recipient.toString();
+		// updated b/c current user is admin
+		var CurrentUserEmail = event.parm1;
+		var recipients = [recipientList, CurrentUserEmail];
+		gs.eventQueue("x_153465_discovert.EmailTaskInformation", taskerEmail, '', recipients.toString());
+
+		// STRY0101213
+		taskerEmail.u_status = 'sent';
+		taskerEmail.update();
+
+		//update worknotes on the tasker record
+		var parentTaskNumber = taskerEmail.parent.taskernumber;
+		var subject = taskerEmail.u_subject;
+		var recipient = taskerEmail.getDisplayValue('u_recipient');
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		grTask.addQuery('taskernumber', parentTaskNumber);
+		grTask.query();
+		if(grTask.next()){
+			// TODO - multilanguage
+			grTask.work_notes = "Requested an export of " + parentTaskNumber +", " + subject  + " that was sent to " + recipient.toString();
+			grTask.update();
+		}
+	}
+	catch(ex) {
+		var message = ex.message;
+		
+		// STRY0101213
+		taskerEmail.u_message = gs.getMessage('Email Information Error occured while ') + ' [' + taskerEmail.u_status.getDisplayValue() + ']  ' + gs.getMessage('Error: ') + ex + '  ' + gs.getMessage('Additional information is available in the system error logs.  Please contact your application administrator to resolve the issue.');
+
+		taskerEmail.u_status = 'error';
+		taskerEmail.update();
+		writeToErroLog =  taskerEmail.u_message + gs.getMessage(' in filename: ') + ex.fileName + gs.getMessage(' at line number:') + ex.lineNumber;
+		gs.error(gs.getMessage('Tasker Error: ') + writeToErroLog);
+		return;
+	}
+
+}]]></script>
+        <synchronous>false</synchronous>
+        <sys_class_name>sysevent_script_action</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-05-07 05:24:28</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>5af59258db4c34107f50a0a11596195b</sys_id>
+        <sys_mod_count>35</sys_mod_count>
+        <sys_name>Tasker_Send_Email_Event</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sysevent_script_action_5af59258db4c34107f50a0a11596195b</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-05-12 19:21:21</sys_updated_on>
+    </sysevent_script_action>
+</record_update>
