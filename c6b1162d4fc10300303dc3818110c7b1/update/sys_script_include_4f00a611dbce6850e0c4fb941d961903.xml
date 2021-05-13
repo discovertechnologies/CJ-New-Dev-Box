@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.6 - Tasker Moible&#13;
+        <description>2.5.405 (patched after 2.6)&#13;
+STRY0101213 - - Modify Email send with attachments to Asyncrhonous call&#13;
+&#13;
+2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
 STRY0071902 - As a Task Owner and Task manager of the Primary Office (OUTA), I will receive an email notification when the Assigned Member, Reviewer or OUTA of the primary Assignee, or Task Administrator (GTA) has requested clarification.&#13;
 &#13;
@@ -827,95 +830,10 @@ Task_uiAction.prototype = {
 		}
 	},
 	
-	uiAction_SendEmail: function(taskerEmail) {
+	uiAction_SendEmail: function(taskerEmail) {	
 		taskerEmail.insert();
-
-		//HT - STRY0058721
-		if(taskerEmail.u_export_task_information == true){
-
-			var instance = gs.getProperty("glide.servlet.uri");
-			var recordSys_Id = taskerEmail.parent;
-			var fileName = taskerEmail.parent.task_name;
-			var taskTable = 'x_153465_discovert_route_task_instance';
-
-			try {
-				// EXP - STRY0069767
-				var r = new sn_ws.RESTMessageV2('x_153465_discovert.Email Task Information', 'Email Task Information POST');
-				r.setStringParameterNoEscape('record_sys_id', recordSys_Id);
-				r.setStringParameterNoEscape('instance', instance);
-				r.setStringParameterNoEscape('taskTable', 'x_153465_discovert_route_task_instance');
-				// EXP - STRY0069767
-				r.saveResponseBodyAsAttachment('x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"), fileName+".pdf");
-				var response = r.execute();
-			}
-			catch(ex) {
-				var message = ex.message;
-			}
-
-			//TODO: HT once tree level is finished 
-			//  if check attachemnts check call glidesystem and pass table = task tree and pass current.parent.U_top_task.U_task_tree.sys_id
-		}
-		//if the export my attachments checkbox is checked attach all my attachments
-		if(taskerEmail.u_export_my_attachments == true){
-			// EXP - STRY0069767
-			GlideSysAttachment.copy('x_153465_discovert_route_task_instance', taskerEmail.parent, 'x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"));
-		}
-		//if the export all shared attachments checkbox is checked attach all shared attachments
-		if(taskerEmail.u_export_all_shared_attachments == true){
-			// EXP - STRY0069767
-			GlideSysAttachment.copy('x_153465_discovert_task_tree',  taskerEmail.parent.u_top_task.u_task_tree, 'x_153465_discovert_tasker_email', taskerEmail.getValue("sys_id"));
-		}
-		//if the export my documents checkbox is checked , attach my documents
-		if(taskerEmail.u_export_my_documents == true){
-			var DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntViewSysIDTasks');
-			var cmd = new x_dtll2_contentint.CopyAndMoveDocuments();
-			// EXP - STRY0069767
-			var eventArgs = {
-				"sourceTable" : "x_153465_discovert_route_task_instance",
-				"sourceTableItemID" : taskerEmail.getValue('parent'),
-				"isAsync" :false,
-				"event" : "x_dtll2_contentint.SPtoSN",
-				"sourceView": DocIntViewSysID,
-				"targetTableName" : "x_153465_discovert_tasker_email",
-				"targetTableItemID" :  taskerEmail.getValue("sys_id")
-			};
-			cmd.createEvent(eventArgs);
-		}
-		//if the export all shared documents checkbox is checked, attach all shared documents
-		if(taskerEmail.u_export_all_shared_documents == true){
-			var DocIntSharedViewSysID = gs.getProperty('x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks');
-			var cmd2 = new x_dtll2_contentint.CopyAndMoveDocuments();
-			// EXP - STRY0069767
-			var eventArgs2 = {
-				"sourceTable" : "x_153465_discovert_route_task_instance",
-				"sourceTableItemID" : taskerEmail.getValue('parent'),
-				"isAsync" : false,
-				"event" : "x_dtll2_contentint.SPtoSN",
-				"sourceView": DocIntSharedViewSysID,
-				"targetTableName" : "x_153465_discovert_tasker_email",
-				"targetTableItemID" : taskerEmail.getValue("sys_id")
-			};
-			cmd2.createEvent(eventArgs2);
-		}
-		//HT - STRY0058721
-		//collect the list of recipients
-		var recipientList = taskerEmail.u_recipient.toString();
-		var CurrentUserEmail = gs.getUser().getEmail();
-		var recipients = [recipientList, CurrentUserEmail];
-		gs.eventQueue("x_153465_discovert.EmailTaskInformation", taskerEmail, '', recipients.toString());
-		//HT -STRY0053835
-		//update worknotes on the tasker record
-		var parentTaskNumber = taskerEmail.parent.taskernumber;
-		var subject = taskerEmail.u_subject;
-		var recipient = taskerEmail.getDisplayValue('u_recipient');
-		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
-		grTask.addQuery('taskernumber', parentTaskNumber);
-		grTask.query();
-		if(grTask.next()){
-			// TODO - multilanguage
-			grTask.work_notes = "Requested an export of " + parentTaskNumber +", " + subject  + " that was sent to " + recipient.toString();
-			grTask.update();
-		}
+		// RAJ - NOTE: these 2 lines go into UI Action script include in 2.6 and beyond
+		gs.eventQueue('x_153465_discovert.Tasker_Send_Email', current, gs.getUser().getEmail());
 	},
 	
 	uiAction_SendClarification: function(task) {
@@ -1164,14 +1082,16 @@ Task_uiAction.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>115</sys_mod_count>
+        <sys_mod_count>116</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:46</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-05-12 23:11:07</sys_updated_on>
     </sys_script_include>
 </record_update>
