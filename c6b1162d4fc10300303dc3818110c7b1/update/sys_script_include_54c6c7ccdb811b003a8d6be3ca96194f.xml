@@ -6,6 +6,9 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+v2.7&#13;
+STRY0095102 - Stretch- HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
+&#13;
 v 2.5 P3&#13;
 STRY0084273 - Restricted Group - Template - OU, Member and Contact Field Filters based on "Restricted Group" selected&#13;
 STRY0084270 - Restricted Group - Task Form - OU, Member and Contact fields should filter based on "Restricted Group" selected&#13;
@@ -30,6 +33,34 @@ UserInfoScripts.prototype = {
 	initialize: function() {
 	},
 
+	// STRY0095102 - by using a single method that checks properties in all the places we load restricted groups, updates can be made from one place
+	getRestrictedGroupsAndDescendents: function(groupName){
+		var groups = groupName + '';
+		if(gs.getProperty('x_153465_discovert.restricted_groups_can_nest') == 'true'){
+			var maxLevel = parseInt(gs.getProperty('x_153465_discovert.max_restricted_group_nesting'),10);
+			groups = this.getNestedDescendantGroups(groups, maxLevel);
+		}
+		return groups;
+	},		
+	
+	// STRY0095102 - get the nest list of groups
+	getNestedDescendantGroups: function(restricted_group, level){
+		// if no limit set, then 
+		if(level <= 1 )
+			return restricted_group;
+		
+		level -= 1;
+		
+		var childGroups = new GlideRecord('sys_user_group');  
+		childGroups.addQuery('parent','=', restricted_group);
+		childGroups.query();  
+		
+		while (childGroups.next())	{
+			restricted_group += "," + this.getNestedDescendantGroups(childGroups.getUniqueValue(), level);
+		}
+		return restricted_group;
+	},
+
 	// STRY0085438
 	IsUserOUTA: function(userId, ou){
 		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
@@ -44,8 +75,6 @@ UserInfoScripts.prototype = {
 		}else{
 			return false;
 		}
-		
-		
 	},
 	
 	// STRY0076016
@@ -324,6 +353,9 @@ UserInfoScripts.prototype = {
 		var processLevel;
 		var processOU;
 		var processOwner;
+		// STRY0095102 - change this to check against this users list of groups rather than looking for the user in the group
+		var groupsArray;
+		
 		var restrictedGroup = '';
 		if (recordTable == 'x_153465_discovert_discover_routing_template'){
 			// get the process owner
@@ -367,7 +399,10 @@ UserInfoScripts.prototype = {
 			if(restrictedGroup == ''){
 				return true;
 			} else{
-				return gs.getUser().isMemberOf(restrictedGroup);
+				// STRY0095102 - change this to check against this users list of groups rather than looking for the user in the group
+				groupsArray = gs.getUser().getMyGroups().toArray();
+				return groupsArray.indexOf(restrictedGroup) !== -1;
+				// return gs.getUser().isMemberOf(restrictedGroup);
 			}
 		}
 		switch (processLevel.toString()){
@@ -385,7 +420,9 @@ UserInfoScripts.prototype = {
 		
 		if (userHasProcessRights){
 			if(restrictedGroup != ''){
-				userHasProcessRights = gs.getUser().isMemberOf(restrictedGroup);
+				// STRY0095102 - change this to check against this users list of groups rather than looking for the user in the group
+				groupsArray = gs.getUser().getMyGroups().toArray();
+				userHasProcessRights = groupsArray.indexOf(restrictedGroup) !== -1;
 			}
 		}
 		return userHasProcessRights;
@@ -397,7 +434,8 @@ UserInfoScripts.prototype = {
 		var userBelongstoGroup = false;
 		var users = new GlideRecord('sys_user_grmember');  
 		users.addQuery('user','=', member);
-		users.addQuery('group','=', assignment_group);
+		// STRY0095102 - Use IN instead of equals to pull members from all parent groups
+		users.addQuery('group','IN', assignment_group);
 		users.query();  
 		
 		while (users.next())	{  
@@ -411,8 +449,13 @@ UserInfoScripts.prototype = {
 	// STRY0078831
 	getAllMembersSysIdsInGroup: function(groupName) {
         var memArr = [];
+		
+		// STRY0095102 - by using a single method that checks properties in all the places we load restricted groups, updates can be made from one place
+		var groups = this.getRestrictedGroupsAndDescendents(groupName);
+		
         var grUsers = new GlideRecord('sys_user_grmember');
-        grUsers.addQuery('group', '=', groupName);
+		// STRY0095102 - Use IN instead of equals to pull members from all parent groups
+        grUsers.addQuery('group', 'IN', groupName);
         grUsers.query();
         while (grUsers.next()) {
 			memArr.push(grUsers.getValue('user'));
@@ -734,14 +777,14 @@ UserInfoScripts.prototype = {
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>270</sys_mod_count>
+        <sys_mod_count>282</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:46</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-06-04 00:43:13</sys_updated_on>
     </sys_script_include>
 </record_update>
