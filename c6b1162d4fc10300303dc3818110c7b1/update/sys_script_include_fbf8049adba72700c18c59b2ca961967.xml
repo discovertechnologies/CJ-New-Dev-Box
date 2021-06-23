@@ -8,6 +8,8 @@
         <description>v2.7&#13;
 STRY0101692 - REQ – Respond Clarification Request via Modal  - add Task Administrators to the people who can respond&#13;
 STRY0101754 - "Disable Email Task Information" Tasker setting does not disable "New Email" button&#13;
+STRY0104349 -  Request Extension on Platform does not reload form and should be available from more states&#13;
+STRY0104533 - Respond Extension should be available from more states and available for Task Owner's Task Manager and Task Administrators&#13;
 &#13;
 v2.6&#13;
 Updated to put all UI Actions condition checks into this file&#13;
@@ -673,19 +675,32 @@ uiConditionCheck.prototype = {
 		var canRead = current.canRead();
 		var newRecord = current.sys_id;
 		var isActive = current.active;
-		var state = current.state;
 		var extension_requested  = current.extension_requested;
-		var assignedTo = current.assigned_to;
-		var reviewer = current.u_reviewer;
-		var task_owner = current.u_task_requester;
-		var originator = current.originator;
 		var currentUser = gs.getUserID();
+		var isAssignedTo = currentUser == current.assigned_to;
+		var isReviewer = currentUser == current.u_reviewer;
+		var isTaskOwner = currentUser == current.u_task_requester;
+		
 		// STRY0088624 
 		var isSuspenseDateSet = (current.getDisplayValue('suspense_date') != '');
-		if((isSuspenseDateSet && canRead && (newRecord != -1) && isActive == true && state == 13 && (extension_requested == false) && (assignedTo == gs.getUserID())) && !(currentUser == task_owner && currentUser == reviewer && currentUser == assignedTo)){
-			
+
+		// STRY0104349 - set states and types
+		var accepted = (current.state == "10");
+		var workInProgress = (current.state == "13");
+		var inReview = (current.state == "14");
+		var reWork = (current.state == "15");
+		var isStandardType = (current.tasker_type.getDisplayValue() == "Standard");
+		var isReviewType = (current.tasker_type.work_type == "review_item");
+		
+		// set states for reviewer
+		var reviewerCanRequest = (isStandardType && isReviewer && inReview) || (isReviewType && isReviewer && (accepted || inReview));
+		// set states for assigned member
+		var assignedMemberCanRequest = (isStandardType && isAssignedTo && (accepted || workInProgress || reWork || inReview));
+
+		
+		if(isSuspenseDateSet && canRead && (newRecord != -1) && isActive && !extension_requested && !isTaskOwner && 
+			(reviewerCanRequest || assignedMemberCanRequest )) {			
 			return true;
-			
 		} else{
 			return false;
 		}
@@ -693,14 +708,14 @@ uiConditionCheck.prototype = {
 	},
 	
 	RespondExtension: function(current){
-		
 		var canRead;
 		var isActive;
 		var state;
 		var extension_requested;
 		var taskOwner;
 		var currentUser = gs.getUserID();
-		
+		var tasker_type;
+		var work_type;
 		//KT: current is from Task table: uses current directly
 		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
 			canRead = current.canRead();
@@ -708,8 +723,9 @@ uiConditionCheck.prototype = {
 			state = current.state;
 			extension_requested = current.extension_requested;
 			taskOwner = current.u_task_requester;
+			tasker_type = current.tasker_type.getDisplayValue();
+			work_type = current.tasker_type.work_type;
 		}
-		
 		//KT: current is from Request table: uses current.parent -> Task
 		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
 			canRead = current.parent.canRead();
@@ -717,9 +733,25 @@ uiConditionCheck.prototype = {
 			state = current.parent.state;
 			extension_requested = current.parent.extension_requested;
 			taskOwner = current.parent.u_task_requester;
+			tasker_type = current.parent.tasker_type.getDisplayValue();
+			work_type = current.parent.tasker_type.work_type;
 		}
+		// STRY0104533
+		var isTaskOwner = currentUser == taskOwner;
+		// STRY0104349 - set states and types
+		var accepted = (state == "10");
+		var workInProgress = (state == "13");
+		var inReview = (state == "14");
+		var reWork = (state == "15");
+		var isStandardType = (tasker_type == "Standard");
+		var isReviewType = (work_type == "review_item");
+		// set states response is allowed
+		var UserCanRespond = (isStandardType && (accepted || workInProgress || reWork || inReview)) || (isReviewType && (accepted || inReview));
 		
-		if(canRead && isActive == true && state == 13 && extension_requested == true && taskOwner == currentUser){
+		// see if User is a task manager for the Task owner
+		var isTaskManagerOfTaskOwner = new UserInfoScripts().IsUserOUTAOfAnotherUser(taskOwner, currentUser);
+		var isUserTaskAdministrator =  new UserInfoScripts().IsUserTaskAdministrator(currentUser);
+		if(canRead && isActive == true && UserCanRespond && extension_requested == true && (isTaskOwner || isTaskManagerOfTaskOwner || isUserTaskAdministrator)){
 			return true;
 		} else{
 			return false;
@@ -863,6 +895,7 @@ uiConditionCheck.prototype = {
 		var listOfTaskAdministrators;
 		var isTaskAdministrator;
 		
+		
 		//KT: current is from Task table: uses current directly
 		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
 			
@@ -939,6 +972,9 @@ uiConditionCheck.prototype = {
 			}
 		}
 		
+		// STRY0101692 - REQ – Respond Clarification Request via Modal  - add Task Manager of Task owner
+		var isTaskManagerOfTaskOwner = new UserInfoScripts().IsUserOUTAOfAnotherUser(taskOwner, currentUser);
+		
 		//KT: gr is from Task table: uses gr directly
 		if (canRead && clarificationRequested == true) {
 						
@@ -947,7 +983,7 @@ uiConditionCheck.prototype = {
 				//Top Task //05.27.20: Condition fixed 
 				if(isTopTask == true){ 
 					// STRY0101692 - REQ – Respond Clarification Request via Modal  - add Task Administrators to the people who can respond
-					if(taskOwner == true || isPrimaryOfficeOUTA == true || isTaskAdministrator == true){ 
+					if(taskOwner || isPrimaryOfficeOUTA  || isTaskAdministrator || isTaskManagerOfTaskOwner){ 
 						return true;
 					}else{
 						return false;
@@ -956,7 +992,7 @@ uiConditionCheck.prototype = {
 				//Sub Task //05.27.20: Condition fixed 
 				if(isTopTask == false){
 					// STRY0101692 - REQ – Respond Clarification Request via Modal  - add Task Administrators to the people who can respond
-					if(taskOwner == true || isPrimaryAssigneeOUTA == true || isTaskAdministrator == true){
+					if(taskOwner || isPrimaryAssigneeOUTA || isTaskAdministrator || isTaskManagerOfTaskOwner){
 						return true;
 					}else{
 						return false;
@@ -1460,7 +1496,7 @@ uiConditionCheck.prototype = {
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>425</sys_mod_count>
+        <sys_mod_count>434</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1468,6 +1504,6 @@ uiConditionCheck.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-11 15:23:54</sys_updated_on>
+        <sys_updated_on>2021-06-22 13:26:35</sys_updated_on>
     </sys_script_include>
 </record_update>
