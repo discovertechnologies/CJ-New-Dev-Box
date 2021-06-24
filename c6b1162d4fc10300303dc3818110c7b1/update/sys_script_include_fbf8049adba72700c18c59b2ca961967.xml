@@ -10,6 +10,8 @@ STRY0101692 - REQ – Respond Clarification Request via Modal  - add Task Admini
 STRY0101754 - "Disable Email Task Information" Tasker setting does not disable "New Email" button&#13;
 STRY0104349 -  Request Extension on Platform does not reload form and should be available from more states&#13;
 STRY0104533 - Respond Extension should be available from more states and available for Task Owner's Task Manager and Task Administrators&#13;
+STRY0104699 - Request Reassignment should be available from more states &#13;
+STRY0104714 - Respond Reassignment should be available from more states&#13;
 &#13;
 v2.6&#13;
 Updated to put all UI Actions condition checks into this file&#13;
@@ -609,27 +611,31 @@ uiConditionCheck.prototype = {
 		}
 	},
 	
+	// STRY0104714
 	RequestReassignment: function(current){
-		
+		var canRead = current.canRead();
+		var newRecord = current.sys_id;
+		var isActive = current.active;
+		var reassignment_requested = current.reassignment_requested;
 		var currentUser = gs.getUserID();
-		//KT: current is from Task table: uses current directly
-		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
-			var canRead = current.canRead();
-			var isActive = current.active;
-			var state = current.state;
-			var reassignment_requested = current.reassignment_requested;
-			var assignedTo = current.assigned_to;
-			
-			if(canRead && isActive == true && state == 13 && reassignment_requested == false &&
-				assignedTo == currentUser){
-				return true;
-			} else{
-				return false;
-			}
-		}
+		var isAssignedTo = currentUser == current.assigned_to;
+		var isReviewer = currentUser == current.u_reviewer;
+		var isTaskOwner = currentUser == current.u_task_requester;
 		
-		//KT: current is from Request table: We don't have a way to restrict the UI Action on the client
-		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
+		// STRY0104349 - set states and types
+		var accepted = (current.state == "10");
+		var workInProgress = (current.state == "13");
+		var inReview = (current.state == "14");
+		var reWork = (current.state == "15");
+		var isStandardType = (current.tasker_type.getDisplayValue() == "Standard");
+		var isReviewType = (current.tasker_type.work_type == "review_item");
+		
+		// set states for reviewer
+		var reviewerCanRequest = (isReviewType && isReviewer && (accepted || inReview));
+		// set states for assigned member
+		var assignedMemberCanRequest = (isStandardType && isAssignedTo && (accepted || workInProgress || reWork || inReview));
+		
+		if(canRead && (newRecord != -1) && isActive && !reassignment_requested && (reviewerCanRequest || assignedMemberCanRequest )) {			
 			return true;
 		} else{
 			return false;
@@ -644,13 +650,18 @@ uiConditionCheck.prototype = {
 		var state;
 		var reassignment_requested;
 		var isTaskingAuthority;
+		var tasker_type;
+		var work_type;
 		
 		//KT: current is from Task table: uses current directly
 		if (current.getTableName() == "x_153465_discovert_route_task_instance") {
 			canRead = current.canRead();
 			isActive = current.active;
 			state = current.state;
-			reassignment_requested = current.reassignment_requested;
+			reassignment_requested = current.reassignment_requested == true;
+			tasker_type = current.tasker_type.getDisplayValue();
+			work_type = current.tasker_type.work_type;
+
 			isTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(current.primary_assignee, gs.getUserID());
 		}
 		
@@ -659,11 +670,22 @@ uiConditionCheck.prototype = {
 			canRead = current.parent.canRead();
 			isActive = current.parent.active;
 			state = current.parent.state;
-			reassignment_requested = current.parent.reassignment_requested;
+			reassignment_requested = current.parent.reassignment_requested == true;
+			tasker_type = current.parent.tasker_type.getDisplayValue();
+			work_type = current.parent.tasker_type.work_type;
 			isTaskingAuthority = new UserInfoScripts().IsUserTaskingAuthority(current.parent.primary_assignee, gs.getUserID());
 		}
+		// STRY0104349 - set states and types
+		var accepted = (state == "10");
+		var workInProgress = (state == "13");
+		var inReview = (state == "14");
+		var reWork = (state == "15");
+		var isStandardType = (tasker_type == "Standard");
+		var isReviewType = (work_type == "review_item");
+		// set states response is allowed
+		var UserCanRespond = (isStandardType && (accepted || workInProgress || reWork || inReview)) || (isReviewType && (accepted || inReview));
 		
-		if(canRead && isActive == true && state == 13 && reassignment_requested == true && isTaskingAuthority == true){
+		if(canRead && isActive && UserCanRespond && reassignment_requested && isTaskingAuthority){
 			return true;
 		} else{
 			return false;
@@ -1494,14 +1516,16 @@ uiConditionCheck.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>434</sys_mod_count>
+        <sys_mod_count>440</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-22 13:26:35</sys_updated_on>
+        <sys_updated_on>2021-06-23 22:12:14</sys_updated_on>
     </sys_script_include>
 </record_update>
