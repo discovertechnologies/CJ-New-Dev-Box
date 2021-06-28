@@ -1,805 +1,1080 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[///Tasker Graph - Template Tree Widget - Client Script
+        <client_script><![CDATA[api.controller = function($scope, $location, $rootScope, amb, spModal, spUtil) {
+    //------------------------------------------------------------------------------------------------------------------------
+    // COMPANY: DISCOVER TECHNOLOGIES
+    // CUSTOMIZED BY: KARINA TORRES
+    // RECURSIVE GRAPHICAL TREE FOR PROCESS TEMPLATE
+    // HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
+    //------------------------------------------------------------------------------------------------------------------------
+    // 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+    // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
+    //											some special characters in "instruction" or "Signature Instructions" field
+    // 											Add a private function to convert HTML to a simple string
+    //											Added missing semicolons, formatted code
+    //------------------------------------------------------------------------------------------------------------------------
 
-function($scope, $location, $rootScope, amb, spModal, spUtil) {
-	//------------------------------------------------------------------------------------------------------------------------
-	// COMPANY: DISCOVER TECHNOLOGIES
-	// CUSTOMIZED BY: KARINA TORRES
-	// RECURSIVE GRAPHICAL TREE FOR PROCESS TEMPLATE
-	// HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
-	//------------------------------------------------------------------------------------------------------------------------
-	
-	//------------------------------------------------------------------------------------------------------------------------
-	// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
-	var node_active_bg = '#33738e';
-	var node_inactive_bg = '#787878';
-	var node_selected_border = '#FFD247';
+    var node_active_bg = '#33738e';
+    var node_inactive_bg = '#787878';
+    var node_selected_border = '#FFD247';
 
-	var $go = go.GraphObject.make; // for conciseness in defining templates
-	var font_awesome_calendar_o = '\uf073';
-	var font_awesome_user_o = '\uf007';
-	var font_awesome_exclamation_triangle_o = '\uf071';
-	var font_awesome_pencil_square_o = '\uf044';
+    var $go = go.GraphObject.make; // for conciseness in defining templates
+    var font_awesome_calendar_o = '\uf073';
+    var font_awesome_user_o = '\uf007';
+    var font_awesome_exclamation_triangle_o = '\uf071';
+    var font_awesome_pencil_square_o = '\uf044';
 
-	var icon_normal_stroke = "white";
-	var icon_hover_stroke = "#F00";
-	var icon_warning_stroke = "#FF0";
+    var icon_normal_stroke = "white";
+    var icon_hover_stroke = "#F00";
+    var icon_warning_stroke = "#FF0";
 
-	var toolTipBackgroundColor = '#FFFFFF'; // "#C5C5C5"
-	var tooltipTextColor = '#3A3F51';																							
-	
-	var c = this;
-	var currentPage = $scope.data.page_id;
-	// STRY0069986 - move to top
-	var display_id = $location.search().sys_id;
-	// STRY0040294
-	if (!display_id && c.data.id){
-		display_id = c.data.id;
-	}
-	
-	//  UI/UX - STRY0065140 - 2.5 Template List - FIX
-	var diagram;
+    var toolTipBackgroundColor = '#FFFFFF'; // "#C5C5C5"
+    var tooltipTextColor = '#3A3F51';
 
-	// STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
-	var  diagramMinHeight = 150;
-	// STRY0040294 - use record watcher to keep grid synced
-	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-	var watcher;
-	initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition="  + $scope.data.templateId);
+    var c = this;
+    var currentPage = $scope.data.page_id;
+    // STRY0069986 - move to top
+    var display_id = $location.search().sys_id;
+    // STRY0040294
+    if (!display_id && c.data.id) {
+        display_id = c.data.id;
+    }
 
+    //  UI/UX - STRY0065140 - 2.5 Template List - FIX
+    var diagram;
 
-	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-	function initRecordWatcher(table, filter) {
-		if (watcher)
-			watcher.unsubscribe();
-
-		if (table && filter) {
-			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
-			var params = {};
-			var watcherChannel = amb.getChannelRW(table, filter);
-			amb.connect();
-			watcher = watcherChannel.subscribe(function(name) {
-				var changes = name.data.changes;
-				var sys_id = name.data.sys_id;
-				switch (name.data.operation){
-					case "update":
-						var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
-						if(nodeChangedFound){
-							var nodeDataChanged = false;
-							for (var change in changes) {
-								if(c.data.fieldsInModel[changes[change]]){
-									nodeDataChanged = true;
-									break;
-								}
-							}
-							if(nodeDataChanged){
-								updateModelNodeData(nodeChangedFound, name.data.record);
-							}
-						} 
-						break;
-					case "insert":
-						if(name.data.record.parent){
-							var newNodeData = createModelNodeData(sys_id, name.data.record);
-							diagram.startTransaction("Add new Task");
-							diagram.model.addNodeData(newNodeData);
-							diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
-							diagram.commitTransaction("Add new Task");
-							// if suspensedate changed, need to check parent and all subtasks again
-							checkDateWarnings(newNodeData);
-						}
-						break;
-					case "delete":
-						var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
-						if(nodeDeletedFound){
-							diagram.model.removeNodeData(nodeDeletedFound);
-						}
-				}		
-			});
-		}
-	}
-
-	function createModelNodeData(sys_id, record){
-		var newNodeData = {};
-		newNodeData.key = sys_id;
-		newNodeData.sys_id = sys_id;
-		for (var key in record){
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if(field){
-				fieldLabel = field.fieldLabel; 
-				displayValue = record[key].display_value;
-				if(field.maxChars>0)
-					displayValue = displayValue.toString().length> field.maxChars ? displayValue.substring(0,field.maxChars-1) : displayValue.toString();
-				if(field.hasValue){
-					// many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
-					// others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to_individual'
-					newNodeData[key] = record[key].value;
-				}
-				if(field.keyUsesDisplayOnly){
-					// 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
-					newNodeData[key] = displayValue;
-				}
-				if(field.hasDiplayValue){
-					// 'state_DisplayValue', 'assigned_to_individual_DisplayValue'
-					newNodeData[key + '_DisplayValue'] = displayValue;
-				}
-				if(field.type=='date'){
-					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
-					newNodeData[key] = date_number;
-				}
-			}  //if field wasn't found do nothing
-		}
-		newNodeData.name = getTaskTitleNode(newNodeData);
-		newNodeData.warning = {};
-		newNodeData.warning.waitStatewithNoSubtasks = (newNodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(newNodeData.calchaschildren)==0));
-		newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
-		// STRY0095897
-		newNodeData.warning.taskingAuthorityEmpty = ((newNodeData.tasking_authority == '' || newNodeData.tasking_authority == null));
-		newNodeData.warning.primaryOfficeEmpty = ((newNodeData.primary_office == '' || newNodeData.primary_office == null));
-
-		// if status is not provided on a new record, set to unkown
-		if(!newNodeData.status)
-			newNodeData.status = 'unkown';
-
-		return newNodeData;
-	}
-	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
-	function updateModelNodeData(nodeData, record){
-		for (var key in record){
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if(field){
-				fieldLabel = field.fieldLabel; 
-				displayValue = record[key].display_value;
-				if(field.maxChars>0)
-					displayValue = displayValue.toString().length> field.maxChars ? displayValue.substring(0,field.maxChars-1) : displayValue.toString();
-				if(field.hasValue){
-					// many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
-					// others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to_individual'
-					diagram.model.setDataProperty(nodeData, key, record[key].value); // this is the default value to key match
-				}
-				if(field.keyUsesDisplayOnly){
-					// 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
-					diagram.model.setDataProperty(nodeData, key, displayValue);
-				}
-				if(field.hasDiplayValue){
-					// 'state_DisplayValue', 'assigned_to_individual_DisplayValue'
-					diagram.model.setDataProperty(nodeData, key + '_DisplayValue', displayValue);
-				}
-				if(field.type=='date'){
-					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
-					// STRY0091251 - STRETCH-TUP(Estimated Duration Calculation)  - calculate Estimated Duration for Task Template Tree to show where Parent duration is shorter than sum of children
-					// server is loading duration values in UTC
-					var gdt = new Date();
-					// returns the offset in minutes
-					// updates offset to miliseconds
-					date_number = date_number - (gdt.getTimezoneOffset()*60*1000);					
-					diagram.model.setDataProperty(nodeData, key, date_number);
-				}
-			}  //if field wasn't found do nothing
-		}
-		var nameValue = getTaskTitleNode(nodeData);
-		if (nodeData.name != nameValue){
-			diagram.model.setDataProperty(nodeData, 'name', nameValue);
-		}
-		var newWaitState = (nodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(nodeData.calchaschildren)==0));
-		if(nodeData.warning.waitStatewithNoSubtasks != newWaitState){
-			diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
-		}
-		
-		var primaryAssigneeEmpty = (nodeData.primary_assignee == '' || nodeData.primary_assignee == null);
-		if(primaryAssigneeEmpty != nodeData.warning.primaryAssigneeEmpty){
-			diagram.model.setDataProperty(nodeData.warning, 'primaryAssigneeEmpty', primaryAssigneeEmpty);
-		}
-		// STRY0095897
-		var taskingAuthorityEmpty = ((nodeData.tasking_authority == '' || nodeData.tasking_authority == null));
-		if(taskingAuthorityEmpty != nodeData.warning.taskingAuthorityEmpty){
-			diagram.model.setDataProperty(nodeData.warning, 'taskingAuthorityEmpty', taskingAuthorityEmpty);
-		}
-		// STRY0095897
-		var primaryOfficeEmpty = ((nodeData.primary_office == '' || nodeData.primary_office == null));
-		if(primaryOfficeEmpty != nodeData.warning.primaryOfficeEmpty){
-			diagram.model.setDataProperty(nodeData.warning, 'primaryOfficeEmpty', primaryOfficeEmpty);
-		}
-		diagram.model.updateTargetBindings(nodeData);
-		// if suspensedate changed, need to check parent and all subtasks again
-		checkDateWarnings(nodeData);
-		
-		
-	}
-	function getTaskTitleNode (nodeData) {
-			var nodeTitle = nodeData.number + ' - ' + nodeData.short_description + ' (' + nodeData.primary_assignee_DisplayValue + ')';
-			if (nodeData.route_order != null  && nodeData.route_order != 0) 
-				nodeTitle = nodeData.route_order + ". " + nodeTitle;
-		return nodeTitle;
-	}
-
-	function checkDateWarnings(changedNodeData){
-		if(changedNodeData.parent != undefined && changedNodeData.parent != '' ){
-			var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
-			compareParentDateToAllChildren(parentNodeData.sys_id);
-		}
-		if(parseInt(changedNodeData.calchaschildren) > 0){
-			compareParentDateToAllChildren(changedNodeData.sys_id);
-		} else {
-			diagram.model.setDataProperty(changedNodeData.data.warning, 'isParentLongEnough', true);
-		}		
-	}	
-	
-	function compareParentDateToAllChildren(parentKey){
-		// these the variables are used to build the duration total at each level
-		var sumSubTaskTemplateDuration = 0;
-		var currentOrder = 0;
-		var orderMax = 0;
-		
-		var parentNode = diagram.findNodeForKey(parentKey)
-		var childrenNodes = parentNode.findTreeChildrenNodes();
-		// STRY0091251
-		var singleSubtaskLongerThanParent = false;
-		while(childrenNodes.next()) {
-			var thisSubtaskLongerThanParent = false;
-			var node = childrenNodes.value;
-			if (currentOrder != node.data.route_order){
-				sumSubTaskTemplateDuration += orderMax;
-				orderMax = 0;
-				currentOrder = parseInt(node.data.route_order);
-			}
-			if (node.data.duration > orderMax){
-				orderMax = parseInt(node.data.duration);
-			}
-			// STRY0091251
-			if(node.data.duration > parentNode.data.duration){
-				singleSubtaskLongerThanParent = true;
-				thisSubtaskLongerThanParent = true;
-			}
-			
-			// STRY0091251
-			if(node.data.warning.isParentShorterThanThisTask != thisSubtaskLongerThanParent){
-				diagram.model.setDataProperty(node.data.warning, 'isParentShorterThanThisTask', thisSubtaskLongerThanParent);
-				diagram.model.updateTargetBindings(node.data);
-			}
-		}
-		// STRY0091251
-		diagram.model.setDataProperty(parentNode.data.warning, 'isSubTaskLongerThanParent', singleSubtaskLongerThanParent);
-		
-		var totalChildDuration = sumSubTaskTemplateDuration + orderMax;
-		diagram.model.setDataProperty(parentNode.data, 'totalChildDuration', totalChildDuration);
-		diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.duration >= totalChildDuration)));
-		diagram.model.updateTargetBindings(parentNode.data);
-	}	
-	
-	// STRY0091260
-	function getToolTipText(objectName){
-		var $go = go.GraphObject.make; // for conciseness in defining templates
-		var toolTip;
-		switch(objectName){
-			case 'DurationIcon':
-				var durrationWarningCount = 1;
-				toolTip = $go(go.Panel, "Table", 
-											$go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ",
-													{ row: 0, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.duration_DisplayValue; }),
-													{ row: 0, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.durationWarningWaitState,
-													{visible: false, row: 1, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor },
-													new go.Binding("visible", "", function (data) {return (data.warning.waitStatewithNoSubtasks == true);})),
-											// STRY0091251
-											$go(go.TextBlock, c.data.durationWarningParentLessThanCombinedSubtasks,
-													{visible: false, row: 2, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit },
-													new go.Binding("visible", "", function (data) {return (data.warning.isParentLongEnough != true);})),
-											$go(go.TextBlock, c.data.durationWarningIsSubTaskLongerThanParent,
-													{visible: false, row: 3, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit },
-													new go.Binding("visible", "", function (data) {return (data.warning.isSubTaskLongerThanParent == true);})),
-											$go(go.TextBlock, c.data.durationWarningisParentShorterThanThisTask,
-													{visible: false, row: 4, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit },
-													new go.Binding("visible", "", function (data) {return (data.warning.isParentShorterThanThisTask == true);}))
-										 );
-				break;
-			case 'OperationalIcon':
-				toolTip = $go(go.Panel, "Table", 
-											$go(go.TextBlock, c.data.fieldsInModel.tasker_type.fieldLabel + ": ",
-													{ row: 0, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.tasker_type_DisplayValue; }), 
-													{ row: 0, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.classification.fieldLabel + ": ",
-													{ row: 1, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.classification_DisplayValue; }), 
-													{ row: 1, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.u_priority.fieldLabel + ": ",
-													{ row: 2, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.u_priority_DisplayValue; }),
-													{ row: 2, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.u_risk_flag.fieldLabel + ": ",
-													{ row: 3, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.u_risk_flag_DisplayValue; }), 
-													{ row: 3, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.instructions.fieldLabel + ": ",
-													{ row: 4, column: 0, alignment: go.Spot.Right, margin: 5, background: toolTipBackgroundColor, verticalAlignment: go.Spot.Top }),
-											$go(go.TextBlock, 
-													// strip HTML Tags
-													new go.Binding("text", "", function(data) { return data.instructions.replace(/<\/?[^>]+(>|$)/g, ""); }), 
-													{ row: 4, column: 1, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit}),
-												$go(go.TextBlock, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": ",
-														{visible: false, row: 5, column: 0, alignment: go.Spot.Right, margin: 5, background: toolTipBackgroundColor, verticalAlignment: go.Spot.Top },
-														new go.Binding("visible", "", function (data) {return (data.u_signature_instructions != 'null');})),
-												$go(go.TextBlock, 
-																																																			// strip HTML Tags
-														new go.Binding("text", "", function(data) { return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, ""); }), 
-														{visible: false, row: 5, column: 1, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit},
-														new go.Binding("visible", "", function (data) {return (data.u_signature_instructions != 'null');}))
-										 );
-				break;
-			case 'UserIcon':
-				toolTip = $go(go.Panel, "Table", 
-											$go(go.TextBlock, c.data.fieldsInModel.tasking_authority.fieldLabel + ": ",
-													{ row: 0, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.tasking_authority_DisplayValue; }),
-													{ row: 0, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.primary_office.fieldLabel + ": ",
-													{ row: 1, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.primary_office_DisplayValue; }), 
-													{ row: 1, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.primary_assignee.fieldLabel + ": ",
-													{ row: 2, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.primary_assignee_DisplayValue; }), 
-													{ row: 2, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, c.data.fieldsInModel.assigned_to_individual.fieldLabel + ": ",
-													{ row: 3, column: 0, alignment: go.Spot.Right, margin: 2, background: toolTipBackgroundColor }),
-											$go(go.TextBlock, 
-													new go.Binding("text", "", function(data) { return data.assigned_to_individual_DisplayValue; }), 
-													{ row: 3, column: 1, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor }) 
-										 );
-				break;
-			case 'ExclamationIcon':
-				toolTip = $go(go.Panel, "Table", 
-											$go(go.TextBlock, c.data.durationWarning,
-													{visible: false, row: 1, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 2, background: toolTipBackgroundColor },
-													new go.Binding("visible", "", function (data) {return (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks);})),
-											$go(go.TextBlock, c.data.assignmentWarning,
-													{visible: false, row: 3, column: 0, columnSpan: 2, alignment: go.Spot.Left, margin: 5, background: toolTipBackgroundColor, width: 600, wrap: go.TextBlock.WrapFit },
-													// STRY0095897
-													new go.Binding("visible", "", function (data) { return (data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty);}))
-										 );
-				break;
-		}
-		return toolTip;
-	}
-	
-	function toolTipJSON(objectName){
-		var $go = go.GraphObject.make; // for conciseness in defining templates
-		var toolJSON = $go(go.Adornment, "Spot", "Auto", 
-											 $go(go.Shape, "Rectangle", { fill: toolTipBackgroundColor }),
-											 getToolTipText(objectName)
-											);
-		return toolJSON;
-	}
-	//------------------------------------------------------------------------------------------------------------------------
-	
-		// RJ - TUP - STRY0068618 - added run template
-		$scope.runModalProcessTemplate = function() {
+    // STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
+    var diagramMinHeight = 150;
+    // STRY0040294 - use record watcher to keep grid synced
+    // RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+    var watcher;
+    initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition=" + $scope.data.templateId);
 
 
-			spModal.open({
-				title: 'Template Instance',
-				backdrop: 'static',
-				widget: 'discovertasker-widget-modal-prompt',
-				widgetInput: {process_template_sys_id: $scope.data.templateId},
-				size: 'lg',
-				buttons: [{label:'Close', cancel: true}]
-			}).then( function(){
-				/* update model after return from modal */
-				c.server.update();
-			});
-		};
-	
-	$scope.openModalProcessTemplate = function() {
+    // RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+    function initRecordWatcher(table, filter) {
+        if (watcher)
+            watcher.unsubscribe();
 
-		/* opens the platform form in a modal for this table */
-		// STRY0040294 - added isModal: true
-		c.modalInstance = spModal.open({
-			title: "Template Information",
-			backdrop: 'static',
-			widget: 'discovertasker-formtab',
-			widgetInput: {table: 'x_153465_discovert_discover_routing_template',
-										sys_id: $scope.data.templateId,
-										isModal: true},
-			size: 'lg',
-			buttons: []
-		});
-	};
+        if (table && filter) {
+            // STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+            var params = {};
+            var watcherChannel = amb.getChannelRW(table, filter);
+            amb.connect();
+            watcher = watcherChannel.subscribe(function(name) {
+                var changes = name.data.changes;
+                var sys_id = name.data.sys_id;
+                switch (name.data.operation) {
+                    case "update":
+                        var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
+                        if (nodeChangedFound) {
+                            var nodeDataChanged = false;
+                            for (var change in changes) {
+                                if (c.data.fieldsInModel[changes[change]]) {
+                                    nodeDataChanged = true;
+                                    break;
+                                }
+                            }
+                            if (nodeDataChanged) {
+                                updateModelNodeData(nodeChangedFound, name.data.record);
+                            }
+                        }
+                        break;
+                    case "insert":
+                        if (name.data.record.parent) {
+                            var newNodeData = createModelNodeData(sys_id, name.data.record);
+                            diagram.startTransaction("Add new Task");
+                            diagram.model.addNodeData(newNodeData);
+                            diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
+                            diagram.commitTransaction("Add new Task");
+                            // if suspensedate changed, need to check parent and all subtasks again
+                            checkDateWarnings(newNodeData);
+                        }
+                        break;
+                    case "delete":
+                        var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
+                        if (nodeDeletedFound) {
+                            diagram.model.removeNodeData(nodeDeletedFound);
+                        }
+                }
+            });
+        }
+    }
 
-	openDurationModal = function(obj) {
-		spModal.open({
-			title: c.data.durationTitle + ': ' + obj.part.data.name,
-			message:'',
-			backdrop:'static',
-			widget: 'tasker_modal_additional_information',
-			widgetInput: {
-				table: 'x_153465_discovert_route_tasks', 
-				sys_id: obj.part.data.key, 
-				view: 'Duration_View', 
-				hideRelatedLists: true,
-				omitHeader: 'true',
-				hideAttachmentBtn: true,
-				isModal: true},
-			shared: {},
-			size:'lg',
-			buttons: []
-		});
-	}
-	openOperationalModal = function(obj) {
-		spModal.open({
-			title: c.data.operationalTitle + ': ' + obj.part.data.name,
-			message:'',
-			backdrop:'static',
-			widget: 'tasker_modal_additional_information',
-			widgetInput: {
-				//STRY0095887
-				table: 'x_153465_discovert_route_tasks', 
-				sys_id: obj.part.data.key, 
-				view: 'Operational_View', 
-				hideRelatedLists: true,
-				omitHeader: 'true',
-				hideAttachmentBtn: true,
-				isModal: true},
-			shared: {},
-			size:'lg',
-			buttons: []
-		});
-	}		
-	
-	openAssignmentModal = function(obj) {
-		spModal.open({
-			title: c.data.assignmentTitle + ': ' + obj.part.data.name,
-			message:'',
-			backdrop:'static',
-			widget: 'tasker_modal_additional_information',
-			widgetInput: {
-				table: 'x_153465_discovert_route_tasks', 
-				sys_id: obj.part.data.key, 
-				view: 'Assignment_View', 
-				hideRelatedLists: true,
-				omitHeader: 'true',
-				hideAttachmentBtn: true,
-				isModal: true},
-			shared: {},
-			size:'lg',
-			buttons: []
-		});
-	}	
+    function createModelNodeData(sys_id, record) {
+        var newNodeData = {};
+        newNodeData.key = sys_id;
+        newNodeData.sys_id = sys_id;
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
+                displayValue = record[key].display_value;
+                if (field.maxChars > 0)
+                    displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
+                if (field.hasValue) {
+                    // many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
+                    // others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to_individual'
+                    newNodeData[key] = record[key].value;
+                }
+                if (field.keyUsesDisplayOnly) {
+                    // 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
+                    newNodeData[key] = displayValue;
+                }
+                if (field.hasDiplayValue) {
+                    // 'state_DisplayValue', 'assigned_to_individual_DisplayValue'
+                    newNodeData[key + '_DisplayValue'] = displayValue;
+                }
+                if (field.type == 'date') {
+                    var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+                    newNodeData[key] = date_number;
+                }
+            } //if field wasn't found do nothing
+        }
+        newNodeData.name = getTaskTitleNode(newNodeData);
+        newNodeData.warning = {};
+        newNodeData.warning.waitStatewithNoSubtasks = (newNodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(newNodeData.calchaschildren) == 0));
+        newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
+        // STRY0095897
+        newNodeData.warning.taskingAuthorityEmpty = ((newNodeData.tasking_authority == '' || newNodeData.tasking_authority == null));
+        newNodeData.warning.primaryOfficeEmpty = ((newNodeData.primary_office == '' || newNodeData.primary_office == null));
 
-	
-	$rootScope.$on('dataTableClick', function (evt, item) { 
-		
-		$scope.data.id = item.sys_id;
-		$scope.data.sys_id = item.sys_id;
-		$scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
-		
+        // if status is not provided on a new record, set to unkown
+        if (!newNodeData.status)
+            newNodeData.status = 'unkown';
 
-		//  UI/UX - STRY0065140 - 2.5 Template List - FIX
-		if(item.process_level) c.data.process_level = item.process_level.display_value;
-		if(item.template_name) c.data.name = item.template_name.display_value;
-		
-		//$location.search('table', $scope.data.table).search('sys_id', $scope.data.sys_id).search('spa', 1);
-		spUtil.update($scope).then(function(){
-			// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-			initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition="  + $scope.data.templateId);
-			drawTree();	
-		});
-		
-	});
+        return newNodeData;
+    }
+    // load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+    function updateModelNodeData(nodeData, record) {
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
+                displayValue = record[key].display_value;
+                if (field.maxChars > 0)
+                    displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
+                if (field.hasValue) {
+                    // many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
+                    // others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to_individual'
+                    diagram.model.setDataProperty(nodeData, key, record[key].value); // this is the default value to key match
+                }
+                if (field.keyUsesDisplayOnly) {
+                    // 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
+                    diagram.model.setDataProperty(nodeData, key, displayValue);
+                }
+                if (field.hasDiplayValue) {
+                    // 'state_DisplayValue', 'assigned_to_individual_DisplayValue'
+                    diagram.model.setDataProperty(nodeData, key + '_DisplayValue', displayValue);
+                }
+                if (field.type == 'date') {
+                    var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+                    // STRY0091251 - STRETCH-TUP(Estimated Duration Calculation)  - calculate Estimated Duration for Task Template Tree to show where Parent duration is shorter than sum of children
+                    // server is loading duration values in UTC
+                    var gdt = new Date();
+                    // returns the offset in minutes
+                    // updates offset to miliseconds
+                    date_number = date_number - (gdt.getTimezoneOffset() * 60 * 1000);
+                    diagram.model.setDataProperty(nodeData, key, date_number);
+                }
+            } //if field wasn't found do nothing
+        }
+        var nameValue = getTaskTitleNode(nodeData);
+        if (nodeData.name != nameValue) {
+            diagram.model.setDataProperty(nodeData, 'name', nameValue);
+        }
+        var newWaitState = (nodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(nodeData.calchaschildren) == 0));
+        if (nodeData.warning.waitStatewithNoSubtasks != newWaitState) {
+            diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
+        }
 
-	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
-	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-		c.data.sys_id = parms.sys_id;
-		// STRY0074663 Only rebroadcast if the node changed
-		if(display_id != parms.sys_id){
-			display_id = parms.sys_id;	
-			// Select the node using the sys_id parameter supplied.
-			var node_select = diagram.findNodeForKey(display_id);
-			diagram.select(node_select);
-		}
-	});
-	
-		function nodeSelectionChanged(node) { 
-			
-			var evt = {};
-				var d = node.data;
-				evt.sys_id = d.sys_id;
+        var primaryAssigneeEmpty = (nodeData.primary_assignee == '' || nodeData.primary_assignee == null);
+        if (primaryAssigneeEmpty != nodeData.warning.primaryAssigneeEmpty) {
+            diagram.model.setDataProperty(nodeData.warning, 'primaryAssigneeEmpty', primaryAssigneeEmpty);
+        }
+        // STRY0095897
+        var taskingAuthorityEmpty = ((nodeData.tasking_authority == '' || nodeData.tasking_authority == null));
+        if (taskingAuthorityEmpty != nodeData.warning.taskingAuthorityEmpty) {
+            diagram.model.setDataProperty(nodeData.warning, 'taskingAuthorityEmpty', taskingAuthorityEmpty);
+        }
+        // STRY0095897
+        var primaryOfficeEmpty = ((nodeData.primary_office == '' || nodeData.primary_office == null));
+        if (primaryOfficeEmpty != nodeData.warning.primaryOfficeEmpty) {
+            diagram.model.setDataProperty(nodeData.warning, 'primaryOfficeEmpty', primaryOfficeEmpty);
+        }
+        diagram.model.updateTargetBindings(nodeData);
+        // if suspensedate changed, need to check parent and all subtasks again
+        checkDateWarnings(nodeData);
 
-				if (evt.sys_id == display_id) { // get called twice by gojs
-					return;
-				}
-			// STRY0093948 = template was not loading the form on changing node selection
-				evt.table = c.data.table_detail;
-				// RJ -ET - Story 4
-				evt.parent = d.parent;
-			
-				display_id = evt.sys_id;
-				$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
-				$rootScope.$broadcast('$sp.list.click', evt);
-				// STRY0072032
-				if(c.data.isSystemTreeOrientationVertical){
-					diagram.centerRect(node.actualBounds);
-				}
-		}
 
-		$scope.page = {
-				displayValue: $scope.data.title,
-				value: $scope.data.id,
-				name: 'page'
-		};
-	
-	// STRY0069986 - one draw tree function, not 2 places with the same logic.
-	if ($scope.data.id) { 
-		drawTree();
-	}
-	
-	function drawTree() {  
-		//  UI/UX - STRY0065140 - 2.5 Template List - FIX
-		if(diagram != undefined){
-			diagram.div = null;
-			diagram = null;
-		}
+    }
 
-			//setTimeout(function () {	
-				var node_id = "page_map_new";
-				//jslog(diagram.div)
+    function getTaskTitleNode(nodeData) {
+        var nodeTitle = nodeData.number + ' - ' + nodeData.short_description + ' (' + nodeData.primary_assignee_DisplayValue + ')';
+        if (nodeData.route_order != null && nodeData.route_order != 0)
+            nodeTitle = nodeData.route_order + ". " + nodeTitle;
+        return nodeTitle;
+    }
 
-				// STRY0097904 - on refresh, these values were not getting set for the template list page
-				//if(currentPage == "discovertasker_processtemplatedetails" ){
-				c.data.name = $scope.data.map[0].process_name_map;
-				c.data.process_level = $scope.data.map[0].process_level_map;
-				//} 
-				
-				// STRY0072032
-				if(!c.data.isSystemTreeOrientationVertical){
-					// Horizontal Settings
-					diagram = $go(go.Diagram, node_id, {
-						allowVerticalScroll:false,
-						//initialContentAlignment: go.Spot.Default,
-						//allowZoom: false,
-						// define the layout for the diagram
-						layout: $go(go.TreeLayout, {
-							nodeSpacing: 5,
-							layerSpacing: 60
-						})
-					}, {"toolManager.hoverDelay": 200}, {"toolManager.toolTipDuration": 10000});
-				} else{
-					diagram = $go(go.Diagram, node_id, {
-						initialAutoScale: go.Diagram.UniformToFill,
-						// STRY0072032 trying takign this out for vertical, thinking we may need to allow vertical scroll
-						// allowVerticalScroll:false,
-						
-						//initialContentAlignment: go.Spot.Default,
-						//allowZoom: false,
-						// define the layout for the diagram
-						layout: $go(go.TreeLayout, {
-							angle:90,
-							nodeSpacing: 5,
-							layerSpacing: 60
-						})
-					}, {"toolManager.hoverDelay": 200}, {"toolManager.toolTipDuration": 10000});
-					
-				}
+    function checkDateWarnings(changedNodeData) {
+        if (changedNodeData.parent != undefined && changedNodeData.parent != '') {
+            var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
+            compareParentDateToAllChildren(parentNodeData.sys_id);
+        }
+        if (parseInt(changedNodeData.calchaschildren) > 0) {
+            compareParentDateToAllChildren(changedNodeData.sys_id);
+        } else {
+            diagram.model.setDataProperty(changedNodeData.data.warning, 'isParentLongEnough', true);
+        }
+    }
 
-				diagram.model = new go.TreeModel($scope.data.map);
-				//var font = "12px SourceSansPro, Helvetica, Arial, sans-serif";
-				var fontStyle = "13px Segoe UI";
-				// Define a simple node template consisting of text followed by an expand/collapse button
-				// STRY0072032
-				var treeOrientation;
-				if(!c.data.isSystemTreeOrientationVertical){
-					treeOrientation = "Horizontal";
-				} else {
-					treeOrientation = "Vertical";
-				}
-		
-				diagram.nodeTemplate = $go(go.Node, treeOrientation, {
-						selectionAdorned: false,
-						selectionChanged: nodeSelectionChanged,
-						isTreeExpanded: true,
-						isTreeLeaf: true
-					}, // this event handler is defined below
-					$go(go.Panel, "Auto",														
-						$go(go.Shape, "RoundedRectangle", {
-								strokeWidth: 3
-							}, {
-								fill: "Gray"
-							},
-							new go.Binding("stroke", "isSelected", function (s) {
-								if (s)
-									return node_selected_border;
-								else
-									return null;
-							}).ofObject(""),
+    function compareParentDateToAllChildren(parentKey) {
+        // these the variables are used to build the duration total at each level
+        var sumSubTaskTemplateDuration = 0;
+        var currentOrder = 0;
+        var orderMax = 0;
 
-							new go.Binding("fill", "active", function (t) { 
-									switch(t){
-										case false:
-											return node_inactive_bg;
-										case 'false':
-											return node_inactive_bg;
-										default:
-											return node_active_bg;
-									}
-							})
-						),
-						
-															
-						$go(go.Panel, "Vertical",
-								$go(go.Panel, "Horizontal", 
-										{  width:200, isOpposite: true},  
-										
-										$go(go.TextBlock, { 
-												name: 'DurationIcon',
-												text: font_awesome_calendar_o,
-												margin: new go.Margin(2, 5, 2, 5),
-												alignment: go.Spot.Right,
-												font: '18px FontAwesome',
-												editable: false,
-												isMultiline: false,
-												isActionable:true,
-												click: function(e, obj){
-													openDurationModal(obj);
-													e.handled = true;
-												},
-												mouseEnter: function(e, obj){ obj.saveStroke = obj.stroke;  obj.stroke = icon_hover_stroke;},
-												mouseLeave: function(e, obj){ obj.stroke = obj.saveStroke; obj.saveStroke = null;}
-										},
-											 //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-											 //the fake logic here is if level is 1 then warning color, otherwise use the default color.
-											 new go.Binding("stroke", "", function (data) {
-													if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask|| data.warning.waitStatewithNoSubtasks)
-														return icon_warning_stroke; 
-													else
-														return icon_normal_stroke;
-												}),
-												{toolTip: toolTipJSON('DurationIcon') }
-											 ),
-										$go(go.TextBlock, { 
-												name: 'UserIcon',
-												 text: font_awesome_user_o,
-												margin: new go.Margin(2, 5, 2, 5),
-												alignment: go.Spot.Right,
-												font: '18px FontAwesome',
-												editable: false,
-												isMultiline: false,
-												isActionable:true,
-												click: function(e, obj){
-													openAssignmentModal(obj);
-													e.handled = true;
-												},
-												mouseEnter: function(e, obj){ obj.saveStroke = obj.stroke;  obj.stroke = icon_hover_stroke;},
-												mouseLeave: function(e, obj){ obj.stroke = obj.saveStroke; obj.saveStroke = null;}
-										},
-											 //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-											 //the fake logic here is if level is 1 then warning color, otherwise use the default color.
-											 new go.Binding("stroke", "", function (data) {
-													// STRY0095897
-													if (data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
-														return icon_warning_stroke;
-													else
-														return icon_normal_stroke;
-												}),
-												{toolTip: toolTipJSON('UserIcon') }
-											 ),
-										$go(go.TextBlock, { 
-												name: 'OperationalIcon',
-												text: font_awesome_pencil_square_o,
-												margin: new go.Margin(2, 5, 2, 5),
-												alignment: go.Spot.Right,
-												font: '18px FontAwesome',
-												editable: false,
-												isMultiline: false,
-												isActionable:true,
-												click: function(e, obj){
-													openOperationalModal(obj);
-													e.handled = true;
-												},
-												mouseEnter: function(e, obj){ obj.saveStroke = obj.stroke;  obj.stroke = icon_hover_stroke;},
-												mouseLeave: function(e, obj){ obj.stroke = obj.saveStroke; obj.saveStroke = null;}
-												},
-												//this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-												//sets the warning color, otherwise use the default color.
-												new go.Binding("stroke", "", function (data) {
-													//if (data.warning.primaryAssigneeEmpty)
-													//	return getStateColors(data.state,"warning");
-													//else
-														return icon_normal_stroke;
-												}),
-												{toolTip: toolTipJSON('OperationalIcon') }
-										),
-										//this binds the exclamation icon to the duration warning  property of the data mapping, 
-										//the function uses the level determine if the icon is added or not
-										$go(go.TextBlock, { 
-												name: 'ExclamationIcon',
-												margin: new go.Margin(2, 5, 2, 5),
-												alignment: go.Spot.Right,
-												font: '18px FontAwesome',
-												stroke: icon_warning_stroke,
-												editable: false,
-												isMultiline: false,
-												isActionable:true,
-												mouseEnter: function(e, obj){ obj.saveStroke = obj.stroke;  obj.stroke = icon_hover_stroke;},
-												mouseLeave: function(e, obj){ obj.stroke = obj.saveStroke; obj.saveStroke = null;}
-										},
-											 //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-											 //the fake logic here is if level is 1 then warning color, otherwise use the default color.
-											 new go.Binding("text", "", function (data) {
-													if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks || data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
-														return font_awesome_exclamation_triangle_o;
-													else
-														return '';
-												}),
-												{toolTip: toolTipJSON('ExclamationIcon') }
-											) 
-								), 
-								$go(go.TextBlock, {
-										font: fontStyle,
-										stroke: "white",
-										margin: 3,
-										width: 200
-								},
-								new go.Binding("text", "name")
-								)
-					 )
-					),
-					$go("TreeExpanderButton")// this was overkill for small diagrams
-				);
-				if(c.selectedNode == null){
-					c.selectedNode = $scope.data.map[0].sys_id;
-				}
-				diagram.select(diagram.findNodeForKey(display_id));
-				// Define a trivial link template with no arrowhead
-				// STRY0072032
-				if(!c.data.isSystemTreeOrientationVertical){
-					diagram.initialAutoScale=go.Diagram.Uniform;
-				}
-				//  UI/UX - STRY0065140 - 2.5 Template List - FIX
-				diagram.allowVerticalScroll=false;
-				diagram.linkTemplate = $go(go.Link, {
-					selectable: false
-				}, $go(go.Shape)); // the link shape
-				// Resize the graph container height when the graph changes size
-				diagram.addDiagramListener('DocumentBoundsChanged', function () {
-					// STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
-					var diagramHeight = parseInt(diagram.documentBounds.height > diagramMinHeight? diagram.documentBounds.height: diagramMinHeight);
-					jQuery("#" + node_id).height(diagramHeight);
-				})
-				// Select the node using the sys_id parameter supplied.
-				var node_select = diagram.findNodeForKey(display_id);
-				diagram.select(node_select);
-				
-			//}, 1000);
-			//}
-	}
-	// only add the listner if data.id was set.
-	if ($scope.data.id) { 
-		// this event handler is called when the diagram is first ready
-		diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
-			var node = diagram.findNodeForKey(display_id);
-			// and center it and select it
-			// STRY0072032
-			if(c.data.isSystemTreeOrientationVertical && node !=  null){
-				diagram.centerRect(node.actualBounds);
-			}
-		});
-	}
-	
-}]]></client_script>
+        var parentNode = diagram.findNodeForKey(parentKey);
+        var childrenNodes = parentNode.findTreeChildrenNodes();
+        // STRY0091251
+        var singleSubtaskLongerThanParent = false;
+        while (childrenNodes.next()) {
+            var thisSubtaskLongerThanParent = false;
+            var node = childrenNodes.value;
+            if (currentOrder != node.data.route_order) {
+                sumSubTaskTemplateDuration += orderMax;
+                orderMax = 0;
+                currentOrder = parseInt(node.data.route_order);
+            }
+            if (node.data.duration > orderMax) {
+                orderMax = parseInt(node.data.duration);
+            }
+            // STRY0091251
+            if (node.data.duration > parentNode.data.duration) {
+                singleSubtaskLongerThanParent = true;
+                thisSubtaskLongerThanParent = true;
+            }
+
+            // STRY0091251
+            if (node.data.warning.isParentShorterThanThisTask != thisSubtaskLongerThanParent) {
+                diagram.model.setDataProperty(node.data.warning, 'isParentShorterThanThisTask', thisSubtaskLongerThanParent);
+                diagram.model.updateTargetBindings(node.data);
+            }
+        }
+        // STRY0091251
+        diagram.model.setDataProperty(parentNode.data.warning, 'isSubTaskLongerThanParent', singleSubtaskLongerThanParent);
+
+        var totalChildDuration = sumSubTaskTemplateDuration + orderMax;
+        diagram.model.setDataProperty(parentNode.data, 'totalChildDuration', totalChildDuration);
+        diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.duration >= totalChildDuration)));
+        diagram.model.updateTargetBindings(parentNode.data);
+    }
+
+    // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+    // private function to convert HTML to a simple string
+    function _convertHtmlToSimpleString(someHtmlText) {
+        var divElement = document.createElement('div');
+        divElement.innerHTML = someHtmlText;
+
+        return divElement.textContent || divElement.innerHTML || '';
+    }
+
+    // STRY0091260
+    function getToolTipText(objectName) {
+        var $go = go.GraphObject.make; // for conciseness in defining templates
+        var toolTip;
+        switch (objectName) {
+            case 'DurationIcon':
+                var durrationWarningCount = 1;
+                toolTip = $go(go.Panel, "Table",
+                    $go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ", {
+                        row: 0,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.duration_DisplayValue;
+                        }), {
+                            row: 0,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.durationWarningWaitState, {
+                            visible: false,
+                            row: 1,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.warning.waitStatewithNoSubtasks == true);
+                        })),
+                    // STRY0091251
+                    $go(go.TextBlock, c.data.durationWarningParentLessThanCombinedSubtasks, {
+                            visible: false,
+                            row: 2,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.warning.isParentLongEnough != true);
+                        })),
+                    $go(go.TextBlock, c.data.durationWarningIsSubTaskLongerThanParent, {
+                            visible: false,
+                            row: 3,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.warning.isSubTaskLongerThanParent == true);
+                        })),
+                    $go(go.TextBlock, c.data.durationWarningisParentShorterThanThisTask, {
+                            visible: false,
+                            row: 4,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.warning.isParentShorterThanThisTask == true);
+                        }))
+                );
+                break;
+            case 'OperationalIcon':
+                toolTip = $go(go.Panel, "Table",
+                    $go(go.TextBlock, c.data.fieldsInModel.tasker_type.fieldLabel + ": ", {
+                        row: 0,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.tasker_type_DisplayValue;
+                        }), {
+                            row: 0,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.classification.fieldLabel + ": ", {
+                        row: 1,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.classification_DisplayValue;
+                        }), {
+                            row: 1,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.u_priority.fieldLabel + ": ", {
+                        row: 2,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.u_priority_DisplayValue;
+                        }), {
+                            row: 2,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.u_risk_flag.fieldLabel + ": ", {
+                        row: 3,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.u_risk_flag_DisplayValue;
+                        }), {
+                            row: 3,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.instructions.fieldLabel + ": ", {
+                        row: 4,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 5,
+                        background: toolTipBackgroundColor,
+                        verticalAlignment: go.Spot.Top
+                    }),
+                    $go(go.TextBlock,
+                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+                        // strip HTML Tags
+                        // new go.Binding("text", "", function(data) {
+                        //    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
+                        // convert HTML to a simple string
+                        new go.Binding("text", "", function(data) {
+                            return _convertHtmlToSimpleString(data.instructions);
+                        }), {
+                            row: 4,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": ", {
+                            visible: false,
+                            row: 5,
+                            column: 0,
+                            alignment: go.Spot.Right,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            verticalAlignment: go.Spot.Top
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.u_signature_instructions != 'null');
+                        })),
+                    $go(go.TextBlock,
+                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+                        // strip HTML Tags
+                        // new go.Binding("text", "", function(data) {
+                        //    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
+                        new go.Binding("text", "", function(data) {
+                            return _convertHtmlToSimpleString(data.u_signature_instructions);
+                        }), {
+                            visible: false,
+                            row: 5,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (data.u_signature_instructions != 'null');
+                        }))
+                );
+                break;
+            case 'UserIcon':
+                toolTip = $go(go.Panel, "Table",
+                    $go(go.TextBlock, c.data.fieldsInModel.tasking_authority.fieldLabel + ": ", {
+                        row: 0,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.tasking_authority_DisplayValue;
+                        }), {
+                            row: 0,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.primary_office.fieldLabel + ": ", {
+                        row: 1,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.primary_office_DisplayValue;
+                        }), {
+                            row: 1,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.primary_assignee.fieldLabel + ": ", {
+                        row: 2,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.primary_assignee_DisplayValue;
+                        }), {
+                            row: 2,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.assigned_to_individual.fieldLabel + ": ", {
+                        row: 3,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.assigned_to_individual_DisplayValue;
+                        }), {
+                            row: 3,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        })
+                );
+                break;
+            case 'ExclamationIcon':
+                toolTip = $go(go.Panel, "Table",
+                    $go(go.TextBlock, c.data.durationWarning, {
+                            visible: false,
+                            row: 1,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        },
+                        new go.Binding("visible", "", function(data) {
+                            return (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks);
+                        })),
+                    $go(go.TextBlock, c.data.assignmentWarning, {
+                            visible: false,
+                            row: 3,
+                            column: 0,
+                            columnSpan: 2,
+                            alignment: go.Spot.Left,
+                            margin: 5,
+                            background: toolTipBackgroundColor,
+                            width: 600,
+                            wrap: go.TextBlock.WrapFit
+                        },
+                        // STRY0095897
+                        new go.Binding("visible", "", function(data) {
+                            return (data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty);
+                        }))
+                );
+                break;
+        }
+        return toolTip;
+    }
+
+    function toolTipJSON(objectName) {
+        var $go = go.GraphObject.make; // for conciseness in defining templates
+        var toolJSON = $go(go.Adornment, "Spot", "Auto",
+            $go(go.Shape, "Rectangle", {
+                fill: toolTipBackgroundColor
+            }),
+            getToolTipText(objectName)
+        );
+        return toolJSON;
+    }
+
+    // RJ - TUP - STRY0068618 - added run template
+    $scope.runModalProcessTemplate = function() {
+
+
+        spModal.open({
+            title: 'Template Instance',
+            backdrop: 'static',
+            widget: 'discovertasker-widget-modal-prompt',
+            widgetInput: {
+                process_template_sys_id: $scope.data.templateId
+            },
+            size: 'lg',
+            buttons: [{
+                label: 'Close',
+                cancel: true
+            }]
+        }).then(function() {
+            /* update model after return from modal */
+            c.server.update();
+        });
+    };
+
+    $scope.openModalProcessTemplate = function() {
+
+        /* opens the platform form in a modal for this table */
+        // STRY0040294 - added isModal: true
+        c.modalInstance = spModal.open({
+            title: "Template Information",
+            backdrop: 'static',
+            widget: 'discovertasker-formtab',
+            widgetInput: {
+                table: 'x_153465_discovert_discover_routing_template',
+                sys_id: $scope.data.templateId,
+                isModal: true
+            },
+            size: 'lg',
+            buttons: []
+        });
+    };
+
+    openDurationModal = function(obj) {
+        spModal.open({
+            title: c.data.durationTitle + ': ' + obj.part.data.name,
+            message: '',
+            backdrop: 'static',
+            widget: 'tasker_modal_additional_information',
+            widgetInput: {
+                table: 'x_153465_discovert_route_tasks',
+                sys_id: obj.part.data.key,
+                view: 'Duration_View',
+                hideRelatedLists: true,
+                omitHeader: 'true',
+                hideAttachmentBtn: true,
+                isModal: true
+            },
+            shared: {},
+            size: 'lg',
+            buttons: []
+        });
+    };
+
+    openOperationalModal = function(obj) {
+        spModal.open({
+            title: c.data.operationalTitle + ': ' + obj.part.data.name,
+            message: '',
+            backdrop: 'static',
+            widget: 'tasker_modal_additional_information',
+            widgetInput: {
+                //STRY0095887
+                table: 'x_153465_discovert_route_tasks',
+                sys_id: obj.part.data.key,
+                view: 'Operational_View',
+                hideRelatedLists: true,
+                omitHeader: 'true',
+                hideAttachmentBtn: true,
+                isModal: true
+            },
+            shared: {},
+            size: 'lg',
+            buttons: []
+        });
+    };
+
+    openAssignmentModal = function(obj) {
+        spModal.open({
+            title: c.data.assignmentTitle + ': ' + obj.part.data.name,
+            message: '',
+            backdrop: 'static',
+            widget: 'tasker_modal_additional_information',
+            widgetInput: {
+                table: 'x_153465_discovert_route_tasks',
+                sys_id: obj.part.data.key,
+                view: 'Assignment_View',
+                hideRelatedLists: true,
+                omitHeader: 'true',
+                hideAttachmentBtn: true,
+                isModal: true
+            },
+            shared: {},
+            size: 'lg',
+            buttons: []
+        });
+    };
+
+
+    $rootScope.$on('dataTableClick', function(evt, item) {
+
+        $scope.data.id = item.sys_id;
+        $scope.data.sys_id = item.sys_id;
+        $scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
+
+
+        //  UI/UX - STRY0065140 - 2.5 Template List - FIX
+        if (item.process_level) c.data.process_level = item.process_level.display_value;
+        if (item.template_name) c.data.name = item.template_name.display_value;
+
+        //$location.search('table', $scope.data.table).search('sys_id', $scope.data.sys_id).search('spa', 1);
+        spUtil.update($scope).then(function() {
+            // RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+            initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition=" + $scope.data.templateId);
+            drawTree();
+        });
+
+    });
+
+    // STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+    $rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+        c.data.sys_id = parms.sys_id;
+        // STRY0074663 Only rebroadcast if the node changed
+        if (display_id != parms.sys_id) {
+            display_id = parms.sys_id;
+            // Select the node using the sys_id parameter supplied.
+            var node_select = diagram.findNodeForKey(display_id);
+            diagram.select(node_select);
+        }
+    });
+
+    function nodeSelectionChanged(node) {
+
+        var evt = {};
+        var d = node.data;
+        evt.sys_id = d.sys_id;
+
+        if (evt.sys_id == display_id) { // get called twice by gojs
+            return;
+        }
+        // STRY0093948 = template was not loading the form on changing node selection
+        evt.table = c.data.table_detail;
+        // RJ -ET - Story 4
+        evt.parent = d.parent;
+
+        display_id = evt.sys_id;
+        $location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+        $rootScope.$broadcast('$sp.list.click', evt);
+        // STRY0072032
+        if (c.data.isSystemTreeOrientationVertical) {
+            diagram.centerRect(node.actualBounds);
+        }
+    }
+
+    $scope.page = {
+        displayValue: $scope.data.title,
+        value: $scope.data.id,
+        name: 'page'
+    };
+
+    // STRY0069986 - one draw tree function, not 2 places with the same logic.
+    if ($scope.data.id) {
+        drawTree();
+    }
+
+    function drawTree() {
+        //  UI/UX - STRY0065140 - 2.5 Template List - FIX
+        if (diagram != undefined) {
+            diagram.div = null;
+            diagram = null;
+        }
+
+        //setTimeout(function () {	
+        var node_id = "page_map_new";
+        //jslog(diagram.div)
+
+        // STRY0097904 - on refresh, these values were not getting set for the template list page
+        //if(currentPage == "discovertasker_processtemplatedetails" ){
+        c.data.name = $scope.data.map[0].process_name_map;
+        c.data.process_level = $scope.data.map[0].process_level_map;
+        //} 
+
+        // STRY0072032
+        if (!c.data.isSystemTreeOrientationVertical) {
+            // Horizontal Settings
+            diagram = $go(go.Diagram, node_id, {
+                allowVerticalScroll: false,
+                //initialContentAlignment: go.Spot.Default,
+                //allowZoom: false,
+                // define the layout for the diagram
+                layout: $go(go.TreeLayout, {
+                    nodeSpacing: 5,
+                    layerSpacing: 60
+                })
+            }, {
+                "toolManager.hoverDelay": 200
+            }, {
+                "toolManager.toolTipDuration": 10000
+            });
+        } else {
+            diagram = $go(go.Diagram, node_id, {
+                initialAutoScale: go.Diagram.UniformToFill,
+                // STRY0072032 trying takign this out for vertical, thinking we may need to allow vertical scroll
+                // allowVerticalScroll:false,
+
+                //initialContentAlignment: go.Spot.Default,
+                //allowZoom: false,
+                // define the layout for the diagram
+                layout: $go(go.TreeLayout, {
+                    angle: 90,
+                    nodeSpacing: 5,
+                    layerSpacing: 60
+                })
+            }, {
+                "toolManager.hoverDelay": 200
+            }, {
+                "toolManager.toolTipDuration": 10000
+            });
+
+        }
+
+        diagram.model = new go.TreeModel($scope.data.map);
+        //var font = "12px SourceSansPro, Helvetica, Arial, sans-serif";
+        var fontStyle = "13px Segoe UI";
+        // Define a simple node template consisting of text followed by an expand/collapse button
+        // STRY0072032
+        var treeOrientation;
+        if (!c.data.isSystemTreeOrientationVertical) {
+            treeOrientation = "Horizontal";
+        } else {
+            treeOrientation = "Vertical";
+        }
+
+        diagram.nodeTemplate = $go(go.Node, treeOrientation, {
+                selectionAdorned: false,
+                selectionChanged: nodeSelectionChanged,
+                isTreeExpanded: true,
+                isTreeLeaf: true
+            }, // this event handler is defined below
+            $go(go.Panel, "Auto",
+                $go(go.Shape, "RoundedRectangle", {
+                        strokeWidth: 3
+                    }, {
+                        fill: "Gray"
+                    },
+                    new go.Binding("stroke", "isSelected", function(s) {
+                        if (s)
+                            return node_selected_border;
+                        else
+                            return null;
+                    }).ofObject(""),
+
+                    new go.Binding("fill", "active", function(t) {
+                        switch (t) {
+                            case false:
+                                return node_inactive_bg;
+                            case 'false':
+                                return node_inactive_bg;
+                            default:
+                                return node_active_bg;
+                        }
+                    })
+                ),
+
+
+                $go(go.Panel, "Vertical",
+                    $go(go.Panel, "Horizontal", {
+                            width: 200,
+                            isOpposite: true
+                        },
+
+                        $go(go.TextBlock, {
+                                name: 'DurationIcon',
+                                text: font_awesome_calendar_o,
+                                margin: new go.Margin(2, 5, 2, 5),
+                                alignment: go.Spot.Right,
+                                font: '18px FontAwesome',
+                                editable: false,
+                                isMultiline: false,
+                                isActionable: true,
+                                click: function(e, obj) {
+                                    openDurationModal(obj);
+                                    e.handled = true;
+                                },
+                                mouseEnter: function(e, obj) {
+                                    obj.saveStroke = obj.stroke;
+                                    obj.stroke = icon_hover_stroke;
+                                },
+                                mouseLeave: function(e, obj) {
+                                    obj.stroke = obj.saveStroke;
+                                    obj.saveStroke = null;
+                                }
+                            },
+                            //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
+                            //the fake logic here is if level is 1 then warning color, otherwise use the default color.
+                            new go.Binding("stroke", "", function(data) {
+                                if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks)
+                                    return icon_warning_stroke;
+                                else
+                                    return icon_normal_stroke;
+                            }), {
+                                toolTip: toolTipJSON('DurationIcon')
+                            }
+                        ),
+                        $go(go.TextBlock, {
+                                name: 'UserIcon',
+                                text: font_awesome_user_o,
+                                margin: new go.Margin(2, 5, 2, 5),
+                                alignment: go.Spot.Right,
+                                font: '18px FontAwesome',
+                                editable: false,
+                                isMultiline: false,
+                                isActionable: true,
+                                click: function(e, obj) {
+                                    openAssignmentModal(obj);
+                                    e.handled = true;
+                                },
+                                mouseEnter: function(e, obj) {
+                                    obj.saveStroke = obj.stroke;
+                                    obj.stroke = icon_hover_stroke;
+                                },
+                                mouseLeave: function(e, obj) {
+                                    obj.stroke = obj.saveStroke;
+                                    obj.saveStroke = null;
+                                }
+                            },
+                            //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
+                            //the fake logic here is if level is 1 then warning color, otherwise use the default color.
+                            new go.Binding("stroke", "", function(data) {
+                                // STRY0095897
+                                if (data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
+                                    return icon_warning_stroke;
+                                else
+                                    return icon_normal_stroke;
+                            }), {
+                                toolTip: toolTipJSON('UserIcon')
+                            }
+                        ),
+                        $go(go.TextBlock, {
+                                name: 'OperationalIcon',
+                                text: font_awesome_pencil_square_o,
+                                margin: new go.Margin(2, 5, 2, 5),
+                                alignment: go.Spot.Right,
+                                font: '18px FontAwesome',
+                                editable: false,
+                                isMultiline: false,
+                                isActionable: true,
+                                click: function(e, obj) {
+                                    openOperationalModal(obj);
+                                    e.handled = true;
+                                },
+                                mouseEnter: function(e, obj) {
+                                    obj.saveStroke = obj.stroke;
+                                    obj.stroke = icon_hover_stroke;
+                                },
+                                mouseLeave: function(e, obj) {
+                                    obj.stroke = obj.saveStroke;
+                                    obj.saveStroke = null;
+                                }
+                            },
+                            //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
+                            //sets the warning color, otherwise use the default color.
+                            new go.Binding("stroke", "", function(data) {
+                                //if (data.warning.primaryAssigneeEmpty)
+                                //	return getStateColors(data.state,"warning");
+                                //else
+                                return icon_normal_stroke;
+                            }), {
+                                toolTip: toolTipJSON('OperationalIcon')
+                            }
+                        ),
+                        //this binds the exclamation icon to the duration warning  property of the data mapping, 
+                        //the function uses the level determine if the icon is added or not
+                        $go(go.TextBlock, {
+                                name: 'ExclamationIcon',
+                                margin: new go.Margin(2, 5, 2, 5),
+                                alignment: go.Spot.Right,
+                                font: '18px FontAwesome',
+                                stroke: icon_warning_stroke,
+                                editable: false,
+                                isMultiline: false,
+                                isActionable: true,
+                                mouseEnter: function(e, obj) {
+                                    obj.saveStroke = obj.stroke;
+                                    obj.stroke = icon_hover_stroke;
+                                },
+                                mouseLeave: function(e, obj) {
+                                    obj.stroke = obj.saveStroke;
+                                    obj.saveStroke = null;
+                                }
+                            },
+                            //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
+                            //the fake logic here is if level is 1 then warning color, otherwise use the default color.
+                            new go.Binding("text", "", function(data) {
+                                if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks || data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
+                                    return font_awesome_exclamation_triangle_o;
+                                else
+                                    return '';
+                            }), {
+                                toolTip: toolTipJSON('ExclamationIcon')
+                            }
+                        )
+                    ),
+                    $go(go.TextBlock, {
+                            font: fontStyle,
+                            stroke: "white",
+                            margin: 3,
+                            width: 200
+                        },
+                        new go.Binding("text", "name")
+                    )
+                )
+            ),
+            $go("TreeExpanderButton") // this was overkill for small diagrams
+        );
+        if (c.selectedNode == null) {
+            c.selectedNode = $scope.data.map[0].sys_id;
+        }
+        diagram.select(diagram.findNodeForKey(display_id));
+        // Define a trivial link template with no arrowhead
+        // STRY0072032
+        if (!c.data.isSystemTreeOrientationVertical) {
+            diagram.initialAutoScale = go.Diagram.Uniform;
+        }
+        //  UI/UX - STRY0065140 - 2.5 Template List - FIX
+        diagram.allowVerticalScroll = false;
+        diagram.linkTemplate = $go(go.Link, {
+            selectable: false
+        }, $go(go.Shape)); // the link shape
+        // Resize the graph container height when the graph changes size
+        diagram.addDiagramListener('DocumentBoundsChanged', function() {
+            // STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
+            var diagramHeight = parseInt(diagram.documentBounds.height > diagramMinHeight ? diagram.documentBounds.height : diagramMinHeight);
+            jQuery("#" + node_id).height(diagramHeight);
+        });
+        // Select the node using the sys_id parameter supplied.
+        var node_select = diagram.findNodeForKey(display_id);
+        diagram.select(node_select);
+
+        //}, 1000);
+        //}
+    }
+    // only add the listner if data.id was set.
+    if ($scope.data.id) {
+        // this event handler is called when the diagram is first ready
+        diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
+            var node = diagram.findNodeForKey(display_id);
+            // and center it and select it
+            // STRY0072032
+            if (c.data.isSystemTreeOrientationVertical && node != null) {
+                diagram.centerRect(node.actualBounds);
+            }
+        });
+    }
+
+};]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
 // COMPANY: DISCOVER TECHNOLOGIES
@@ -888,11 +1163,19 @@ a.span {
         <option_schema/>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[//------------------------------------------------------------------------------------------------------------------------
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
 // COMPANY: DISCOVER TECHNOLOGIES
 // CUSTOMIZED BY: KARINA TORRES & BRIAN KEENER
 // GRAPHICAL TREE FOR PROCESS DEFINITION
 //------------------------------------------------------------------------------------------------------------------------
+//
+// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
+//											some special characters in "instruction" or "Signature Instructions" field
+//                                          Changes in Client controller
+//------------------------------------------------------------------------------------------------------------------------
+
 (function() {
 	// STRY0091260
 	data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
@@ -980,15 +1263,17 @@ a.span {
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>1783</sys_mod_count>
+        <sys_mod_count>1787</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-14 06:55:41</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-06-25 21:04:18</sys_updated_on>
         <template><![CDATA[
 
 <div class="panel panel-default">
