@@ -3,26 +3,25 @@
         <abort_action>false</abort_action>
         <access>package_private</access>
         <action_delete>false</action_delete>
-        <action_insert>false</action_insert>
+        <action_insert>true</action_insert>
         <action_query>false</action_query>
-        <action_update>true</action_update>
-        <active>false</active>
+        <action_update>false</action_update>
+        <active>true</active>
         <add_message>false</add_message>
         <advanced>true</advanced>
         <change_fields>false</change_fields>
         <client_callable>false</client_callable>
-        <collection>sys_attachment</collection>
+        <collection>x_153465_discovert_discover_routing_runtime</collection>
         <condition/>
         <description/>
         <execute_function>false</execute_function>
-        <filter_condition table="sys_attachment">table_sys_idVALCHANGES^ORtable_nameVALCHANGES^EQ<item endquery="false" field="table_sys_id" goto="false" newquery="false" operator="VALCHANGES" or="false" value=""/>
-            <item endquery="false" field="table_name" goto="false" newquery="false" operator="VALCHANGES" or="true" value=""/>
+        <filter_condition table="x_153465_discovert_discover_routing_runtime">u_scheduled_task=true^EQ<item endquery="false" field="u_scheduled_task" goto="false" newquery="false" operator="=" or="false" value="true"/>
             <item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
         </filter_condition>
         <is_rest>false</is_rest>
         <message/>
-        <name>Deprecated - Attachment -  onUpdate</name>
-        <order>100</order>
+        <name>Template Instance - On Insert -Scheduled</name>
+        <order>50</order>
         <priority>100</priority>
         <rest_method/>
         <rest_method_text/>
@@ -36,38 +35,51 @@
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-/**
- * Description
- * 
- * @method executeRule
- * @author Robert Joy [rjoy]
- * @memberof x_153465_discovert.module:sys_script
- * @returns {undefined}
- */
-(function executeRule(current, previous /*null when async*/) {
-	if(current.table_name=='x_153465_discovert_route_task_instance'){
-		// Determine if the file is already in the system
-		var attachmentProperties = new GlideRecord('x_153465_discovert_tasker_attachment_properties');
-		attachmentProperties.addQuery('attachment_sys_id', current.sys_id);
-		attachmentProperties.query();
 
-		if(attachmentProperties.next()){
-			// attachment found in the properties table, update it
-			attachmentProperties.tasker = current.table_sys_id;
-			attachmentProperties.update();
-			gs.debug("Tasker Attachment Properties - updated");
+(function executeRule(current, previous /*null when async*/) {
+	// NOTE: this replaces functions in TaskTemplateHelpers
+	// - createTemplateInstanceToRunTemplate - this function is not needed from the Schedule Task runtime as it will now use this instead.
+	//   This allows us to set a rutnime value that says this was a scheduled task so these can be queued 
+	//   while user templates are run immediately
+
+	var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+	var templateID = current.routing_template_ref + '';
+	if(grTemp.get(templateID)){
+		if(current.originator + '' == ''){
+			current.originator = grTemp.getValue('process_owner');
 		}
-		else {
-			// Attachment not added yet, create new record
-			attachmentProperties.initialize();
-			attachmentProperties.attachment_sys_id = current.sys_id;
-			attachmentProperties.attachment_stage = 'input'; // default stage
-			attachmentProperties.tasker = current.table_sys_id;
-			
-			attachmentProperties.insert();
-			gs.debug("Tasker Attachment Properties - created");
+		// STRY0085139 - pull classification from the template instead of Task
+		current.classification = grTemp.getValue("classification");
+		current.discover_template_name = grTemp.template_name + '';
+		if(current.instance_notation + '' == ''){
+			current.instance_notation = grTemp.description + '';
 		}
+		current.short_description = grTemp.short_description + '';
+		current.u_template_subtask_s_name_setting = grTemp.getValue("u_template_subtask_s_name_setting");
+		current.u_subtask_s_name_modifier = grTemp.u_subtask_s_name_modifier;
+
+		current.u_restricted_group = grTemp.u_restricted_group + '';
+		current.u_tasking_authority = grTemp.u_tasking_authority + '';
+		current.u_primary_office = grTemp.u_primary_office + '';
+		current.u_primary_assignee = grTemp.u_primary_assignee +'';
+		current.u_assigned_member = grTemp.u_assigned_member +'';
+		current.u_objective = grTemp.u_objective + '';		
+		
+		current.u_external_ou = grTemp.getValue("u_external_ou");
+		current.poc_name = grTemp.getValue("poc_name");
+		current.outbound = (grTemp.outbound == true) ? 'true' : 'false';
+		current.u_internal_contact = grTemp.getValue("u_internal_contact");
+		current.u_internal_contact_performing_task = (grTemp.u_internal_contact_performing_task == true) ? 'true' : 'false';
+
+		// STRY0085139 
+		current.u_reviewer = grTemp.u_reviewer + '';
+		current.u_on_behalf_of = grTemp.u_on_behalf_of +'';
+
+		// simplify template run, remove workflow
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		current = new CustomTaskerFieldHelper().mapFieldDataOnAction('TemplateInstanceOnInsertScheduleTasksRun', grTemp, current);		
 	}
+
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
@@ -76,18 +88,18 @@
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>7e907e49db5953403a8d6be3ca961956</sys_id>
-        <sys_mod_count>8</sys_mod_count>
-        <sys_name>Deprecated - Attachment -  onUpdate</sys_name>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>Template Instance - On Insert -Scheduled</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_7e907e49db5953403a8d6be3ca961956</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:28</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-10 17:39:31</sys_updated_on>
         <template/>
-        <when>after</when>
+        <when>before</when>
     </sys_script>
     <sys_translated_text action="delete_multiple" query="documentkey=7e907e49db5953403a8d6be3ca961956"/>
 </record_update>

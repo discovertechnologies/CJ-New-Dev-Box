@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Tasker_GenerateTaskFromTemplate</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.7&#13;
+STRY0100724 - DEV Story- Performance Improvements -  Running Templates - This is a new script include that replaces the workflow.  It also udpates the template instance status to track completion&#13;
+&#13;
+This script include takes a Template and builds the associated Task Tree</description>
+        <name>Tasker_GenerateTaskFromTemplate</name>
+        <script><![CDATA[var Tasker_GenerateTaskFromTemplate = Class.create();
+Tasker_GenerateTaskFromTemplate.prototype = {
+    initialize: function() {
+		gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - initialize');
+    },
+
+	startTemplate: function(recTempInstance){
+		try {
+			// STRY0100724
+			recTempInstance.setWorkflow(false);
+			recTempInstance.u_status = 'initialized';
+			recTempInstance.update();
+			var recTaskInst = this.initiateTemplate(recTempInstance);
+
+			this.buildTemplateTask(recTaskInst, recTempInstance);
+			recTempInstance.u_status = 'completed';
+			recTempInstance.update();
+		} catch(e) {
+			recTempInstance.u_status = 'error';
+			recTempInstance.u_error_message = 'Tasker Error in (startTemplate) - ' + e.toString();
+			recTempInstance.update();
+			
+			gs.error(e);
+		}
+			
+	},
+	
+	initiateTemplate: function(recTempInstance){
+		try {
+			// do not run template if the template or the top template task are inactive.
+			// routing_template_ref.u_active=true^routing_template_ref.parent_task_def.active=true^EQ
+
+			// STRY0047782
+			var tdc = new TaskerDurationCalculator();
+			var recProcessDef = new GlideRecord('x_153465_discovert_discover_routing_template');
+			// STRY0090463
+			if (recProcessDef.get(recTempInstance.getValue('routing_template_ref'))) {
+				// STRY0085827
+				if (recProcessDef.u_active == false) {
+					// Template is not active, exit and close workflow
+					return;
+				}
+
+				// STRY0100724
+				recTempInstance.u_status = 'in_progress';
+				recTempInstance.update();
+
+
+				var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
+				// RAJ - STRY0014064 When a template is run by a task 
+				// If the user is given the option to make the task where the template was started as the "top Task" 
+				// then this task would not be created, an if logic would look up that checkbox
+				// if the user chooses not to add the "middle" task, all of the lines between the comment block would go in the if
+				// ---------------------------------------------------------------------------------------------
+				// - start of IF block
+				// - if there is a parent task on the instance and the user checks the box above, 
+				// - then instead of initialize below GET the Task associated with teh Parent_Task provided
+				// ---------------------------------------------------------------------------------------------
+				recTaskInst.initialize();
+				// STRY0014064 - if the template was started under a task, then the parent_task field will be populated.  
+				//  Add this new record to the tree
+				if (recTempInstance.parent_task + '' != '') {
+					recTaskInst.parent = recTempInstance.parent_task;
+				}
+				// ---------------------------------------------------------------------------------------------
+				// - end of future IF block
+				// ---------------------------------------------------------------------------------------------
+
+				// RAJ - 2018-02-20 STRY0010829 - Short Desc and Instructions are missing in the Top Task . They need to be copied from the Process Definition.
+				// had to change the line below to recTempInstance.sys_id from recRunTemp.sys_id.
+				// The tasker instance insert is expecting the proces definition, not the process instance.
+
+				// RAJ - STRY 0011909 - modify process template
+				// the child route was left in here, but is only used to show what process is being run.
+				//This is currently only set on the top tasker, not an any children
+				recTaskInst.u_parent_template = recTempInstance.routing_template_ref;
+				recTaskInst.source_definition = recProcessDef.getValue('parent_task_def');
+				// STRY0063859 - This is needed to pass values into the top task from the Template Instance for or the API
+				recTaskInst.tasker_process_instance = recTempInstance.sys_id;
+
+				// RAJ Originator
+				if (recTempInstance.u_schedule_originator != '' && recTempInstance.u_schedule_originator != undefined) {
+					recTaskInst.originator = recTempInstance.u_schedule_originator;
+					recTaskInst.u_task_requester = recTempInstance.u_schedule_originator;
+				} else {
+					recTaskInst.originator = recTempInstance.originator;
+					recTaskInst.u_task_requester = recTempInstance.originator;
+				}
+
+				// STRY0090463 - moved this out of the if block to use again later
+				var gdt = new GlideDateTime();
+				if (recTempInstance.instance_notation == '' || recTempInstance.instance_notation == undefined) {
+					var currentTime = gdt.getDisplayValue();
+					recTaskInst.instance_notation = currentTime;
+				} else {
+					recTaskInst.instance_notation = recTempInstance.instance_notation;
+					recTaskInst.u_objective = recTempInstance.u_objective;
+				}
+				// STRY0090463
+				var recTopTempTask = new GlideRecord('x_153465_discovert_route_tasks');
+				// STRY0090463
+				if (recTopTempTask.get(recProcessDef.getValue('parent_task_def'))) {
+					// this should always be entered
+					if(!recTopTempTask.duration.nil()){
+						var durationAdd=recTopTempTask.duration.dateNumericValue();
+						// STRY0047782 
+						gdt.setValue(tdc.calculateEndDate(recTopTempTask, (durationAdd), gdt));
+						// gdt.add(durationAdd);
+					}			
+				}
+				// STRY0098078
+				recTaskInst.setValue('suspense_date', gdt.getValue());
+				recTaskInst.setValue('due_date', gdt.getValue());
+
+				recTaskInst.insert();
+
+				// STRY0014064 Set the Top Task on the Process Instance
+				recTempInstance.u_top_task = recTaskInst.sys_id;
+				recTempInstance.update();
+			}
+			return recTaskInst;
+		} catch(e) {
+			recTempInstance.u_status = 'error';
+			recTempInstance.u_error_message = 'Tasker Error in (initiateTemplate) - ' + e.toString();
+			recTempInstance.update();
+			gs.error(e);
+		}
+			
+	},
+
+	buildTemplateTask: function(recTaskInst, recTempInstance) {
+		try{
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - buildTemplateTask start');
+
+			var oTaskInstnace = {};
+			oTaskInstnace.recTaskInst = recTaskInst;
+			oTaskInstnace.u_total_Tasks = 0;
+			oTaskInstnace.u_Tasks_loaded_count = 0;
+			oTaskInstnace.u_Task_route_order_count = 0;
+			oTaskInstnace.u_current_duration_offset = 0;
+
+			this.loadTemplateTask(oTaskInstnace);
+			while (oTaskInstnace.u_Tasks_loaded_count < oTaskInstnace.u_total_Tasks) {
+				// createTasksForOrderOnTemplateTask creates all of the tasks for a single order on the template task
+				this.createTasksForOrderOnTemplateTask(oTaskInstnace, recTempInstance);
+			}
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - buildTemplateTask end');
+		} catch(e) {
+			recTempInstance.u_status = 'error';
+			recTempInstance.u_error_message = 'Tasker Error in (buildTemplateTask) - ' + e.toString();
+			recTempInstance.update();
+			gs.error(e);
+		}
+			
+	},
+
+	loadTemplateTask: function(oTaskInstnace){		
+		try{
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask start');
+			var taskDefQ = new GlideAggregate('x_153465_discovert_route_tasks');
+			taskDefQ.addQuery('parent', oTaskInstnace.recTaskInst.source_definition);
+			// STRY0085827 - do not run task templates that were deactivated
+			taskDefQ.addQuery('active', true);
+
+			taskDefQ.addAggregate('COUNT');
+			taskDefQ.query();
+			if (taskDefQ.next()){
+				oTaskInstnace.u_total_Tasks = taskDefQ.getAggregate('COUNT');
+			}
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask - oTaskInstnace.u_total_Tasks: ' + oTaskInstnace.u_total_Tasks);
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask end');
+		} catch(e) {
+			recTempInstance.u_status = 'error';
+			recTempInstance.u_error_message = 'Tasker Error in (loadTemplateTask) - ' + e.toString();
+			recTempInstance.update();
+			gs.error(e);
+		}
+	},	
+	
+	createTasksForOrderOnTemplateTask: function(oTaskInstnace, recTempInstance){
+		try{
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - createTasksForOrderOnTemplateTask start');
+			// STRY0047782
+			var tdc = new TaskerDurationCalculator();
+
+			oTaskInstnace.u_Task_route_order_count +=1;
+			// we query to get the list of all Task Defs in this "route order"
+			// the loop below will process each Task Defs in this route order
+			// it will increment the total Task Defs processed for each order
+			var taskDefQ = new GlideRecord('x_153465_discovert_route_tasks');
+			taskDefQ.addQuery('parent',oTaskInstnace.recTaskInst.source_definition);
+			// if this is the fisrt pass, the route order is 1 b/c it started at 0
+			// the order default is 1.  there should be nothing that is 0 
+			if (oTaskInstnace.u_Task_route_order_count>0){
+				taskDefQ.addQuery('route_order',oTaskInstnace.u_Task_route_order_count);
+			}
+			// STRY0085827 - do not run task templates that were deactivated
+			taskDefQ.addQuery('active', true);
+			taskDefQ.query();
+
+			var maxTaskOrderOffset = 0;
+			while (taskDefQ.next()){
+				var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
+				recTaskInst.initialize();
+				//  this is the relationship to the route instance
+				recTaskInst.source_definition = taskDefQ.sys_id;
+				recTaskInst.parent = oTaskInstnace.recTaskInst.sys_id;
+
+				recTaskInst.u_task_requester = oTaskInstnace.recTaskInst.parent.originator;
+
+				var gdt = new GlideDateTime();
+				if(!oTaskInstnace.recTaskInst.expected_start.nil()){
+					gdt.setValue(oTaskInstnace.recTaskInst.expected_start);
+				}
+				var durationAdd;
+				// Set estimated Start and Estimated Duration
+				if (oTaskInstnace.u_current_duration_offset > 0 )
+				{
+					durationAdd=oTaskInstnace.u_current_duration_offset;
+					// STRY0047782 
+					gdt.setValue(tdc.calculateEndDate(taskDefQ, (durationAdd), gdt));
+					//gdt.add(durationAdd);
+				}
+				// STRY0098078
+				recTaskInst.setValue('expected_start', gdt.getValue());
+
+				if(!taskDefQ.duration.nil()){
+					durationAdd=taskDefQ.duration.dateNumericValue();
+					// if this is the max duration for the route in the current Route Order, reset within the loop
+					if(durationAdd>maxTaskOrderOffset){
+						maxTaskOrderOffset = durationAdd;
+					}
+					// STRY0047782 
+					gdt.setValue(tdc.calculateEndDate(taskDefQ, (durationAdd), gdt));
+					//gdt.add(durationAdd);
+				}
+				// STRY0098078
+				recTaskInst.setValue('suspense_date',gdt.getValue());
+				recTaskInst.setValue('due_date', gdt.getValue());
+
+				recTaskInst.tasker_process_instance = oTaskInstnace.recTaskInst.tasker_process_instance.sys_id;
+				recTaskInst.source_definition = taskDefQ.sys_id;
+				// NOTE: TODO: set number to parent number here...
+				recTaskInst.insert();
+
+				// buildTemplateTask is called again to initiate the next level down the Template Tree
+				var nextLevel =  new Tasker_GenerateTaskFromTemplate();
+				nextLevel.buildTemplateTask(recTaskInst, recTempInstance);
+
+				// increment the total routes processed for each route in this order
+				oTaskInstnace.u_Tasks_loaded_count +=1;
+			}
+			oTaskInstnace.u_current_duration_offset = oTaskInstnace.u_current_duration_offset + maxTaskOrderOffset;
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - createTasksForOrderOnTemplateTask end');
+		} catch(e) {
+			recTempInstance.u_status = 'error';
+			recTempInstance.u_error_message = 'Tasker Error in (createTasksForOrderOnTemplateTask) - ' + e.toString();
+			recTempInstance.update();
+			gs.error(e);
+		}
+			
+	},
+		
+    type: 'Tasker_GenerateTaskFromTemplate'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>btoole</sys_created_by>
+        <sys_created_on>2021-03-23 15:40:04</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>feb6fc46db432010029db298f4961915</sys_id>
+        <sys_mod_count>25</sys_mod_count>
+        <sys_name>Tasker_GenerateTaskFromTemplate</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_feb6fc46db432010029db298f4961915</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-10 19:05:41</sys_updated_on>
+    </sys_script_include>
+</record_update>
