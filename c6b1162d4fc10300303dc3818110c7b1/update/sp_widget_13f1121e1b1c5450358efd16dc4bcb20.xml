@@ -4,6 +4,8 @@
         <client_script><![CDATA[function($scope, spModal, $rootScope, spUtil) {
 	// STRY0079658 removed dtBreadcrumbs since this is always used in a a page by itself or in modal
 	var c = this;
+	$scope.submitting = false;
+	var g_form;
 	if (c.data.currentStep == undefined){
 		c.data.currentStep = 'selectTemplate';
 	}
@@ -79,13 +81,31 @@
 			c.server.update();
 		}
 	}
-
+	
 	$scope.btnStartButton = function(){
-		$(".showAlert").hide().show('medium');
-		c.data.currentStep = 'StartTemplate';
-		c.server.update();
+		// STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
+		if(g_form){
+			$scope.submitting = true;
+			if(g_form.submit('start_template')){
+				$(".showAlert").hide().show('medium');
+				c.data.currentStep = 'StartTemplate';
+			}
+			$scope.submitting = false;
+		}
 	}
 	angular.element('.modal-footer').css({display:'none'});  
+	// STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
+	function initForm(gFormInstance) {
+		if (gFormInstance.getTableName() != undefined &&
+				gFormInstance.getTableName() == $scope.data.f.table) {
+			g_form = gFormInstance;
+		}
+	}
+
+	$scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
+		initForm(gFormInstance);
+	});
+	
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
@@ -334,22 +354,33 @@ label{
         <option_schema>[{"name":"link_template","section":"Presentation","label":"Template","type":"choice","choices":[{"label":"Top Icon","value":"Top Icon"},{"label":"Circle Icon","value":"Circle Icon"},{"label":"Color Box","value":"Color Box"}]},{"hint":"The title of your modal.","name":"modal_title","section":"Presentation","default_value":"My Modal","label":"Modal Title","type":"string"},{"hint":"","name":"short_description","section":"Presentation","label":"Short Description","type":"string"},{"name":"color","section":"Presentation","default_value":"--None--","label":"Bootstrap Color","type":"choice","choices":[{"label":"default","value":"default"},{"label":"primary","value":"primary"},{"label":"success","value":"success"},{"label":"info","value":"info"},{"label":"warning","value":"warning"},{"label":"danger","value":"danger"}]},{"name":"class_name","section":"Presentation","label":"Bootstrap Class Name","type":"string"},{"name":"glyph","section":"Presentation","default_value":"empty","label":"Glyph","type":"glyphicon"},{"hint":"The title of the button.","name":"title","section":"Presentation","default_value":"Click here!","label":"Title","type":"string"},{"hint":"The ID of the widget you wish to embed","name":"widget_id","section":"Data","default_value":"widget-cool-clock","label":"Widget ID","type":"string"},{"hint":"The input you wish to pass to the embedded widget.","name":"widget_input","section":"Data","default_value":"{}","label":"Widget Input","type":"string"},{"hint":"Specify the size of the modal window (--None-- is default size)","name":"size","section":"Presentation","default_value":"--None--","label":"Modal Window Size","type":"choice","choices":[{"label":"xs","value":"xs"},{"label":"lg","value":"lg"}]}]</option_schema>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[(function($sp) {
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// WIDGET BASE: TASKER DATA TABLE
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: Rob Joy
+//------------------------------------------------------------------------------------------------------------------------
+//
+// 2.7.0 | 07.05.2021 | raj | STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
+//                                   Updates in Server, Client and HTML
+//------------------------------------------------------------------------------------------------------------------------
+
+(function($sp) {
   // STRY0079658 added $sp to get the parentTask off of the URL on mobile
 	/* populate the 'data' object */
   /* e.g., data.table = $sp.getValue('table'); */	
 	data.templateLevel = (input || {}).templateLevel || 'all';
 	data.parentTask = (input || {}).parentTask || (options || {}).parentTask || $sp.getParameter('parentTask');	
+	// STRY0100724
+	data.selected_Template_id = (input || {}).selected_Template_id || (options || {}).selected_Template_id || $sp.getParameter('selected_Template_id');	
 	// STRY0098385 - remove Cancel button from Mobile 
 	data.page_id = $sp.getParameter("id");
 	
 	var widgetParams = {};
-	var tTH = new TaskTemplateHelpers();
-	var UserPermissions = new UserInfoScripts();
 	var taskingScripts = new tasking_System_Settings_Scripts();
 	// STRY0079658 added parent task to get restricted group
 	var templateFilters = taskingScripts.getTemplateFilters(true, data.parentTask);
-	var ousWhereTaskManager 
 	
 	data.userHasPersonalTemplateRights = templateFilters.hasMyTemplateRights + '';
 	// if the user has personal template permissions, they can run personal templates
@@ -360,6 +391,7 @@ label{
 	data.myFilter = templateFilters.myTemplateFilter;
 	data.ouFilter = templateFilters.ouFilter;
 	data.globalFilter = templateFilters.globalFilter;
+	data.f = {};
 
 	// initial load, build the original data table widget
 	// STRY0097161
@@ -381,25 +413,13 @@ label{
 		};
 		data.widgetParams = widgetParams;
 		data.templateListWidget = $sp.getWidget('discovertasker-widget-data-table', widgetParams);	
-		//discovertasker-widget-data-table
 	}else	if(input.currentStep == 'enterInfo'){
 		data.canAttach = false;
 		// build the Template Instance Form here
-		widgetParams = {
-			table: "x_153465_discovert_discover_routing_runtime", 
-			sys_id: "-1",	
-			view: "Default View",
-			disableUIActions: "true",
-			//shared: {routing_template_ref: c.data.selected_Template_id},
-			window_size : "10"
-		};
-		data.templateFormWidget = $sp.getWidget('widget-form', widgetParams);	
-		data.templateFormWidget.data.f._fields = tTH.loadTemplateAndTaskIntoInstanceForm(data.templateFormWidget.data.f._fields, input.selected_Template_id, data.parentTask);
-		} else if(input.currentStep == 'StartTemplate'){
-			// take the data from the form and push into the standard input object for starting a template
-			var templateInputs = {};
-			templateInputs = tTH.loadTemplateInputsFromDataFields(input.templateFormWidget.data.f._fields);	
-			tTH.startTemplateWithID(input.selected_Template_id, true, templateInputs);
+		data.f = $sp.getForm("x_153465_discovert_discover_routing_runtime",
+												 "-1", 'parent_task=' + data.parentTask +'^routing_template_ref=' + data.selected_Template_id,
+												 "Default View");
+		data.canRun = new uiConditionCheck().startTemplateUIAction(data.selected_Template_id, data.parentTask); 
 		}
 })($sp);]]></script>
         <servicenow>false</servicenow>
@@ -408,7 +428,7 @@ label{
         <sys_created_on>2020-04-23 03:49:28</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>13f1121e1b1c5450358efd16dc4bcb20</sys_id>
-        <sys_mod_count>243</sys_mod_count>
+        <sys_mod_count>293</sys_mod_count>
         <sys_name>Tasker Insert Template in Task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -416,7 +436,7 @@ label{
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_13f1121e1b1c5450358efd16dc4bcb20</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-05 20:01:49</sys_updated_on>
+        <sys_updated_on>2021-07-09 15:52:27</sys_updated_on>
         <template><![CDATA[<div class="iconlink" style="cursor:pointer;">
 
   <div ng-if="data.currentStep=='StartTemplate'" class="alert alert-success alert-dismissable showAlert">
@@ -444,7 +464,8 @@ label{
   </span>
   
   <span ng-if="data.currentStep=='enterInfo'">
-  	<sp-widget ng-if="data.templateFormWidget" widget="data.templateFormWidget"></sp-widget>
+    <!-- STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify -->
+    <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
   </span>
 
   <div class="panel-footer"> 
@@ -457,7 +478,7 @@ label{
         </div>
         <div class="col-sm-6 text-right">
           <button type="button" ng-if="data.currentStep=='selectTemplate'" class="btn btn-primary" ng-click="btnNextButton()">Next</button>
-          <button type="button" ng-if="data.currentStep=='enterInfo'" class="btn btn-primary" ng-click="btnStartButton()">Start Template</button>
+          <button type="button" ng-disabled="submitting || !data.canRun" ng-if="data.currentStep=='enterInfo'" class="btn btn-primary" ng-click="btnStartButton()">Start Template</button>
         </div>
       </div>
   </div>

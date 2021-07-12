@@ -12,6 +12,7 @@ STRY0104349 -  Request Extension on Platform does not reload form and should be 
 STRY0104533 - Respond Extension should be available from more states and available for Task Owner's Task Manager and Task Administrators&#13;
 STRY0104699 - Request Reassignment should be available from more states &#13;
 STRY0104714 - Respond Reassignment should be available from more states&#13;
+STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
 &#13;
 v2.6&#13;
 Updated to put all UI Actions condition checks into this file&#13;
@@ -77,6 +78,62 @@ uiConditionCheck.prototype = {
 		
 	},
 
+	// STRY0100724 likely this update fixes an issue where start Template on the client was not limiting enough.  
+	// It only looked to see if a user had the rights to run
+	// It would have been difficult to open a template instance as you would come from a place where you would have already chosen a template 
+	// or a task and from there selected a run template button that checked if you had permissions.
+	// But, running a template form a task would have been allowed to anyone with process rights on 2.6 or before
+	// This controls running a template from the Template area as a new task tree
+	// This function expects to receive the Template record
+	// templateID - (required) - takes the ID of the seledted template
+	// taskID - (optional) - taskes the ID of the task to check
+	startTemplateUIAction: function(templateID, taskID)
+	{
+		var restrictedGroup = '';
+		var restricted_group_s;
+		if(taskID){
+			var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParentTask.get(taskID)){
+				restrictedGroup = grParentTask.assignment_group + '';
+				// STRY0095102 - get the nest list of groups
+				// NOTE: may want to look at loading this one time for performance.  
+				// If loading, build an object with top group as the key 
+				// and the list of all groups under the top group as a comman delimitted string.
+				restricted_group_s = new UserInfoScripts().getRestrictedGroupsAndDescendents(restrictedGroup);
+			}
+		}
+		var grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+		if(grTemp.get(templateID)){
+			var templateRestrictedGroup = grTemp.u_restricted_group + '';
+			var isActive = grTemp.u_active == true;
+			var checkRestrictedGroup = templateRestrictedGroup != '' || restrictedGroup != '';
+			var restrictedGroupMatches = templateRestrictedGroup == restrictedGroup;
+			var isUserInRestrictedGroup = false;
+			if(checkRestrictedGroup){
+				// Template has a Restricted Group and it matches the Task's Restricted, make sure the user is in teh group 
+				if(templateRestrictedGroup != '' && restrictedGroupMatches){
+					isUserInRestrictedGroup = gs.getUser().getMyGroups().indexOf(templateRestrictedGroup + '') >= 0;
+				}
+			}
+			var isRestrictedGroupAllowed = (!checkRestrictedGroup || (restrictedGroupMatches && isUserInRestrictedGroup)) ;
+			var isProcessOwner = grTemp.getValue('process_owner') == gs.getUserID();
+			var processLevel = grTemp.getValue('process_level');
+			var UserPermissions  = new UserInfoScripts();
+			// STRY0085827
+			if(isActive && isRestrictedGroupAllowed){
+				if (processLevel == 'global_process') 
+					return UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+				else if (processLevel == 'ou_process')
+					return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemp.getValue('process_ou'));
+				else if (processLevel == 'my_process')
+					return grTemp.getValue('process_owner') == gs.getUserID();
+				else
+					return false;
+			} else return false;
+			
+		}
+	},
+	
 	// v2.6
 	canAcceptAssignment: function(gr){
 		var answer = false;
@@ -1518,7 +1575,7 @@ uiConditionCheck.prototype = {
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>440</sys_mod_count>
+        <sys_mod_count>458</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1526,6 +1583,6 @@ uiConditionCheck.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-23 22:12:14</sys_updated_on>
+        <sys_updated_on>2021-07-11 06:56:53</sys_updated_on>
     </sys_script_include>
 </record_update>

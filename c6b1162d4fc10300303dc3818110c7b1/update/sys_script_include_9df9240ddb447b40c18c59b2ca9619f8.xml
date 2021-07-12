@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.TaskTemplateHelpers</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.6 - moved duration code in here from Task Helper as this duration logic is related to template, not task&#13;
+        <description>2.7&#13;
+STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
+&#13;
+2.6 - moved duration code in here from Task Helper as this duration logic is related to template, not task&#13;
 &#13;
 2.5 P3&#13;
 STRY0084306 - TUP -  STRETCH - Template form - "Template Subtask Name Setting" - None, Suffix and Prefix&#13;
@@ -321,81 +324,7 @@ TaskTemplateHelpers.prototype = {
 		return new CustomTaskerFieldHelper().loadCustomFieldsFromTemplateIntoInstanceForm(data_f_fields, grTemp);
 	},
 	
-	// This function takes data.f._fields from a widget and loads the values into the Ojbect provided
- 	// It returns a data.f._fields object loaded with the default values for a Template
- 	// inputs ---------------------------------------------------------------------
- 	// template     -> Template Glide Record
- 	// RETURN - --------------------------------------------------------------------- 
- 	//   JSON object with the following values
- 	//                  templateName
- 	//                  classification
- 	//                  templateNotation
- 	//                  shortDescription
-	//                  u_template_subtask_s_name_setting
-	//                  u_subtask_s_name_modifier
- 	//                  tableName
- 	//                  tableSysID
- 	//                  assignedMember
- 	//                  objective
- 	//                  primaryAssignee
- 	//                  primaryOffice
- 	//                  restrictedGroup
- 	//                  taskingAuthority	
-	//                  u_external_ou
-	//                  poc_name
-	//                  outbound
-	//                  u_internal_contact
-	//                  u_internal_contact_performing_task
-	loadTemplateInputsFromDataFields: function(data_f_fields) {
-		// for each field that can be in the input, check to see if it is provided.
-		// if it is not provided, see if the associated Template field has a value.
-		// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
-		// check values in input and override values from the Template
-
-		var templateDefaults = {};
-		templateDefaults.parentTask = data_f_fields.parent_task.value;
-		templateDefaults.templateName = data_f_fields.discover_template_name.value;
-		templateDefaults.classification = data_f_fields.classification.value;
-		templateDefaults.templateNotation = data_f_fields.instance_notation.value;
-		templateDefaults.shortDescription = data_f_fields.short_description.value;
-		
-		// STRY0084306
-		templateDefaults.u_template_subtask_s_name_setting = data_f_fields.u_template_subtask_s_name_setting.value;
-		// STRY0084419, STRY0084420, STRY0084424
-		templateDefaults.u_subtask_s_name_modifier = data_f_fields.u_subtask_s_name_modifier.value;
-		
-		templateDefaults.tableName = '';
-		templateDefaults.tableSysID = '';
-		templateDefaults.restrictedGroup = data_f_fields.u_restricted_group.value;
-		templateDefaults.taskingAuthority = data_f_fields.u_tasking_authority.value;
-		templateDefaults.primaryOffice = data_f_fields.u_primary_office.value;
-		templateDefaults.primaryAssignee = data_f_fields.u_primary_assignee.value;
-		templateDefaults.assignedMember = data_f_fields.u_assigned_member.value;
-		// STRY0075858
-		templateDefaults.u_external_ou = data_f_fields.u_external_ou.value;
-		templateDefaults.poc_name = data_f_fields.poc_name.value;
-		templateDefaults.outbound = data_f_fields.outbound.value;
-		templateDefaults.u_internal_contact = data_f_fields.u_internal_contact.value;
-		templateDefaults.u_internal_contact_performing_task = data_f_fields.u_internal_contact_performing_task.value;
-
-		// STRY0085134
-		templateDefaults.u_reviewer = data_f_fields.u_reviewer.value;
-		templateDefaults.u_on_behalf_of = data_f_fields.u_on_behalf_of.value;
-		
-		var strFullObjective = data_f_fields.u_objective.value;
-		if (strFullObjective.length > 2500){
-			strFullObjective =  strFullObjective.substring(0,2500);
-		}
-		templateDefaults.objective = strFullObjective;
-
-		//  STRY0076608
-		templateDefaults.originator = data_f_fields.originator.value;
-
-		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
-		return new CustomTaskerFieldHelper().loadCustomFieldsItnoTemplateInputsFromDataFields(templateDefaults, data_f_fields);
-	},
-
-	
+	// 2.7 - This is used by the API to load all of the default template fields before running the template
 	// This function loads the inputs object using the Template Object provided as defaults
 	// It returns an object loaded with the default values for a Template
 	// inputs ---------------------------------------------------------------------
@@ -456,7 +385,7 @@ TaskTemplateHelpers.prototype = {
 		
 		var strFullObjective = template.getValue('u_objective');
 		if (strFullObjective.length > 2500){
-			 strFullObjective =  strFullObjective.substring(0,2500);
+			strFullObjective =  strFullObjective.substring(0,2500);
 		}
 		templateDefaults.objective = strFullObjective;
 		
@@ -547,13 +476,7 @@ TaskTemplateHelpers.prototype = {
 	
 	startTemplate: function(template, async, inputs) {
 		// if async is set and it is false, then create Template Instance record here
-		if(async == true || async.toString() == ''){
-			// default is true.  So, if true or empty, use Event to launch asynchronously
-			gs.eventQueue('x_153465_discovert.Start_Template', template, JSON.stringify(inputs),  gs.getUserID());
-		} else {
-			// if async is set and it is false, then create Template Instance record here
-			this.createTemplateInstanceToRunTemplate(template, inputs, gs.getUserID());
-		}
+		this._createTemplateInstanceToRunTemplate(template, async, inputs, gs.getUserID());
 
 	},
 
@@ -583,11 +506,12 @@ TaskTemplateHelpers.prototype = {
 	//                  u_internal_contact_performing_task
 	// RETURN - --------------------------------------------------------------------- 
 	// Sys_id of Template Instance
-	createTemplateInstanceToRunTemplate: function(template, inputs, originator) {
+	_createTemplateInstanceToRunTemplate: function(template, async, inputs, originator) {
 		// if input is undefined, create a blank object.  the blank object will get populated by the defaults from the template.
 		if(inputs == undefined) {
 			inputs = {};
 		}
+		
 		
 		// for each field that can be in the input, check to see if it is provided.
 		// if it is not provided, see if the associated Template field has a value.
@@ -668,7 +592,7 @@ TaskTemplateHelpers.prototype = {
 
 		// STRY0014064 - set the parent to be passed into the new sub tree being created
 		if(inputs.parentTask + '' != ''){
-		   recRunTemp.parent_task = inputs.parentTask;
+			recRunTemp.parent_task = inputs.parentTask;
 			// STRY0074135 - the parent task for the grafted in template did not update to set the child template run
 			// See associated fix script Tasker_2_5_13_Set_child_route_template
 			var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
@@ -683,6 +607,12 @@ TaskTemplateHelpers.prototype = {
 		if((inputs.originator == undefined)  && template.getValue('process_owner') != ''){
 			inputs.originator = template.getValue('process_owner');
 		}
+		
+		// if async is, then set the status to queued which will create the Template Instance and then call the event to start the script instead of starting the script right away.
+		if(async == true || async.toString() == ''){
+			recRunTemp.u_status = 'queued';
+		} 
+
 		recRunTemp.originator = inputs.originator;	
 		// recRunTemp.originator = originator;	
 		
@@ -731,20 +661,99 @@ TaskTemplateHelpers.prototype = {
 	
 
     type: 'TaskTemplateHelpers'
-};]]></script>
+	// ***********************************************************************************************
+	// DEPCRECATED IN 2.7 - MOVING AWAY FROM WORKFLOW MADE THIS UNNECCESSARY
+	// EVERYTHING BELOW HERE WAS DEPRECATED
+	// ***********************************************************************************************
+	// This function takes data.f._fields from a widget and loads the values into the Ojbect provided
+	// It returns a data.f._fields object loaded with the default values for a Template
+	// inputs ---------------------------------------------------------------------
+	// template     -> Template Glide Record
+	// RETURN - --------------------------------------------------------------------- 
+	//   JSON object with the following values
+	//                  templateName
+	//                  classification
+	//                  templateNotation
+	//                  shortDescription
+	//                  u_template_subtask_s_name_setting
+	//                  u_subtask_s_name_modifier
+	//                  tableName
+	//                  tableSysID
+	//                  assignedMember
+	//                  objective
+	//                  primaryAssignee
+	//                  primaryOffice
+	//                  restrictedGroup
+	//                  taskingAuthority	
+	//                  u_external_ou
+	//                  poc_name
+	//                  outbound
+	//                  u_internal_contact
+	//                  u_internal_contact_performing_task
+	// loadTemplateInputsFromDataFields: function(data_f_fields) {
+	//	// for each field that can be in the input, check to see if it is provided.
+	//	// if it is not provided, see if the associated Template field has a value.
+	//	// if the field was not provided, but the associated tempalte has a value, the set the field to the template field.
+	//	// check values in input and override values from the Template
+	//
+	//	var templateDefaults = {};
+	//	templateDefaults.parentTask = data_f_fields.parent_task.value;
+	//	templateDefaults.templateName = data_f_fields.discover_template_name.value;
+	//	templateDefaults.classification = data_f_fields.classification.value;
+	//	templateDefaults.templateNotation = data_f_fields.instance_notation.value;
+	//	templateDefaults.shortDescription = data_f_fields.short_description.value;
+	//	
+	//	// STRY0084306
+	//	templateDefaults.u_template_subtask_s_name_setting = data_f_fields.u_template_subtask_s_name_setting.value;
+	//	// STRY0084419, STRY0084420, STRY0084424
+	//	templateDefaults.u_subtask_s_name_modifier = data_f_fields.u_subtask_s_name_modifier.value;
+	//	
+	//	templateDefaults.tableName = '';
+	//	templateDefaults.tableSysID = '';
+	//	templateDefaults.restrictedGroup = data_f_fields.u_restricted_group.value;
+	//	templateDefaults.taskingAuthority = data_f_fields.u_tasking_authority.value;
+	//	templateDefaults.primaryOffice = data_f_fields.u_primary_office.value;
+	//	templateDefaults.primaryAssignee = data_f_fields.u_primary_assignee.value;
+	//	templateDefaults.assignedMember = data_f_fields.u_assigned_member.value;
+	//	// STRY0075858
+	//	templateDefaults.u_external_ou = data_f_fields.u_external_ou.value;
+	//	templateDefaults.poc_name = data_f_fields.poc_name.value;
+	//	templateDefaults.outbound = data_f_fields.outbound.value;
+	//	templateDefaults.u_internal_contact = data_f_fields.u_internal_contact.value;
+	//	templateDefaults.u_internal_contact_performing_task = data_f_fields.u_internal_contact_performing_task.value;
+	//
+	//	// STRY0085134
+	//	templateDefaults.u_reviewer = data_f_fields.u_reviewer.value;
+	//	templateDefaults.u_on_behalf_of = data_f_fields.u_on_behalf_of.value;
+	//	
+	//	var strFullObjective = data_f_fields.u_objective.value;
+	//	if (strFullObjective.length > 2500){
+	//		strFullObjective =  strFullObjective.substring(0,2500);
+	//	}
+	//	templateDefaults.objective = strFullObjective;
+	//
+	//	//  STRY0076608
+	//	templateDefaults.originator = data_f_fields.originator.value;
+	//
+	//	// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+	//	return new CustomTaskerFieldHelper().loadCustomFieldsItnoTemplateInputsFromDataFields(templateDefaults, data_f_fields);
+	//},
+	
+};
+]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-03-05 20:30:26</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>9df9240ddb447b40c18c59b2ca9619f8</sys_id>
-        <sys_mod_count>118</sys_mod_count>
+        <sys_mod_count>126</sys_mod_count>
         <sys_name>TaskTemplateHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9df9240ddb447b40c18c59b2ca9619f8</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:48</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-11 03:56:22</sys_updated_on>
     </sys_script_include>
 </record_update>

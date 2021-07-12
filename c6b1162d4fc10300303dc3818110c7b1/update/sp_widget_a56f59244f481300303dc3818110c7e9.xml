@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, $http, $location, $rootScope, spModal, spUtil, $interpolate) {
+        <client_script><![CDATA[api.controller = function($scope, $http, $location, $rootScope, spModal, spUtil, $interpolate, htmlToStringService) {
     //------------------------------------------------------------------------------------------------------------------------
     // COMPANY: DISCOVER TECHNOLOGIES
     // CUSTOMIZED BY: KARINA TORRES
@@ -13,6 +13,11 @@
     //											some special characters in "instruction" or "Signature Instructions" field
     // 											Add a private function to convert HTML to a simple string
     //											Added missing semicolons, formatted code
+    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+    //											some special characters in "instruction" or "Signature Instructions" field
+	// 											Remove private function to convert HTML to a simple string; use service instead
+    //											Instructions and Signature Instructions need HTML converted to string before
+    //											the call to substring with field.maxChars
     //------------------------------------------------------------------------------------------------------------------------
 
     //	Font Awesome css
@@ -307,7 +312,15 @@
             var field = c.data.fieldsInModel[key];
             if (field) {
                 fieldLabel = field.fieldLabel;
-                displayValue = record[key].display_value;
+
+                // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
+
                 if (field.maxChars > 0)
                     displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
                 if (field.hasValue) {
@@ -359,7 +372,15 @@
             var field = c.data.fieldsInModel[key];
             if (field) {
                 fieldLabel = field.fieldLabel;
-                displayValue = record[key].display_value;
+
+                // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
+
                 if (field.maxChars > 0)
                     displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
                 if (field.hasValue) {
@@ -467,15 +488,6 @@
         }
         diagram.model.setDataProperty(parentNode.data.warning, 'isSuspenseDateAfterChildren', parentAfterAllChildren);
         diagram.model.updateTargetBindings(parentNode.data);
-    }
-
-    // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-    // private function to convert HTML to a simple string
-    function _convertHtmlToSimpleString(someHtmlText) {
-        var divElement = document.createElement('div');
-        divElement.innerHTML = someHtmlText;
-
-        return divElement.textContent || divElement.innerHTML || '';
     }
 
     // STRY0091260
@@ -667,7 +679,10 @@
                         //    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
                         // convert HTML to a simple string
                         new go.Binding("text", "", function(data) {
-                            return _convertHtmlToSimpleString(data.instructions);
+							// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                            // return _convertHtmlToSimpleString(data.instructions); // function was removed
+							// Need to call below to have <, >, and & show as that character and not an ALT code
+							return htmlToStringService.convertHtmlToString(data.instructions);
                         }), {
                             row: 4,
                             column: 1,
@@ -690,13 +705,16 @@
                             return (data.u_signature_instructions != 'null');
                         })),
                     $go(go.TextBlock,
-						// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
                         // strip HTML Tags
                         // new go.Binding("text", "", function(data) {
                         //    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
-						// convert HTML to a simple string
-						new go.Binding("text", "", function(data) {
-                            return _convertHtmlToSimpleString(data.u_signature_instructions);
+                        // convert HTML to a simple string
+                        new go.Binding("text", "", function(data) {
+							// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                            // return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
+							// Need to call below to have <, >, and & show as that character and not an ALT code
+							return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
                         }), {
                             visible: false,
                             row: 5,
@@ -1086,6 +1104,7 @@
                         "toolManager.toolTipDuration": 10000
                     });
             }
+			
             diagram.model = new go.TreeModel($scope.data.map);
             var fontStyle = "13px Segoe UI";
 
@@ -1517,7 +1536,8 @@ span.label.label-pill.label-Cancelled {
 </css>
         <data_table>sp_instance</data_table>
         <demo_data/>
-        <description/>
+        <description>2.7 Added Angular Provider htmlToStringService;&#13;
+Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-06-25;</description>
         <docs/>
         <field_list/>
         <has_preview>true</has_preview>
@@ -1537,6 +1557,9 @@ span.label.label-pill.label-Cancelled {
 //------------------------------------------------------------------------------------------------------------------------
 //
 // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
+//											some special characters in "instruction" or "Signature Instructions" field
+//                                          Changes in Client controller
+// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
 //											some special characters in "instruction" or "Signature Instructions" field
 //                                          Changes in Client controller
 //------------------------------------------------------------------------------------------------------------------------
@@ -1634,7 +1657,7 @@ span.label.label-pill.label-Cancelled {
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1462</sys_mod_count>
+        <sys_mod_count>1476</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1642,7 +1665,7 @@ span.label.label-pill.label-Cancelled {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-06-25 20:12:20</sys_updated_on>
+        <sys_updated_on>2021-07-09 16:07:09</sys_updated_on>
         <template><![CDATA[<!--
 <select ng-model="c.angle">
   <option ng-repeat="x in c.views"  value="{{x.angle}}" >{{x.alignment}}</option>
