@@ -4,6 +4,8 @@
         <client_script><![CDATA[function ($scope, $rootScope,spAriaFocusManager, $http, amb,$timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
 	/* widget controller */
 	var c = this;
+	$scope.submitting = false;
+	var g_form;
 
 	angular.element('.modal-footer').css({display:'none'});
 
@@ -20,17 +22,23 @@
 	}
 
 	$scope.btnStartButton = function(){
-		$scope.initiatingTemplate = true;
-		$(".showAlert").hide().show('medium');
-		c.data.currentStep = 'StartTemplate';
-		var table = 'x_153465_discovert_route_task_instance';
-		var filter = 'u_parent_template='+ c.data.process_template_sys_id + '^parentISEMPTY';
-		// Start watching for task looking for an event for the Template ID before starting the template
-		if (c.watcher)
-			c.watcher.unsubscribe();
-		c.watcher = watcher(table, filter, taskFromTemplateStarted);
-		
-		c.server.update();
+		// STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
+		if(g_form){
+			$scope.submitting = true;
+			if(g_form.submit('start_template')){
+				$scope.initiatingTemplate = true;
+				$(".showAlert").hide().show('medium');
+				c.data.currentStep = 'StartTemplate';
+				var table = 'x_153465_discovert_route_task_instance';
+				var filter = 'u_parent_template='+ c.data.process_template_sys_id + '^parentISEMPTY';
+				// Start watching for task looking for an event for the Template ID before starting the template
+				if (c.watcher)
+					c.watcher.unsubscribe();
+				c.watcher = watcher(table, filter, taskFromTemplateStarted);
+				
+			}
+			$scope.submitting = false;
+		}		
 	}
 	
 	// Make sure to include amb as a provider in your client controller
@@ -50,7 +58,18 @@
 		// done with record watcher unsubscribe	
 		c.watcher.unsubscribe();
 	}
-	
+
+	function initForm(gFormInstance) {
+		if (gFormInstance.getTableName() != undefined &&
+				gFormInstance.getTableName() == $scope.data.f.table) {
+			g_form = gFormInstance;
+		}
+	}
+
+	$scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
+		initForm(gFormInstance);
+	});
+
 	// remove record watcher when form closes
 	$scope.$on('$destroy', function() {
 		if (c.watcher)
@@ -292,15 +311,26 @@ label{
         <option_schema/>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[/**
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// WIDGET BASE: TASKER DATA TABLE
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: Karina Torres
+/**
  * Description
  * This widget opens when you click on "Run Process Template" 
  * @method anonymous-0
  * @author Karina Torres [KTorres]
- * @requires x_153465_discovert.module:sys_script_include.RunProcessTemplate
- * @memberof x_153465_discovert.module:sp_widget
+  * @memberof x_153465_discovert.module:sp_widget
  * @returns {undefined}
  */
+//------------------------------------------------------------------------------------------------------------------------
+//
+// 2.7.0 | 07.05.2021 | raj | STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
+//                                   Updates in Server, Client and HTML
+//------------------------------------------------------------------------------------------------------------------------
+
 (function($sp, input, data, options, gs) {
 	/* populate the 'data' object */
 	
@@ -311,27 +341,16 @@ label{
 	// RJ - TUP - STRY0068618 
 	// STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
 	data.process_template_sys_id = (input || {}).process_template_sys_id || (options || {}).process_template_sys_id || $sp.getParameter('process_template_sys_id');	
-	var tTH = new TaskTemplateHelpers();
 	// STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
 	if(input == undefined || input.currentStep == undefined){
 		data.canAttach = false;
 		// build the Template Instance Form here
-		widgetParams = {
-			table: "x_153465_discovert_discover_routing_runtime", 
-			sys_id: "-1",	
-			//view: "sp",
-			disableUIActions: "true",
-			//shared: {routing_template_ref: c.data.selected_Template_id},
-			window_size : "10"
-		};
-		data.templateFormWidget = $sp.getWidget('widget-form', widgetParams);	
-		data.templateFormWidget.data.f._fields = tTH.loadTemplateIntoInstanceForm(data.templateFormWidget.data.f._fields, data.process_template_sys_id);
+		data.f = $sp.getForm("x_153465_discovert_discover_routing_runtime",
+												 "-1", 'routing_template_ref=' + data.process_template_sys_id,
+												 "Default View");
+		data.canRun = new uiConditionCheck().startTemplateUIAction(data.process_template_sys_id,'');
+		
 		data.currentStep = 'enterInfo';
-	} else if(input.currentStep == 'StartTemplate'){
-		// take the data from the form and push into the standard input object for starting a template
-		var templateInputs = {};
-		templateInputs = tTH.loadTemplateInputsFromDataFields(input.templateFormWidget.data.f._fields);	
-		tTH.startTemplateWithID(data.process_template_sys_id, true, templateInputs);
 	}
 	
 	
@@ -340,15 +359,17 @@ label{
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-03-13 14:58:39</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>391ce42fdb843380c18c59b2ca96196a</sys_id>
-        <sys_mod_count>210</sys_mod_count>
+        <sys_mod_count>218</sys_mod_count>
         <sys_name>Tasker Modal - Run Template</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_391ce42fdb843380c18c59b2ca96196a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-05 20:08:45</sys_updated_on>
+        <sys_updated_on>2021-07-10 18:50:19</sys_updated_on>
         <template><![CDATA[<div class="iconlink" style="cursor:pointer;">
   <!--// Top Icon -->
   <div ng-if="templateStarted" class="alert alert-info alert-dismissable showAlert">
@@ -360,7 +381,8 @@ label{
   </div>
 
   <span ng-if="data.currentStep=='enterInfo'">
-    <sp-widget ng-if="data.templateFormWidget" widget="data.templateFormWidget"></sp-widget>
+    <!-- STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify -->
+    <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
   </span>
   <div class="modal-body text-right">
     <div class="row">

@@ -2,246 +2,286 @@
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function clientController($scope, $rootScope, $http, $location, spUtil, $interpolate, $log, spAriaUtil) {
-	//------------------------------------------------------------------------------------------------------------------------
-	// COMPANY: DISCOVER TECHNOLOGIES
-	// CUSTOMIZED BY: KARINA TORRES
-	// RECURSIVE LIST TREE
-	//------------------------------------------------------------------------------------------------------------------------
-	var c = this;
+    //------------------------------------------------------------------------------------------------------------------------
+    // COMPANY: DISCOVER TECHNOLOGIES
+    // CUSTOMIZED BY: KARINA TORRES
+    // RECURSIVE LIST TREE
+    //------------------------------------------------------------------------------------------------------------------------
+    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+    //												some special characters in "instruction" or "Signature Instructions" field
+    //                                          Rewrite getTaskTreeListTitleNode() to pass just an object and refactor code
+    //------------------------------------------------------------------------------------------------------------------------
 
-	//spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id);
-	// NOTE: record watcher accounts for the form save change, no need to reload on form change
-	// var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
-	spUtil.recordWatch($scope, $scope.data.table, "u_task_tree=" + $scope.data.task_tree, function(name) {
-		var changes = name.data.changes;
-		var sys_id = name.data.sys_id.toString();
-		switch (name.data.operation){
-			case "update":
-				var arrItemChanged = c.data.tasks.filter(function(item) { return item.key === sys_id; });
-				if(arrItemChanged[0]){
-					var itemChanged = arrItemChanged[0];
-					var itemDataChanged = false;
-					for (var change in changes) {
-						if(c.data.fieldsInModel[changes[change]]){
-							itemDataChanged = true;
-						}
-					}
-					if(itemDataChanged){
-						updateTaskData(itemChanged, name.data.record);	
-					}
-				}
-				break;
-			case "insert":
-				if(name.data.record.parent){
-					c.data.tasks.push(createTaskData(sys_id,name.data.record));
-				}
-				break;
-			case "delete":
-				if(c.data.tasks.indexOf(sys_id) > -1) {
-					c.data.tasks.splice(c.data.tasks.indexOf(sys_id), 1);
-				}
-		}
-	});
-	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
-	function createTaskData(sys_id, record){
-		var newTaskData = {};
-		newTaskData.key = sys_id;
-		newTaskData.sys_id = sys_id;
-		for (var key in record){
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if(field){
-				fieldLabel = field.fieldLabel; 
-				if(field.keyUsesDisplayOnly){
-					newTaskData[key] = record[key].display_value;
-				}
-				if(field.hasValue){
-					newTaskData[key] = record[key].value;
-				}
-				if(field.hasDiplayValue){
-					newTaskData[key + '_DisplayValue'] = record[key].display_value;
-				}
-				if(field.hasDisplayAndLabel){
-					displayValue = fieldLabel + ': ' +  record[key].display_value;
-					newTaskData[key + '_DisplayText'] = displayValue;
-				}
-				if(field.type=='date'){
-					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
-					newTaskData[key] = date_number;
-				}
-			}  //if field wasn't found do nothing
-		}
+    var c = this;
+
+    //spUtil.recordWatch($scope, $scope.data.table, "sys_id=" + $scope.data.sys_id);
+    // NOTE: record watcher accounts for the form save change, no need to reload on form change
+    // var onSaveUpdate = $scope.$on('sp.form.record.updated', refreshWidget);
+    spUtil.recordWatch($scope, $scope.data.table, "u_task_tree=" + $scope.data.task_tree, function(name) {
+        var changes = name.data.changes;
+        var sys_id = name.data.sys_id.toString();
+        switch (name.data.operation) {
+            case "update":
+                var arrItemChanged = c.data.tasks.filter(function(item) {
+                    return item.key === sys_id;
+                });
+                if (arrItemChanged[0]) {
+                    var itemChanged = arrItemChanged[0];
+                    var itemDataChanged = false;
+                    for (var change in changes) {
+                        if (c.data.fieldsInModel[changes[change]]) {
+                            itemDataChanged = true;
+                        }
+                    }
+                    if (itemDataChanged) {
+                        updateTaskData(itemChanged, name.data.record);
+                    }
+                }
+                break;
+            case "insert":
+                if (name.data.record.parent) {
+                    c.data.tasks.push(createTaskData(sys_id, name.data.record));
+                }
+                break;
+            case "delete":
+                if (c.data.tasks.indexOf(sys_id) > -1) {
+                    c.data.tasks.splice(c.data.tasks.indexOf(sys_id), 1);
+                }
+        }
+    });
+    // load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+    function createTaskData(sys_id, record) {
+        var newTaskData = {};
+        newTaskData.key = sys_id;
+        newTaskData.sys_id = sys_id;
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
+                if (field.keyUsesDisplayOnly) {
+                    newTaskData[key] = record[key].display_value;
+                }
+                if (field.hasValue) {
+                    newTaskData[key] = record[key].value;
+                }
+                if (field.hasDiplayValue) {
+                    newTaskData[key + '_DisplayValue'] = record[key].display_value;
+                }
+                if (field.hasDisplayAndLabel) {
+                    displayValue = fieldLabel + ': ' + record[key].display_value;
+                    newTaskData[key + '_DisplayText'] = displayValue;
+                }
+                if (field.type == 'date') {
+                    var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+                    newTaskData[key] = date_number;
+                }
+            } //if field wasn't found do nothing
+        }
+
+        // These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
+        var iLevel = 0;
+        if (newTaskData.parent != null) {
+            var arrParentItem = c.data.tasks.filter(function(item) {
+                return item.key === newTaskData.parent;
+            });
+            iLevel = parseInt(arrParentItem[0].level);
+        }
+        newTaskData.level = iLevel;
+
+        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering; refactor function 
+        // newTaskData.text = getTaskTreeListTitleNode(newTaskData, newTaskData.parent, newTaskData.task_name, newTaskData.primary_assignee, newTaskData.assigned_to, newTaskData.state, newTaskData.order);
+        newTaskData.text = getTaskTreeListTitleNode(newTaskData);
+
+        // we will expand all on initial page load
+        newTaskData.expanded = true;
+        // NOTE you are here, there is an issue with leaf nodes having the down chevron when they should not	
+        // this should be removed
+		// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering; use dot notation for state and order
+        // newTaskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + newTaskData.sys_id + '&table=x_153465_discovert_route_task_instance&view=sp' + '&state=' + newTaskData['state'] + '&order=' + newTaskData['order'];
+		newTaskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + newTaskData.sys_id + 
+			'&table=x_153465_discovert_route_task_instance&view=sp' + 
+			'&state=' + newTaskData.state + 
+			'&order=' + newTaskData.order;
+        return newTaskData;
+    }
+    // load all of the field names used in the task tree nodes
+    function updateTaskData(taskData, record) {
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
+                if (field.keyUsesDisplayOnly) {
+                    taskData[key] = record[key].display_value;
+                }
+                if (field.hasValue) {
+                    taskData[key] = record[key].value; // this is the default value to key match
+                }
+                if (field.hasDiplayValue) {
+                    taskData[key + '_DisplayValue'] = record[key].display_value;
+                }
+                if (field.hasDisplayAndLabel) {
+                    displayValue = fieldLabel + ': ' + record[key].display_value;
+                    taskData[key + '_DisplayText'] = displayValue;
+                }
+                if (field.type == 'date') {
+                    var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+                    taskData[key] = date_number;
+                }
+            } //if field wasn't found do nothing
+        }
+
+        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering; refactor function
+        // taskData.text = getTaskTreeListTitleNode(taskData, taskData.parent, taskData.task_name, taskData.primary_assignee, taskData.assigned_to, taskData.state, taskData.order);
+        taskData.text = getTaskTreeListTitleNode(taskData);
+
+        // we will expand all on initial page load
+        taskData.expanded = true;
 		
-		// These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
-		var iLevel=0;
-		if (newTaskData.parent != null){
-			var arrParentItem = c.data.tasks.filter(function(item) { return item.key === newTaskData.parent;});
-			iLevel = parseInt(arrParentItem[0].level);
-		}
-		newTaskData.level = iLevel;
-		newTaskData.text = getTaskTreeListTitleNode(newTaskData, newTaskData.parent, newTaskData.task_name, newTaskData.primary_assignee, newTaskData.assigned_to, newTaskData.state, newTaskData.order);
-		// we will expand all on initial page load
-		newTaskData.expanded = true;
-		// NOTE you are here, there is an issue with leaf nodes having the down chevron when they should not	
-		// this should be removed
-		newTaskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + newTaskData.sys_id +'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ newTaskData['state']+'&order='+ newTaskData['order'];
-		return newTaskData;
-	}
-	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
-	function updateTaskData(taskData, record){
-		for (var key in record){
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if(field){
-				fieldLabel = field.fieldLabel; 
-				if(field.keyUsesDisplayOnly){
-					taskData[key] = record[key].display_value;
-				}
-				if(field.hasValue){
-					taskData[key] = record[key].value; // this is the default value to key match
-				}
-				if(field.hasDiplayValue){
-					taskData[key + '_DisplayValue'] = record[key].display_value;
-				}
-				if(field.hasDisplayAndLabel){
-					displayValue = fieldLabel + ': ' +  record[key].display_value;
-					taskData[key + '_DisplayText'] = displayValue;
-				}
-				if(field.type=='date'){
-					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
-					taskData[key] = date_number;
-				}
-			}  //if field wasn't found do nothing
-		}
-		// These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
-		taskData.text = getTaskTreeListTitleNode(taskData, taskData.parent, taskData.task_name, taskData.primary_assignee, taskData.assigned_to, taskData.state, taskData.order);
-		// we will expand all on initial page load
-		taskData.expanded = true;
-		taskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + taskData.sys_id +'&table=x_153465_discovert_route_task_instance&view=sp'+'&state='+ taskData['state']+'&order='+ taskData['order'];
-		return taskData;
-	}	
-
-	function getTaskTreeListTitleNode (newTaskData, parent, TaskNameNumber, Primary_Assignee, Assigned_To, State, Order) {
-		var taskText = {};
-		if (parent != null) TaskNameNumber = Order + ". " + TaskNameNumber; // NEW
-		newTaskData.TaskNameNumber = TaskNameNumber;
-		taskText = {TaskNameNumber: TaskNameNumber, primary_assignee: Primary_Assignee,assigned_to: Assigned_To, State: State, Order: Order};
-		// STRY0099313 - When adding tasks that are unassigned, the user shows "undefined" instead of nothing.  This story fixes that as well.
-		if (Assigned_To != '' && Assigned_To != undefined) 
-			taskText.assigned_to = '(' + Assigned_To + ')';
-		else
-			taskText.assigned_to = '';
+		// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering; use dot notation for state and order 
+        // taskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + taskData.sys_id + '&table=x_153465_discovert_route_task_instance&view=sp' + '&state=' + taskData['state'] + '&order=' + taskData['order'];
+		taskData.href = '/discovertaskerportal?id=discovertasker_taskdetails&sys_id=' + taskData.sys_id + 
+			'&table=x_153465_discovert_route_task_instance&view=sp' + 
+			'&state=' + taskData.state + 
+			'&order=' + taskData.order;
 		
-		var badgeclass = "label label-"+State;
-		taskText.state = State;
-		return taskText;
-	}
-	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
-	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-		setAndExpandSelected(parms.sys_id);
-	})
-	$rootScope.$on('$sp.list.click', function(e, parms) {
-		setAndExpandSelected(parms.sys_id);
-	})
-	// NOTE you are here, you need to expand/collaps	
-	function extendAllAncestors(parent) {
-		var itemParent = c.data.tasks.filter(function(item) { return item.key === parent; });
-		if(itemParent.parent){
-			extendAllAncestors(itemParent.parent);
-			itemParent.expanded = true;
-			c.expand(itemParent.key);
-		}
-	}
+        return taskData;
+    }
 
-	function setAndExpandSelected(sys_id){
-		c.data.sys_id = sys_id;
-		// TODO - ON CHANGE EXPAND ALL NODES UP THE TREE FROM SELECTED NODE
-		extendAllAncestors(sys_id);
-	}
+    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering; refactor function
+    function getTaskTreeListTitleNode(newTaskData) {
+        var assignedTo = '';
+        var taskNameNumber = newTaskData.task_name;
+        var taskText = {};
 
-	//function refreshWidget() {
-	//	$scope.server.update();
-	//}
-	
-	c.openLink = function(href, sys_id){
-		//$location.url(href);
-		if (c.data.sys_id == sys_id) // get called twice by gojs
-			return;
-		c.data.sys_id = sys_id;
-		var evt = {};
-		evt.sys_id = sys_id;
-		evt.table = c.data.table;
-		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
-		$rootScope.$broadcast('$TaskerTaskList.click', evt);
-	};
+        if (newTaskData.parent != null) {
+            taskNameNumber = newTaskData.order + ". " + newTaskData.task_name;
+        }
 
-	c.findChildren = function(id){
-		var taskChildren =[];
-		for (var i = 0; i < c.data.tasks.length; i++) {
-			if(c.data.tasks[i].parent == id){
-				taskChildren.push(c.data.tasks[i]);
-			}
-		}
-		return taskChildren;
-	};
-	c.findCurrentTask = function(id){
-		var currentTask = {};
-		for (var i = 0; i < c.data.tasks.length; i++) {
-			if(c.data.tasks[i].sys_id == id){
-				currentTask = c.data.tasks[i];
-			}
-		}
-		return currentTask;
-	};
-	c.collapse= function(id,event){
-		var currentTask = c.findCurrentTask(id);
-		var taskChildren = c.findChildren(id);
+        // STRY0099313 - When adding tasks that are unassigned, the user shows "undefined" instead of nothing.  This story fixes that as well.
+        if (!!newTaskData.assigned_to && newTaskData.assigned_to != '') {
+            assignedTo = '(' + newTaskData.assigned_to + ')';
+        }
 
-		if($("#span" + currentTask.sys_id).hasClass( "glyphicon-chevron-down" )){
-			c.collapse_1 (id);
+        taskText = {
+            TaskNameNumber: taskNameNumber,
+            primary_assignee: newTaskData.primary_assignee,
+            assigned_to: assignedTo,
+            state: newTaskData.state,
+            Order: newTaskData.order
+        };
 
-		} 
-		else if($("#span" + currentTask.sys_id).hasClass( "glyphicon-chevron-right" )){
-			c.expand(id);
-		}
-		event.stopPropagation();
-	};
-	c.changeState = function(id){
-		for(var r=0; r < c.data.tasks; r++){
-			if(c.data.tasks[r].sys_id == id){
-				c.data.tasks[r].state.expanded = !c.data.tasks[r].state.expanded;
-			}
-		}
-	};
-	c.collapse_1 = function(id){
-		var currentTask = c.findCurrentTask(id);
-		var taskChildren = c.findChildren(id);
-		for(var x=0; x < taskChildren.length; x++){
-			$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-down" );
-			$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-right" );
-			//	$( "#" + taskChildren[x].sys_id ).css("background-color",color)
-			$( "#" + taskChildren[x].sys_id ).css("display","none");
-			c.collapse_1(taskChildren[x].sys_id );
-		}
-	};
+        return taskText;
+    }
 
-	c.expand = function(id){
-		var currentTask = c.findCurrentTask(id);
-		var taskChildren = c.findChildren(id);
+    // STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+    $rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+        setAndExpandSelected(parms.sys_id);
+    });
+    $rootScope.$on('$sp.list.click', function(e, parms) {
+        setAndExpandSelected(parms.sys_id);
+    });
+    // NOTE you are here, you need to expand/collaps	
+    function extendAllAncestors(parent) {
+        var itemParent = c.data.tasks.filter(function(item) {
+            return item.key === parent;
+        });
+        if (itemParent.parent) {
+            extendAllAncestors(itemParent.parent);
+            itemParent.expanded = true;
+            c.expand(itemParent.key);
+        }
+    }
 
-		for(var x=0; x < taskChildren.length; x++){
-			$("#span" + currentTask.sys_id).removeClass( "glyphicon-chevron-right" );
-			$("#span" + currentTask.sys_id).addClass( "glyphicon-chevron-down" );
-			var color = 'red';
-			//$( "#" + taskChildren[x].sys_id ).css("background-color",color)
-			$( "#" + taskChildren[x].sys_id ).css("display","block");
+    function setAndExpandSelected(sys_id) {
+        c.data.sys_id = sys_id;
+        // TODO - ON CHANGE EXPAND ALL NODES UP THE TREE FROM SELECTED NODE
+        extendAllAncestors(sys_id);
+    }
 
-			c.expand(taskChildren[x].sys_id );
+    //function refreshWidget() {
+    //	$scope.server.update();
+    //}
 
-		}
-	};
+    c.openLink = function(href, sys_id) {
+        //$location.url(href);
+        if (c.data.sys_id == sys_id) // get called twice by gojs
+            return;
+        c.data.sys_id = sys_id;
+        var evt = {};
+        evt.sys_id = sys_id;
+        evt.table = c.data.table;
+        $location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
+        $rootScope.$broadcast('$TaskerTaskList.click', evt);
+    };
+
+    c.findChildren = function(id) {
+        var taskChildren = [];
+        for (var i = 0; i < c.data.tasks.length; i++) {
+            if (c.data.tasks[i].parent == id) {
+                taskChildren.push(c.data.tasks[i]);
+            }
+        }
+        return taskChildren;
+    };
+    c.findCurrentTask = function(id) {
+        var currentTask = {};
+        for (var i = 0; i < c.data.tasks.length; i++) {
+            if (c.data.tasks[i].sys_id == id) {
+                currentTask = c.data.tasks[i];
+            }
+        }
+        return currentTask;
+    };
+    c.collapse = function(id, event) {
+        var currentTask = c.findCurrentTask(id);
+        var taskChildren = c.findChildren(id);
+
+        if ($("#span" + currentTask.sys_id).hasClass("glyphicon-chevron-down")) {
+            c.collapse_1(id);
+
+        } else if ($("#span" + currentTask.sys_id).hasClass("glyphicon-chevron-right")) {
+            c.expand(id);
+        }
+        event.stopPropagation();
+    };
+    c.changeState = function(id) {
+        for (var r = 0; r < c.data.tasks; r++) {
+            if (c.data.tasks[r].sys_id == id) {
+                c.data.tasks[r].state.expanded = !c.data.tasks[r].state.expanded;
+            }
+        }
+    };
+    c.collapse_1 = function(id) {
+        var currentTask = c.findCurrentTask(id);
+        var taskChildren = c.findChildren(id);
+        for (var x = 0; x < taskChildren.length; x++) {
+            $("#span" + currentTask.sys_id).removeClass("glyphicon-chevron-down");
+            $("#span" + currentTask.sys_id).addClass("glyphicon-chevron-right");
+            //	$( "#" + taskChildren[x].sys_id ).css("background-color",color)
+            $("#" + taskChildren[x].sys_id).css("display", "none");
+            c.collapse_1(taskChildren[x].sys_id);
+        }
+    };
+
+    c.expand = function(id) {
+        var currentTask = c.findCurrentTask(id);
+        var taskChildren = c.findChildren(id);
+
+        for (var x = 0; x < taskChildren.length; x++) {
+            $("#span" + currentTask.sys_id).removeClass("glyphicon-chevron-right");
+            $("#span" + currentTask.sys_id).addClass("glyphicon-chevron-down");
+            var color = 'red';
+            //$( "#" + taskChildren[x].sys_id ).css("background-color",color)
+            $("#" + taskChildren[x].sys_id).css("display", "block");
+
+            c.expand(taskChildren[x].sys_id);
+
+        }
+    };
 
 }]]></client_script>
         <controller_as>c</controller_as>
@@ -414,7 +454,8 @@ span.label.label-pill.label-Cancelled {
       "hide_xs" : false
    }
 }</demo_data>
-        <description>2.6 updates for post back removal</description>
+        <description>2.7 Updated getTaskTreeListTitleNode() to pass just an object and refactor code. Update href to use dot notation for state and order for record watcher create and update.&#13;
+2.6 updates for post back removal</description>
         <docs/>
         <field_list>glyph,color</field_list>
         <has_preview>true</has_preview>
@@ -425,64 +466,71 @@ span.label.label-pill.label-Cancelled {
         <option_schema>[{"name":"title","label":"Title","type":"string"},{"displayValue":"Page","name":"page","label":"Page","type":"reference","value":"sp_page","ed":{"reference":"sp_page"}},{"name":"hide_xs","label":"Hide at XS","type":"boolean"}]</option_schema>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[//------------------------------------------------------------------------------------------------------------------------
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
 // COMPANY: DISCOVER TECHNOLOGIES
 // CUSTOMIZED BY: KARINA TORRES
 // RECURSIVE TASK LIST TREE
 //------------------------------------------------------------------------------------------------------------------------
+// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+//												some special characters in "instruction" or "Signature Instructions" field
+//											 Updated some comments in Server Script
+//                                          Changes in Client controller
+//------------------------------------------------------------------------------------------------------------------------
 
-//------------------------------------------------------------------------------------------------------------------------
-// INITIALIZE VARIABLES
-//------------------------------------------------------------------------------------------------------------------------
 (function() {
-	data.results = [];
-	data.table = $sp.getParameter("table");
-	data.sys_id =  $sp.getParameter("sys_id");
+    data.results = [];
+    data.table = $sp.getParameter("table");
+    data.sys_id = $sp.getParameter("sys_id");
 
-	if ((data.table != 'x_153465_discovert_route_task_instance') || (!data.sys_id)){
-		data.id = null;
-		return;		
-	}
+    if ((data.table != 'x_153465_discovert_route_task_instance') || (!data.sys_id)) {
+        data.id = null;
+        return;
+    }
 
-	var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-	if(!gr.get(data.sys_id)){
-		return;
-	}
+    var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+    if (!gr.get(data.sys_id)) {
+        return;
+    }
 
-	var sys_id_topparenttask = gr.getValue("u_top_task");
-	var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-	if(!grTopTask.get(sys_id_topparenttask)){
-		return;
-	}
-	data.task_tree = grTopTask.getValue('u_task_tree');
+    var sys_id_topparenttask = gr.getValue("u_top_task");
+    var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+    if (!grTopTask.get(sys_id_topparenttask)) {
+        return;
+    }
+    data.task_tree = grTopTask.getValue('u_task_tree');
 
-	var taskWidgetData = new TaskWidgetData();
-	data.fieldsInModel = taskWidgetData.loadTaskListTreeFieldsInModelAndFieldLabels(grTopTask);
-	taskWidgetData.buildTaskMap('discovertasker-recursivetasktreelist', data.results, grTopTask, data.fieldsInModel)
-	data.sc_catalog = $sp.getValue('x_153465_discovert_route_task_instance');
+    var taskWidgetData = new TaskWidgetData();
+    data.fieldsInModel = taskWidgetData.loadTaskListTreeFieldsInModelAndFieldLabels(grTopTask);
+    taskWidgetData.buildTaskMap('discovertasker-recursivetasktreelist', data.results, grTopTask, data.fieldsInModel);
+    data.sc_catalog = $sp.getValue('x_153465_discovert_route_task_instance');
 
-	data.tasks = data.results;
-	data.title = gs.getMessage(options.title);
-	//data.page = "discovertasker_processdetails"; //before
-	data.page = $sp.getParameter("id");
+    data.tasks = data.results;
+    data.title = gs.getMessage(options.title);
+    //data.page = "discovertasker_processdetails"; //before
+    data.page = $sp.getParameter("id");
 
-})();
-
-
-]]></script>
+})();]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-02-13 22:40:38</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>890dd6cd4f589b00303dc3818110c70e</sys_id>
-        <sys_mod_count>998</sys_mod_count>
+        <sys_mod_count>1009</sys_mod_count>
         <sys_name>Tasker List Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_890dd6cd4f589b00303dc3818110c70e</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-27 16:38:53</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-07-09 15:52:00</sys_updated_on>
         <template><![CDATA[<div ng-class="::{'hidden-xs' : options.hide_xs}" class="panel panel-{{::options.color}} b">
    <div class="panel-heading">
       <span>Task List View</span>

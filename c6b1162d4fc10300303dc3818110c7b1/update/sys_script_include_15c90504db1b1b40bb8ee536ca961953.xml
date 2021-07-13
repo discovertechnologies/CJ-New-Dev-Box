@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.Tasker_RecurringTask_Functions</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>This script include contains all of the functions used to run the recurring Taskers.&#13;
+        <description>2.7&#13;
+STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
+&#13;
+This script include contains all of the functions used to run the recurring Taskers.&#13;
 &#13;
 These Methods are used in the Scheduled Script Exection script - "DiscoverTasker - Start Recurring Processes"&#13;
 </description>
@@ -50,34 +53,28 @@ Tasker_RecurringTask_Functions.prototype = {
 		var inputs = {};
 		var recTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
 		if(recTemp.get(grScheduleToStart.getValue('tasker_process'))){
-			inputs = tTH.loadInputDefaultFromTemplate(recTemp);
-			// STRY0076608
-			inputs.originator = grScheduleToStart.originator;
+			/// create the Template Instance Record
+			var recRunTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_runtime');
+			recRunTemp.initialize();
+			
+			// set the scheduled task flag so the daily run templates are queued using an event instead of run all at once
+			recRunTemp.u_scheduled_task = true;
+			recRunTemp.originator = grScheduleToStart.originator;
+			recRunTemp.instance_notation = currentTime;
+			recRunTemp.routing_template_ref = recTemp.getUniqueValue();
+			recRunTemp.insert();
 
-			// STRY0063859 - change to use the new helper functions so all calls are consistent.
-			// that is it, workflow is still going to fire off the insert of the Process Instance table
-			// set the originator to the person who last updated the process schedule
-			//recRunTemp.originator = grScheduleToStart.sys_created_by;
-			//recRunTemp.instance_notation = currentTime;
-			//recRunTemp.u_objective = grScheduleToStart.tasker_process.u_objective;
-			//recRunTemp.insert();
-			// value is already set by the load function
-			//inputs.objective = grScheduleToStart.tasker_process.u_objective;
-			//inputs.templateNotation = currentTime;
-			// running syncronously b/c we need the sys_id back
-			var recTempInstId = tTH.createTemplateInstanceToRunTemplate(recTemp, inputs, grScheduleToStart.originator);
 			// update the last run on the Schedule table
 			grScheduleToStart.last_run = new GlideDateTime();
 			// below is to move back a day to test only!
 			//grScheduleToStart.last_run = gs.daysAgoStart(1);
 			grScheduleToStart.update();
-
 			// update the schedule run history table
 			var grScheduleHistory = new GlideRecord('x_153465_discovert_tasker_scheduler_history');
 			grScheduleHistory.initialize();
 			grScheduleHistory.run_note_from_schedule = grScheduleToStart.notes;
 			// set this when you have the proc inst from the process you just started
-			grScheduleHistory.tasker_process_instance = recTempInstId;
+			grScheduleHistory.tasker_process_instance = recRunTemp.getUniqueValue();
 			grScheduleHistory.tasker_process_template = grScheduleToStart.tasker_process;
 			grScheduleHistory.tasker_schedule = grScheduleToStart.sys_id;
 			grScheduleHistory.time_run = new GlideDateTime();
@@ -162,14 +159,16 @@ Tasker_RecurringTask_Functions.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-07-09 17:12:21</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>15c90504db1b1b40bb8ee536ca961953</sys_id>
-        <sys_mod_count>122</sys_mod_count>
+        <sys_mod_count>128</sys_mod_count>
         <sys_name>Tasker_RecurringTask_Functions</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_15c90504db1b1b40bb8ee536ca961953</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:45</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-10 22:59:14</sys_updated_on>
     </sys_script_include>
 </record_update>

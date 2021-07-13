@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, $location, $rootScope, amb, spModal, spUtil) {
+        <client_script><![CDATA[api.controller = function($scope, $location, $rootScope, amb, spModal, spUtil, htmlToStringService) {
     //------------------------------------------------------------------------------------------------------------------------
     // COMPANY: DISCOVER TECHNOLOGIES
     // CUSTOMIZED BY: KARINA TORRES
@@ -13,6 +13,11 @@
     //											some special characters in "instruction" or "Signature Instructions" field
     // 											Add a private function to convert HTML to a simple string
     //											Added missing semicolons, formatted code
+    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+    //											some special characters in "instruction" or "Signature Instructions" field
+    // 											Remove private function to convert HTML to a simple string; use service instead
+    //											Instructions and Signature Instructions need HTML converted to string before
+    //											the call to substring with field.maxChars
     //------------------------------------------------------------------------------------------------------------------------
 
     var node_active_bg = '#33738e';
@@ -112,7 +117,15 @@
             var field = c.data.fieldsInModel[key];
             if (field) {
                 fieldLabel = field.fieldLabel;
-                displayValue = record[key].display_value;
+                
+				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
+				
                 if (field.maxChars > 0)
                     displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
                 if (field.hasValue) {
@@ -156,7 +169,15 @@
             var field = c.data.fieldsInModel[key];
             if (field) {
                 fieldLabel = field.fieldLabel;
-                displayValue = record[key].display_value;
+				
+				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
+				
                 if (field.maxChars > 0)
                     displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
                 if (field.hasValue) {
@@ -273,15 +294,6 @@
         diagram.model.setDataProperty(parentNode.data, 'totalChildDuration', totalChildDuration);
         diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.duration >= totalChildDuration)));
         diagram.model.updateTargetBindings(parentNode.data);
-    }
-
-    // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-    // private function to convert HTML to a simple string
-    function _convertHtmlToSimpleString(someHtmlText) {
-        var divElement = document.createElement('div');
-        divElement.innerHTML = someHtmlText;
-
-        return divElement.textContent || divElement.innerHTML || '';
     }
 
     // STRY0091260
@@ -451,7 +463,10 @@
                         //    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
                         // convert HTML to a simple string
                         new go.Binding("text", "", function(data) {
-                            return _convertHtmlToSimpleString(data.instructions);
+                            // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                            // return _convertHtmlToSimpleString(data.instructions); // function was removed
+                            // Need to call below to have <, >, and & show as that character and not an ALT code
+                            return htmlToStringService.convertHtmlToString(data.instructions);
                         }), {
                             row: 4,
                             column: 1,
@@ -479,7 +494,10 @@
                         // new go.Binding("text", "", function(data) {
                         //    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
                         new go.Binding("text", "", function(data) {
-                            return _convertHtmlToSimpleString(data.u_signature_instructions);
+                            // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                            // return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
+                            // Need to call below to have <, >, and & show as that character and not an ALT code
+                            return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
                         }), {
                             visible: false,
                             row: 5,
@@ -1152,7 +1170,10 @@ a.span {
 } </css>
         <data_table>sp_instance</data_table>
         <demo_data/>
-        <description/>
+        <description>2.7 Added Angular Provider htmlToStringService;&#13;
+Server script updated to use TaskWidgetData instead of TemplateWidgetData;&#13;
+Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-06-25;&#13;
+</description>
         <docs/>
         <field_list/>
         <has_preview>true</has_preview>
@@ -1174,104 +1195,114 @@ a.span {
 // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
 //											some special characters in "instruction" or "Signature Instructions" field
 //                                          Changes in Client controller
+// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+//											some special characters in "instruction" or "Signature Instructions" field
+//											 Instruction or Signature Instructions need to convert HTML to string;
+//											 Combine Template Widget Data into Task Widget Data
+//                                          Changes in Server script and Client controller
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
-	// STRY0091260
-	data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
-	data.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal');
-	data.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal');
-	data.durationWarningParentLessThanCombinedSubtasks = gs.getMessage('Tasker - Warning: Parent duration shorter than the durations of subtasks');
-	data.durationWarningIsSubTaskLongerThanParent = gs.getMessage('Tasker - Warning: Parent Duration is Shorter than a subtasks');
-	data.durationWarningisParentShorterThanThisTask = gs.getMessage('Tasker - Warning: Subtask Duration is longer than parent');
-	
-	data.durationWarningWaitState = gs.getMessage('Tasker - Warning: Wait state set with no subtasks');
-	data.durationWarning = gs.getMessage('Tasker -  Warning Duration');
-	data.assignmentWarning = gs.getMessage('Tasker -  Warning Assignment');
+    // STRY0091260
+    data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
+    data.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal');
+    data.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal');
+    data.durationWarningParentLessThanCombinedSubtasks = gs.getMessage('Tasker - Warning: Parent duration shorter than the durations of subtasks');
+    data.durationWarningIsSubTaskLongerThanParent = gs.getMessage('Tasker - Warning: Parent Duration is Shorter than a subtasks');
+    data.durationWarningisParentShorterThanThisTask = gs.getMessage('Tasker - Warning: Subtask Duration is longer than parent');
 
-	//data.placeholderMsg = gs.getMessage("Select Template ...");
-	var map = data.map = [];
-	data.pageTemplateDetails = "discovertasker_processtemplatedetails"; //"discovertasker_processtemplatedetails";
-	data.table_detail = "x_153465_discovert_route_tasks";
-	//------------------------------------------------------------------------------------------------------------------------
-	// CUSTOM
-	//------------------------------------------------------------------------------------------------------------------------
-	data.page_id = $sp.getParameter("id");
-	data.view = $sp.getParameter("view");
-	data.filter = $sp.getParameter("filter");
-	data.table = $sp.getParameter("table");
-	data.isValid = true;
-	data.sys_id = $sp.getParameter("sys_id");
-	data.templateId = "return none until set";
-	//----------------------------------------------------------------------------------------------------
-	// Initializing Variables
-	//----------------------------------------------------------------------------------------------------
-	var sys_id = data.sys_id;
-	var id = "";
-	
-	if (input) {
-		data.table = input.table;
-		data.sys_id = input.sys_id;
-		//id =  input.sys_id;
-		sys_id = input.sys_id;
-	}
+    data.durationWarningWaitState = gs.getMessage('Tasker - Warning: Wait state set with no subtasks');
+    data.durationWarning = gs.getMessage('Tasker -  Warning Duration');
+    data.assignmentWarning = gs.getMessage('Tasker -  Warning Assignment');
 
-	// STRY0072032
-	data.isSystemTreeOrientationVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
-	
-	//------------------------------------------------------------------------------------------------------------------------
-	// GET THE TOP PARENT FOR THE CURRENT SYS_ID
-	//------------------------------------------------------------------------------------------------------------------------
-	var currentRecord = new GlideRecordSecure(data.table);
-	if(currentRecord.get(sys_id)){
-		if (data.table == 'x_153465_discovert_route_tasks') {
-			// Make sure you have top task def by getting the Template and setting the ID to the parent_task_def
-			var grTemplate = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
-			if(grTemplate.get(currentRecord.tasker_process_definition)){
-				id = grTemplate.getValue('parent_task_def');
-			}
-		} else if (data.table == 'x_153465_discovert_discover_routing_template') {
-				id = currentRecord.getValue('parent_task_def');
-		}
-	}
-	//------------------------------------------------------------------------------------------------------------------------
-	
-	if (!id) {
-		data.id = null;
-		return;
-	}
-	var gr = new GlideRecordSecure('x_153465_discovert_route_tasks');
-	if(gr.get(id)){
-		var uiChec = new uiConditionCheck();
-		data.canRunTemplate = uiChec.runTemplateUIAction(gr)
-		data.id = id;
-		data.title = gr.getValue('short_description');
-		// RJ - TUP - STRY0068618 - added run template
-		data.topParentTask_id = id;
-		data.templateId = gr.getValue('tasker_process_definition');
-		data.templateName = gr.getDisplayValue('tasker_process_definition');
-		// STRY0040294 - use record watcher to keep grid synced
-		// STRY0091251
-		var templateWidgetData = new TemplateWidgetData();
-		data.fieldsInModel = templateWidgetData.loadTemplateTreeFieldsInModelAndFieldLabels(gr);
-		templateWidgetData.buildTemplateMap('discovertasker-processtemplatetreegraph', map, gr, data.fieldsInModel)
-	}
-		
-	})();
-	]]></script>
+    //data.placeholderMsg = gs.getMessage("Select Template ...");
+    var map = data.map = [];
+    data.pageTemplateDetails = "discovertasker_processtemplatedetails"; //"discovertasker_processtemplatedetails";
+    data.table_detail = "x_153465_discovert_route_tasks";
+    //------------------------------------------------------------------------------------------------------------------------
+    // CUSTOM
+    //------------------------------------------------------------------------------------------------------------------------
+    data.page_id = $sp.getParameter("id");
+    data.view = $sp.getParameter("view");
+    data.filter = $sp.getParameter("filter");
+    data.table = $sp.getParameter("table");
+    data.isValid = true;
+    data.sys_id = $sp.getParameter("sys_id");
+    data.templateId = "return none until set";
+    //----------------------------------------------------------------------------------------------------
+    // Initializing Variables
+    //----------------------------------------------------------------------------------------------------
+    var sys_id = data.sys_id;
+    var id = "";
+
+    if (input) {
+        data.table = input.table;
+        data.sys_id = input.sys_id;
+        //id =  input.sys_id;
+        sys_id = input.sys_id;
+    }
+
+    // STRY0072032
+    data.isSystemTreeOrientationVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
+
+    //------------------------------------------------------------------------------------------------------------------------
+    // GET THE TOP PARENT FOR THE CURRENT SYS_ID
+    //------------------------------------------------------------------------------------------------------------------------
+    var currentRecord = new GlideRecordSecure(data.table);
+    if (currentRecord.get(sys_id)) {
+        if (data.table == 'x_153465_discovert_route_tasks') {
+            // Make sure you have top task def by getting the Template and setting the ID to the parent_task_def
+            var grTemplate = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+            if (grTemplate.get(currentRecord.tasker_process_definition)) {
+                id = grTemplate.getValue('parent_task_def');
+            }
+        } else if (data.table == 'x_153465_discovert_discover_routing_template') {
+            id = currentRecord.getValue('parent_task_def');
+        }
+    }
+    //------------------------------------------------------------------------------------------------------------------------
+
+    if (!id) {
+        data.id = null;
+        return;
+    }
+    var gr = new GlideRecordSecure('x_153465_discovert_route_tasks');
+    if (gr.get(id)) {
+        var uiChec = new uiConditionCheck();
+        data.canRunTemplate = uiChec.runTemplateUIAction(gr);
+        data.id = id;
+        data.title = gr.getValue('short_description');
+        // RJ - TUP - STRY0068618 - added run template
+        data.topParentTask_id = id;
+        data.templateId = gr.getValue('tasker_process_definition');
+        data.templateName = gr.getDisplayValue('tasker_process_definition');
+        // STRY0040294 - use record watcher to keep grid synced
+        // STRY0091251
+        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering
+        // var templateWidgetData = new TemplateWidgetData();
+        // data.fieldsInModel = templateWidgetData.loadTemplateTreeFieldsInModelAndFieldLabels(gr);
+        // templateWidgetData.buildTemplateMap('discovertasker-processtemplatetreegraph', map, gr, data.fieldsInModel)
+        var taskWidgetData = new TaskWidgetData();
+        data.fieldsInModel = taskWidgetData.loadTemplateTreeFieldsInModelAndFieldLabels(gr);
+        taskWidgetData.buildTaskMap('discovertasker-processtemplatetreegraph', map, gr, data.fieldsInModel);
+    }
+
+})();]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>1787</sys_mod_count>
+        <sys_mod_count>1796</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-06-25 21:04:18</sys_updated_on>
+        <sys_updated_on>2021-07-09 16:03:17</sys_updated_on>
         <template><![CDATA[
 
 <div class="panel panel-default">
