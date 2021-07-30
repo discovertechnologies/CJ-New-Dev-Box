@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.tasker_User_Form_Preferences</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script was designed to load the </description>
+        <name>tasker_User_Form_Preferences</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+g_taskUserFormPreferences = {};
+var tasker_User_Form_Preferences = Class.create();
+tasker_User_Form_Preferences.prototype = {
+    initialize: function() {
+		if(typeof g_taskUserFormPreferences != undefined){
+			if (typeof g_taskUserFormPreferences.lastRefreshDateTime != undefined){
+				// check here and rebuild if necessary
+// TODO, check load time against last updated time of all preferences to make sure it doesn't need to be loaded again				
+//				return g_taskUserFormPreferences;
+			}
+		}
+		this._loadFormPreferences();
+		
+    },
+	
+	_loadFormPreferences: function (){
+		g_taskUserFormPreferences.Preferences = [];
+		// TODO - Load the list of Form preferences for the user, OU and Top OU
+		var gr_user_preferences = new GlideRecord('x_153465_discovert_task_form_preferences');
+		gr_user_preferences.addQuery('u_active', true);
+		// put the highest order first as they take precedence
+		gr_user_preferences.orderByDesc('u_order');
+		gr_user_preferences.query();
+		var fields = gr_user_preferences.getElements();
+
+		while(gr_user_preferences.next()){
+			var userPrefernce = {};
+			for (var i = 0; i < fields.length; i++) {
+				var glideElement = fields[i];
+				var key = glideElement.getName();
+				if(!key.startsWith('sys_')){
+					userPrefernce[key] = {};
+					// set the display value the same way reguardless of field
+					userPrefernce[key].displayValue = gr_user_preferences.getDisplayValue(glideElement.getName());
+					
+					switch (key){
+						case 'u_related_table_view':
+							// lookup the view (used in URL)
+							userPrefernce[key].value = gr_user_preferences.getElement('u_related_table_view').getRefRecord('sys_ui_form').getElement('view').getRefRecord('sys_ui_view').getValue('name');
+							break;
+						case 'u_related_table':
+							// lookup the table name (used in URL)
+							userPrefernce[key].value = gr_user_preferences.getValue(glideElement.getName());
+							break;
+						case 'u_service_portal':
+							// lookup the service portal url_suffix (used in URL)
+							userPrefernce[key].value = gr_user_preferences.getElement('u_service_portal').getRefRecord('sp_portal').getValue('url_suffix');
+							break;
+						case 'u_servicenow_form_view':
+							// lookup the service from view (used in URL)
+							userPrefernce[key].value = 
+								gr_user_preferences.getElement('u_servicenow_form_view').getRefRecord('sys_ui_form').getElement('view').getRefRecord('sys_ui_view').getValue('name');
+							break;
+						case 'u_servicenow_portal_page':
+							// lookup the page id (used in URL)
+							userPrefernce[key].value = 
+								gr_user_preferences.getElement('u_servicenow_portal_page').getRefRecord('sp_page').getValue('id');
+							break;
+						default:
+							userPrefernce[key].value = gr_user_preferences.getValue(glideElement.getName());							
+							break;
+					}
+				}
+			}
+			g_taskUserFormPreferences.Preferences.push(userPrefernce);
+		}	
+		g_taskUserFormPreferences.lastRefreshDateTime =  new GlideDateTime().getNumericValue();
+		return g_taskUserFormPreferences;
+	},
+	
+	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager){
+		var userID = gs.getUserID();
+		
+		// if user's OUs are not passed in, load them
+		if(!OUsWhereIamAMember)
+			OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
+		
+		var isTaskManager = (OUsWhereIamATaskManager.length > 0);
+
+		// TODO - need to define function for get my top OUs in order to use this field - u_user_in_top_ou
+		// TODO - ADD ROLES, ADD TASK CHECKS for Hierarchy
+		// load global preferences, things that apply to all users
+		var myUserPreferences = g_taskUserFormPreferences.Preferences.filter(function (pref){
+			var matchFailure = 
+				(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value != userID) || 
+				(pref.u_user_in_ou.displayValue != '' && pref.u_user_in_ou.displayValue != null  && OUsWhereIamAMember.indexOf(pref.u_user_in_ou.value)<0) ||
+				(pref.u_user_in_ou.value == 'task_manager' && isTaskManager != true)  ||
+				(pref.u_user_in_ou.value == 'task_administrator' && 
+					gs.getUser().hasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin') != true);
+			if(!matchFailure){
+				return pref;
+			}
+		});
+		
+		return myUserPreferences;
+	},
+
+    type: 'tasker_User_Form_Preferences'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-07-21 01:42:57</sys_created_on>
+        <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
+        <sys_mod_count>61</sys_mod_count>
+        <sys_name>tasker_User_Form_Preferences</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-28 17:00:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

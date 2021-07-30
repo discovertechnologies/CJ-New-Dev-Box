@@ -16,7 +16,7 @@
     $("td:contains(true)").css("color","green");
     $("td:contains(false)").css("color","red");
     */
-
+	
     /*
      * options:
      * hide_footer (bool) = true to remove the data table footer contents
@@ -75,8 +75,16 @@
         var currentPageId = $location.search()['id'];
         //KT: STRY0065140
         if ((currentPageId != ("discovertasker_processtemplatelist")) && (currentPageId != "discovertasker_processtemplatedetails")) {
+					// STRY0101803 added this to use Tasker Data Table for styling on the drill down page
+					if (currentPageId == "discovertasker_detailsdrilldown") {				
+						var p = $scope.data.page_id || 'form';
+						var s = {id: p, table: parms.table, sys_id: parms.sys_id, view: $scope.data.view};
+						$rootScope.$broadcast('$sp.list.click', s);
+					}else {
             $scope.$emit(eventNames.click, parms);
+					}					
         }
+
     };
 
     //------------------------------------------------------------------------------------------------------------------------
@@ -844,6 +852,9 @@ tbody tr:last-child {
 // 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating
 // 											emit sends rowCount in params, no need for .Deleted or .Added
 //                                         Change made in Client controller only.
+// 2.7.0 | 2021-07-21 | raj | STRY0106159 Platform view is accessible from context list menus on Existing Tasks forms
+//                                         Change made in Server Script, HTML only.
+
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -875,11 +886,33 @@ tbody tr:last-child {
     // copy to data[name] from input[name] || option[name]
     optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
     optCopy(['relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
+    data.showInactiveProcess = input.showInactiveProcess;
+    //data.view = data.view || 'mobile';
+    //KT - RLS - STRY0065050: 04/01/2020: Added
+		// 2.7.0 | 2021-07-24 - added $sp.getParameter() on the calls to pull from URL when everything else is blank
+    data.view = options.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
+		data.table = data.table || $sp.getValue('table') || $sp.getParameter('table');
+    data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
+    data.keywords = data.keywords || $sp.getValue('keywords') || $sp.getParameter('keywords');
+    data.p = data.p || $sp.getValue('p') || $sp.getParameter('p') || 1;
+    data.p = parseInt(data.p);
+    data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by') || $sp.getParameter('order_by') || $sp.getParameter('o');
+    data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction') || $sp.getParameter('order_direction') || $sp.getParameter('d');
+	
+    data.page_index = data.p - 1;
+    data.show_new = data.show_new || options.show_new;
+    data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" || options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
+    data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
+        options.enable_filter == true || options.enable_filter == "true");
+
+		// 2.7.0 | 2021-07-24 - move after the $sp pulls values from the URL
     if (!data.table) {
         data.invalid_table = true;
         data.table_label = "";
         return;
     }
+		// 2.7.0 | 2021-07-21 | raj | STRY0106159 Platform view is accessible from context list menus on Existing Tasks forms
+		data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
 
     if (!data.fields) {
         if (data.view)
@@ -887,23 +920,6 @@ tbody tr:last-child {
         else
             data.fields = $sp.getListColumns(data.table);
     }
-    data.showInactiveProcess = input.showInactiveProcess;
-    //data.view = data.view || 'mobile';
-    //KT - RLS - STRY0065050: 04/01/2020: Added
-    data.view = options.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
-
-    data.table = data.table || $sp.getValue('table');
-    data.filter = data.filter || $sp.getValue('filter');
-    data.keywords = data.keywords || $sp.getValue('keywords');
-    data.p = data.p || $sp.getValue('p') || 1;
-    data.p = parseInt(data.p);
-    data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by');
-    data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction');
-    data.page_index = data.p - 1;
-    data.show_new = data.show_new || options.show_new;
-    data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" || options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
-    data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
-        options.enable_filter == true || options.enable_filter == "true");
 
     var windowSize = data.window_size || $sp.getValue('maximum_entries') || 20;
     windowSize = parseInt(windowSize);
@@ -951,12 +967,17 @@ tbody tr:last-child {
         rel.queryWith(applyTo, target); // put the relationship query into target
         gr.addEncodedQuery(target.getEncodedQuery()); // get the query the relationship made for us
     }
-
+	
+		// 2.7.0 | 2021-07-21 | raj | STRY0106159 Platform view is accessible from context list menus on Existing Tasks forms
+		data.orderByParameter = '';
     if (data.o) {
-        if (data.d == "asc")
-            gr.orderBy(data.o);
-        else
-            gr.orderByDesc(data.o);
+        if (data.d == "asc"){
+					gr.orderBy(data.o);
+					data.orderByParameter = '&ORDERBY' + data.o;
+				} else {
+					gr.orderByDesc(data.o);
+					data.orderByParameter = '&ORDERBYDESC' + data.o;
+				}
     }
     // only show active process ----------------------
     if (data.table == 'x_153465_discovert_discover_routing_template' && data.showInactiveProcess != true) {
@@ -1042,19 +1063,23 @@ tbody tr:last-child {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1143</sys_mod_count>
+        <sys_mod_count>1158</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-05-24 15:20:16</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-25 04:38:29</sys_updated_on>
         <template><![CDATA[  <div class="panel panel-{{options.color}} b">
     <div class="panel-heading form-inline" ng-hide="options.hide_header">
       <span class="dropdown m-r-xs">
         <button aria-label="${Table menu}" class="btn dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="optionsMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
         <ul class="dropdown-menu" aria-labelledby="optionsMenu">
+            <!-- 2.7.0 | 2021-06-30 | raj | STRY0106159 Added Open in Platform to open the list with the fitler in platform  -->
+            <li ng-if="::data.hasRoleTaskerUser"><a href="discovertaskerportal/{{data.table}}_list.do?sysparm_query={{data.filter}}&sysparm_view={{data.view}}&sysparm_fields={{data.fields}}{{data.orderByParameter}}" target="_blank">${Open in platform}</a></li>
+           	<li role="separator" class="divider"></li>
+          
           <li ng-repeat="t in ::exportTypes">
             <a ng-href="/{{data.table}}_list.do?{{::t.value}}&sysparm_query={{data.filter}}&sysparm_view={{data.view}}&sysparm_fields={{data.fields}}" target="_new">${Export as} {{::t.label}}</a>
           </li>

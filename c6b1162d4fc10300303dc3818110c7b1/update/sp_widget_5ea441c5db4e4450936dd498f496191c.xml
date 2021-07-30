@@ -30,7 +30,6 @@
 			setFilter: 'data_table.setFilter',
 			setKeywords: 'data_table.setKeywords'
 		};
-		
 		// AAlzyoud Custom Starts here
 		//-----------------------------------------------------------------------------
 		
@@ -73,9 +72,24 @@
 				c.data.field_list = undefined;
 			}
 			c.data.list = [];
-			$scope.server.update();
+			// STRY0101803 added this call so the data table is reset on the filter every time
+			$scope.server.update().then(function() {
+				loadFilterWidget();
+			});
 		});
-		
+	
+	// STRY0101803 added this call so the data table is reset on the filter every time
+	function loadFilterWidget() {	
+		c.data.filterBreadcrumbs = null;
+		spUtil.get('widget-filter-breadcrumbs', {
+			table: c.data.table,
+			query: c.data.filter,
+			enable_filter: c.data.enable_filter
+		}).then(function(response) {
+			c.data.filterBreadcrumbs = response;
+		});
+	}
+	
 	// 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Make sure all other tooltips are closed except for the 1 passed in, no stuck open tooltips
 	c.closeOtherTooltips = function(tooltipItem) {
 		c.data.list.forEach(function(rowItem) {
@@ -119,6 +133,72 @@
 // 			$("#floaty").css("display", "none");
 			
 // 		};
+
+		c.openNewPage = function(table, sys_id, item){
+			// TODO, LOOK UP PAGE AND VIEWS SOMEHOW MAYBE A CLIENT SCRIPT CALLBACK
+			// NOTE: remove item when calling server
+			var portal_url_ref = '../discovertaskerportal';
+			var pageId; 
+			var pageTable;
+			var view = 'sp';
+			switch (table) {
+				case 'x_153465_discovert_tasker_requests':
+					pageTable = 'x_153465_discovert_route_task_instance';
+					pageId = 'discovertasker_taskdetails';
+					break;
+				case 'x_153465_discovert_tasker_schedule':
+					pageTable = 'x_153465_discovert_tasker_schedule';
+					pageId = 'scheduled_task_graphic';
+					break;
+				case 'x_153465_discovert_route_task_instance':
+					pageId = 'discovertasker_taskdetails';
+					pageTable = table;
+					
+// TODO - QUESTION SHOULD THE BE ON SERVER TO GET FULL TASK RECORD?
+					var getFormToLoadOptions = c.data.userPreferences.filter(function (pref){
+					var matchFailure = 
+							(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value != c.data.userID) || 
+							(pref.u_task_category.displayValue != '' && pref.u_task_category.displayValue != null  && pref.u_task_category.value != item.category.value) ||
+							(pref.u_tasker_sub_category.displayValue != '' && pref.u_tasker_sub_category.displayValue != null  && pref.u_tasker_sub_category.value != item.sub_category.value) || 
+							(pref.u_task_state.displayValue != '' && pref.u_task_state.displayValue != null  && pref.u_task_state.value != item.state.value) ||
+							(pref.u_task_task_type.displayValue != '' && pref.u_task_task_type.displayValue != null  && pref.u_task_task_type.value != item.tasker_type.value);
+						if(!matchFailure){
+							return pref;
+						}
+					});
+					// If a match was found for this task, then use first item as 
+					// form preferences were loaded in order by the ORDER 
+					// to override the default settings
+					if(getFormToLoadOptions.length > 0){
+						var formToLoad = getFormToLoadOptions[0];
+						if(formToLoad.u_servicenow_portal_page.displayValue != '' && formToLoad.u_servicenow_portal_page.displayValue != null){
+							pageId = formToLoad.u_servicenow_portal_page.value;	
+						}
+						if(formToLoad.u_servicenow_form_view.displayValue != '' && formToLoad.u_servicenow_form_view.displayValue != null){
+							view = formToLoad.u_servicenow_form_view.value;	
+						}
+						if(formToLoad.u_service_portal.displayValue != '' && formToLoad.u_service_portal.displayValue != null){
+							portal_url_ref = '../' + formToLoad.u_service_portal.value;	
+						}
+						
+					}
+					break;
+				default:
+					pageId = 'discovertasker_taskdetails';
+					pageTable = table;
+					
+					
+					break;
+			}
+
+
+
+			
+			// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
+			var url = portal_url_ref + '?id=' +  pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
+			window.open(url, '_blank');
+		};
+
 	
 		// open quickview modal
 		c.quickView = function(table, sys_id, widgetId, item) {
@@ -386,6 +466,8 @@
 						jslog("Service Portal: New button not supported for sys_attachment list");
 					$scope.loadingData = false;
 					initRecordWatcher($scope.data.table, $scope.data.filter);
+					// STRY0101803 - moved to load in client so table updates
+					loadFilterWidget();
 				});
 				
 				function parseQuery(table, queryString){
@@ -982,6 +1064,20 @@ tbody tr:last-child {
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
+	
+	// TODO - REMOVE THIS WHEN THE UPDATE IS MADE TO CHECK DATE ON THE SERVER
+	g_taskUserFormPreferences = undefined;
+	data.userID = gs.getUserID();
+	// STRY0101803 - load user preferences object for use when opening forms
+	// only load this one time
+	if(!data.OUsWhereIamAMember)
+		data.OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
+	if(!data.OUsWhereIamATaskManager){
+		data.OUsWhereIamATaskManager = new x_153465_discovert.tasking_System_Settings_Scripts().getMyOUTaskManagers();
+	}
+	var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+	data.userPreferences = oUserPref.loadMyFormPreferences(data.OUsWhereIamAMember,data.OUsWhereIamATaskManager);
+	
 	if (!input) // asynch load list
 		return;
 
@@ -1066,13 +1162,11 @@ tbody tr:last-child {
 	gr_filters.orderBy('u_filter_label');	
 	gr_filters.query();
 	
-	
 	while(gr_filters.next()){
 		// STRY0099083
 		var currentFilter = gr_filters.getDisplayValue('u_filter');
 		if(currentFilter.indexOf("OUsWhereIamAMember") > 0){
-			var OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
-			currentFilter = currentFilter.replace("OUsWhereIamAMember", OUsWhereIamAMember);
+			currentFilter = currentFilter.replace("OUsWhereIamAMember", data.OUsWhereIamAMember);
 		}
 		
 		data.filters.push({
@@ -1159,20 +1253,26 @@ tbody tr:last-child {
 	data.row_count = gr.getRowCount();
 	data.num_pages = Math.ceil(data.row_count / data.window_size);
 	data.column_labels = {};
-
 	// STRY0101803
-	data.fields_array = data.field_list.split(',');
+	data.fields_array = data.field_list.split(",").map(function(item) {
+		return item.trim();
+	});	
 	data.modal_title_fields_array = [];
 	if(data.modal_title_fields + '' != ''){
-		data.modal_title_fields_array = data.modal_title_fields.split(',');	
+		data.modal_title_fields_array = data.modal_title_fields.split(",").map(function(item) {
+			return item.trim();
+		});
 	}
+		
 	data.modal_title_fields_not_set = gs.getMessage('- Modal Title Fields Not Set');																											 
 
 	// use GlideRecord to get field labels vs. GlideRecordSecure
 	var grForLabels = new GlideRecord(data.table);
+
 	for (var i in data.fields_array) {
 		var field = data.fields_array[i];
 		var ge = grForLabels.getElement(field);
+
 		if (ge == null)
 			continue;
 
@@ -1248,7 +1348,28 @@ tbody tr:last-child {
 						'numComments': numComments
 					};
 					break;
-					
+				case 'x_153465_discovert_tasker_schedule':
+					// STRY0101803 set the default hover field for request if not set, load if set
+					data.hoverField = (data.hoverField != undefined && data.hoverField !='') ? data.hoverField : 'u_request_comments';					
+					data.popOverRecord[sys_id] = {
+						'sys_id': gr.getUniqueValue(),
+						'title': gr.getDisplayValue('number') + ' - ' + gr.getDisplayValue('name'),
+						// 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML; added u_top_task. as subtasks showed blank Objective
+						// "objective": gr.getDisplayValue('u_objective'),
+						"objective": gr.getDisplayValue('tasker_process.u_objective'),
+						"short_description": gr.getDisplayValue('tasker_process.description'),
+						"number": gr.getValue('number'),
+						"state":gr.getDisplayValue('tasker_process.schedule_complete_flag'),
+						// TODO, QUESTION, do we use request type here or task type or a combination of both?
+						// "taskType": gr.getDisplayValue('parent.tasker_type'),
+						"taskType": gr.getDisplayValue('tasker_process.u_tasker_type'),
+						"classification": gr.getDisplayValue('tasker_process.classification'),
+						"assignment_group": gr.getDisplayValue('tasker_process.u_restricted_group'),
+						'status': gr.getLabel('tasker_process.next_run_date') + ' - ' + gr.getDisplayValue('tasker_process.next_run_date'),
+						'reviewer': gr.getDisplayValue('tasker_process.u_reviewer'),
+						'numComments': numComments
+					};
+					break;					
 			} 
 
 		}
@@ -1269,10 +1390,56 @@ tbody tr:last-child {
 					record[fld].display_value = null;
 				}
 			}
-			
 		}
+		switch (data.table){
+			case 'x_153465_discovert_route_task_instance':
+				record.category = {};
+				record.sub_category = {};
+				record.tasker_type = {};
+				record.state = {};
+				record.category.display_value = gr.getDisplayValue('category');
+				record.category.value = gr.getValue('category');
+				record.sub_category.display_value = gr.getDisplayValue('sub_category');
+				record.sub_category.value = gr.getValue('sub_category');
+				record.tasker_type.display_value = gr.getDisplayValue('tasker_type');
+				record.tasker_type.value = gr.getValue('tasker_type');
+				record.state.display_value = gr.getDisplayValue('state');
+				record.state.value = gr.getValue('state');
+				break;
+			case 'x_153465_discovert_tasker_requests':
+				record.category = {};
+				record.sub_category = {};
+				record.tasker_type = {};
+				record.state = {};				
+				record.category.display_value = gr.getDisplayValue('parent.category');
+				record.category.value = gr.getValue('parent.category');
+				record.sub_category.display_value = gr.getDisplayValue('parent.sub_category');
+				record.sub_category.value = gr.getValue('parent.sub_category');
+				record.tasker_type.display_value = gr.getDisplayValue('parent.tasker_type');
+				record.tasker_type.value = gr.getValue('parent.tasker_type');
+				record.state.display_value = gr.getDisplayValue('parent.state');
+				record.state.value = gr.getValue('parent.state');				
+				break;
+			default:
+				break;
+		}		
 		record.sys_id = gr.getValue('sys_id');
-		
+		// STRY0101803 set the id for the Task page based on the table of the filter
+		switch (data.table){
+			case 'x_153465_discovert_route_task_instance':
+				record.href_id = gr.getValue('sys_id');
+				break;
+			case 'x_153465_discovert_tasker_requests':
+				record.href_id = gr.getValue('parent');
+				break;
+			case 'x_153465_discovert_tasker_schedule':
+				record.href_id = gr.getValue('sys_id');
+				break;				
+			default:
+				record.href_id = gr.getValue('sys_id');
+				break;
+		}
+
 		// 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Add a new boolean property to indicate when to show the tooltip
 		record.isTooltipOpened = false;
 		
@@ -1281,13 +1448,16 @@ tbody tr:last-child {
 
 	data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
 		options.enable_filter == true || options.enable_filter == "true");
+/*
 	var breadcrumbWidgetParams = {
 		table: data.table,
 		query: data.filter,
 		enable_filter: data.enable_filter
 	};
-	data.filterBreadcrumbs = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
 
+	data.filterBreadcrumbs // = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
+*/
+	
 	// copy to data from input or options
 	function optCopy(names) {
 		names.forEach(function(name) {
@@ -1301,14 +1471,14 @@ tbody tr:last-child {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>733</sys_mod_count>
+        <sys_mod_count>839</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-07-19 22:05:29</sys_updated_on>
+        <sys_updated_on>2021-07-28 18:40:46</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
    <div class="panel-heading form-inline" ng-hide="options.hide_header">
       <div class="dropdown pull-right">
@@ -1377,7 +1547,8 @@ this was in a div at the bottom
    <!-- body -->
    <div class="panel-body">
       <h2 class="sr-only data-table-title">{{data.title || data.table_plural}} ${table} - ${page} {{data.p}}</h2>
-      <div ng-if="options.show_breadcrumbs && (data.filter || data.enable_filter)" class="filter-breadcrumbs">
+     	<!-- // STRY0101803 added data.filterBreadcrumbs to if to refresh widget each load -->
+      <div ng-if="data.filterBreadcrumbs && options.show_breadcrumbs && (data.filter || data.enable_filter)" class="filter-breadcrumbs">
          <sp-widget widget="data.filterBreadcrumbs"></sp-widget>
       </div>
       <div class="alert alert-info" ng-if="!data.list.length && !data.num_pages && !data.invalid_table && !loadingData">
@@ -1406,8 +1577,10 @@ this was in a div at the bottom
                <!--Add action buttons to each table row -->
                <td>
                   <div class="buttonwrapper">
-                     
-                     <a href="?id=discovertasker_taskdetails&sys_id={{item.sys_id}}&table=x_153465_discovert_route_task_instance" target="_blank">
+<!--                     
+                     <a href="?id=discovertasker_taskdetails&sys_id={{item.href_id}}&table=x_153465_discovert_route_task_instance" target="_blank">
+-->
+                     <a href='#' ng-click="c.openNewPage(data.table, item.href_id, item)">                    
                      <span class="glyphicon glyphicon-new-window" aria-hidden="true" title="Open task in new tab"></span>
                      </a>
                     

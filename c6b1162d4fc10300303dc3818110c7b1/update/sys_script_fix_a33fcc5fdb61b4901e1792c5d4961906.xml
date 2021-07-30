@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>Tasks were closed and requests were left open.  The issue has been resolved and this fix script closed all requests left open due to the bug.</description>
+        <name>Tasker 2.7-Close Requests on closed Task</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+closeAllRequestsOnCloseTasks();
+
+function closeAllRequestsOnCloseTasks(){
+	// ***************************************************************************
+	// TO TEST COMMENTS SET TESTING TO TRUE
+	// This is in just for testing, it could be removed, but hurts nothing as long as testing is set to false above
+	// If removed, find everywhere the "testing" variable is used and delete or comment out
+	// ***************************************************************************
+	var testing = false;
+	
+	
+	// count all open requests on closed tasks and log
+	var ga = new GlideAggregate('x_153465_discovert_tasker_requests');
+	ga.addEncodedQuery('u_status=In progress^parent.stateIN7,4,3');
+	ga.addAggregate("COUNT");	
+	ga.query();
+	if(ga.next()){
+		var requestNotClosedCount = ga.getAggregate("COUNT");
+	}
+	
+	gs.info('Fix Script - Tasker 2.7-Close Requests on closed Task - Your system was analyzed and ' + requestNotClosedCount + ' requests with closed tasks are still in progress.  Closing the opened requests...');
+
+	var numRequestsClosed = 0;
+	// STRY0106180 - Find all open requests for the task and close them.
+	var requests = new GlideRecord('x_153465_discovert_tasker_requests');
+	requests.addEncodedQuery('u_status=In progress^parent.stateIN7,4,3');
+	requests.query();
+	while(requests.next()) {
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grTask.get(requests.parent)){
+			var task_state = parseInt(grTask.getValue('state'));
+			requests.setValue("u_status", 'Completed');
+			switch (task_state) {
+					// Task was cancelled
+				case 7:
+					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for cancelled task'));
+					break;
+					// Task was completed
+				case 3: case 4:
+					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for Closed tasks'));
+					break;
+			}
+			// TO TEST, SET TESTING TO false ABOVE - this is in just for testing, it could be removed, but hurts nothing as long as testing is set to false above
+			if(!testing)
+				requests.update();
+		
+			grTask.setValue("active", false);
+			// STRY0106180 - clear all request fields
+			grTask.u_clarification_requested = false;
+			grTask.extension_requested = false;
+			grTask.reassignment_requested = false;
+			grTask.extended_suspense_date = null;
+
+			// TO TEST, SET TESTING TO false ABOVE - this is in just for testing, it could be removed, but hurts nothing as long as testing is set to false above
+			if(!testing)
+				grTask.update();
+		}
+			// TO TEST, SET TESTING TO false ABOVE - this is in just for testing, it could be removed, but hurts nothing as long as testing is set to false above
+			if(!testing)
+				numRequestsClosed +=1;
+	}
+	
+	if(numRequestsClosed == requestNotClosedCount){
+		gs.info("Fix Script - Tasker 2.7-Close Requests on closed Task - Completed - all Requests on completed tasks have been marked coimplete.");
+	} else {
+		gs.info("Fix Script - Tasker 2.7-Close Requests on closed Task - Completed - Not all requests were marked complete. " + numRequestsClosed + " of " + requestNotClosedCount + " were closed. To see requests still remain open, run this query on the request table: u_status=In progress^parent.stateIN7,4,3");
+
+	}
+
+}]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-07-29 20:15:20</sys_created_on>
+        <sys_id>a33fcc5fdb61b4901e1792c5d4961906</sys_id>
+        <sys_mod_count>7</sys_mod_count>
+        <sys_name>Tasker 2.7-Close Requests on closed Task</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_a33fcc5fdb61b4901e1792c5d4961906</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-07-29 21:30:59</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
