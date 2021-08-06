@@ -37,21 +37,52 @@
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 // v2.5.13 | 08.08.2020 | STRY0076605:  Sequential Review
-var insertTaskerHelper = new TaskerHelpers();
-var updatedState = insertTaskerHelper.getUpdatedState(current);
-current.state = updatedState;
+(function executeRule(current, previous /*null when async*/) {
+	// STRY0105793 - Email Notification when task assignment changes.
+	if(current.assigned_to && previous.assigned_to){
+		current.previous_assigned_to = previous.assigned_to;
+	}
+	// STRY0106824 - Close Request(s) when task assignment changes.
+	if(previous.assigned_to){
+		tcs = new TaskerCommonScriptingMethods();
+		var sys_id = current.sys_id;
+		//close any open requests from the previous assigned member
+		tcs.queryRelated('x_153465_discovert_tasker_requests', 
+						[{"parent":sys_id}, {"u_status": "In progress"}, {"u_requested_by": previous.assigned_to}], 
+						function(record){
+			// set the task values here,  the request record information is updated in the after update business rule
+			if(record.u_request_type ==	"Clarification"){
+				current.u_clarification_requested = false;
+			}
+			if(record.u_request_type ==	"Extension"){
+				current.extension_requested = false;
+				current.extended_suspense_date = null;
+			}
+			if(record.u_request_type ==	"Reassignment"){
+				current.reassignment_requested = false;
+			}
+		});
+	}
+		
+		
 
-if(current.state == 1){
-	current.u_last_unassigned_date = null;
-	gs.addInfoMessage(current.number + ' has been assigned to ' + current.assigned_to.getDisplayValue());
-}]]></script>
+
+	var insertTaskerHelper = new TaskerHelpers();
+	var updatedState = insertTaskerHelper.getUpdatedState(current);
+	current.state = updatedState;
+
+	if(current.state == 1){
+		current.u_last_unassigned_date = null;
+		gs.addInfoMessage(current.number + ' has been assigned to ' + current.assigned_to.getDisplayValue());
+	}
+})(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-04-05 05:08:04</sys_created_on>
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>d5749951db919340bb8ee536ca961968</sys_id>
-        <sys_mod_count>54</sys_mod_count>
+        <sys_mod_count>56</sys_mod_count>
         <sys_name>Tasker - onUpdate - Assigned Member </sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -59,7 +90,7 @@ if(current.state == 1){
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_d5749951db919340bb8ee536ca961968</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-05-28 19:59:29</sys_updated_on>
+        <sys_updated_on>2021-08-03 13:11:25</sys_updated_on>
         <template>state=1^EQ</template>
         <when>before</when>
     </sys_script>
