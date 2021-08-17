@@ -1,108 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
     <sys_script_client action="INSERT_OR_UPDATE">
-        <active>false</active>
+        <active>true</active>
         <applies_extended>false</applies_extended>
         <condition/>
-        <description>v2.6 &#13;
-STRY0091379 - FLDS/PRMs - Update the Fields and Permissions logic to streamline the client script and remove flicker&#13;
-&#13;
-v 2.5.3&#13;
-STRY0083372 - STRETCH- FLDS: "Assigned Member" field must be editable on "New" sub task form.&#13;
-STRY0085187 - RESPONSE/REVIEWER - Standard Task form - Review Required flag and Reviewer field as Task Owner&#13;
-STRY0085438 - FIX: Javascript error on new "Modals" - this was due to AJAX calls in modal windows which is not allowed.  Used Scratch Pad to remove AJAX calls in Onload.&#13;
-STRY0085338 - UI MODAL - (Portal &amp; Platform) Modal for Send to Review - Response Comments - "Reviewer" field Read-Only&#13;
-STRY0074111 - RESPONSE/REVIEWER - Task Form - latest "Response Comment" displays on Task form when populated on Send to Review Modal&#13;
-STRY0085538 - RESPONSE/REVIEWER - Task Form - latest "Rework Comments" displays on Task form when populated on Send to Rework Modal&#13;
-2.5.316 - RJ - Adjust Read Only settings into Permissions&#13;
-2.5.321 - STRY0088985 - Platform - Reopen a Task on Platform redirects to the latest Platform page accessed&#13;
-v 2.5.13: &#13;
-KT - FLDS - STRY0063495 - Updated Reqs on Top TAA: Change to Edit : 08.01.20&#13;
-&#13;
-v 2.5.27:&#13;
-KT - Rework JS Error</description>
+        <description>v2.7&#13;
+STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State</description>
         <field>calchaschildren</field>
         <global>true</global>
         <isolate_script>true</isolate_script>
         <messages/>
-        <name>DEPRECATED - Task - Patch Permissions</name>
-        <order/>
+        <name>Task - onSubmit - sverb_delete</name>
+        <order>-2000</order>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
 *  The Government's rights to use, display, or disclose this software are restricted.
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-function onLoad() {
-    var taskPermissions = JSON.parse(g_scratchpad.taskPermissions);
-
-    // NOTE: saving the base form before opening modal, but modal opens asynchronously
-    //       so, it is possible the data in here needs to be refreshed.  There is an idea taking the form feilds and passing 
-    //       to the taskPermissions to update that could be used to ensure fresh
-	var isTaskManagerOUTA = taskPermissions.isTaskManagerOUTA;
-    var isTAExternal = taskPermissions.isTAExternal == true;
-    var reviewerInOUTA_OU = taskPermissions.reviewerInOUTA_OU;
-    var isSubTask = taskPermissions.isSubTask;
-    var currentUser = g_user.userID;
-    var isTaskerApplicationAdmin = g_user.hasRoleExactly("x_153465_discovert.tasker_application_admin");
-    var isTaskAdministratorGTA = g_user.hasRoleExactly("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-	var isUserOUTAOfAnotherUserBasedOnDefaultOu = g_scratchpad.isUserOUTAOfAnotherUserBasedOnDefaultOu;
-    var isTaskerUser = g_user.hasRoleExactly("x_153465_discovert.tasker_user");
-    var isParentTaskOwner = taskPermissions.parentTaskOwner == currentUser;
-    var isParentTaskAssignedMember = taskPermissions.parentTaskAssignedMember == currentUser;
-	// STRY0091379
-	var isUserInPrimaryAssigneeOU = g_scratchpad.isUserInPrimaryAssigneeOU;
-	
-    var isOnBehalfOf = taskPermissions.on_behalf_of == currentUser;
-    var isReviewer = taskPermissions.reviewer == currentUser;
-    var isReviewRequired = taskPermissions.isReviewRequired;
-    var isTaskOwner = taskPermissions.taskOwner == currentUser;
-    var isAssignedMember = taskPermissions.assignedMember == currentUser;
-	var stateNumeric = parseInt(taskPermissions.state);
-    var state = (g_form.isNewRecord()) ? "New" : isNaN(stateNumeric) ? taskPermissions.state : stateNumeric;
-    //  2.5.316 - RJ - Adjust Read Only settings into Permissions
-    var primaryOUMustMatchInternalTAOU = (g_scratchpad.primary_office_must_match_Internal_tasking_authority == 'true');
-
-    var isReviewType = (g_scratchpad.taskType == 'Concur with signature' 
-						|| g_scratchpad.taskType == 'Approval without signature' 
-						|| g_scratchpad.taskType == 'Approval with signature' 
-						|| g_scratchpad.taskType == 'Concur without signature');
-    var isStandardType = (g_scratchpad.taskType == 'Standard');
-    /*
-	//var newLine = "\r\n";
-	var msg = "KT isSubTask: " + isSubTask + newLine;
-	msg += "state: " + state + newLine;
-	msg += "isTaskerApplicationAdmin: " + isTaskerApplicationAdmin + newLine;
-	msg += "isTaskAdministratorGTA: " + isTaskAdministratorGTA + newLine;
-	msg += "isTaskManagerOUTA: " + isTaskManagerOUTA + newLine;
-	msg += "isOnBehalfOf: " + isOnBehalfOf + newLine;
-	msg += "isReviewer: " + isReviewer + newLine;
-	msg += "isTaskOwner: " + isTaskOwner + newLine;
-	msg += "isAssignedMember: " + isAssignedMember + newLine;
-	msg += "isParentTaskOwner: " + isParentTaskOwner + newLine;
-	msg += "isParentTaskAssignedMember: " + isParentTaskAssignedMember + newLine;
- 	*/
-    function makeWriteable(fields, value) {
-        if (Array.isArray(fields)) {
-            for (var i = 0; i < fields.length; ++i) {
-                g_form.setDisabled(fields[i], !value);
-				// STRY0091379 - NOTE: this may fix paris issues (NOTE: should look at whether in platform or portal and only call one, not both)
-				g_form.setReadOnly(fields[i], !value);
-            }
-        } else {
-            g_form.setDisabled(fields, !value);
-			// STRY0091379 - NOTE: this may fix paris issues (NOTE: should look at whether in platform or portal and only call one, not both)
-			g_form.setReadOnly(fields, !value);
-        }
-    }
-
-	
-    var permissionsCalc = {};
-	
-    //------------------------------------------------------------------------------------------------------------------------------------
-    // IN GENERAL BY TASK TYPE
-    //------------------------------------------------------------------------------------------------------------------------------------
-	
-
+// STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State
+function onSubmit() {
+	var formAction = g_form.getActionName();
+	if (formAction == 'delete_tasks'){
+		alert('This is temporay until the delete confirmation form is built - we are deleting now...');
+		return true;
+	}
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
@@ -111,18 +32,18 @@ function onLoad() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>61b3938edb03b300c448d1c2ca9619cb</sys_id>
-        <sys_mod_count>636</sys_mod_count>
-        <sys_name>DEPRECATED - Task - Patch Permissions</sys_name>
-        <sys_overrides/>
+        <sys_mod_count>654</sys_mod_count>
+        <sys_name>Task - onSubmit - sverb_delete</sys_name>
+        <sys_overrides display_value="Delete Confirmation">cb4bfc40bf2320001875647fcf0739cc</sys_overrides>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_61b3938edb03b300c448d1c2ca9619cb</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:40</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-08-15 23:36:17</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
-        <type>onLoad</type>
+        <type>onSubmit</type>
         <ui_type>10</ui_type>
         <view/>
     </sys_script_client>
