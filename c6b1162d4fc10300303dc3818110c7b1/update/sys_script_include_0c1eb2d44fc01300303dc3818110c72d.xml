@@ -8,7 +8,8 @@
         <description>Taking a User, find the default OU for the user.  This is used anywhere the system is trying to set the default OU.  Putting it in a script include will make a switch from finding the highest OU for a member to finding the "Default OU" for a member if we choose to make that switch.&#13;
 &#13;
 2.7 &#13;
-STRY0104389 - There is an error in the DIA log related to the function - GetUserDefaultOU  -  org.mozilla.javascript.EcmaError: The undefined value has no properties.</description>
+STRY0104389 - There is an error in the DIA log related to the function - GetUserDefaultOU  -  org.mozilla.javascript.EcmaError: The undefined value has no properties.&#13;
+STRY0059849 - OU Roles - OU Hierarchy Administrator</description>
         <name>OrganizationalScripts</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -21,6 +22,28 @@ OrganizationalScripts.prototype = {
 	initialize: function() {
 	},
 
+	// STRY0059849 - OU Roles - OU Hierarchy Administrator
+	getOUHA_responsible: function(OUID)
+	{
+		var OUHA_responsible = {OU:{value:'', displayValue:''}, Administrators: {value:'', displayValue: ''}};
+		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		
+		if(grOU.get(OUID)){
+			if(grOU.u_ou_hiearchy_administrators + '' != ''){
+				OUHA_responsible.OU.displayValue = grOU.getDisplayValue();
+				OUHA_responsible.OU.value = OUID;
+				OUHA_responsible.Administrators.value = grOU.getValue('u_ou_hiearchy_administrators');
+				OUHA_responsible.Administrators.displayValue = grOU.getDisplayValue('u_ou_hiearchy_administrators');
+			} else {
+				// if not found go to parent until found or at top
+				if(grOU.parent + '' != ''){
+					OUHA_responsible = this.getOUHA_responsible(grOU.parent);
+				}
+			}
+		}
+
+		return OUHA_responsible;		
+	},
 		//RJ -STRY0074663
 	saveContactInfo: function(contactData)
 	{
@@ -148,6 +171,22 @@ OrganizationalScripts.prototype = {
 		}
 		return;
 	},
+	//STRY0059849 - making OU HA similar to TM
+	RemoveMemberAsOUHiearchyAdmin: function(strOU, strUserId)
+	{ 
+		// STRY0046028, STRY0085149
+		// NOTE: Glide Record secure did NOT work here, the user may have rights to remove a member, but not rights to update the OU
+		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		grOU.addQuery('sys_id',strOU);
+		grOU.query();
+		if(grOU.next()){
+			var ou_hiearchy_Amin = grOU.u_ou_hiearchy_administrators + '';
+			grOU.u_ou_hiearchy_administrators = ou_hiearchy_Amin.replaceAll(strUserId, '');
+			grOU.update();
+		}
+		return;
+	},	
+	
 	// Returns the default ou for a given user.
 	GetUserDefaultOU: function(strUserId)
 	{
@@ -230,14 +269,16 @@ OrganizationalScripts.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-30 07:11:25</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>0c1eb2d44fc01300303dc3818110c72d</sys_id>
-        <sys_mod_count>89</sys_mod_count>
+        <sys_mod_count>102</sys_mod_count>
         <sys_name>OrganizationalScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0c1eb2d44fc01300303dc3818110c72d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-19 00:48:18</sys_updated_on>
+        <sys_updated_on>2021-08-20 15:19:05</sys_updated_on>
     </sys_script_include>
 </record_update>
