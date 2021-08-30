@@ -17,6 +17,7 @@ STRY0059849 - OU Roles - OU Hierarchy Administrator</description>
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
+g_OUHA_responsible = {};
 var OrganizationalScripts = Class.create();
 OrganizationalScripts.prototype = {
 	initialize: function() {
@@ -25,24 +26,59 @@ OrganizationalScripts.prototype = {
 	// STRY0059849 - OU Roles - OU Hierarchy Administrator
 	getOUHA_responsible: function(OUID)
 	{
-		var OUHA_responsible = {OU:{value:'', displayValue:''}, Administrators: {value:'', displayValue: ''}};
+		if(typeof g_OUHA_responsible != undefined){
+			if(g_OUHA_responsible.OU != undefined){
+				if(g_OUHA_responsible.OU.value != undefined){
+					if(g_OUHA_responsible.OU.value == OUID){
+						// TODO - may need to do a quick time check here and reset if older than 5 min - or, just let the advice to user be select different OU and come back
+						return g_OUHA_responsible;
+					}
+				}
+			}
+		}
+		g_OUHA_responsible = this.getOUHA_responsibleRecurse(OUID);
+		return g_OUHA_responsible;
+	},
+	getOUHA_responsibleRecurse: function(OUID)
+	{
+		var OUHA_responsible = {};
+		OUHA_responsible.OU = {};
+		OUHA_responsible.Administrators = {};
+		OUHA_responsible.GlobalAdministrators = {};
 		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-		
 		if(grOU.get(OUID)){
 			if(grOU.u_ou_hiearchy_administrators + '' != ''){
-				OUHA_responsible.OU.displayValue = grOU.getDisplayValue();
-				OUHA_responsible.OU.value = OUID;
 				OUHA_responsible.Administrators.value = grOU.getValue('u_ou_hiearchy_administrators');
 				OUHA_responsible.Administrators.displayValue = grOU.getDisplayValue('u_ou_hiearchy_administrators');
 			} else {
 				// if not found go to parent until found or at top
 				if(grOU.parent + '' != ''){
 					OUHA_responsible = this.getOUHA_responsible(grOU.parent);
+				} else {
+					// if here, then reached the top and did not find OUHA, load Global Hierarchy 
+					// If here, set the GHA, there might be GHA, but this may not be set
+					var grUserRoles = new GlideRecord('sys_user_has_role');  
+					grUserRoles.addEncodedQuery('^role.name=x_153465_discovert.tasker_organizational_admin^state=active^user.active=true');
+					grUserRoles.query();
+					var aGlobalAdministratorsValue = [];
+					var aGlobalAdministratorsDisplayValue = [];
+					while(grUserRoles.next()) {
+						aGlobalAdministratorsValue.push(grUserRoles.getValue('user')); 
+						aGlobalAdministratorsDisplayValue.push(grUserRoles.getDisplayValue('user'));
+					}
+					OUHA_responsible.GlobalAdministrators.value=aGlobalAdministratorsValue.join(',');
+					OUHA_responsible.GlobalAdministrators.displayValue=aGlobalAdministratorsDisplayValue.join(',');
+					// OUHAs were not found, so set to blank
+					OUHA_responsible.Administrators.value='';
+					OUHA_responsible.Administrators.displayValue='';
 				}
 			}
+			// set this at the end to reset back to the base calling OU after any recursion
+			OUHA_responsible.OU.displayValue = grOU.getDisplayValue();
 		}
-
-		return OUHA_responsible;		
+		// set this at the end to reset back to the base calling OU after any recursion
+		OUHA_responsible.OU.value = OUID;
+		return OUHA_responsible;
 	},
 		//RJ -STRY0074663
 	saveContactInfo: function(contactData)
@@ -271,7 +307,7 @@ OrganizationalScripts.prototype = {
         <sys_created_on>2018-01-30 07:11:25</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>0c1eb2d44fc01300303dc3818110c72d</sys_id>
-        <sys_mod_count>102</sys_mod_count>
+        <sys_mod_count>152</sys_mod_count>
         <sys_name>OrganizationalScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -279,6 +315,6 @@ OrganizationalScripts.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0c1eb2d44fc01300303dc3818110c72d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-20 15:19:05</sys_updated_on>
+        <sys_updated_on>2021-08-27 22:56:37</sys_updated_on>
     </sys_script_include>
 </record_update>
