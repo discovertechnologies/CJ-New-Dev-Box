@@ -22,75 +22,48 @@ Tasker - There are no available Hierarchy Administrators. Please contact your Ap
 // RJ - OU REQUEST TYPE
 function onSubmit() {
 	
-	var table = 'x_153465_discovert_tasker_requests';
+	var table;
 	var RequestSysId; 
 	var modalForm;
 	var title;
 	var view;
 	var ou_parent;
-	
+	var query;
 	var formAction = g_form.getActionName();
 
-	// STRY0088787 added if statement to check the submit is a Request submit, then doin save before continuing
-	if(formAction == 'request_organizational_update'){
-		// If the form is dirty, ask the user if they would like to save the record
-		var saveChangeConfirmation = false;
-		var saveMsg = getMessage('Tasker - Modal Save Changes Message');
-		if(typeof spModal != 'undefined'){
-			var serializeChanges = g_form.serialize(true);
-			if(serializeChanges.length>0){
-				var changeFieldList = [];
-				for (var field in serializeChanges) {
-					changeFieldList.push(serializeChanges[field].label.trim());
-				}
-				var fMsg = changeFieldList.join(', ');					
-				saveMsg += "  " + fMsg;
-				saveChangeConfirmation = true;
-			}
-		} else if (typeof spModal == 'undefined' && g_form.modified) {
-			saveMsg += JSON.stringify(g_form.modifiedFields);
-			saveChangeConfirmation = true;
-		}
+	// STRY0088787 added if statement to check the submit is a Request submit, then doing save before continuing
+	// each form acction needs to be above save confirmation below or it never gets to any other logic and stays in a confirmation loop
+	if(formAction == 'request_organizational_update'  ||
+		formAction == 'create_sub_ou' || 
+		formAction == 'add_member_to_ou' || 
+		formAction == 'add_contact_to_ou'){
+		// each button needs to be added 
+		if(!saveConfirmation())
+			return false;
 
-		// use the variable set above here to show confirmation message.
-		if(saveChangeConfirmation){				
-			if(confirm(saveMsg)){
-				g_form.save();
-			} else{
+		ou_parent = g_form.getUniqueValue();
+		
+		// TESTING RETURN AFTER SAVE CONFIRMATION FOR NOW
+		if(formAction == 'create_sub_ou'){
+			// TODO - multilanguage - NOTE: what is done on new here should be done in Tasker Form with Tabs and other places
+			open_New_Modal('x_153465_discovert_discover_office_hierarchy', getMessage('New Sub OU'), view, 'parent=' + ou_parent);
+		} else if(formAction == 'add_member_to_ou'){
+			// TODO - multilanguage - NOTE: what is done on new here should be done in Tasker Form with Tabs and other places
+			open_New_Modal('x_153465_discovert_discover_office_members', getMessage('New OU Member'), view, 'discover_office_hierarchy=' + ou_parent);
+		} else if(formAction == 'add_contact_to_ou'){
+			// TODO - multilanguage - NOTE: what is done on new here should be done in Tasker Form with Tabs and other places
+			open_New_Modal('x_153465_discovert_organizational_contacts', getMessage('New OU Contact'), view, 'u_contact_ou=' + ou_parent);
+
+		} else if(formAction == 'request_organizational_update'){
+			if(!g_scratchpad.OUHA_responsible.GlobalAdministrators.value && !g_scratchpad.OUHA_responsible.Administrators.value){
+				// no people are available to send request, raise error
+				g_form.addErrorMessage(getMessage('Tasker - There are no available Hierarchy Administrators. Please contact your Application Administrator to add Hierarchy Administrators.'));
 				return false;
 			}
-		}
-		
-		if(!g_scratchpad.OUHA_responsible.GlobalAdministrators.value && !g_scratchpad.OUHA_responsible.Administrators.value){
-			// no people are available to send request, raise error
-			g_form.addErrorMessage(getMessage('Tasker - There are no available Hierarchy Administrators. Please contact your Application Administrator to add Hierarchy Administrators.'));
-			return false;
-		}
+			open_New_Modal('x_153465_discovert_tasker_requests', getMessage('Tasker - Title - Request Hierarchy Update'), 'ou_requesttop', 'u_ou_parent=' + ou_parent);
 
-		title = getMessage('Tasker - Title - Request Hierarchy Update');
-		view = 'ou_requesttop';
-		ou_parent = g_form.getUniqueValue();
-		var oWidgetInput = {};
-		if (typeof spModal != 'undefined' ) { 
-			oWidgetInput = {table: table, sys_id: -1, view: view, u_ou_parent: ou_parent, isModal: true};
-			spModal.open({
-				title:  title,
-				message:'',
-				backdrop:'static',
-				widget: 'discovertasker-formtab',
-				widgetInput: oWidgetInput,
-				size:'lg',
-				buttons: []
-			});
-		} else {
-			modalForm = new GlideModalForm(title, table);
-			modalForm.addParm('sysparm_query','u_ou_parent='+ou_parent);
-			modalForm.addParm('sysparm_view', view); //Specify a form view
-			modalForm.render();
-			modalForm.setSysID(-1);
-			modalForm.setCompletionCallback(refreshForm);
+
 		}
-		
 		return false;
 	}
 	
@@ -98,7 +71,68 @@ function onSubmit() {
 	function refreshForm() {
 		g_form.save();
 	}	
+
+	function open_New_Modal(table, title, view, query) {
+		if (typeof spModal != 'undefined' ) { 
+			spModal.open({
+				title: title,
+				backdrop:'static',
+				widget: 'discovertasker-formtab',
+				widgetInput: {
+					table: table,
+					sys_id: "-1",
+					view: view,
+					query: query,
+					// STRY0040294 - added isModal - added closing of open modal
+					isModal: true //,
+				},
+				size: 'lg',
+				buttons: []
+			});
+		} else {
+			modalForm = new GlideModalForm(title, table);
+			modalForm.addParm('sysparm_query',query);
+			modalForm.addParm('sysparm_view', view); //Specify a form view
+			modalForm.render();
+			modalForm.setSysID(-1);
+			modalForm.setCompletionCallback(refreshForm);
+		}
+	}
 	
+	// NOTE this code exists in too many places, need to understand how to move into a client script library
+	function saveConfirmation(){
+		var saveConfirmed = true;
+		var saveMsg =  getMessage('Tasker - Modal Save Changes Message');
+		if(typeof spModal != 'undefined'){
+			var fMsg = '';
+			var serializeChanges = g_form.serialize(true);
+			if(serializeChanges.length>0){
+				// start as true, if no changes it will return true, if changes confirmation will have to set back to true
+				saveConfirmed = false;
+				var changeFieldList = [];
+				for (var field in serializeChanges) {
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+				fMsg = changeFieldList.join(', ');
+				spModal.confirm(saveMsg + "  "+ fMsg).then(function(confirmed) {
+					g_form.save();
+					saveConfirmed = true;
+				});
+			}
+		} else if (typeof spModal == 'undefined' && g_form.modified) {
+			// start as true, if no changes it will return true, if changes confirmation will have to set back to true
+			saveConfirmed = false;
+			saveMsg += JSON.stringify(g_form.modifiedFields);
+			if(confirm(saveMsg)){
+				g_form.save();
+				saveConfirmed = true;				
+			} else{
+				return saveConfirmed;
+			}			
+		}
+		
+		return saveConfirmed;
+	}	
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
@@ -107,7 +141,7 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>546f6184db1a305087f2892d13961900</sys_id>
-        <sys_mod_count>25</sys_mod_count>
+        <sys_mod_count>40</sys_mod_count>
         <sys_name>OU Hierarchy-onSubmit Open Request Modal</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -116,7 +150,7 @@ function onSubmit() {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_546f6184db1a305087f2892d13961900</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-28 02:30:51</sys_updated_on>
+        <sys_updated_on>2021-08-28 05:45:24</sys_updated_on>
         <table>x_153465_discovert_discover_office_hierarchy</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>

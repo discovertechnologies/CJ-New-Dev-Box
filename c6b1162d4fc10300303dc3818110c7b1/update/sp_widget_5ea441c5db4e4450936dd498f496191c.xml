@@ -63,8 +63,10 @@
 			c.data.title = data.filter_label;
 			c.data.d = data.d;
 			c.data.o = data.o;
-			c.data. modal_title_field_separator = data.modal_title_field_separator;
-			c.data. modal_title_fields = data.modal_title_fields;
+			c.data.modal_title_field_separator = data.modal_title_field_separator;
+			c.data.modal_title_fields = data.modal_title_fields;
+			// STRY0108629
+			c.data.DiscoverControllerURL = data.DiscoverControllerURL;
 			c.data.include_comments = data.include_comments;
 			if(data.field_list != undefined && data.field_list != ''){
 				c.data.field_list = data.field_list;
@@ -141,10 +143,18 @@
 			var pageId; 
 			var pageTable;
 			var view = 'sp';
+			// STRY0108629
+			var ref_field_name = item.dcu_ref;
 			switch (table) {
 				case 'x_153465_discovert_tasker_requests':
-					pageTable = 'x_153465_discovert_route_task_instance';
-					pageId = 'discovertasker_taskdetails';
+					// STRY0108629
+					if(item.parentType == 'Organizational Unit'){
+						pageId = 'discover_simple_processing_form';
+						pageTable = 'x_153465_discovert_tasker_requests';
+					} else {
+						pageId = 'discovertasker_taskdetails';	
+						pageTable = 'x_153465_discovert_route_task_instance';
+					}
 					break;
 				case 'x_153465_discovert_tasker_schedule':
 					pageTable = 'x_153465_discovert_tasker_schedule';
@@ -190,12 +200,15 @@
 					
 					break;
 			}
-
-
-
-			
-			// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
-			var url = portal_url_ref + '?id=' +  pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
+			// STRY0108629
+			var url;
+			if(c.data.DiscoverControllerURL){
+				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
+				url = portal_url_ref + '?id=' +  pageId + '&dcu_sys_id=' + sys_id + '&dcu_table=' + pageTable + '&dcu_ref=' + ref_field_name + '&dcu_view=' + view + '&query=' + c.data.filter + '&o=' + c.data.o + '&d=' + c.data.d;
+			} else {
+				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
+				url = portal_url_ref + '?id=' +  pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
+			}
 			window.open(url, '_blank');
 		};
 
@@ -1082,6 +1095,10 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 //                                         In CSS, Move State styling to Tasker State CSS Include. Move Status styling to Tasker Status CSS Include
 //                                         Changes made in HTML and CSS
 
+// 2.7.0 | 2021-08-23 | raj  | STRY0108629 - DIA- Org Hierarchy Request- Respond Hierarchy Update Bifold
+//                                         Changes made in client script only
+
+
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1129,13 +1146,12 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
     optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'field_list', 'keywords', 'view']);
     optCopy(['relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
     // STRY0101803
-    optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments']);
+    optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments','DiscoverControllerURL']);
     if (!data.table) {
         data.invalid_table = true;
         data.table_label = "";
         return;
     }
-
     // STRY0101803 - changed how data.fields is loaded to include udpates from the fitler selection
     if (!data.field_list) {
         if (data.view)
@@ -1219,6 +1235,10 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
             currentFilter = currentFilter.replace("OUsWhereIamAMember", data.OUsWhereIamAMember);
         }
 
+				// STRY0108629
+				var DiscoverControllerURL = gr_filters.getValue('u_discover_controller_url');
+				DiscoverControllerURL = DiscoverControllerURL != null ? (DiscoverControllerURL == true) : false;
+
         // 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
         // Create the filter then push later
         var filter = {
@@ -1236,6 +1256,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
             // 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
             // include_comments: gr_filters.getDisplayValue('u_include_comments'),
             include_comments: gr_filters.getValue('u_include_comments'),
+						// STRY0108629
+						DiscoverControllerURL: DiscoverControllerURL,
             o: gr_filters.getDisplayValue('u_order_by'),
             d: gr_filters.getDisplayValue('u_direction')
         };
@@ -1502,26 +1524,40 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
                 record.sub_category = {};
                 record.tasker_type = {};
                 record.state = {};
-                record.category.display_value = gr.getDisplayValue('parent.category');
-                record.category.value = gr.getValue('parent.category');
-                record.sub_category.display_value = gr.getDisplayValue('parent.sub_category');
-                record.sub_category.value = gr.getValue('parent.sub_category');
-                record.tasker_type.display_value = gr.getDisplayValue('parent.tasker_type');
-                record.tasker_type.value = gr.getValue('parent.tasker_type');
-                record.state.display_value = gr.getDisplayValue('parent.state');
-                record.state.value = gr.getValue('parent.state');
+								// STRY0108629
+								if(gr.parent){
+									record.parentType = 'Task';
+									record.category.display_value = gr.getDisplayValue('parent.category');
+									record.category.value = gr.getValue('parent.category');
+									record.sub_category.display_value = gr.getDisplayValue('parent.sub_category');
+									record.sub_category.value = gr.getValue('parent.sub_category');
+									record.tasker_type.display_value = gr.getDisplayValue('parent.tasker_type');
+									record.tasker_type.value = gr.getValue('parent.tasker_type');
+									record.state.display_value = gr.getDisplayValue('parent.state');
+									record.state.value = gr.getValue('parent.state');
+								} else {
+									record.parentType = 'Organizational Unit';
+									record.u_ou_parent = gr.getValue('u_ou_parent');
+								}
                 break;
             default:
                 break;
         }
         record.sys_id = gr.getValue('sys_id');
+				record.dcu_ref = '';
         // STRY0101803 set the id for the Task page based on the table of the filter
         switch (data.table) {
             case 'x_153465_discovert_route_task_instance':
                 record.href_id = gr.getValue('sys_id');
                 break;
             case 'x_153465_discovert_tasker_requests':
-                record.href_id = gr.getValue('parent');
+								if(gr.parent){
+									record.href_id = gr.getValue('parent');
+								} else{
+									// STRY0108629
+									record.href_id = gr.getValue('sys_id');
+									record.dcu_ref = 'u_ou_parent';
+								}
                 break;
             case 'x_153465_discovert_tasker_schedule':
                 record.href_id = gr.getValue('sys_id');
@@ -1576,15 +1612,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1010</sys_mod_count>
+        <sys_mod_count>1035</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-08-23 18:32:40</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-08-31 00:13:41</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
