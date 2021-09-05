@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, $rootScope,spAriaFocusManager, $http, amb,$timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
+        <client_script><![CDATA[api.controller=function ($scope, $rootScope, spAriaFocusManager, $http, amb, $timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
 	/* widget controller */
 	var c = this;
-	$scope.submitting = false;
+  $scope.submitting = false;
+  $scope.mandatory = [];
+  $scope.errorMessages = [];
+  $scope.data.show_sql = false;
 	var g_form;
 
 	angular.element('.modal-footer').css({display:'none'});
@@ -23,22 +26,23 @@
 
 	$scope.btnStartButton = function(){
 		// STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify
-		if(g_form){
-			$scope.submitting = true;
-			if(g_form.submit('start_template')){
-				$scope.initiatingTemplate = true;
-				$(".showAlert").hide().show('medium');
-				c.data.currentStep = 'StartTemplate';
-				var table = 'x_153465_discovert_route_task_instance';
-				var filter = 'u_parent_template='+ c.data.process_template_sys_id + '^parentISEMPTY';
-				// Start watching for task looking for an event for the Template ID before starting the template
-				if (c.watcher)
-					c.watcher.unsubscribe();
-				c.watcher = watcher(table, filter, taskFromTemplateStarted);
-				
+		$scope.$evalAsync(function() {
+			if(g_form){
+				$scope.submitting = true;
+				if(g_form.submit('start_template')){
+					$scope.initiatingTemplate = true;
+					$(".showAlert").hide().show('medium');
+					var table = 'x_153465_discovert_route_task_instance';
+					var filter = 'u_parent_template='+ c.data.process_template_sys_id + '^parentISEMPTY';
+					// Start watching for task looking for an event for the Template ID before starting the template
+					if (c.watcher)
+						c.watcher.unsubscribe();
+					c.watcher = watcher(table, filter, taskFromTemplateStarted);
+					return;
+				}
+				$scope.submitting = false;
 			}
-			$scope.submitting = false;
-		}		
+		});
 	}
 	
 	// Make sure to include amb as a provider in your client controller
@@ -59,13 +63,28 @@
 		c.watcher.unsubscribe();
 	}
 
+	$scope.$on('spModel.fields.rendered', function() {
+		if (c.panels)
+			c.panels.removeClass('shift-out').addClass('shift-in');
+	});
+	
 	function initForm(gFormInstance) {
 		if (gFormInstance.getTableName() != undefined &&
 				gFormInstance.getTableName() == $scope.data.f.table) {
 			g_form = gFormInstance;
+			spNavStateManager.register($scope.data.table, _save, g_form);
+			$scope.isPageReady = true;
+			$timeout(function() {
+				$rootScope.$emit('spModel.gForm.rendered', g_form);
+			}, 175);
+			
 		}
 	}
 
+  $scope.$on('spModel.gForm.initialized', function(e, gFormInstance) {
+		initForm(gFormInstance);
+  });
+	
 	$scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
 		initForm(gFormInstance);
 	});
@@ -75,6 +94,11 @@
 		if (c.watcher)
 			c.watcher.unsubscribe();
 	});
+	
+  function clearStatus() {
+    $scope.status = "";
+  }
+	
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------&#13;
@@ -298,24 +322,25 @@ label{&#13;
 
 (function($sp, input, data, options, gs) {
     /* populate the 'data' object */
-
+	
+		data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions;	
+		data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;	
+	
     // STRY0098385 - remove Cancel button from Mobile 
     data.page_id = $sp.getParameter("id");
-
+	
     // rebuild the widget to run using template instance
     // RJ - TUP - STRY0068618 
     // STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
     data.process_template_sys_id = (input || {}).process_template_sys_id || (options || {}).process_template_sys_id || $sp.getParameter('process_template_sys_id');
     // STRY0090951 - Mobile – Run Template action from swipe action and from UI action on Template form
-    if (input == undefined || input.currentStep == undefined) {
+    if (input == undefined  || (!input.templateStarted && !input.initiatingTemplate) ) {
         data.canAttach = false;
         // build the Template Instance Form here
         data.f = $sp.getForm("x_153465_discovert_discover_routing_runtime",
             "-1", 'routing_template_ref=' + data.process_template_sys_id,
             "Default View");
         data.canRun = new uiConditionCheck().startTemplateUIAction(data.process_template_sys_id, '');
-
-        data.currentStep = 'enterInfo';
     }
 
 
@@ -324,15 +349,17 @@ label{&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-03-13 14:58:39</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>391ce42fdb843380c18c59b2ca96196a</sys_id>
-        <sys_mod_count>219</sys_mod_count>
+        <sys_mod_count>270</sys_mod_count>
         <sys_name>Tasker Modal - Run Template</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_391ce42fdb843380c18c59b2ca96196a</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-08-12 20:11:06</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-05 04:13:40</sys_updated_on>
         <template><![CDATA[<div class="iconlink" style="cursor:pointer;">
   <!--// Top Icon -->
   <div ng-if="templateStarted" class="alert alert-info alert-dismissable showAlert">
@@ -343,19 +370,30 @@ label{&#13;
     <fa name="spinner" spin="true"></fa> ${Tasker - Starting Template}...
   </div>
 
-  <span ng-if="data.currentStep=='enterInfo'">
-    <!-- STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify -->
-    <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
-  </span>
-  <div class="modal-body text-right">
-    <div class="row">
-      <div class="col-sm-6 text-left">
-        <!-- STRY0098385 - remove Cancel button from Mobile -->        
-        <button type="button" ng-if="data.currentStep=='enterInfo' && data.page_id!='start_template_from_mobile'" class="btn btn-secondary" data-dismiss="modal"   ng-click="btnCancelClick()">${Cancel}</button>
-      </div>
-      <div class="col-sm-6 text-right">
-        <button type="button" ng-if="data.currentStep=='enterInfo'" class="btn btn-primary" ng-click="btnStartButton()">${Start Template}</button>
-      </div>
+  <div ng-if = '!templateStarted && !initiatingTemplate' class="panel-shift">
+    <div class="panel panel-default" ng-if="data.f._view.length" >    
+
+      <div class="panel-heading" ng-if="data.omitHeader != 'true' && data.f.title.length" sp-context-menu="getUIActionContextMenu(event)">
+        <span class="panel-title" role="heading" aria-level="2">{{data.f.title}}</span> <span ng-if="::options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
+      </div>      
+
+      <div class="panel-body">
+        <!-- STRY0100724: DEV Story- Performance Improvements -  Running Templates and implify -->
+        <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
+
+
+        <div class="panel-footer">
+          <button type="button" ng-disabled="submitting" ng-if="data.page_id!='start_template_from_mobile'" class="btn btn-default pull-left" data-dismiss="modal"   ng-click="btnCancelClick()">${Cancel}</button>
+          <span>{{status}}</span>
+          <button type="button" ng-disabled="submitting" class="btn btn-primary pull-right" ng-click="btnStartButton()">${Start Template}</button>
+
+          <div style="clear: both;"></div>
+          <div ng-if="mandatory.length" class="alert alert-info" style="margin-top: .5em" aria-live="polite" aria-atomic="true">
+            <span ng-if="mandatory.length > 0">${Required information} </span>
+            <span ng-repeat="f in mandatory" class="label sc-field-error-label" ng-bind="f.label"></span>
+          </div>
+        </div>
+      </div>        
     </div>
   </div>
 </div>]]></template>
