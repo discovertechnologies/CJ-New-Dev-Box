@@ -23,6 +23,11 @@ These Methods are used in the Scheduled Script Exection script - "DiscoverTasker
 var Tasker_RecurringTask_Functions = Class.create();
 Tasker_RecurringTask_Functions.prototype = {
 	initialize: function() {
+		this.dc = new Tasker_Copy_DurationCalculator();
+		this.tdc = new TaskerDurationCalculator();
+		this.hoursInBusinessDay = 9;
+		// default is "8-5 weekdays excluding holidays";
+		this.taskerDefaultscheduleName = gs.getProperty("x_153465_discovert.Global Template Default Schedule") + '';		
 	},
 	
 	findAndStartRecurringTaskersDaily: function(){
@@ -88,21 +93,60 @@ Tasker_RecurringTask_Functions.prototype = {
 	
 	isCountTrue:function (){
 		var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+		
+		var countDefault = this.countAcceptanceOverdue(daysBeforeTaskAcceptanceIsOverdue, null);
+		// if default count is greater than zero return true, no need to go through all OUs with schedules set
+		if(countDefault > 0)
+			return true;
+		
+		// now process OUs with Schedules set
+		var grOUs= new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		grOUs.addNotNullQuery('u_schedule_override');
+		grOUs.query();
+		while(grOUs.next()){
+			var ouCountDefault = this.countAcceptanceOverdue(daysBeforeTaskAcceptanceIsOverdue, grOUs);
+			if(ouCountDefault > 0)
+				return true;
+		}
+		// if you make it here, no acceptance overdue items found
+		return false;
+	},
+	
+	
+	countAcceptanceOverdue:function (daysToCount, grOU){
+		// STRY0102134 - Updated to apply system schedule to the calculation.
+		// OU Schedule is applied, user schedule is not.  Not sure we need to apply user schedule to acceptance overdue as this is something managers handle
+		var today = new GlideDate();
+		var daysAsDurtion = daysToCount*60*60*24*1000;
+		var dayInSchedule = this.tdc.calculateDateOfAddedBusinessDays(grOU, daysAsDurtion, today);
+		gdt.setValue(dayInSchedule);		
+		
+		
+		// TODO - FOR CONSIDERATION, DO WE SET TO THE END OF THE DAY INSTEAD OF THE BEGINING OF THE DAY
+		
 		var a = new GlideAggregate('x_153465_discovert_route_task_instance');
 		a.addEncodedQuery('state=1');
-		a.addEncodedQuery('primary_assigneeISNOTEMPTY');
-		a.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@' + daysBeforeTaskAcceptanceIsOverdue);
+		if(grOU != null){
+			a.addEncodedQuery('primary_assigneeISNOTEMPTY');
+			a.addEncodedQuery('primary_assignee.u_schedule_overrideISEMPTY');
+		} else {
+			a.addEncodedQuery('primary_assignee=' + grOU.getUniqueValue());
+		}
+		// changed from a relative date to use the date in schedule
+		a.addEncodedQuery('suspense_dateISNOTEMPTY');
+		a.addEncodedQuery('suspense_date<=' + dayInSchedule);		
 		a.addAggregate("COUNT");
 		a.query();
 		a.next();
 		
-		return a.getAggregate('COUNT') > '0';
+		// if default count is greater than zero return true, no need to go through all OUs with schedules set
+		var countOfAccptanceOverdue = parseInt(a.getAggregate('COUNT'));
+		return countOfAccptanceOverdue;
 	},
 	
+	
 	acceptanceOverdueNotification: function(){
-		//HT - STRY0033444
-		/*KT - STRY0033444
-		WHO IS NOTIFIED:
+		/*WHO IS NOTIFIED:
 		
 		Task Owner, and
 		Send to Assigned Member, (If an Assigned member is set) and
@@ -110,14 +154,53 @@ Tasker_RecurringTask_Functions.prototype = {
 		If Primary Assignee is empty OR Primary Assignee OU does not have an OU-TA, send to Global-TA.
  		*/
 		var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
-
+		
+		// STRY0102134 - run all tasks where the OU override is not set
+		this.sendAcceptanceOverdueNotifications(daysBeforeTaskAcceptanceIsOverdue, null);
+		
+		// STRY0102134 - run all tasks where the OU override is set
+		var grOUs= new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		grOUs.addNotNullQuery('u_schedule_override');
+		grOUs.query();
+		while(grOUs.next()){
+			var ouCountDefault = this.sendAcceptanceOverdueNotifications(daysBeforeTaskAcceptanceIsOverdue,  grOUs);
+		}
+	},
+		
+	// STRY0102134 - this function is run multiple times and can support running all with no ouID based on the default schedule and running for an OU with the OU schedule and the ouID
+	sendAcceptanceOverdueNotifications: function(daysToCount, grOU){
+		/*WHO IS NOTIFIED:
+		
+		Task Owner, and
+		Send to Assigned Member, (If an Assigned member is set) and
+		If Primary Assignee is set and Primary Assignee OU has a TA, send it to Primary Assignee OU-TA
+		If Primary Assignee is empty OR Primary Assignee OU does not have an OU-TA, send to Global-TA.
+ 		*/
+		
+		// OU Schedule is applied, user schedule is not.  Not sure we need to apply user schedule to acceptance overdue as this is something managers handle
+		var today = new GlideDate();
+		// STRY0102134 - if a default schedule is set, get the next business day based on the default schedule
+		var daysAsDurtion = daysToCount*60*60*24*1000;
+		var dayInSchedule = this.tdc.calculateDateOfAddedBusinessDays(grOU, daysAsDurtion, today);
+		gdt.setValue(dayInSchedule);		
+		
+		
 		//query the task table looking for records where the task is assigned and
 		//the primary assignee is not empty and
-		//it has a suspense date older than the system property value daysBeforeTaskAcceptanceIsOverdue
+		//it has a suspense date older than the system property value daysBeforeTaskAcceptanceIsOverdue based on the schedule given
 		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
 		grTask.addEncodedQuery('state=1');
-		grTask.addEncodedQuery('primary_assigneeISNOTEMPTY');
-		grTask.addEncodedQuery('suspense_dateRELATIVELE@dayofweek@ahead@' + daysBeforeTaskAcceptanceIsOverdue);
+		// STRY0102134 - if a default schedule is set, get the next business day based on the default schedule
+		if(grOU != null){
+			grTask.addEncodedQuery('primary_assigneeISNOTEMPTY');
+			grTask.addEncodedQuery('primary_assignee.u_schedule_overrideISEMPTY');
+		} else {
+			grTask.addEncodedQuery('primary_assignee=' + grOU.getUniqueValue());
+		}
+		// changed from a relative date to use the date in schedule
+		grTask.addEncodedQuery('suspense_dateISNOTEMPTY');
+		grTask.addEncodedQuery('suspense_date<=' + dayInSchedule);		
+		
 		grTask.query();
 		
 		while(grTask.next()) {
@@ -157,7 +240,7 @@ Tasker_RecurringTask_Functions.prototype = {
 				gs.eventQueue('x_153465_discovert.NotificationAcceptanc', grTask, payload, recipients);	
 			}
 		},
-		
+	
 		type: 'Tasker_RecurringTask_Functions'
 	};]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
@@ -165,7 +248,7 @@ Tasker_RecurringTask_Functions.prototype = {
         <sys_created_on>2018-07-09 17:12:21</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>15c90504db1b1b40bb8ee536ca961953</sys_id>
-        <sys_mod_count>131</sys_mod_count>
+        <sys_mod_count>144</sys_mod_count>
         <sys_name>Tasker_RecurringTask_Functions</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -173,6 +256,6 @@ Tasker_RecurringTask_Functions.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_15c90504db1b1b40bb8ee536ca961953</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-08 22:17:57</sys_updated_on>
+        <sys_updated_on>2021-09-08 18:59:53</sys_updated_on>
     </sys_script_include>
 </record_update>

@@ -74,10 +74,38 @@ MyDateTimeAjax.prototype = Object.extendsObject(global.AbstractAjaxProcessor,
 	//HT - STRY0052942
 	//add default days to acknowledgement type suspense date
 	addDaysAcknowledgementSuspenseDate:function(){
+		
+		// STRY0102134 - pass taskin so we can look up Primary Office OU and check for override schedule
+		var tdc = new TaskerDurationCalculator();
+		var taskId = this.getParameter('sysparam_task_id');
+		var scheduleId = '';
+		var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grTask.get(taskId)){
+			// look for Schedule override on the Primary Office OU
+			if(grTask.primary_office && 
+				(grTask.primary_office + '' != '') && 
+				grTask.primary_office.u_schedule_override && 
+				(grTask.primary_office.u_schedule_override + '' != '')){
+				scheduleId=grTask.getValue('primary_office.u_schedule_override');
+			}
+		}
+		if(scheduleId == ''){
+			// if no OU schedule, load sytem default
+			scheduleId = tdc.taskerDefaultScheduleId;
+		}
 		var data = {};
 		var gdt = new GlideDateTime();
 		var systemPropDefaultSuspenseDays = gs.getProperty("x_153465_discovert.#AcknowledmentTaskerTypeDefaultSuspenseDate");
-		gdt.addDaysUTC(systemPropDefaultSuspenseDays);
+		
+		// STRY0102134 - pass taskin so we can look up Primary Office OU and check for override schedule
+		if(scheduleId){
+			var today = new GlideDate();
+			var dayInSchedule = tdc.calculateDateOfAddedBusinessDaysWitScheduleId(scheduleId, systemPropDefaultSuspenseDays, today);
+			gdt.setValue(dayInSchedule);
+		} else {
+			gdt.addDaysUTC(systemPropDefaultSuspenseDays);
+		}
+		
 		// STRY0078779
 		//var payload =  gdt.getDate().getDisplayValue();
 		var payload =  gdt.getDate().getDisplayValue() + ' ' + gdt.getUserFormattedLocalTime();
@@ -139,14 +167,14 @@ MyDateTimeAjax.prototype = Object.extendsObject(global.AbstractAjaxProcessor,
         <sys_created_on>2019-01-21 16:28:17</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>6467de43dbcb6b00bb8ee536ca961954</sys_id>
-        <sys_mod_count>133</sys_mod_count>
+        <sys_mod_count>137</sys_mod_count>
         <sys_name>MyDateTimeAjax</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6467de43dbcb6b00bb8ee536ca961954</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:49</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-08 18:55:36</sys_updated_on>
     </sys_script_include>
 </record_update>

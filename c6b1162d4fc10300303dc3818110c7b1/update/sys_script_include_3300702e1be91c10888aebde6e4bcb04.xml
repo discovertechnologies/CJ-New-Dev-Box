@@ -27,6 +27,10 @@ TaskerDurationCalculator.prototype = {
 		this.hoursInBusinessDay = 9;
 		// default is "8-5 weekdays excluding holidays";
 		this.taskerDefaultscheduleName = gs.getProperty("x_153465_discovert.Global Template Default Schedule") + '';
+		this.taskerDefaultScheduleId =  this.getDefaultScheduleId();
+		// default the schedule used, but leave the default set for future calls
+		this.scheduleName = this.taskerDefaultscheduleName + '';
+		this.scheduleId = this.taskerDefaultScheduleId + '';
     },
 
 	// find the number of business days in the duration assuming 9 hour day TODO: determine how to find the number of hours per day in the schedule.
@@ -44,6 +48,55 @@ TaskerDurationCalculator.prototype = {
 		return durCalc;
 	},
 
+	calculateDateOfAddedBusinessDays: function(gr, days, startDate) {
+		this.setDurationCaluclationSchedule(gr,this.dc);
+		return this.calculateDateOfAddedBusinessDaysWitScheduleId(this.scheduleId,days,startDate);
+	},
+	
+// STRY0102134
+	// calculate full days and ignore the number of hours.  
+	// There may be a better way, but this will take the start and the number of days to add
+	// it will add one day at a time to the schedule and only count the days in the schedule
+	// it will count until it reaches the number of days to add, then add that many calendar days and return the date to the caller
+	calculateDateOfAddedBusinessDaysWitScheduleId: function(scheduleId, daysToAdd, startDate){
+		var lEndDate = new GlideDateTime(startDate);
+		var lDaysToAdd = isNaN(daysToAdd)?undefined:parseInt(daysToAdd);
+		if(lDaysToAdd == undefined  || lDaysToAdd <= 0){
+			return null;
+		}
+		var daysAdded = 0;
+		var sch;
+		if(scheduleId != ''){
+			sch = new GlideSchedule(scheduleId); //use your scheudle sysid here
+			// keep adding days and counting only the days in the schedule until you get to the number of days to add
+			while(daysAdded < lDaysToAdd){
+				// add one day at at time
+				lEndDate.addDaysLocalTime(1);
+				if(sch.isInSchedule(lEndDate)){
+					// each time a day is in the schedule add one to the days added
+					daysAdded++;
+				} else {
+					// the date/time was not in the schedule, find the next time in schedule and reset the date found
+					var milliseconds = sch.whenNext(lEndDate);
+					lEndDate.addSeconds(milliseconds/1000);
+					daysAdded++;
+				}
+			}
+			return lEndDate;
+		} else {
+			// no schedule given, just add the days
+			lEndDate.addDaysLocalTime(lDaysToAdd);
+		}
+		return lEndDate;
+	},
+	
+	// STRY0102134
+	// calls the calculateEndDate function after converting a number of days to a duration
+	calculateEndDateUsingDays: function (gr,  days, std){
+		// convert days to a duration of business days
+		var daysAsDurtion = days*60*60*24*1000;
+		return this.calculateEndDate(gr, daysAsDurtion, std);
+	},
 	
 	// NOTE: The initial implementation uses a system property and all templates will use that schedule to block days.
 	//       In this function we will be able to set the schedule based on any values passed in the current record.
@@ -60,7 +113,7 @@ TaskerDurationCalculator.prototype = {
 	calculateEndDate: function(gr, d, std) {
 		this.setDurationCaluclationSchedule(gr,this.dc);
 		this.dc.setStartDateTime(std);
-		if(this.taskerDefaultscheduleName != ''){
+		if(this.scheduleName != ''){
 			// convert days to business days
 			var businessDuration = this.calculateBusinessDays(d);
 
@@ -72,22 +125,113 @@ TaskerDurationCalculator.prototype = {
 			return std.getValue();
 		}
 	},
+
+	getOUsWithScheduleOverride: function(aOUsToCheck){
+		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		var aOverrideOUs = [];
+		for (i=0; i<aOUsToCheck.length; i++) {
+			if(grOU.get(aOUsToCheck[i])){
+				if(grOU.getDisplayValue('u_schedule_override') + '' != ''){
+					var oOUSchedule = {};
+					oOUSchedule.ouId = aOUsToCheck[i];
+					oOUSchedule.scheduleId = grOU.getValue('u_schedule_override');
+					aOverrideOUs.push(oOUSchedule);
+				}
+			}
+		}
+		return aOverrideOUs;
+	},
+	
+	// dc: Duration Calculator - this is the duration calculator object from ServiceNow
+	getDefaultScheduleId: function(){
+		var scheduleId = '';
+		// Load the schedule set in the system property.  See note above for future options.
+		var grSched = new GlideRecord('cmn_schedule');
+		grSched.addQuery('name', this.taskerDefaultscheduleName);
+		grSched.query();
+		if(grSched.next()){
+			scheduleId = grSched.getUniqueValue();
+		} else {
+			gs.warn('*** Could not find schedule "'+ this.taskerDefaultscheduleName +'"');
+		}
+		return scheduleId;
+	},
 	
 	// gr: Glide record - for initial implementation it will be Template task. (today ignored)
 	//     This could be any Tasker Object and we would need to determine how to get the schedule
 	//     for that object in the future.
 	// dc: Duration Calculator - this is the duration calculator object from ServiceNow
 	setDurationCaluclationSchedule: function(gr, dc){
-		// Load the schedule set in the system property.  See note above for future options.
-		var grSched = new GlideRecord('cmn_schedule');
-		grSched.addQuery('name', this.taskerDefaultscheduleName);
-		grSched.query();
-		if(!grSched.next()){
-			gs.warn('*** Could not find schedule "'+ this.taskerDefaultscheduleName +'"');
-			return;
+		var scheduleId = '';
+		// OU should always hit here...
+		if(gr && gr.u_schedule_override  && gr.getDisplayValue('u_schedule_override') + '' != ''){
+			scheduleId = gr.getValue('u_schedule_override');
+			this.scheduleName = gr.getDisplayValue('u_schedule_override');
+		} else if(gr){
+			switch (gr.getRecordClassName()){
+				case 'x_153465_discovert_route_task_instance':
+				case 'x_153465_discovert_route_tasks':
+					// look up Primary Office and see if there is an override on the Primary Office
+					// NOTE: if we decide on other / prefered overrides like top or tree is primary office and per task is Primary assignee
+					if(gr.primary_office){
+						var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+						if(grOU.get(gr.primary_office)){
+							if(grOU.u_schedule_override){
+								this.scheduleName = grOU.getDisplayValue('u_schedule_override');
+								scheduleId = grOU.getValue('u_schedule_override');
+							}
+						}
+					}
+					break;
+			}
+		} 
+		// if here, no overrrides were found.  Set using default
+		if (scheduleId == '') {
+			// Load the schedule set in the system property.  See note above for future options.
+			var grSched = new GlideRecord('cmn_schedule');
+			grSched.addQuery('name', this.taskerDefaultscheduleName);
+			grSched.query();
+			if(grSched.next()){
+				scheduleId = grSched.getUniqueValue();
+				this.scheduleName = this.taskerDefaultscheduleName;
+			} else {
+				gs.warn('*** Could not find schedule "'+ this.taskerDefaultscheduleName +'"');
+			}
+
 		}
-		dc.setSchedule(grSched.getUniqueValue());
+		this.scheduleId = scheduleId;
+		if(scheduleId != ''){
+			dc.setSchedule(scheduleId);			
+		}
 	},
+
+	// scheduleOverride: name of the schedule to lookup
+	//          returns: schedule ID
+	getScheduleID: function(scheduleOverride){
+		// check schedule override
+		var scheduleId='';
+		var grSched = new GlideRecord('cmn_schedule');
+		if(scheduleOverride != ''){
+			grSched.addQuery('name', scheduleOverride);
+			grSched.query();
+			if(grSched.next()){
+				scheduleId =  grSched.getUniqueValue();
+			} else {
+				gs.warn('*** Could not find schedule "'+ scheduleOverride +'"');
+			}
+		} else if(this.taskerDefaultscheduleName != ''){
+			// load default schedule
+			grSched.addQuery('name', this.taskerDefaultscheduleName);
+			grSched.query();
+			if(grSched.next()){
+				scheduleId =  grSched.getUniqueValue();
+			} else {
+				gs.warn('*** Could not find schedule "'+ this.taskerDefaultscheduleName +'"');
+			}
+			
+		}
+		return scheduleId;
+	},	
 	
     type: 'TaskerDurationCalculator'
 };]]></script>
@@ -96,14 +240,14 @@ TaskerDurationCalculator.prototype = {
         <sys_created_on>2020-06-24 18:38:34</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>3300702e1be91c10888aebde6e4bcb04</sys_id>
-        <sys_mod_count>21</sys_mod_count>
+        <sys_mod_count>67</sys_mod_count>
         <sys_name>TaskerDurationCalculator</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3300702e1be91c10888aebde6e4bcb04</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:46</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-10 00:12:26</sys_updated_on>
     </sys_script_include>
 </record_update>
