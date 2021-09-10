@@ -19,7 +19,6 @@ TaskerStatus.prototype = {
 	},
 	
 	updateTaskerStatus : function(strquery){
-		
 		var daysBeforeSuspenseDateTaskStatusIsWarning = gs.getProperty("x_153465_discovert.#DaysBeforeSuspenseDateTaskStatusIsWarning");
 		
 		var now = new GlideDateTime();
@@ -37,23 +36,38 @@ TaskerStatus.prototype = {
 		
 		
 		while(gr.next()) {
-			
 			//if(gr.active) {
 				// RAJ 2018-03-13 check supsense date before using
 				if(!gr.suspense_date.nil()){
-					var suspense = new GlideDateTime(gr.suspense_date);
+					// STRY0102134 - NOTE: below warning hours is really warning days.  The field name is hours, but the label is clearly days
+					var warningStartDate = new GlideDate();
+					
+					var grOU = null;
+					if(gr.getDisplayValue('primary_office') + '' == ''){
+						grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+						if(grOU.get(gr.getValue('primary_office'))){
+							// use OU below
+						} else {
+							grOU = null;
+						}
+					}
+
+					var tdc = new TaskerDurationCalculator();
 					if(!gr.warning_hours.nil()){
-						suspense.addDaysLocalTime(-gr.warning_hours);
+						// count from today the number of warning days
+						warningStartDate = tdc.calculateDateOfAddedBusinessDays(grOU, gr.warning_hours, warningStartDate);
 					}
 					else{
-						suspense.addDaysLocalTime(-daysBeforeSuspenseDateTaskStatusIsWarning);// - 3
+						warningStartDate = tdc.calculateDateOfAddedBusinessDays(grOU, daysBeforeSuspenseDateTaskStatusIsWarning, warningStartDate);
 					}
-					var new_warningdate = suspense.getLocalDate();
-					
+					var WarningStartTime = warningStartDate.getValue();
+		
 					if (now > gr.suspense_date)
 						dateStatus = "Overdue";
 					else {
-						if (now > new_warningdate) {
+						// STRY0102134 - above we are adding the number of warning days to today.
+						//               This line of code was changed to compare the suspense date to the warning days instead of now to warning days since we are counting forward instead of backward
+						if (WarningStartTime > gr.suspense_date) {
 							dateStatus = "Warning";
 						}else{
 							dateStatus = "Projected on time";
@@ -101,14 +115,14 @@ TaskerStatus.prototype = {
         <sys_created_on>2019-06-27 00:36:37</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>532e93d1db5eb3002658255c8a96192e</sys_id>
-        <sys_mod_count>42</sys_mod_count>
+        <sys_mod_count>52</sys_mod_count>
         <sys_name>TaskerStatus</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_532e93d1db5eb3002658255c8a96192e</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:48</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-09 04:36:08</sys_updated_on>
     </sys_script_include>
 </record_update>

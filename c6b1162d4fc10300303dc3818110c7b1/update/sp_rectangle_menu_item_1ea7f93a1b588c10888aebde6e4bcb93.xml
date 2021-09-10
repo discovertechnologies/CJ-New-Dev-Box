@@ -16,24 +16,40 @@
         <order>210</order>
         <record_script><![CDATA[var bannerAwaitingAssignmentOverdue = function(data){
   var u = gs.getUser().getID();
-
   var DaysSinceTaskWasUnassignedOrRejectedWarning = gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
+  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+  
+	// STRY0102134 - Apply Default Schedule to Task Information
+  var tdc = new TaskerDurationCalculator();
+  var today = new GlideDateTime().getDate();
+  
+  // find the end date in the schedule
+  var dayInSchedule = tdc.calculateDateOfAddedBusinessDays(null, DaysSinceTaskWasUnassignedOrRejectedWarning, today);
+  
   //------------------------------------------------------------------------------------------------------------------
   // Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
   // Get the list of OUs where the current user is a Task Manager
-  var primary_assigneeFilter = "primary_assigneeIN";
   var taskSystemSettings = new tasking_System_Settings_Scripts();
-  primary_assigneeFilter += taskSystemSettings.getMyOUTaskManagers(u).join(",");
+  var aMyOUTaskManager = taskSystemSettings.getMyOUTaskManagers(u);
 
-  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-  if(isGTA)
-    primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY"
-
-  var filter ='u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11';
-  if(!isGTA){
-    filter += '^' + primary_assigneeFilter;
+  var filter = "primary_assigneeIN" + aMyOUTaskManager.join(",") + '^primary_assignee.u_schedule_overrideISEMPTY^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
+  
+  if(isGTA){
+    // load all items and use the sytem wide default for the delay days
+    filter = 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
   }
-  filter += '^u_last_unassigned_dateRELATIVELE@dayofweek@ago@'+DaysSinceTaskWasUnassignedOrRejectedWarning; 
+  
+  var aOUSchedules = tdc.getOUsWithScheduleOverride(aMyOUTaskManager);
+
+  if(aOUSchedules.length > 0) {
+    for (i=0; i<aOUSchedules.length; i++) {
+      var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+      if(grOU.get(aOUSchedules[i].ouId)){
+        var overrideDayInSchedule = tdc.calculateDateOfAddedBusinessDays(grOU, DaysSinceTaskWasUnassignedOrRejectedWarning, today);
+        filter += '^NQprimary_assignee=' + aOUSchedules[i].ouId + '^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+overrideDayInSchedule;
+      }
+    }
+  }
 
   var tbf = new TaskerBannerFilters();
 
@@ -48,11 +64,7 @@
   tbf.viewAllLinkTitle = gs.getMessage('View all requests');
   tbf.viewAllLinkPageId = 'discovertasker_detailsdrilldown';
   tbf.viewAllLinkView = 'sp';
-  if(!isGTA){
-    tbf.viewAllLinkFilter = primary_assigneeFilter+'^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + DaysSinceTaskWasUnassignedOrRejectedWarning; 
-  } else {
-    tbf.viewAllLinkFilter = 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_dateRELATIVELE@dayofweek@ago@' + DaysSinceTaskWasUnassignedOrRejectedWarning; 
-  }
+	tbf.viewAllLinkFilter = filter;
 
   tbf.createBanner();
   data.items = tbf.items;
@@ -73,7 +85,7 @@ bannerAwaitingAssignmentOverdue(data);]]></record_script>
         <sys_created_on>2019-10-08 19:00:15</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>1ea7f93a1b588c10888aebde6e4bcb93</sys_id>
-        <sys_mod_count>120</sys_mod_count>
+        <sys_mod_count>147</sys_mod_count>
         <sys_name>Awaiting Assignment Overdue</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -81,7 +93,7 @@ bannerAwaitingAssignmentOverdue(data);]]></record_script>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_rectangle_menu_item_1ea7f93a1b588c10888aebde6e4bcb93</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-21 18:10:04</sys_updated_on>
+        <sys_updated_on>2021-09-09 13:28:30</sys_updated_on>
         <table/>
         <type>scripted</type>
         <url/>

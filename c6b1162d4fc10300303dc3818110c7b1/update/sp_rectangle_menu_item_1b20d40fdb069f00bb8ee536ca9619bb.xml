@@ -16,21 +16,42 @@
         <order>200</order>
         <record_script><![CDATA[var bannerAcceptanceOverdue = function(data){
   var u = gs.getUser().getID();
-
   var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+	
+	// STRY0102134 - Apply Default Schedule to Task Information
+  var tdc = new TaskerDurationCalculator();
+  var today = new GlideDateTime().getDate();
+  
+  // find the end date in the schedule
+  var dayInSchedule = tdc.calculateDateOfAddedBusinessDays(null, daysBeforeTaskAcceptanceIsOverdue, today);
 
   //------------------------------------------------------------------------------------------------------------------
   // Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
   // Get the list of OUs where the current user is a Task Manager
   var primary_assigneeFilter = "primary_assigneeIN";
   var taskSystemSettings = new tasking_System_Settings_Scripts();
-  primary_assigneeFilter += taskSystemSettings.getMyOUTaskManagers(u).join(",");
+	var aMyOUTaskManager = taskSystemSettings.getMyOUTaskManagers(u);
+	
+	var filter = "primary_assigneeIN" + aMyOUTaskManager.join(",") + 'state=1^suspense_dateISNOTEMPTY^suspense_date<='+ dayInSchedule;
+	
+	
+	if(isGTA){
+    // load all items and use the sytem wide default for the delay days
+		filter = 'state=1^suspense_dateISNOTEMPTY^suspense_date<='+ dayInSchedule;
+  }
+	
+	var aOUSchedules = tdc.getOUsWithScheduleOverride(aMyOUTaskManager);
 
-  var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-  if(isGTA)
-    primary_assigneeFilter += "^ORprimary_assignee.tasking_authoritiesISEMPTY"
-
-  var filter = 'state=1^' + primary_assigneeFilter + '^suspense_dateRELATIVELE@dayofweek@ahead@'+daysBeforeTaskAcceptanceIsOverdue;
+  if(aOUSchedules.length > 0) {
+    for (i=0; i<aOUSchedules.length; i++) {
+      var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+      if(grOU.get(aOUSchedules[i].ouId)){
+        var overrideDayInSchedule = tdc.calculateDateOfAddedBusinessDays(grOU, daysBeforeTaskAcceptanceIsOverdue, today);
+        filter += '^NQprimary_assignee=' + aOUSchedules[i].ouId + '^state=1^suspense_dateISNOTEMPTY^suspense_date<='+overrideDayInSchedule;
+      }
+    }
+  }
 
   var tbf = new TaskerBannerFilters();
 
@@ -70,7 +91,7 @@ bannerAcceptanceOverdue(data);
         <sys_created_on>2018-05-17 17:26:13</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>1b20d40fdb069f00bb8ee536ca9619bb</sys_id>
-        <sys_mod_count>134</sys_mod_count>
+        <sys_mod_count>136</sys_mod_count>
         <sys_name>Acceptance Overdue</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -78,7 +99,7 @@ bannerAcceptanceOverdue(data);
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_rectangle_menu_item_1b20d40fdb069f00bb8ee536ca9619bb</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-21 18:05:33</sys_updated_on>
+        <sys_updated_on>2021-09-09 13:30:04</sys_updated_on>
         <table/>
         <type>scripted</type>
         <url/>
