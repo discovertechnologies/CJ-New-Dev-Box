@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Task_Business_Rules</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script include will contain all of the Task table business rules&#13;
+&#13;
+Currently there are too many Business rules on the task table.  It is impacting performance and making it confusing to see the flow.  Over the 2.7 through 3.2 releases we will move all of the business rules into this script include to clean up, streamline and simplify the rules associated with tasks being added.</description>
+        <name>Task_Business_Rules</name>
+        <script><![CDATA[var Task_Business_Rules = Class.create();
+Task_Business_Rules.prototype = {
+    initialize: function() {
+		this.tcs = new TaskerCommonScriptingMethods();
+    },
+
+	stateChangeWorkNote: function(current, previous){
+		// if the states are the same do not add to the worknote
+		if(current.state == previous.state)
+			return;
+		var workNote;
+		if(previous.getDisplayValue('state') == ''){
+			workNote = gs.getMessage('State created in state {0}. ', [current.getDisplayValue('state')]);
+		} else{
+			workNote = gs.getMessage('State changed from {0} to {1}. ', [previous.getDisplayValue('state'), current.getDisplayValue('state')]);
+		}
+		
+		switch(current.state){
+			case this.tcs.UNASSIGNED_STATE:
+				switch (previous.state){
+					case this.tcs.REJECTED_ASSIGNMENT_STATE, this.tcs.REJECTED_PRIMARY_ASSIGNEE_STATE:
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:\n New {3}: {4}',
+								[current.getLabel('primary_assignee'), gs.getUserDisplayName(), current.getLabel('primary_assignee'),
+									current.getLabel('primary_assignee'),current.getDisplayValue('primary_assignee')]);
+						break;
+					case this.tcs.WORK_IN_PROGRESS_STATE, this.tcs.IN_REVIEW_STATE, this.tcs.REWORK_STATE:
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:\n New {3}: {4}',
+								[current.getLabel('assigned_to'), gs.getUserDisplayName(), current.getLabel('assigned_to'),
+									current.getLabel('assigned_to'),current.getDisplayValue('assigned_to')]);
+						break;
+					case this.tcs.ASSIGNED_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				break;
+			case this.tcs.ASSIGNED_STATE:
+				switch (previous.state){
+					case this.tcs.REJECTED_ASSIGNMENT_STATE, this.tcs.UNASSIGNED_STATE:
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:\n New {3}: {4}',
+								[current.getLabel('assigned_to'), gs.getUserDisplayName(), current.getLabel('assigned_to'),
+									current.getLabel('assigned_to'),current.getDisplayValue('assigned_to')]);
+						break;
+					case this.tcs.REJECTED_PRIMARY_ASSIGNEE_STATE:
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:\n New {3}: {4}',
+								[current.getLabel('primary_assignee'), gs.getUserDisplayName(), current.getLabel('primary_assignee'),
+									current.getLabel('primary_assignee'),current.getDisplayValue('primary_assignee')]);
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:\n New {3}: {4}',
+								[current.getLabel('assigned_to'), gs.getUserDisplayName(), current.getLabel('assigned_to'),
+									current.getLabel('assigned_to'),current.getDisplayValue('assigned_to')]);
+						break;
+					case this.tcs.ACCEPTED_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				break;
+			case this.tcs.ACCEPTED_STATE:
+				switch (previous.state){
+					case this.tcs.WORK_IN_PROGRESS_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				
+				break;
+			case this.tcs.REJECTED_PRIMARY_ASSIGNEE_STATE:
+				switch (previous.state){
+					case this.tcs.UNASSIGNED_STATE_STATE:
+						workNote += gs.getMessage('\n{0} was updated by {1}\n Previous {2}:{3}\n New {3}: {4}',
+								[current.getLabel('primary_assignee'), gs.getUserDisplayName(), current.getLabel('primary_assignee'),
+								previous.getDisplayValue('primary_assignee'),current.getLabel('primary_assignee'),
+								current.getDisplayValue('primary_assignee')]);
+				}
+				break;
+			case this.tcs.WORK_IN_PROGRESS_STATE:
+				switch (previous.state){
+					case this.tcs.ASSIGNED_STATE, this.tcs.ACCEPTED_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+					case this.tcs.IN_REVIEW_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				break;
+			case this.tcs.IN_REVIEW_STATE:
+				switch (previous.state){
+					case this.tcs.ASSIGNED_STATE, this.tcs.ACCEPTED_STATE, this.tcs.WORK_IN_PROGRESS_STATE, this.tcs.REWORK_STATE:
+						workNote += gs.getMessage('\n{0}  has been sent to review by {1}: {2}',
+								[current.getDisplayValue('number'), gs.getUserDisplayName(), current.getDisplayValue('response')]);
+						break;
+				}
+				break;
+			case this.tcs.REWORK_STATE:
+				switch (previous.state){
+					case this.tcs.IN_REVIEW_STATE:
+						workNote += gs.getMessage('\n{0}  has been sent to rework by {1}: {2}',
+								[current.getDisplayValue('number'), gs.getUserDisplayName(), current.getDisplayValue('comments_dt')]);
+						break;
+					case this.tcs.WORK_IN_PROGRESS_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				break;
+			case this.tcs.COMPLETED_STATE, this.tcs.COMPLETED_INCOMPLETE_STATE:
+				switch (previous.state){
+						case this.tcs.ASSIGNED_STATE, this.tcs.ACCEPTED_STATE, this.tcs.WORK_IN_PROGRESS_STATE, this.tcs.IN_REVIEW_STATE, this.tcs.REWORK_STATE:
+						// nothing additoinal here, only from to is required
+						break;
+				}
+				break;
+			case this.tcs.CANCELLED_STATE:
+				workNote += gs.getMessage('\nThis task has been cancelled by {0}: {1}',
+							[gs.getUserDisplayName(), current.getDisplayValue('u_cancellation_reason')]);
+				break;				
+				
+		}
+		return workNote;
+	},
+	
+    type: 'Task_Business_Rules'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-09-11 00:28:25</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>ee9f4745db22f81087f2892d13961971</sys_id>
+        <sys_mod_count>10</sys_mod_count>
+        <sys_name>Task_Business_Rules</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_ee9f4745db22f81087f2892d13961971</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-11 05:50:04</sys_updated_on>
+    </sys_script_include>
+</record_update>
