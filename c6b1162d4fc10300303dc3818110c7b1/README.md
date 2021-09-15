@@ -28,5 +28,5 @@ If you find yourself unable to import your repository due to the presence of fil
    * Process Flow Formatter
    * Text Index
    * Task table schema
-   * System Import Sets
    * Service Management Basics
+   * System Import Sets
