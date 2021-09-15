@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function($rootScope, $scope, $timeout, $location, $log, $window, spUtil, nowAttachmentHandler, spAriaUtil, spNavStateManager) {
+        <client_script><![CDATA[function($rootScope, $scope, $timeout, spAriaFocusManager, $http, amb, spModal, $uibModal, $location, $log, $window, spUtil, spAriaUtil, spNavStateManager) {
 	// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
 	// Script Continued Below
 	//------------------------------------------------------------------------------------------------------------------------
@@ -34,27 +34,12 @@
 		loadItem: '$sp.list.click'
 	};
 	
-	var tableId = $scope.data.sys_id != -1 ? $scope.data.sys_id : ($scope.data.f ? $scope.data.f._attachmentGUID : -1);
-	spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + tableId, function (response, data) {
-		$scope.attachmentHandler.getAttachmentList();
-		if (response.data) {
-			var options = {};
-			options.operation = response.data.operation;
-			options.filename = response.data.display_value;
-			options.sys_id = tableId;
-			options.table = $scope.data.table;
-			options.state = (response.data.record && response.data.record.state) ? response.data.record.state.value : "";
-			if (options.operation === 'update' && options.state === 'not_available')
-				$rootScope.$broadcast("attachment.updated", options);
-		}
-	});
-
 	$rootScope.$on('$sp.html.editor.progress', function(e, conf) {
 		$scope.submitting = conf.state;
 	});
 
 	$scope.set_sys_id = function(sys_id) {
-		loadForm($scope.data.table, sys_id).then(constructResponseHandler(response));
+		loadForm($scope.data.table, sys_id);
 	};
 
 	$scope.getButtonClass = function(action) {
@@ -145,30 +130,34 @@
 	}
 
 	$scope.$on("spModel.uiActionComplete", function(evt, response, savedFormSysId) {
-		if (!response.isInsert &&  ($scope.data.sys_id !== savedFormSysId))
+		if ($scope.data.sys_id !== savedFormSysId)
 			return;
 
 		$scope.submitting = false;
 		if (response.isActionAborted)
 			return;
-
-		var sysID = (response.isInsert) ? response.sys_id : $scope.data.sys_id;
-		loadForm($scope.data.table, sysID).then(constructResponseHandler(response));
+		
+		// UI Action just completed move to the next item if it exists
+		//    If no more next items, go to previous.  If now more previous show splash
+		var sysID;
+		if(savedFormSysId == $scope.data.sys_id  && c.data.nextRec.sys_id != ''){
+			// move next
+			sysID = c.data.nextRec.sys_id;
+		} else if(savedFormSysId == $scope.data.sys_id  && c.data.prevRec.sys_id != '') {
+			sysID = c.data.prevRec.sys_id;
+		} else {
+			// here is where we would load the landing page b/c there are no more requests to process
+			sysID = -1;
+		}
+		$scope.set_sys_id(sysID);
 	});
 
-	function constructResponseHandler(response) {
+	function constructResponseHandler() {
 		return function() {
-			$rootScope.$broadcast("sp.form.submitted", {sys_id: (response.isInsert) ? response.sys_id : $scope.data.sys_id});
+			$rootScope.$broadcast("sp.form.submitted", {sys_id: $scope.data.sys_id});
 			var message;
 			var eventName = "sp.form.record.updated";
-			if (response.isInsert) {
-				message = $scope.data.recordAddedMsg;
-				var search = $location.search();
-				search.sys_id = response.sys_id;
-				search.spa = 1;
-				$location.search(search).replace();
-			} else
-				message = $scope.data.updatedMsg;
+			message = $scope.data.updatedMsg;
 
 			$scope.data.hideRelatedLists = hideRelatedLists();
 			$scope.$emit(eventName, $scope.data.f._fields, $scope.data.sys_id);
@@ -180,9 +169,6 @@
 	}
 
 	var ctrl = this;
-	// switch forms
-	// // STRY0108629 - this widget does not watch the standard list event
-	// var unregister = $scope.$on('$sp.list.click', onListClick);
 	
 	$scope.$on("$destroy", function() {
 		unregister();
@@ -194,16 +180,15 @@
 			$scope.triggerUIAction(primaryAction);
 	}
 
-	function onListClick(evt, arg) {
-		loadForm(arg.table, arg.sys_id);
-	}
-
 	function loadForm(table, sys_id) {
 		var f = {};
+		$scope.data.use_Discover_Controller_URL = c.data.use_Discover_Controller_URL;
 		$scope.data.table = f.table = table;
 		$scope.data.sys_id = f.sys_id = sys_id;
-		f.view = $scope.data.view;
-		return $scope.server.update().then(setupAttachmentHandler);
+		$scope.data.view =	f.view = c.data.view;
+		$scope.server.update().then(function(){
+			$scope.go(c.data.send_table, c.data.send_sys_id)
+		});
 	}
 
 	function openRelatedList(e, queryString) {
@@ -233,15 +218,15 @@
 	}
 
 	$scope.go = function(table, sys_id) {
+		
 		var parms = {};
 		parms.table = table;
 		parms.sys_id = sys_id;
 		$scope.ignoreLocationChange = true;
 		$scope.$emit(eventNames.loadItem, parms);
-		$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
+//		$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
 		$rootScope.$broadcast(eventNames.loadItem, parms);
 	};
-
 
 	$scope.$on('spModel.gForm.initialized', function(e, gFormInstance) {
 		initForm(gFormInstance);
@@ -289,30 +274,6 @@
 
 	function clearStatus() {
 		$scope.status = "";
-	}
-
-	function setupAttachmentHandler() {
-		$scope.attachmentHandler = new nowAttachmentHandler(appendDone, appendError);
-
-		$scope.$evalAsync(function() {
-			$scope.attachmentHandler.setParams($scope.data.table, $scope.data.f._attachmentGUID, 1024 * 1024 * $scope.data.maxAttachmentSize);
-		});
-
-		$scope.$on('dialog.upload_too_large.show', function(e) {
-			$log.error($scope.data.largeAttachmentMsg);
-			spUtil.addErrorMessage($scope.data.largeAttachmentMsg);
-		});
-	}
-	setupAttachmentHandler();
-
-	function appendDone() {
-		// don't know here whether upload succeeded, so can't show msg either way
-		$scope.$broadcast("sp.attachments.update", $scope.data.f._attachmentGUID);
-	}
-
-	function appendError(error) {
-		$scope.errorMessages.push(error);
-		spUtil.addErrorMessage(error.msg + error.fileName);
 	}
 
 	if ($scope.data.f.title) {
@@ -469,22 +430,15 @@
 // 2.7.0 | 2021-08-23 | raj  | STRY0108629 - DIA- Org Hierarchy Request- Respond Hierarchy Update Bifold
 //                                         New widget for this capability
 //// form functionality - URL parameter driven
-(function($sp, input, data, options, gs) {
+(function(sp, input, data, options, gs) {
   /* "use strict"; -linter issues */
   // populate the 'data' variable
 	data.saveChangesMessage = gs.getMessage('Tasker - Modal Save Changes Message');
 	
-	data.attachmentUploadSuccessMsg = gs.getMessage("Attachment upload was successful");
 	data.recordAddedMsg = gs.getMessage("Record Added");
 	data.updatedMsg = gs.getMessage("updated_uppercase");
 	data.exportPDFMsg = gs.getMessage("Export to PDF");
 	data.exportPDFLandMsg = gs.getMessage("Export to PDF (landscape)");
-	data.addAttachmentMsg = gs.getMessage("Add an attachment");
-	data.maxAttachmentSize = parseInt(gs.getProperty("com.glide.attachment.max_size", 1024));
-	if (isNaN(data.maxAttachmentSize))
-		data.maxAttachmentSize = 24;
-	data.largeAttachmentMsg = gs.getMessage("Attached files must be smaller than {0} - please try again", "" + data.maxAttachmentSize + "MB");
-	data.attachmentSuccessMsg = gs.getMessage("Attachment successfully uploaded");
 	
 	// *************** Customization Start ***************************
 	// RAJ - Removed from Standard form widget as this doesn't work in scoped app
@@ -492,68 +446,55 @@
 	// *************** Customization End ***************************
 	
 	data.emptyStateTemplate = options.empty_state_template;
-	data.disableUIActions = options.disableUIActions === "true";
 	data.hideRelatedLists = options.hideRelatedLists || false;
-	
-	// *************** Customization Start ***************************
-	// RAJ - added to improve ability to open in a modal
-	// rebuild the widget to be a modal
-	data.table = (input || {}).table || (options || {}).table;	
-	data.sys_id = (input || {}).sys_id || (options || {}).sys_id;	
-	data.view = (input || {}).view || (options || {}).view;	
-	// STRY0108629 - if the Discover Controller URL is set, then override URL parameters
-	data.use_Discover_Controller_URL = (input || {}).use_Discover_Controller_URL || (options || {}).use_Discover_Controller_URL;	
-
-	if(data.use_Discover_Controller_URL){
-		data.dcu_sys_id = (input || {}).dcu_sys_id || (options || {}).dcu_sys_id;	
-		data.dcu_table = (input || {}).dcu_table || (options || {}).dcu_table;
-		data.dcu_view = (input || {}).dcu_view || (options || {}).dcu_view;	
-		data.dcu_ref = (input || {}).dcu_ref || (options || {}).dcu_ref;	
-	}
-
 	data.disableUIActions = (input || {}).disableUIActions || (options || {}).disableUIActions || false;	
 	data.hideRelatedLists = (input || {}).hideRelatedLists || (options || {}).hideRelatedLists || false;
 	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions;	
 	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;	
-	data.hideAttachmentBtn = (input || {}).hideAttachmentBtn || (options || {}).hideAttachmentBtn;	
 	data.size = (input || {}).size || (options || {}).size;	
 	data.isModal = (input || {}).isModal || (options || {}).isModal;
+	
+	// *************** Customization Start ***************************
+	// RAJ - added to improve ability to open in a modal
+	// rebuild the widget to be a modal
+	data.table = (input || {}).table || (options || {}).table || $sp.getParameter("t") || $sp.getParameter("table") || $sp.getParameter("sl_table");
+	data.sys_id = (input || {}).sys_id || (options || {}).sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
+	data.view = (input || {}).view || (options || {}).view || $sp.getParameter("view") || $sp.getParameter("v"); // no default	
+	// STRY0108629 - if the Discover Controller URL is set, then override URL parameters
+	data.use_Discover_Controller_URL = (input || {}).use_Discover_Controller_URL || (options || {}).use_Discover_Controller_URL;	
+
+	if(data.use_Discover_Controller_URL){
+		data.dcu_sys_id = (input || {}).dcu_sys_id || (options || {}).dcu_sys_id || $sp.getParameter("dcu_sys_id");
+		data.dcu_table = (input || {}).dcu_table || (options || {}).dcu_table || $sp.getParameter("dcu_table");
+		data.dcu_view = (input || {}).dcu_view || (options || {}).dcu_view || $sp.getParameter("dcu_view");	
+		data.dcu_ref = (input || {}).dcu_ref || (options || {}).dcu_ref || $sp.getParameter("dcu_ref");
+	}
+	
 	// *************** Customization end ***************************
 	
-	var isPopup = false;
 // YOU ARE HERE... YOU JUST DECIDED IT IS BETTER TO OVERRIDE DATA TABLE AND LEAVE THE REST OF THE WIDGET USING DATA TABLE AS THE REPLACED DCU
 // THEN SET THE SENDER TABLE, SYS_ID, VIEW
 // THEN ON ALL PUSHES TO THE URL AND BROADCAST SEND THE SENDER
 	if (input) {
+		data.use_Discover_Controller_URL = input.use_Discover_Controller_URL;
 		data.table = input.table;
 		data.sys_id = input.sys_id;
 		data.view = input.view;
+		
 		// if sys_id changed, reset the dcu_sys_id so it gets reloaded below
 		if(data.use_Discover_Controller_URL){
 			data.dcu_sys_id = input.sys_id;
 		}
 		var result = {};
 		if (input._fields) {
-			result = $sp.saveRecord(input.table, input.sys_id, input._fields);
-			data.sys_id = result.sys_id;
+//			result = $sp.saveRecord(input.table, input.sys_id, input._fields);
+//			data.sys_id = result.sys_id;
 		}
 
-		if (input.sys_id == '-1')
-			data.isNewRecord = true;
-		if (input.isPopup === true)
-			isPopup = true;
-	} else {
-		if(data.use_Discover_Controller_URL){
-			data.dcu_sys_id = options.dcu_sys_id || $sp.getParameter("dcu_sys_id");
-			data.dcu_table = options.dcu_table || $sp.getParameter("dcu_table");
-			data.dcu_view = options.dcu_view || $sp.getParameter("dcu_view");
-			data.dcu_ref = options.dcu_ref || $sp.getParameter("dcu_ref");
+		if (input.sys_id == '-1'){
+			// if here, then need to load empty page saying no more requests
 		}
-		data.table = options.table || $sp.getParameter("t") || $sp.getParameter("table") || $sp.getParameter("sl_table");
-		data.sys_id = options.sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
-		if (!data.sys_id && options.sys_id_required != "true")
-			data.sys_id = "-1";
-		data.view = options.view || $sp.getParameter("view") || $sp.getParameter("v"); // no default
+
 	}
 
 	data.query = $sp.getParameter("query") || options.query || "";
@@ -571,7 +512,10 @@
 		data.table = data.dcu_table;
 		data.view = data.dcu_view;
 	}
-	
+
+	if (!data.sys_id && options.sys_id_required != "true")
+		data.sys_id = "-1";  // load empty page...
+
 	if (!data.table)
 		return;
 	
@@ -621,7 +565,7 @@
 	//	data.canAttach = hasRecordAccess && gs.hasRole(gs.getProperty('glide.attachment.role')) && !GlideTableDescriptor.get(data.table).getED().getBooleanAttribute("no_attachment");
 	// *************** Customization End ***************************
 	//	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view, isPopup);
-	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view);
+	data.f = $sp.getForm(data.table, data.sys_id, '', data.view);
 
 	// *************** Customization Start ***************************
 	// RAJ - Removed from Standard form widget as this doesn't work in scoped app
@@ -714,15 +658,17 @@
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-08-29 17:17:53</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>14d24cd5dbd6b45087f2892d139619f5</sys_id>
-        <sys_mod_count>83</sys_mod_count>
+        <sys_mod_count>133</sys_mod_count>
         <sys_name>Simple Processing Form</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_14d24cd5dbd6b45087f2892d139619f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-31 11:44:38</sys_updated_on>
+        <sys_updated_on>2021-09-15 12:49:42</sys_updated_on>
         <template><![CDATA[<div ng-if="::!data.isValid && !data.emptyStateTemplate" class="panel panel-default">
   <div class="panel-body wrapper-lg text-center">
     <span ng-if="!data.tableUnsupported">${Record not found}</span>
@@ -847,12 +793,10 @@
       <span>{{status}}</span>
       <button ng-if="getPrimaryAction()" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-primary action-btn pull-right" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">${Save} <span ng-if="saveButtonSuffix">(${{{saveButtonSuffix}}})</span></button>
       <div style="clear: both;"></div>
-<!--      
       <div ng-if="mandatory.length" class="alert alert-info" style="margin-top: .5em" aria-live="polite" aria-atomic="true">
         <span ng-if="mandatory.length > 0">${Required information} </span>
         <span ng-repeat="f in mandatory" class="label sc-field-error-label" ng-bind="f.label"></span>
       </div>
--->
     </div>
   </div>
 </div>]]></template>
