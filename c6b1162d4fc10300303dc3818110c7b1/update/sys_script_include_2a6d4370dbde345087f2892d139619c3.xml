@@ -8,7 +8,7 @@
         <description>2.7&#13;
 STRY0108329 - added for OU requests&#13;
 STRY0108513 - DIA- Org Hierarchy Request- Response Form Modal&#13;
-</description>
+STRY0101474 - Stretch- Add Create Subtask Button to Task Tree View, Template Tree View</description>
         <name>OU_uiAction</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -38,11 +38,27 @@ OU_uiAction.prototype = {
 		request.u_requested_by = gs.getUserID();
 		request.u_requested = new GlideDateTime();
 		request.insert();
+		// STRY0101474 
+		this.updateOUOpenRequestCount(request);
 		gs.addInfoMessage(gs.getMessage('Request Submitted'));
 	},
 
 	uiAction_AcceptOURequest: function(request) {
-		var errorMessage = gs.getMessage('Tasker - Request {0} was not marked complete.  It is most likely a permissions issue.',[request.number]);
+		// STRY0101474 - did some cleanup
+		this._RespondOURequest(request, 
+								gs.getMessage('Tasker - Request {0} was not marked complete.  It is most likely a permissions issue.',[request.number]), 
+								gs.getMessage('Approved'));
+	},	
+
+	uiAction_RejectOURequest: function(request) {
+		// STRY0101474 - did some cleanup
+		this._RespondOURequest(request, 
+								gs.getMessage('Tasker - Request {0} was not rejected.  It is most likely a permissions issue.',[request.number]), 
+								gs.getMessage('Rejected'));
+	},
+	
+	// STRY0101474 - did some cleanup
+	_RespondOURequest: function(request, errorMessage, response) {
 		if(request.u_ou_parent) {
 			var allow = new uiConditionCheck().RespondOURequest(request);
 			if (allow) {
@@ -50,38 +66,41 @@ OU_uiAction.prototype = {
 				// TODO - multilanguage - this might be enough
 				request.u_status = gs.getMessage('Completed');
 				// TODO - multilanguage - this might be enough
-				request.u_response = gs.getMessage('Approved');
+				request.u_response = response;
 				request.u_responded_by = gs.getUserID();
 				request.u_responded = todaysDate;
 				request.update();
+				
+				// STRY0101474 
+				this.updateOUOpenRequestCount(request);
+
 				gs.addInfoMessage(gs.getMessage('Tasker - The Organizational Request for ({0}) request to: ({1})  was completed by {2} with the following comments: {3}', [request.getDisplayValue('u_ou_parent'),
 									request.getDisplayValue('u_request_type'), gs.getUserDisplayName(), this.trimComments(request.u_response_comments)])
 									);
 			} else gs.addErrorMessage(errorMessage);
 		} else gs.addErrorMessage(errorMessage);
 	},	
-
-	uiAction_RejectOURequest: function(request) {
-		var errorMessage = gs.getMessage('Tasker - Request {0} was not rejected.  It is most likely a permissions issue.',[request.number]);
+	
+	// STRY0101474 - added an indicator to show outstanding request exists
+	updateOUOpenRequestCount: function(request){
+		// note: cannot be glide record secure.  we need to update this count and the user does not have permission to update the OU.
+		var gaOU = new GlideAggregate('x_153465_discovert_tasker_requests');
+		gaOU.addQuery('u_ou_parent',request.getValue('u_ou_parent'));
+		gaOU.addQuery('u_status','In progress');
+		gaOU.addAggregate('COUNT');
+		gaOU.query();
+		var numOpenRequests = 0;
+		if(gaOU.next())
+			numOpenRequests = gaOU.getAggregate('COUNT');
 		
-		if(request.u_ou_parent) {
-			var allow = new uiConditionCheck().RespondOURequest(request);
-			if (allow) {
-				var todaysDate = new GlideDateTime();
-				// TODO - multilanguage - this might be enough
-				request.u_status = gs.getMessage('Completed');
-				// TODO - multilanguage - this might be enough
-				request.u_response = gs.getMessage('Rejected');
-				request.u_responded_by = gs.getUserID();
-				request.u_responded = todaysDate;
-				request.update();
-				gs.addInfoMessage(requestInfoMessage);
-				
-				gs.addInfoMessage(gs.getMessage('Tasker - The Organizational Request for ({0}) request to: ({1})  was completed by {2} with the following comments: {3}', [request.getDisplayValue('u_ou_parent'),
-									request.getDisplayValue('u_request_type'), gs.getUserDisplayName(), this.trimComments(request.u_response_comments)])
-									);
-			} else gs.addErrorMessage(errorMessage);
-		} else gs.addErrorMessage(errorMessage);
+		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		if(grOU.get(request.getValue('u_ou_parent'))){
+			if(parseInt(grOU.u_outstanding_request_count)!=numOpenRequests){
+				grOU.u_outstanding_request_count = numOpenRequests;
+				grOU.update();
+			}
+		}
+		
 	},
 	
     type: 'OU_uiAction'
@@ -91,7 +110,7 @@ OU_uiAction.prototype = {
         <sys_created_on>2021-08-28 18:52:45</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>2a6d4370dbde345087f2892d139619c3</sys_id>
-        <sys_mod_count>15</sys_mod_count>
+        <sys_mod_count>19</sys_mod_count>
         <sys_name>OU_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -99,6 +118,6 @@ OU_uiAction.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_2a6d4370dbde345087f2892d139619c3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-15 05:46:49</sys_updated_on>
+        <sys_updated_on>2021-09-18 15:42:06</sys_updated_on>
     </sys_script_include>
 </record_update>

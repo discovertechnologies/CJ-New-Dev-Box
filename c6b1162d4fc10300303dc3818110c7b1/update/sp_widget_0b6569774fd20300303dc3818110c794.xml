@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function($scope, $location, $rootScope,spModal, spUtil) {
+        <client_script><![CDATA[function($scope, $location, $rootScope,spModal,$uibModal, spUtil) {
 	//------------------------------------------------------------------------------------------------------------------------
 	// COMPANY: DISCOVER TECHNOLOGIES
 	// CUSTOMIZED BY: KARINA TORRES
@@ -56,6 +56,30 @@
 	contactsOUListwidgetObject.table = 'x_153465_discovert_organizational_contacts';
 	contactsOUListwidgetObject.filter = 'u_contact_ou=';  // needs key added inline
 	contactsOUListwidgetObject.view = 'Default View';	
+	var OUReportwidgetObject = {};
+	OUReportwidgetObject.modalType = "report";
+	OUReportwidgetObject.title = ''; // needs data to set
+	OUReportwidgetObject.o = 'title';
+	OUReportwidgetObject.d = 'asc';
+	OUReportwidgetObject.table = 'sys_report';
+	OUReportwidgetObject.filter = 'primary_assignee=';  // needs key added inline
+	OUReportwidgetObject.view = 'Default View';
+	var relatedTaskOUListwidgetObject = {};
+	relatedTaskOUListwidgetObject.modalType = "list";
+	relatedTaskOUListwidgetObject.title = ''; // needs data to set
+	relatedTaskOUListwidgetObject.o = 'number';
+	relatedTaskOUListwidgetObject.d = 'desc';
+	relatedTaskOUListwidgetObject.table = 'x_153465_discovert_route_task_instance';
+	relatedTaskOUListwidgetObject.filter = '	primary_assignee=';  // needs key added inline
+	relatedTaskOUListwidgetObject.view = 'Default View';		
+	var requestChangeFormwidgetObject = {};
+	requestChangeFormwidgetObject.modalType = "form";
+	requestChangeFormwidgetObject.title = ''; // needs data to set
+	requestChangeFormwidgetObject.table = 'x_153465_discovert_tasker_requests';
+	requestChangeFormwidgetObject.sys_id = -1;
+	requestChangeFormwidgetObject.u_ou_parent=''; // needs key added inline
+	requestChangeFormwidgetObject.view = 'ou_requesttop';	
+	
 	var createNewFormwidgetObject = {};
 	createNewFormwidgetObject.modalType = "form";
 	createNewFormwidgetObject.title = ''; // needs data to set
@@ -63,7 +87,6 @@
 	createNewFormwidgetObject.sys_id = -1; 
 	createNewFormwidgetObject.parent=''; // needs key added inline
 	createNewFormwidgetObject.view = 'Simple';	
-	
 	//------------------------------------------------------------------------------------------------------------------------
 
 	// RJ -ET - Story 4
@@ -100,7 +123,8 @@
 						name.data.changes.includes("level") ||
 						name.data.changes.includes("parent") ||
 						name.data.changes.includes("u_ou_hiearchy_administrators") ||
-						name.data.changes.includes("tasking_authorities")
+						name.data.changes.includes("tasking_authorities") ||
+						name.data.changes.includes("u_outstanding_request_count")
 					 ){
 			refreshDiagram = true;			
 		}
@@ -266,9 +290,14 @@
 		return toolDataListJSON;
 	}
 
-	function addImage(imgSrc, opacity, toolTiptextHeader, toolTipBindingList, showFormModal, showListModal) {
+	function addImage(imgSrc, opacity, toolTiptextHeader, toolTipBindingList) {
 		var $go = go.GraphObject.make; // for conciseness in defining templates
 // NOTE: put go.picture in a function and pass what you need to clean this up
+
+		// STRY0101474 - if the image wasn't laoded, don't add the image NOTE: we may wat to put placeholder here IF it is defined to keep the space
+		if(imgSrc == undefined){
+			imgSrc = '';
+		}
 		var imageJSON =
 			$go(go.Picture, 
 				{margin: new go.Margin(5, 3, 5, 3),
@@ -276,7 +305,7 @@
 				 source: imgSrc,
 				 opacity: opacity}, 
 					new go.Binding("opacity", toolTipBindingList, function(data){
-													var lOpacity;
+														var lOpacity;
 														if(toolTipBindingList == ''){
 															// for now, leave always on
 															lOpacity = opacity;
@@ -284,8 +313,28 @@
 															lOpacity = data != ''? icon_opacity_normal:0.0;
 														}
 														return lOpacity != ''? icon_opacity_normal:0.0;
+													}),
+					new go.Binding("source", '', function(data){
+													var lSource;
+													switch (imgSrc){
+														case c.data.ouProcessRequestImage:
+															lSource = data.outStandingRequestCount > 0?imgSrc:'';
+															break;
+														case c.data.ouRequestChangeImage:
+															lSource = !data.isAdmin?imgSrc:'';
+															break;
+														case c.data.createSubOUImage:
+															lSource = data.isAdmin?imgSrc:'';
+															break;
+														case c.data.dividerImage:
+															lSource = data.isAdmin?imgSrc:'';
+															break;
+														default:
+															lSource = imgSrc;
+															break;
 													}
-												),
+													return lSource;
+												}),					
 				{mouseEnter: function(e, obj) {
 					 obj.saveOpacity = obj.opacity;
 					 obj.opacity = icon_opacity_hover;
@@ -296,40 +345,70 @@
 				 },
 				 
 				 click: function(e, obj) {
-					 if(showFormModal){
-// todo, review modal here
-						 var objFormWidget = null;
-						 if(obj.source == c.data.ouInformationImage){
-							 objFormWidget = JSON.parse(JSON.stringify(informationFormwidgetObject));
-							 objFormWidget.title = c.data.informationModal;
-							 objFormWidget.sys_id = obj.part.data.key; 
-						 } else if(c.data.createSubOUImage){
-							 objFormWidget = JSON.parse(JSON.stringify(createNewFormwidgetObject));
-							 objFormWidget.title = c.data.newSubOUModal;
-							 objFormWidget.sys_id = -1; 
-							 objFormWidget.parent = obj.part.data.key; 
-						 }
-						 openFormModal(objFormWidget); 
-					 } else if (showListModal){
-						 var objListWidget = null;
-						 switch (obj.source){
-							 case c.data.ouSubOUImage:
-								 objListWidget = JSON.parse(JSON.stringify(subOUListwidgetObject));
-								 objListWidget.title = c.data.subOUModal + ': ' + obj.part.data.name;
-								 objListWidget.filter = objListWidget.filter + obj.part.data.key; 
-								 break;
-							 case c.data.ouMembersImage:
-								 objListWidget = JSON.parse(JSON.stringify(membersOUListwidgetObject));
-								 objListWidget.title = c.data.memberOUModal + ': ' + obj.part.data.name;
-								 objListWidget.filter = objListWidget.filter + obj.part.data.key; 
-								 break;
-							 case c.data.ouContactsImage:
-								 objListWidget = JSON.parse(JSON.stringify(contactsOUListwidgetObject));
-								 objListWidget.title = c.data.contactsOUModal + ': ' + obj.part.data.name;
-								 objListWidget.filter = objListWidget.filter + obj.part.data.key;
-								 break;
-						 }
-						 openListModal(objListWidget);
+					 var objWidget = null;
+					 switch (obj.source){
+						 case c.data.ouInformationImage:
+							 objWidget = JSON.parse(JSON.stringify(informationFormwidgetObject));
+							 objWidget.title = c.data.informationModal;
+							 objWidget.sys_id = obj.part.data.key;
+							 openFormModal(objWidget); 
+							 break;
+						 case c.data.ouSubOUImage:
+							 objWidget = JSON.parse(JSON.stringify(subOUListwidgetObject));
+							 objWidget.title = c.data.subOUModal + ': ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key;
+							 openListModal(objWidget);
+							 break;
+						 case c.data.ouMembersImage:							 
+							 objWidget = JSON.parse(JSON.stringify(membersOUListwidgetObject));
+							 objWidget.title = c.data.memberOUModal + ': ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key; 
+							 openListModal(objWidget);
+							 break;
+						 case c.data.ouContactsImage:
+							 objWidget = JSON.parse(JSON.stringify(contactsOUListwidgetObject));
+							 objWidget.title = c.data.contactsOUModal + ': ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key;
+							 openListModal(objWidget);
+							 break;
+						 case c.data.ouReportImage:
+							 objWidget = JSON.parse(JSON.stringify(OUReportwidgetObject));
+							 objWidget.title = c.data.reportOUModal + ' - ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key; 
+							 openReportModal(objWidget);
+							 break;
+						 // STRY0101474
+						 case c.data.ouProcessRequestImage:
+// NOTE - TODO - need to get OU id into filter
+var url = '../discovertaskerportal?id=discover_simple_processing_form&dcu_sys_id=&dcu_table=x_153465_discovert_tasker_requests&dcu_ref=u_ou_parent&dcu_view=&query=u_ou_parent=' + obj.part.data.key + '^u_status=In progress&o=u_requested&d=asc';
+							 window.open(url, '_blank');
+							 break;
+						 case c.data.ouRelatedTasksImage:
+							 objWidget = JSON.parse(JSON.stringify(relatedTaskOUListwidgetObject));
+							 objWidget.title = c.data.relatedTasksOUModal + ': ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key;
+							 openListModal(objWidget);
+							 break;
+
+						 case c.data.ouRequestChangeImage:
+							 objWidget = JSON.parse(JSON.stringify(requestChangeFormwidgetObject));
+							 objWidget.title = c.data.newOURequestChangeModal;
+							 objWidget.sys_id = -1; 
+							 objWidget.u_ou_parent = obj.part.data.key; 
+							 openFormModal(objWidget); 
+							 break;
+
+						 case c.data.createSubOUImage:
+							 objWidget = JSON.parse(JSON.stringify(createNewFormwidgetObject));
+							 objWidget.title = c.data.newSubOUModal;
+							 objWidget.sys_id = -1; 
+							 objWidget.parent = obj.part.data.key; 
+							 openFormModal(objWidget); 
+							 break;
+							 
+						 // STRY0101474 - used for divider
+						 default:
+							 break;
 					 }
 					 e.handled = true;
 				 }		 
@@ -356,6 +435,7 @@
 				table: widgetObject.table,
 				sys_id: widgetObject.sys_id,
 				parent: widgetObject.parent?widgetObject.parent:'',
+				u_ou_parent: widgetObject.u_ou_parent?widgetObject.u_ou_parent:'',
 				filter: widgetObject.filter?widgetObject.filter:'',
 				view: widgetObject.view,
 				hideRelatedLists: true,
@@ -392,6 +472,44 @@
 			buttons: []
 		});
 	};	
+	
+	openReportModal = function(widgetObject) {
+//alert('RJ - testing - openReportModal: ' + c.data.baseURL + '?id=organizational_report_page');
+		c.modalReportInstance = $uibModal.open({
+//			templateUrl:  c.data.baseURL + 'tcp?id=organizational_report_page',
+			templateUrl:  c.data.baseURL + 'discovertaskerportal?id=discovertasker_dashboard',
+			scope: $scope,
+			size: 'lg'
+		}).closed.then(function(){
+			spUtil.update($scope);
+		});
+		
+		
+/*
+		spModal.open({
+			title: widgetObject.title,
+			message: '',
+			backdrop: 'static',
+
+			widget: 'discovertasker-widget-data-table',
+			widgetInput: {
+				o: widgetObject.o,
+				d:  widgetObject.d,
+				table: widgetObject.table,
+				filter: widgetObject.filter,
+				show_new: true,			
+				open_new_in_modal: true,
+				open_row_details_in_modal: true,
+				view: widgetObject.view,
+				hideAttachmentBtn: true,
+				isModal: true
+			},
+			size: 'lg',
+			buttons: []
+		});
+*/		
+	};	
+	 
 	// RJ -ET - Story 4
 	// Move this into a fucntion to redraw tree when a new node is selected
 	if ($scope.data.id) {
@@ -484,12 +602,17 @@
 													{alignment: go.Spot.TopRight, 
 													 width: 300,
 													 isOpposite: true},
-													addImage(c.data.createSubOUImage, c.data.topIconOpacity, '', '', true, false),
+													addImage(c.data.createSubOUImage, c.data.topIconOpacity, '', ''),
+													// STRY0101474
+													addImage(c.data.dividerImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouRelatedTasksImage, c.data.topIconOpacity, '', ''),
 													addImage(c.data.ouReportImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouContactsImage, c.data.topIconOpacity, '', '', false, true),
-													addImage(c.data.ouMembersImage, c.data.topIconOpacity, '', '', false, true),
-													addImage(c.data.ouSubOUImage, c.data.topIconOpacity, '', '', false, true),
-													addImage(c.data.ouInformationImage, c.data.topIconOpacity, '', '', true, false)
+													addImage(c.data.ouContactsImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouMembersImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouSubOUImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouInformationImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouRequestChangeImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouProcessRequestImage, c.data.topIconOpacity, '', '')
 												 ) // end horizontal panel holding the icons	
 										 ), // end horizontal Panel holding Images and icons
 										// ************************************************************************
@@ -500,8 +623,8 @@
 									$go(go.Panel,  "Horizontal", // Horizontal panel for Task Manager, Administrator and Text
 											{alignment: go.Spot.Left},
 											$go(go.Panel, "Horizontal", {alignment: go.Spot.Left},  // Horizontal panel for Task Manager and Administrator
-													addImage(c.data.taskManagerImage, 1.0, c.data.titleTaskManagers, "taskManagers", false, false),
-													addImage(c.data.ouHABadteImage, 1.0, c.data.titleOUHierarchyAdministrators, "ouHierarchyAdmins", false, false)
+													addImage(c.data.taskManagerImage, 1.0, c.data.titleTaskManagers, "taskManagers"),
+													addImage(c.data.Admin16Image, 1.0, c.data.titleOUHierarchyAdministrators, "ouHierarchyAdmins")
 												 ),	// end horizonal panel for icons
 											$go(go.TextBlock, {alignment: go.Spot.Left, font: fontStyle, stroke: "white", margin: 5,  maxSize: new go.Size(250, 30) },
 													new go.Binding("text", "name"))
@@ -594,6 +717,8 @@
 //
 // 2.7.0 | 2021-08-22 | raj | STRY0108231 - DIA- Visual Indicators for Organizational Hierarchy Admins- Fix Script
 //                                          Changes in Server script, Client Script, HTML
+// 2.7.0 | 2021-09-18 | raj | STRY0101474 - Stretch- Add Create Subtask Button to Task Tree View, Template Tree View
+//																				Changes in Server script and Client Script
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -605,11 +730,15 @@
 	// ONCE COMING FROM OPTIOIN, UPDATE THIS SETTING TO NOT USE PAGE ID, UPDATE
 	// ALL PAGES WHERE FULL SCREEN DESIRED TO TRUE AND THE REST SHOULD BE FINE
 	data.isFullScreen = data.page_id == 'discovertasker_ouhierarchy_full_screeen';
+	data.baseURL = gs.getProperty('glide.servlet.uri');
 	// TODO - GET FROM MESSAGE
 	data.informationModal = gs.getMessage('Organizational Unit Information');
 	data.subOUModal = gs.getMessage('List of Sub OUs');
 	data.memberOUModal = gs.getMessage('List of Members');
 	data.contactsOUModal = gs.getMessage('List of Contacts');
+	data.reportOUModal = gs.getMessage('OU Reports for ');
+	data.relatedTasksOUModal = gs.getMessage('Related Tasks');	
+	data.newOURequestChangeModal = gs.getMessage('Tasker - Title - Request Hierarchy Update');
 	data.newSubOUModal = gs.getMessage('Create New Sub OU');
 	
 	// TODO - ADD TO WIDGET OPTIONS - LEFT OFF FOR NOW
@@ -681,72 +810,56 @@
 	
 	// STRY0108231
 	data.sys_id=data.id;
+	// STRY0101474 
+	var isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
 	
 	var m = getO(gr, null, 1);
 	map.push(m);
 	getLevel1(map, gr.getValue('sys_id'), m.level);
 	
 	// STRY0108231
-	// RAJ - NOTE PERFORMANCE... LOAD THESE 1 TIME AND USE THEM ONCE SET FOR THE SERVER?
+	// RAJ - NOTE performance, load these 1 time, added if logic.  also moved into fucntion to clean up code
 	// --- Get Task Manager Image
-	var grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','TaskManager16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.taskManagerImage=grImage.getDisplayValue();
-	}
-	// --- Get OUHA Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','OUHABadge16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouHABadteImage=grImage.getDisplayValue();
-	}
+	data.taskManagerImage = !data.ouMembersImage?getImage('Tie16.svg'):data.ouMembersImage;
+	// --- Get Admin Image
+	data.Admin16Image = !data.Admin16Image?getImage('Admin16.svg'):data.Admin16Image;
+	// STRY0101474 
+	// --- Get Related Tasks Image
+	data.ouRequestChangeImage = !data.ouRequestChangeImage?getImage('Request16.svg'):data.ouRequestChangeImage;	
+	// --- Get OU Process Request Image
+	data.ouProcessRequestImage = !data.ouProcessRequestImage?getImage('ProcessRequest16.svg'):data.ouProcessRequestImage;
 	// --- Get OU Information Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','Information16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouInformationImage=grImage.getDisplayValue();
-	}	
-
-	// --- Get OU Information Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','SubOU16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouSubOUImage=grImage.getDisplayValue();
-// TODO, GET THE NEW SUB OU ICON
-data.createSubOUImage=grImage.getDisplayValue();
-	}	
-	
-	
-	// --- Get OU Reports Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','Reports16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouReportImage=grImage.getDisplayValue();
-	}	
-	
+	data.ouInformationImage = !data.ouInformationImage?getImage('Information16.svg'):data.ouInformationImage;
+	// --- Get Sub OU Image
+	data.ouSubOUImage = !data.ouSubOUImage?getImage('SubOU16.svg'):data.ouSubOUImage;
 	// --- Get OU Members Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','OUMembers16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouMembersImage=grImage.getDisplayValue();
-	}	
-	
-		// --- Get OU Contacts Image
-	grImage = new GlideRecord("db_image");
-	grImage.addQuery('name','Contacts16.svg');
-	grImage.query();
-	if(grImage.next()){
-		data.ouContactsImage=grImage.getDisplayValue();
-	}	
-	
-	
+	data.ouMembersImage = !data.ouMembersImage?getImage('OUMembers16.svg'):data.ouMembersImage;
+	// --- Get OU Contacts Image
+	data.ouContactsImage = !data.ouContactsImage?getImage('Contacts16.svg'):data.ouContactsImage;	
+	// --- Get OU Reports Image
+	data.ouReportImage = !data.ouReportImage?getImage('Reports16.svg'):data.ouReportImage;	
+	// STRY0101474
+	// --- Get Related Tasks Image
+	data.ouRelatedTasksImage = !data.ouRelatedTasksImage?getImage('RelatedTasks16.svg'):data.ouRelatedTasksImage;	
+	// --- Get Divider Image
+	data.dividerImage = !data.dividerImage?getImage('Divider.svg'):data.dividerImage;	
+	// --- Get Create Sub OU Image
+	data.createSubOUImage = !data.createSubOUImage?getImage('GenericAddSub16.svg'):data.createSubOUImage;	
+
+	// STRY0101474
+
 	//------------------------------------------------------------------------------------------------------------------------
+	function getImage(imageName){
+		var grImage = new GlideRecord("db_image");
+		var image;
+		grImage.addQuery('name',imageName);
+		grImage.query();
+		if(grImage.next()){
+			image=grImage.getDisplayValue();
+		}
+		return image;
+	}
+	
 	function getLevel1(map, sys_id) {
 		var t = getGR('x_153465_discovert_discover_office_hierarchy', 'parent', sys_id);
 		while (t.next()) {
@@ -824,7 +937,10 @@ data.createSubOUImage=grImage.getDisplayValue();
 			c.ouHADisplayValue = ouHADisplayValue == null || ouHADisplayValue == undefined ? '': ouHADisplayValue;
 			var ouHAValue = gr.getValue('u_ou_hiearchy_administrators');
 			c.ouHAValue = ouHAValue == null || ouHAValue == undefined ? '': ouHAValue;
-
+			// STRY0101474 
+			c.outStandingRequestCount = gr.getValue('u_outstanding_request_count')==null?0:parseInt(gr.getValue('u_outstanding_request_count'));
+			c.isAdmin = (isGHA || (c.ouHAValue.indexOf(gs.getUserID())>=0));
+		
 		  // load the OUHAs into the Map
 			c.ouHierarchyAdmins = [];
 			var aOUHierarchyAdmins = c.ouHADisplayValue.split(',');
@@ -845,15 +961,17 @@ data.createSubOUImage=grImage.getDisplayValue();
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>1000</sys_mod_count>
+        <sys_mod_count>1081</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-03 01:51:33</sys_updated_on>
+        <sys_updated_on>2021-09-18 18:01:00</sys_updated_on>
         <template><![CDATA[<style>
 
   
