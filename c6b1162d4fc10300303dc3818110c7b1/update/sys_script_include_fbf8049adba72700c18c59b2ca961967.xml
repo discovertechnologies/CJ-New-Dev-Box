@@ -16,6 +16,7 @@ STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
 STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State&#13;
 STRY0107408 - DIA- Org Hierarchy– Request Update Button&#13;
 STRY0108513 - added a condition check for the Response field and the Response buttons for responding to OU Requests&#13;
+DFCT0010482 - Any Tasker User can create a subtask on ANY task in the system&#13;
 &#13;
 v2.6&#13;
 Updated to put all UI Actions condition checks into this file&#13;
@@ -81,6 +82,44 @@ uiConditionCheck.prototype = {
 	},
 
 	// v2.7
+	canCreateTask: function(rec){
+		// DFCT0010482 
+		// if task has no parent set then just check canCreate.
+		// if Task has a parent value, then check call canCreateSubTask
+		var canCreate = false;
+		if(rec.getValue('parent') == null){
+			var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			canCreate = grTask.canCreate();
+		} else{
+			var grParent = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			if(grParent.get(rec.getValue('parent'))){
+				canCreate = this.canCreateSubTask(grParent);
+			} else {
+				canCreate = false;
+			}
+		}
+		return canCreate;
+	},
+	
+	// DFCT0010482 
+	canCreateSubTask: function(grParent){
+
+		var answer = false;
+		var currentUser = gs.getUserID();
+		var canCreate = grParent.canCreate();
+		var isNotNew = grParent.sys_id != -1;
+		var isActive = grParent.active;
+		var currentUserIsAssignedMember = (grParent.assigned_to == currentUser);
+		var currentUserIsTaskOwner = (grParent.u_task_requester == currentUser);
+
+		if(canCreate && isNotNew && isActive && (currentUserIsAssignedMember || currentUserIsTaskOwner) ){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+	
 	// STRY0108513 
 	RespondOURequest: function(request){
 		var isRequestInProgress = request.u_status == "In progress";
@@ -1659,7 +1698,7 @@ uiConditionCheck.prototype = {
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>478</sys_mod_count>
+        <sys_mod_count>499</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1667,6 +1706,6 @@ uiConditionCheck.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-13 18:42:51</sys_updated_on>
+        <sys_updated_on>2021-09-20 04:36:14</sys_updated_on>
     </sys_script_include>
 </record_update>
