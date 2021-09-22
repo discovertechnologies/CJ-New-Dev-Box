@@ -14,6 +14,7 @@ STRY0100724 - DEV Story- Performance Improvements -  Running Templates - This fu
 STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State&#13;
 STRY0108329 - DIA- Org Hierarchy– OU Request Form- Email Notification - changed a function to make more specific to Task&#13;
 DFCT0010462 - Spelling mistakes - "Activity" tab in the work notes " extenstion and  suspesne  are misspelled. &#13;
+2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
 &#13;
 2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
@@ -45,6 +46,100 @@ Task_uiAction.prototype = {
     initialize: function() {
     },
 
+	// STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)
+	uiAction_ReopenTasks: function(task, process) {
+		switch (process) {
+    case 'allSubtasks':
+        this.reopenTaskInernal(task, true, '');
+        break;
+    case 'tasksByDate':
+        this.reopenTaskInernal(task, true, task.getDisplayValue('closed_at'));
+        break;
+    default:
+        this.reopenTaskInernal(task, false, '');
+}
+	},
+	
+	// STRY0076598: New method to Reopen a Task
+	reopenTaskInernal: function(current, reopenSubtasks, taskClosedDate) {		
+		// this was pulled from the previous function, but needs to be updated to account for wait state
+		var TaskerHelper = new TaskerHelpers();
+		var msgReopenedBy = gs.getMessage('Tasker - has been reopened by', [current.number, gs.getUserDisplayName()]) ;
+		var childOpening = false;
+		
+		// NOTE this was copied from reopen, this should be set based on a function, not hard coded
+		current.status = "Projected on time";
+		current.active = true;
+		// STRY0079667
+		current.u_reviewer_signed = false;
+		current.u_completed_on_time = false;
+		
+		current.work_notes = msgReopenedBy;
+		gs.addInfoMessage(msgReopenedBy);
+		
+		if(reopenSubtasks) {
+			// Glide Record Secure will break this b/c of the Task Table.
+			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+			var grSubtasksToReopen = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubtasksToReopen.addQuery('parent', current.getUniqueValue());
+			grSubtasksToReopen.addQuery('state', 'IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
+			
+			if (taskClosedDate != undefined) {
+				grSubtasksToReopen.addQuery('closed_at', '>=', new GlideDateTime(taskClosedDate));
+			}
+				
+			// STRY0076617 and STRY0076618 - reopen in order so that the order by waiting is applied while reopening
+			grSubtasksToReopen.orderBy('task_order');
+			grSubtasksToReopen.query();
+			
+			if(grSubtasksToReopen.next()) {
+				// if one subtask is being reopened, and the parent is of type waiting, then state should be waiting
+				childOpening = true;
+				
+				// if we find a subtask that is reopening and the parent waits for subtasks to complete, then this task should go into wait state.
+				if(current.u_wait_for_subtasks_to_finish == true) {
+					current.state = -3; // -3 Waiting
+				}
+				else {
+					current.state = TaskerHelper.getUpdatedState(current);
+				}
+				
+				current.update();
+				
+				this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
+			}
+			
+			// Open the rest
+			while (grSubtasksToReopen.next()) {
+				// recursively reopen down the tree
+				this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
+			}
+		}
+		
+		// no subtasks were opened, set the state based on the task values
+		if (!childOpening){
+			current.state = TaskerHelper.getUpdatedState(current);
+			current.update();
+		}
+		
+		// check the parent to see if it has the wait flag set.  If it does then reopening the child should put it in wait state
+		if(current.parent){
+			// Glide Record Secure will break this b/c of the Task Table.
+			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+			var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTaskParent.get(current.getValue("parent"))){
+				if(grTaskParent.u_wait_for_subtasks_to_finish == true) {
+					grTaskParent.state = -3; // -3 Waiting
+					grTaskParent.setWorkflow(false);
+					grTaskParent.update();
+				}
+			}
+		}
+		
+		return true;
+    },
+
+	
 	// STRY0105845 
 	uiAction_DeleteTasks: function(task) {
 		
@@ -1061,14 +1156,14 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>139</sys_mod_count>
+        <sys_mod_count>175</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-10 15:19:25</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-09-21 18:55:55</sys_updated_on>
     </sys_script_include>
 </record_update>

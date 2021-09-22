@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[initPage();
+
+// Use this function to remove the disabled attribute from the submit button
+function enableSubmitButton() {
+	gel('submit').disabled = false;
+}
+
+// Use this function to initialize variables at page load
+function initPage() {
+	gel('submit').disabled = true;
+	gel('tasksByDate').disabled = gel('closedAt').value == '';
+}
+
+// dialog_button id="cancel" was clicked, user does not want to reopen the task
+function onCancel() {
+	// below will auto close popup
+	GlideDialogWindow.get().destroy();
+	return false;
+}
+
+// dialog_button id="submit" was clicked, user confirms wanting to reopen the task
+function onSubmit() {
+	
+	return true;
+}
+]]></client_script>
+        <description>New UI Page to prompt from Platform about re-opening completed or cancelled tasks&#13;
+&#13;
+2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
+    Created UI Page for Reopen Tasks. &lt;input&gt; id="tasksByDate" get disabled when closed_at is empty for selected task. Button id="submit" gets enabled after clicking a radio button.&#13;
+    Updated styleSheets array to use tasker-modal-prompt-UIPages. Changed CSS Selector .dtech-perm-delete to use .dtech-standard-text-color. </description>
+        <direct>false</direct>
+        <endpoint>x_153465_discovert_reopen_task_prompt.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+
+	<!-- Import a style sheet that the customer can edit -->
+	<!-- Tasker Theme Stytle Sheet use GlideRecord tablename: sp.css  is not accessible-->
+	<!-- Content Management > Design > Style Sheets use GlideRecord tablename: content.css -->
+	<g:evaluate object="true">
+		<!-- can have multiple stylesheets -->
+		var styleSheets = [];
+
+		styleSheets.push("tasker-modal-prompt-UIPages.css");
+
+		var linkTags = [];
+		for (var sheet in styleSheets) {
+		var css = new GlideRecord("content_css");
+		css.addQuery("name", styleSheets[sheet]);
+		css.query();
+		css.next();
+		linkTags.push(css.sys_id+".cssdbx?ver="+css.sys_updated_on);
+		}
+	</g:evaluate>
+	<j:forEach var="jvar_link" items="${linkTags}">
+		<link href="${jvar_link}" rel="stylesheet" type="text/css"></link>
+	</j:forEach>
+	
+	<!-- Cache static messages -->
+	<g:messages>
+		Tasker - Please choose to reopen only the top task or all of the sub-tasks
+		Tasker - Button - Confirm
+		Tasker - This Task Only
+		Tasker - Open this Task and all Sub-tasks
+		Tasker - This Task and all Sub-tasks closed on or after
+	</g:messages>
+
+	<g:ui_form>
+		<!-- pass variables from the Client Script (were spModal.open is or new GlideModal is) -->
+		<j:set var="jvar_taskSysId" value="${sysparm_taskSysId}"/>
+
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
+		
+		<g:evaluate var="jvar_closedAt" jelly="true">
+			var closedAt = '';
+			var	taskSys_id = jelly.jvar_taskSysId;
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			grTask.addQuery('sys_id', taskSys_id);
+			grTask.query();
+			
+			if (grTask.next()) {
+				closedAt = grTask.getDisplayValue('closed_at');
+			}
+
+			closedAt;
+		</g:evaluate>
+		
+		<input type="hidden" id="closedAt" value="${jvar_closedAt}" />
+		
+		<div class="dtech-modal-widget-body">
+			
+			<div class="dtech-text-center dtech-standard-text-color">
+				<span>
+					${gs.getMessage('Tasker - Please choose to reopen only the top task or all of the sub-tasks')}
+				</span>
+			</div>
+			<br></br>
+
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="reopenType" id="taskOnly" onchange="enableSubmitButton()"
+							   aria-label="${gs.getMessage('Tasker - This Task Only')}" value="taskOnly"></input>
+						<label for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task Only')}</label>
+					</div>
+				</div>
+
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="reopenType" id="allSubtasks" onchange="enableSubmitButton()"
+							   aria-label="${gs.getMessage('Tasker - Open this Task and all Sub-tasks')}" value="allSubtasks"></input>
+						<label for="allSubtasks" class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - Open this Task and all Sub-tasks')}</label>
+					</div>
+				</div>
+
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="reopenType" id="tasksByDate" onchange="enableSubmitButton()"
+							   aria-label="${gs.getMessage('Tasker - This Task and all Sub-tasks closed on or after')} ${jvar_closedAt}" 
+							   value="tasksByDate"></input>
+						<label for="tasksByDate" class="dtech-standard-text-color dtech-radio-inline">
+							${gs.getMessage('Tasker - This Task and all Sub-tasks closed on or after')} ${jvar_closedAt}
+						</label>
+					</div>
+				</div>
+			</div>
+			<br></br>
+
+		</div>
+		<div id="footer" class="dtech-modal-widget-footer dtech-box">
+			<g:dialog_button 
+							 id="cancel"
+							 title="${gs.getMessage('cancel')}"
+							 type="button"
+							 style_class="btn btn-default dtech-max-width-fit-content"
+							 onclick="return onCancel();"
+							 >${gs.getMessage('cancel')}
+			</g:dialog_button>
+			<g:dialog_button 
+							 id="submit"
+							 title="${gs.getMessage('Tasker - Button - Confirm')}"
+							 type="submit"
+							 style_class="btn btn-primary dtech-max-width-fit-content dtech-push-right "
+							 onclick="onSubmit();"
+							 >${gs.getMessage('Tasker - Button - Confirm')}
+			</g:dialog_button>
+		</div>
+
+	</g:ui_form>
+</j:jelly>]]></html>
+        <name>reopen_task_prompt</name>
+        <processing_script><![CDATA[reopenTasks();
+
+function reopenTasks() {
+    var grSelectedTask = new GlideRecord("x_153465_discovert_route_task_instance");
+    grSelectedTask.addQuery('sys_id', sysid); //comes from hidden input tag name attribute
+    grSelectedTask.query();
+    if (grSelectedTask.next()) {
+        // Calls a Server function
+        new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, reopenType); //comes from radio input tag name attribute
+    }
+	
+	response.sendRedirect("/x_153465_discovert_route_task_instance.do?sys_id=" + sysid);
+}]]></processing_script>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>mmccune</sys_created_by>
+        <sys_created_on>2021-09-14 21:21:20</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>1ce8f692dbeaf4501048570bd39619d5</sys_id>
+        <sys_mod_count>86</sys_mod_count>
+        <sys_name>reopen_task_prompt</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_page_1ce8f692dbeaf4501048570bd39619d5</sys_update_name>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-09-21 19:32:47</sys_updated_on>
+    </sys_ui_page>
+</record_update>
