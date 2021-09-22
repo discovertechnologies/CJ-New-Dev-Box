@@ -3,7 +3,13 @@
         <active>true</active>
         <applies_extended>false</applies_extended>
         <condition/>
-        <description>v2.5.13&#13;
+        <description>Reopen completed or cancelled tasks; show a widget or UI Page modal to prompt the User when the task has subtasks, otherwise no modal just reopen single task&#13;
+&#13;
+v2.7&#13;
+2.7.0 | 2021-08-29 | mmcc | STRY0107404 - Draft Scheduled Tasks – UI – Delete Modal&#13;
+2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
+&#13;
+v2.5.13&#13;
 -  Check if parent is closed&#13;
   - prompt user if can't reopen&#13;
  - Check if any subtasks are closed incomplete&#13;
@@ -12,68 +18,110 @@
         <field>calchaschildren</field>
         <global>true</global>
         <isolate_script>true</isolate_script>
-        <messages>Tasker - Reopen Parent is not active - start&#13;
+        <messages>Tasker - Title - Reopen Selection&#13;
+Tasker - Reopen Parent is not active - start&#13;
 Tasker - Reopen Parent is not active - end&#13;
 Tasker - Closed too long to reopen 1&#13;
 Tasker - Closed too long to reopen 2&#13;
-Tasker - Closed too long to reopen 3&#13;
-Tasker - Do you want to reopen Subtasks</messages>
+Tasker - Closed too long to reopen 3</messages>
         <name>Task - onSubmit - Reopen</name>
         <order/>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
-*  The Government's rights to use, display, or disclose this software are restricted.
-*  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. */
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
+
 function onSubmit() {
-	// STRY0076598
-	if (g_form.getActionName() == 'Reopen') {
-		if(g_form.getValue('active')!='false'){
-			return false;
-		}
+    var formAction = g_form.getActionName();
+    if (formAction == 'Reopen') {
+        if (g_form.getValue('active') != 'false') {
+            return false;
+        }
 
-		if(g_scratchpad.parent_sys_id + '' != '' && g_scratchpad.parent_active != 'true'){
-			var link = "../discovertaskerportal?id=discovertasker_taskdetails&sys_id=" + g_scratchpad.parent_sys_id +"&table=x_153465_discovert_route_task_instance&view=sp&state=3&order=1";
-			g_form.addErrorMessage(" <b>" + getMessage('Tasker - Reopen Parent is not active - start') + " " + '<a href='+link+'>' +g_scratchpad.parent_number+'</a>'  + ' ' + getMessage('Tasker - Reopen Parent is not active - end') + '</b>');
-			return false;
-		}
+        if (isNotActiveParent()) {
+            return false;
+        }
 
-		// STRY0016025- RAJ 2019-04-20 - Determine if Tasker close date is beyond the allowable reopen days
-		if (g_scratchpad.closed_to_long_to_reopen == 'true' || g_scratchpad.closed_to_long_to_reopen == true){
-			g_form.addErrorMessage(g_form.getValue('number') + ' ' + getMessage('Tasker - Closed too long to reopen 1') + ' ' + g_scratchpad.ReopenMaxDays + ' ' + getMessage('Tasker - Closed too long to reopen 2') + ' ' +  g_scratchpad.closed_at + getMessage('Tasker - Closed too long to reopen 3'));
-			return false;
-		}
-		var bOpenSubtasks = false;
-		// if here, then task can be reopened
-		if(g_scratchpad.hasCanceledSubtask == 'true'){
-			bOpenSubtasks = confirm(getMessage('Tasker - Do you want to reopen Subtasks'));
-		}
+        if (isClosedTooLong()) {
+            return false;
+        }
 
-		// reset ajax to call a different method
-		var ajax = new GlideAjax('ClientTaskInfo');
-		ajax.addParam('sysparm_name', 'reopenTask');
-		ajax.addParam('sysparm_task', g_form.getUniqueValue());
-		ajax.addParam('sysparm_reopenSubtasks', bOpenSubtasks);
-//		ajax.getXML(function(response){
-//			/* done, ignore the return */
-//		});
-		ajax.getXML(redirectPage);
-		
-	}
-	function redirectPage(response) {
-		var sysId = g_form.getUniqueValue();
-		var url = '';
-		if(typeof spModal != 'undefined')
-			url = "../discovertaskerportal?id=discovertasker_taskdetails&sys_id=" + sysId +"&table=x_153465_discovert_route_task_instance&view=sp";
-		else
-			url = '/x_153465_discovert_route_task_instance.do?sys_id=' + sysId;	
-		
-		location.href=url;
-		
-	}
-	
-}]]></script>
+        if (g_scratchpad.calchaschildren == 0) {
+            // Do not show a modal; returning true allows the UI Action, Reopen Task, to execute server script
+			return true;
+        } else {
+            confirmReopenTasks();
+			return false;
+        }
+    }
+}
+
+// Use this function to show either a widget or UI Page modal
+function confirmReopenTasks() {
+    var messageTitle = getMessage('Tasker - Title - Reopen Selection');
+
+    // Use widget for Portal
+    if (typeof spModal != 'undefined') {
+        spModal.open({
+            title: messageTitle,
+            backdrop: 'static',
+            widget: 'tasker_modal_reopen_tasks_prompt',
+            widgetInput: {
+                'taskId': g_form.getUniqueValue()
+            },
+            buttons: [],
+            // Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+            footerStyle: {
+                'display': 'none'
+            }
+        }).then(function() {
+            //jslog('numberofsubtasks');
+        });
+        return false;
+    } else if (typeof spModal == 'undefined') {
+        // For Platform use UI Page named: delete_task_prompt
+        var gm = new GlideModal('x_153465_discovert_reopen_task_prompt');
+        gm.setTitle(messageTitle);
+        gm.setPreference('sysparm_taskSysId', g_form.getUniqueValue());
+        gm.setWidth(550);
+        gm.render();
+    }
+}
+
+function isClosedTooLong() {
+    var result = false;
+
+    // STRY0016025- RAJ 2019-04-20 - Determine if Tasker close date is beyond the allowable reopen days
+    if (g_scratchpad.closed_to_long_to_reopen == 'true' || g_scratchpad.closed_to_long_to_reopen == true) {
+        g_form.addErrorMessage(g_form.getValue('number') + ' ' + getMessage('Tasker - Closed too long to reopen 1') + ' ' +
+            g_scratchpad.ReopenMaxDays + ' ' + getMessage('Tasker - Closed too long to reopen 2') + ' ' + g_scratchpad.closed_at +
+            getMessage('Tasker - Closed too long to reopen 3'));
+
+        result = true;
+    }
+
+    return result;
+}
+
+// Task State 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled should have active = 'false'
+function isNotActiveParent() {
+    var result = false;
+
+    if (g_scratchpad.parent_sys_id + '' != '' && g_scratchpad.parent_active != 'true') {
+        var link = "../discovertaskerportal?id=discovertasker_taskdetails&sys_id=" + g_scratchpad.parent_sys_id +
+            "&table=x_153465_discovert_route_task_instance&view=sp&state=3&order=1";
+
+        g_form.addErrorMessage(" <b>" + getMessage('Tasker - Reopen Parent is not active - start') + " " + '<a href=' + link + '>' +
+            g_scratchpad.parent_number + '</a>' + ' ' + getMessage('Tasker - Reopen Parent is not active - end') + '</b>');
+
+        result = true;
+    }
+
+    return result;
+}
+]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-08-07 06:13:35</sys_created_on>
@@ -81,7 +129,7 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>8c0b20e4db6a5410936dd498f49619cf</sys_id>
-        <sys_mod_count>41</sys_mod_count>
+        <sys_mod_count>79</sys_mod_count>
         <sys_name>Task - onSubmit - Reopen</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -89,8 +137,8 @@ function onSubmit() {
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_8c0b20e4db6a5410936dd498f49619cf</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-10 02:21:12</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-09-21 19:23:33</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>
