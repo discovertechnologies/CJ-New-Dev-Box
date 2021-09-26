@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>In 2.7, the Task form and Template Task form- Classification defaults to "--None--"&#13;
+&#13;
+Run this script to set the classification field to none/clear all Tasks, Template, Template Task.&#13;
+&#13;
+See Testing notes below.  NOTE: ships with Testing on since this is optional.&#13;
+</description>
+        <name>2.7 - Clear Restricted Class (Optional)</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+clearClassificationforAllWhereRestricted();
+
+function clearClassificationforAllWhereRestricted(){
+	
+	// to run a test and only perform the counts, set testing to true
+	var testing = true;
+	
+	clearClassifiedRestricted('x_153465_discovert_route_task_instance', 'classification', 'classification=restricted^active=true', testing);
+	clearClassifiedRestricted('x_153465_discovert_discover_routing_template', 'classification', 'classification=restricted^u_active=true', testing);
+	clearClassifiedRestricted('x_153465_discovert_route_tasks', 'classification', 'classification=restricted^active=true', testing);
+	clearClassifiedRestricted('x_153465_discovert_discover_routing_runtime', 'classification', 'classification=restricted', testing);
+}
+
+function clearClassifiedRestricted(table, classificationField, query, testing){
+	
+	var numCleared = 0;
+	var classifiedRestrictedCount = countItemsToClear(table, classificationField, query, testing);
+	if(classifiedRestrictedCount>0){
+		// STRY0106180 - Find all tasks classified restricted and clear the field.
+		var rec = new GlideRecord(table);
+		rec.addEncodedQuery(query);
+		rec.query();
+		while(rec.next()) {
+			rec[classificationField] = null;
+			rec.work_notes = 'Classification cleared by Fix Script';
+
+			if(!testing){
+				rec.update();
+				numCleared +=1;
+			}
+		}
+
+		switch(table){
+			case 'x_153465_discovert_route_task_instance':
+				if(numCleared == classifiedRestrictedCount){
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Tasks Classified as Restricted has been cleared.");
+				} else {
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Tasks with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see tasks still classified as restricted, run this query on the Task table: " + query);
+				}
+				break;
+			case 'x_153465_discovert_discover_routing_template':
+				if(numCleared == classifiedRestrictedCount){
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Classified as Restricted has been cleared.");
+				} else {
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Templates with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see tasks still classified as restricted, run this query on the Template table: " + query);
+				}
+				break;
+			case 'x_153465_discovert_route_tasks':
+				if(numCleared == classifiedRestrictedCount){
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Tasks Classified as Restricted has been cleared.");
+				} else {
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Template Tasks with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see Template Tasks still classified as restricted, run this query on the Template Task table: " + query);
+				}
+				break;
+			case 'x_153465_discovert_discover_routing_runtime':
+				if(numCleared == classifiedRestrictedCount){
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Instances Classified as Restricted has been cleared.");
+				} else {
+					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Template Instances with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see Template Instances still classified as restricted, run this query on the Template Instance table: " + query);
+				}
+				break;
+		}
+	}
+}
+
+function countItemsToClear(table, classificationField, query, testing){
+	var classifiedRestrictedCount;
+	// count all open requests on closed tasks and log
+	var ga = new GlideAggregate(table);
+	ga.addEncodedQuery(query);
+	ga.addAggregate("COUNT");	
+	ga.query();
+	if(ga.next()){
+		classifiedRestrictedCount = ga.getAggregate("COUNT");
+	}
+	
+	switch(table){
+		case 'x_153465_discovert_route_task_instance':
+			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
+					classifiedRestrictedCount + ' Active Tasks have a Classification of "Restricted".  Clearing the Clasification field...');
+			break;
+		case 'x_153465_discovert_discover_routing_template':
+			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
+					classifiedRestrictedCount + ' Active Templates have a Classification of "Restricted".  Clearing the Clasification field...');
+			break;
+		case 'x_153465_discovert_route_tasks':
+			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
+					classifiedRestrictedCount + ' Active Template Tasks have a Classification of "Restricted".  Clearing the Clasification field...');
+			break;
+		case 'x_153465_discovert_discover_routing_runtime':
+			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
+					classifiedRestrictedCount + '  Template Instances have a Classification of "Restricted".  Clearing the Clasification field...');
+			break;
+	}
+	return classifiedRestrictedCount;
+}]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-09-22 00:42:59</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>cf7d3324dbfe78501e1792c5d4961983</sys_id>
+        <sys_mod_count>7</sys_mod_count>
+        <sys_name>2.7 - Clear Restricted Class (Optional)</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_cf7d3324dbfe78501e1792c5d4961983</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-09-22 00:57:10</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
