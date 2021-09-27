@@ -9,6 +9,7 @@
 STRY0095102 - Stretch- HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
 STRY0099083 - Add 4 new OOTB Tasker Portal filters that show tasks in OUs you are a member of&#13;
 STRY0105118 - DIA - Draft Scheduled Tasks- Systems Settings&#13;
+STRY0099280 - DIA: Time in Task suspense date defaults to the time when creating the task.  Adjust the default time to the end of the day for all new tasks.&#13;
 &#13;
 2.5 P3&#13;
 STRY0072032 - DIA: Vertical Task Tree - Tasker Setting for a systemwide setting - Vertical Tree structure on Task Tree View, Template Task Tree &amp; Organizational Hierarchy&#13;
@@ -26,6 +27,47 @@ tasking_System_Settings_Scripts.prototype = {
 	
 	initialize: function() {
 		
+	},
+	
+	// STRY0099280
+	SUSPENSE_DEFAULT_CURRENT_LOCAL_TIME: 0,
+	SUSPENSE_DEFAULT_END_OF_DAY: 1,
+	SUSPENSE_DEFAULT_CUSTOM_TIME: 2,
+	// STRY0099280
+	getDefaultTime: function(gr){
+		var scs = this.systemControlSetting();
+		var gdt = new GlideDateTime();
+		var gDate = new GlideDate();
+		var gTime = new GlideTime();
+		var defaultDateTime;
+		switch (scs.SuspenseDateDefault) {
+			// If System Settings is set to Default, return the current time
+			case this.SUSPENSE_DEFAULT_CURRENT_LOCAL_TIME:
+				defaultDateTime = gdt.getDisplayValue();
+				break;
+				// If system setting is set to End of Day
+			case this.SUSPENSE_DEFAULT_END_OF_DAY:
+				if(gr.getRecordClassName() == 'x_153465_discovert_route_task_instance'){
+					// if Task, then if Primary Assignee is set, then check the Primary Assignee OU for an OU Schedule
+					// if Task, then if User is set get the end of day for the day based on the User's Schedule
+					// if Task, no schedule on the user or the Primary Assignee, then get the end of day based on the System Schedule
+					if(gr.suspense_date){
+						gdt.addDaysLocalTime(2);
+						defaultDateTime = gdt.getDisplayValue();						
+					} else {
+						gdt = new TaskerDurationCalculator().calculateEndOfDay(gr, gDate.getDisplayValue());
+						defaultDateTime = gdt.getDisplayValue();
+					}
+				}
+				break;
+			// if System Setting is set to Custom Date, then use the Custom date system property
+			case this.SUSPENSE_DEFAULT_CUSTOM_TIME:
+				gTime.setDisplayValue(scs.SuspenseDateTime);
+				gdt.setDisplayValue(gDate.getDisplayValue() + " " + gTime.getDisplayValue());
+				defaultDateTime = gdt.getDisplayValue();
+				break;
+		}
+		return defaultDateTime;
 	},
 	
 	// STRY0105118
@@ -211,6 +253,10 @@ tasking_System_Settings_Scripts.prototype = {
 		var systemTreeStructureOrientation =  gs.getProperty("x_153465_discovert.Tree Structure Orientation");
 		systemControlSettings.VerticalTree = (systemTreeStructureOrientation == 'Vertical Hierarchical Structure');
 		systemControlSettings.HorizontalTree = (systemTreeStructureOrientation == 'Horizontal Hierarchical Structure');
+		
+		// STRY0099280
+		systemControlSettings.SuspenseDateDefault = +gs.getProperty('x_153465_discovert.Suspense Time Preferences');
+		systemControlSettings.SuspenseDateTime = gs.getProperty('x_153465_discovert.Suspense Custom due time');
 
 		return systemControlSettings;
 	},
@@ -408,7 +454,7 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>119</sys_mod_count>
+        <sys_mod_count>153</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -416,6 +462,6 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-05 22:56:36</sys_updated_on>
+        <sys_updated_on>2021-09-23 04:03:19</sys_updated_on>
     </sys_script_include>
 </record_update>

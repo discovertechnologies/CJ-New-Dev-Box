@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.TaskerDurationCalculator</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.6&#13;
+        <description>2.7&#13;
+STRY0099280 - DIA: Time in Task suspense date defaults to the time when creating the task.  Adjust the default time to the end of the day for all new tasks.&#13;
+&#13;
+2.6&#13;
 NOTE: The initial implementation uses a system property and all templates will use that schedule to block days.&#13;
 In this function we will be able to set the schedule based on any values passed in the current record.&#13;
 If we want to set it based on the user, we could look at the sys_user table to find their default schedule.&#13;
@@ -32,6 +35,48 @@ TaskerDurationCalculator.prototype = {
 		this.scheduleName = this.taskerDefaultscheduleName + '';
 		this.scheduleId = this.taskerDefaultScheduleId + '';
     },
+
+	//STRY0099280 
+	calculateEndOfDay: function (gr,strDate){
+		this.setDurationCaluclationSchedule(gr,this.dc);
+		var sch = new GlideSchedule(this.scheduleId); //use your scheudle sysid here
+		var gDateStart = new GlideDate();
+		gDateStart.setValue(strDate);
+		var gdtStart = new GlideDateTime();
+		var gTimeStart = new GlideTime();
+		var gDateEnd = new GlideDate();
+		var gdtEndOfDay = new GlideDateTime();
+		var gTimeEnd = new GlideTime();
+		var gdtEnd = new GlideDateTime();
+		var secondsToAdd;
+		var startTime;
+		
+		// Get the start time for the day (NOTE: if there is no time in the schedule for today, this will find the next day in the schedule)
+		gTimeStart.setDisplayValue("00:00:00");
+		startTime = gTimeStart.getDisplayValue();
+		gdtStart.setDisplayValue(gDateStart.getDisplayValue() + " " + startTime);
+		if(!sch.isInSchedule(gdtStart)){
+			var milliseconds = sch.whenNext(gdtStart);
+			gdtStart.addSeconds(milliseconds/1000);
+		}
+		
+		// now get end time for the day
+		gTimeEnd.setDisplayValue("23:59:59");
+		// get the date found if out of schedule above or the date passed in
+		gDateEnd = gdtStart.getDate();
+		gdtEndOfDay.setDisplayValue(gDateEnd.getDisplayValue() + " " + gTimeEnd.getDisplayValue());
+		// get the scheduled duration for the day
+		secondsToAdd = parseInt(this.dc.calcScheduleDuration(/* GlideDateTime or String */ gdtStart, /* GlideDateTime or String */ gdtEndOfDay));
+		this.dc.setStartDateTime(gdtStart);
+		this.dc.calcDuration(secondsToAdd);
+		gdtEnd = this.dc.getEndDateTime();
+
+		// was the 2 lines below and worked without applying to schedule that might have a gap.
+		//gdtEnd = gdtStart;
+		//gdtEnd.addSeconds(secondsToAdd);
+				
+		return gdtEnd;
+	},
 
 	// find the number of business days in the duration assuming 9 hour day TODO: determine how to find the number of hours per day in the schedule.
 	calculateBusinessDays: function(d){
@@ -240,7 +285,7 @@ TaskerDurationCalculator.prototype = {
         <sys_created_on>2020-06-24 18:38:34</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>3300702e1be91c10888aebde6e4bcb04</sys_id>
-        <sys_mod_count>67</sys_mod_count>
+        <sys_mod_count>78</sys_mod_count>
         <sys_name>TaskerDurationCalculator</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -248,6 +293,6 @@ TaskerDurationCalculator.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3300702e1be91c10888aebde6e4bcb04</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-10 00:12:26</sys_updated_on>
+        <sys_updated_on>2021-09-26 01:13:31</sys_updated_on>
     </sys_script_include>
 </record_update>
