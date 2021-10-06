@@ -15,6 +15,7 @@ STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State&#13;
 STRY0108329 - DIA- Org Hierarchy– OU Request Form- Email Notification - changed a function to make more specific to Task&#13;
 DFCT0010462 - Spelling mistakes - "Activity" tab in the work notes " extenstion and  suspesne  are misspelled. &#13;
 2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
+2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification&#13;
 &#13;
 2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
@@ -36,1119 +37,1176 @@ NOTE: &#13;
         <name>Task_uiAction</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
-*  The Government's rights to use, display, or disclose this software are restricted.
-*  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. */
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 
 var Task_uiAction = Class.create();
 Task_uiAction.prototype = {
     initialize: function() {
+        this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
     },
 
-	// STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)
-	uiAction_ReopenTasks: function(task, process) {
-		switch (process) {
-    case 'allSubtasks':
-        this.reopenTaskInernal(task, true, '');
-        break;
-    case 'tasksByDate':
-        this.reopenTaskInernal(task, true, task.getDisplayValue('closed_at'));
-        break;
-    default:
-        this.reopenTaskInernal(task, false, '');
-}
+    // STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)
+    uiAction_ReopenTasks: function(task, process) {
+        switch (process) {
+            case 'allSubtasks':
+                this.reopenTaskInernal(task, true, '');
+                break;
+            case 'tasksByDate':
+                this.reopenTaskInernal(task, true, task.getDisplayValue('closed_at'));
+                break;
+            default:
+                this.reopenTaskInernal(task, false, '');
+        }
+    },
+
+
+    // STRY0108861 - DIA- Cancel from Top Task Notification
+    uiAction_CancelTasks: function(task, cancellationReason, cancelDateTime) {
+		if (task.parent == '') {
+			task.close_notes = gs.getMessage('Tasker - Top task was cancelled by: {0}. brClose Note: {1}', [gs.getUserDisplayName(), task.close_notes]);
+		} else {
+			task.close_notes = gs.getMessage('Tasker - Task was cancelled by: {0}. brClose Note: {1}', [gs.getUserDisplayName(), task.close_notes]);
+		}
+		this._cancelTasks(task, cancellationReason, cancelDateTime);
 	},
 	
-	// STRY0076598: New method to Reopen a Task
-	reopenTaskInernal: function(current, reopenSubtasks, taskClosedDate) {		
-		// this was pulled from the previous function, but needs to be updated to account for wait state
-		var TaskerHelper = new TaskerHelpers();
-		var msgReopenedBy = gs.getMessage('Tasker - has been reopened by', [current.number, gs.getUserDisplayName()]) ;
-		var childOpening = false;
-		
-		// NOTE this was copied from reopen, this should be set based on a function, not hard coded
-		current.status = "Projected on time";
+	// STRY0108861 - DIA- Cancel from Top Task Notification
+	_cancelTasks: function(task, cancellationReason, cancelDateTime) {
+        try {
+			cancellationReason = cancellationReason.replace(/<\/?[^>]+(>|$)/g, "");
+			var grSubTasks = new GlideRecord(this.tableRouteTaskInstance);
+            grSubTasks.addQuery('parent', task.getUniqueValue());
+            grSubTasks.addQuery('active', true);
+            // find all subtasks with this parent value
+            grSubTasks.query();
+
+            while (grSubTasks.next()) {
+                // recursively call to cancel all descendants
+				grSubTasks.close_notes = gs.getMessage('Tasker - Parent task was cancelled by: {0}. brClose Note: {1}', [gs.getUserDisplayName(), grSubTasks.close_notes]);
+                this._cancelTasks(grSubTasks, cancellationReason, cancelDateTime);
+            }
+
+            task.active = false;
+            task.closed_at = cancelDateTime.getValue();
+			task.closed_by = gs.getUserID();
+			task.u_cancellation_reason = cancellationReason;
+            task.work_end = cancelDateTime.getValue();
+			
+            var strComment = task.u_cancellation_reason + '';
+            var userComments = this.trimComments(strComment);
+
+            task.work_notes = gs.getMessage('Tasker - This task has been cancelled by: {0}. brCancellation Reason: {1}', [gs.getUserDisplayName(), userComments]);
+
+            task.state = 7;
+            task.update();
+        } catch (ex) {
+            var message = ex.message || 'Unknown error in Task_uiAction.cancelTasks()';
+            var taskNumber = task.number || 'missing';
+
+            gs.error('Error in Task_uiAction.cancelTasks(); Number: {0} \nMessage: {1}', taskNumber, message);
+        }
+    },
+
+
+    // STRY0076598: New method to Reopen a Task
+    reopenTaskInernal: function(current, reopenSubtasks, taskClosedDate) {
+        // this was pulled from the previous function, but needs to be updated to account for wait state
+        var TaskerHelper = new TaskerHelpers();
+        var msgReopenedBy = gs.getMessage('Tasker - {0} has been reopened by {1}', [current.number, gs.getUserDisplayName()]);
+        var childOpening = false;
+
 		current.active = true;
-		// STRY0079667
-		current.u_reviewer_signed = false;
-		current.u_completed_on_time = false;
 		
-		current.work_notes = msgReopenedBy;
-		gs.addInfoMessage(msgReopenedBy);
+		// STRY0108861 - DIA- Cancel from Top Task Notification
+		current.closed_at = '';
+		current.closed_by = '';
+		current.work_end = '';
 		
-		if(reopenSubtasks) {
-			// Glide Record Secure will break this b/c of the Task Table.
-			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
-			var grSubtasksToReopen = new GlideRecord('x_153465_discovert_route_task_instance');
-			grSubtasksToReopen.addQuery('parent', current.getUniqueValue());
-			grSubtasksToReopen.addQuery('state', 'IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
-			
-			if (taskClosedDate != undefined) {
-				grSubtasksToReopen.addQuery('closed_at', '>=', new GlideDateTime(taskClosedDate));
-			}
-				
-			// STRY0076617 and STRY0076618 - reopen in order so that the order by waiting is applied while reopening
-			grSubtasksToReopen.orderBy('task_order');
-			grSubtasksToReopen.query();
-			
-			if(grSubtasksToReopen.next()) {
-				// if one subtask is being reopened, and the parent is of type waiting, then state should be waiting
-				childOpening = true;
-				
-				// if we find a subtask that is reopening and the parent waits for subtasks to complete, then this task should go into wait state.
-				if(current.u_wait_for_subtasks_to_finish == true) {
-					current.state = -3; // -3 Waiting
-				}
-				else {
-					current.state = TaskerHelper.getUpdatedState(current);
-				}
-				
-				current.update();
-				
-				this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
-			}
-			
-			// Open the rest
-			while (grSubtasksToReopen.next()) {
-				// recursively reopen down the tree
-				this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
-			}
-		}
-		
-		// no subtasks were opened, set the state based on the task values
-		if (!childOpening){
-			current.state = TaskerHelper.getUpdatedState(current);
-			current.update();
-		}
-		
-		// check the parent to see if it has the wait flag set.  If it does then reopening the child should put it in wait state
-		if(current.parent){
-			// Glide Record Secure will break this b/c of the Task Table.
-			// TODO: research this and determine the right Dictionary override to allow the use of glide record secure
-			var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
-			if(grTaskParent.get(current.getValue("parent"))){
-				if(grTaskParent.u_wait_for_subtasks_to_finish == true) {
-					grTaskParent.state = -3; // -3 Waiting
-					grTaskParent.setWorkflow(false);
-					grTaskParent.update();
-				}
-			}
-		}
-		
-		return true;
+		// STRY0108861 - DIA- Cancel from Top Task Notification
+		// use the previous Status, a nightly process should update
+        // NOTE this was copied from reopen, this should be set based on a function, not hard coded
+        //current.status = "Projected on time";
+        
+        // STRY0079667
+        current.u_reviewer_signed = false;
+        current.u_completed_on_time = false;
+
+        current.work_notes = msgReopenedBy;
+        gs.addInfoMessage(msgReopenedBy);
+
+        if (reopenSubtasks) {
+            // Glide Record Secure will break this b/c of the Task Table.
+            // TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+            var grSubtasksToReopen = new GlideRecord('x_153465_discovert_route_task_instance');
+            grSubtasksToReopen.addQuery('parent', current.getUniqueValue());
+            grSubtasksToReopen.addQuery('state', 'IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
+
+            if (taskClosedDate != undefined) {
+                grSubtasksToReopen.addQuery('closed_at', '>=', new GlideDateTime(taskClosedDate));
+            }
+
+            // STRY0076617 and STRY0076618 - reopen in order so that the order by waiting is applied while reopening
+            grSubtasksToReopen.orderBy('task_order');
+            grSubtasksToReopen.query();
+
+            if (grSubtasksToReopen.next()) {
+                // if one subtask is being reopened, and the parent is of type waiting, then state should be waiting
+                childOpening = true;
+
+                // if we find a subtask that is reopening and the parent waits for subtasks to complete, then this task should go into wait state.
+                if (current.u_wait_for_subtasks_to_finish == true) {
+                    current.state = -3; // -3 Waiting
+                } else {
+                    current.state = TaskerHelper.getUpdatedState(current);
+                }
+
+                current.update();
+
+                this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
+            }
+
+            // Open the rest
+            while (grSubtasksToReopen.next()) {
+                // recursively reopen down the tree
+                this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
+            }
+        }
+
+        // no subtasks were opened, set the state based on the task values
+        if (!childOpening) {
+            current.state = TaskerHelper.getUpdatedState(current);
+            current.update();
+        }
+
+        // check the parent to see if it has the wait flag set.  If it does then reopening the child should put it in wait state
+        if (current.parent) {
+            // Glide Record Secure will break this b/c of the Task Table.
+            // TODO: research this and determine the right Dictionary override to allow the use of glide record secure
+            var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+            if (grTaskParent.get(current.getValue("parent"))) {
+                if (grTaskParent.u_wait_for_subtasks_to_finish == true) {
+                    grTaskParent.state = -3; // -3 Waiting
+                    grTaskParent.setWorkflow(false);
+                    grTaskParent.update();
+                }
+            }
+        }
+
+        return true;
     },
 
-	
-	// STRY0105845 
-	uiAction_DeleteTasks: function(task) {
-		
-		// find and delete all descendants
-		var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
-		grSubTasks.addQuery('parent', task.getUniqueValue());
-		// find all subtasks
-		grSubTasks.query();
-		while(grSubTasks.next()){
-			// recursively call to delete all descendants
-			this.uiAction_DeleteTasks(grSubTasks);
-		}
-		task.deleteRecord();
-	},
-	
-	// STRY0105845 
-	uiAction_PublishDraftTasks: function(task) {
-		// TODO - multilanguage
-		// set the state to 0 then, call the update state method.
-		task.state = -5;
-		task.state = new TaskerHelpers().getUpdatedState(task);
-		task.work_notes = "Task Published by " + gs.getUserDisplayName();
-		task.update();
 
-		// find all children and recursively start them
-		// NOTE: this needs to be GlideRecord instead of glide record secure, because users don't have the permission to change the state. 
-		var grTaskChildren = new GlideRecord('x_153465_discovert_route_task_instance');
-		grTaskChildren.addQuery('parent', task.getUniqueValue());
-		grTaskChildren.query();
-		while (grTaskChildren.next()){
-			this.uiAction_PublishDraftTasks(grTaskChildren);
-		}
-		// TODO - multilanguage
-		gs.addInfoMessage(task.task_name + ' has been Published');
-	}, 	
-	
-	// STRY0097883
-	trimComments: function(strComment) {
-		var maxComment = 500;
-		// STRY0097883
-		strComment = strComment + '';
-		var userComments = strComment.replace(/<\/?[^>]+(>|$)/g, "").toString();
-		userComments = userComments.length > maxComment ? userComments.substring(0,maxComment-3) + '...' : userComments;
-		return userComments;
-		
-	},
-	
-	uiAction_Abstain: function(DecisionToClose, task){
-		var stateClosedFrom = task.state;
-		task.decision = DecisionToClose;
-		// TODO - multilanguage
-		task.work_notes = "Reviewer Decision: " + task.decision + " by " +   task.assigned_to.getDisplayValue().toString();
-		task.state = 3;
-		task.active = 'false';
-		var gdt = new GlideDateTime();
-		task.work_end = gdt.getValue();
-		task.update();
+    // STRY0105845 
+    uiAction_DeleteTasks: function(task) {
 
-		var isTaskeOwner = task.u_task_requester == gs.getUserID();
-		var isReviewer = task.u_reviewer == gs.getUserID();
-		var isAssignedMember = task.assigned_to == gs.getUserID();
-		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+        // find and delete all descendants
+        var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+        grSubTasks.addQuery('parent', task.getUniqueValue());
+        // find all subtasks
+        grSubTasks.query();
+        while (grSubTasks.next()) {
+            // recursively call to delete all descendants
+            this.uiAction_DeleteTasks(grSubTasks);
+        }
+        task.deleteRecord();
+    },
 
-		grResponseLog.initialize();
-		grResponseLog.u_task_tree = task.u_task_tree;
-		grResponseLog.u_task = task.getUniqueValue();
-		grResponseLog.u_task_number = task.number;
-		grResponseLog.u_responded_by = gs.getUserID();
-		grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-		grResponseLog.response = task.comments_dt;
-		// TODO - multilanguage
-		grResponseLog.u_action_taken = 'abstain';
-		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-		if (grOU.get(task.primary_assignee)){
-			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-		}
-		grResponseLog.insert();
-		gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
-	},
-	
-	uiAction_AcceptAssignment: function(task) {
-		// TODO - multilanguage - this might be harder to do than most 
-		// we will need to make the task type field able to support multilanguage and then use a code here instead of a text value
-		if (task.tasker_type.getDisplayValue() == "Standard") {
-			task.state = 10; // Work in Progress
-		}
-		else { //Other Task Types
-			task.state = 14; // In Review
-		}
-		// TODO - multilanguage
-		task.work_notes = "Assignment Accepted by " + task.assigned_to.getDisplayValue();
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + ' has been Accepted');
-	}, 
+    // STRY0105845 
+    uiAction_PublishDraftTasks: function(task) {
+        // TODO - multilanguage
+        // set the state to 0 then, call the update state method.
+        task.state = -5;
+        task.state = new TaskerHelpers().getUpdatedState(task);
+        task.work_notes = "Task Published by " + gs.getUserDisplayName();
+        task.update();
 
-	uiAction_AcceptExtensionRequest: function(request) {
-		// TODO - multilanguage
-		var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
-		// TODO - multilanguage
-		// we will need to make the request type field able to support multilanguage and then use a code here instead of a text value
-		if (request.u_request_type == "Extension") {
-			// STRY0104533
-			var parentId = request.parent.toString();
-			var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				var allow = new uiConditionCheck().RespondExtension(grTask);
-				if (allow) {
-					// STRY0097883 - DFCT0010462
-					// TODO - multilanguage
-					var taskWorkNotes = 'Extension Request has been approved by ' + gs.getUserDisplayName() + 
-						' with the following comments: ' + this.trimComments(request.u_response_comments) + 
-						' and the suspense date was ' + request.parent.suspense_date + '.  The extension date requested was ' + request.getDisplayValue('u_requested_suspense_date') + ' the new suspense date approved is ' + request.getDisplayValue('requested_suspense_date_approved');
-			
-					// TODO - multilanguage
-					grTask.extension_approval = 'Approved';
-					grTask.extension_requested = false;
-					
-					//---
-					if (grTask.original_suspense_date == '') {
-						grTask.original_suspense_date = grTask.suspense_date;
-						// TODO - multilanguage
-						grTask.work_notes = "The Original Suspense Date was: " + grTask.original_suspense_date;
-					}
-					grTask.previous_suspense_date = grTask.suspense_date;
-					grTask.suspense_date = request.u_requested_suspense_date;
-					grTask.setValue('latest_extension_request_date', request.u_requested_suspense_date.dateNumericValue());
-					
-					grTask.extended_suspense_date = '';
+        // find all children and recursively start them
+        // NOTE: this needs to be GlideRecord instead of glide record secure, because users don't have the permission to change the state. 
+        var grTaskChildren = new GlideRecord('x_153465_discovert_route_task_instance');
+        grTaskChildren.addQuery('parent', task.getUniqueValue());
+        grTaskChildren.query();
+        while (grTaskChildren.next()) {
+            this.uiAction_PublishDraftTasks(grTaskChildren);
+        }
+        // TODO - multilanguage
+        gs.addInfoMessage(task.task_name + ' has been Published');
+    },
 
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
-					
-					//KT: Update Request table
-					var todaysDate = new GlideDateTime();
-					// TODO - multilanguage
-					request.u_status = 'Completed'; //'Approved';
-					// TODO - multilanguage
-					request.u_response = 'Approved';
-					request.u_responded_by = gs.getUserID();
-					request.u_responded = todaysDate;
-					request.update();
-					
-					//KT: Show Confirmation Message
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);	
-			}
-		} else gs.addErrorMessage(errorMessage);
-	},	
-	
-	uiAction_AcceptReassignmentRequest: function(request) {
-		// TODO - multilanguage
-		var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
+    // STRY0097883
+    trimComments: function(strComment) {
+        var maxComment = 500;
+        // STRY0097883
+        strComment = strComment + '';
+        var userComments = strComment.replace(/<\/?[^>]+(>|$)/g, "").toString();
+        userComments = userComments.length > maxComment ? userComments.substring(0, maxComment - 3) + '...' : userComments;
+        return userComments;
 
-		// TODO - multilanguage
-		// STRY0102985 
-		if (request.u_request_type == "Reassignment") {
-			//KT: Update Task table
-			var parentId = request.parent.toString();
-			var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				var allow = new uiConditionCheck().RespondReassignment(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					var taskWorkNotes = 'Reassignment Request has been accepted by ' + gs.getUserDisplayName() +
-						' with the following comments: ' + this.trimComments(request.u_response_comments);
-					
-					// TODO - multilanguage
-					grTask.reassignment_approval = 'Approved';
-					grTask.reassignment_requested = false;
-					//05.13.20 
-					grTask.previous_assigned_to = grTask.assigned_to;
-					grTask.assigned_to = "";
-					grTask.state = -5;
+    },
 
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
+    uiAction_Abstain: function(DecisionToClose, task) {
+        var stateClosedFrom = task.state;
+        task.decision = DecisionToClose;
+        // TODO - multilanguage
+        task.work_notes = "Reviewer Decision: " + task.decision + " by " + task.assigned_to.getDisplayValue().toString();
+        task.state = 3;
+        task.active = 'false';
+        var gdt = new GlideDateTime();
+        task.work_end = gdt.getValue();
+        task.update();
 
-					//KT: Update Request table
-					var todaysDate = new GlideDateTime();
-					// TODO - multilanguage
-					request.u_status = 'Completed';
-					// TODO - multilanguage
-					request.u_response = 'Approved';
-					request.u_responded_by = gs.getUserID();
-					request.u_responded = todaysDate;
-					request.update();
+        var isTaskeOwner = task.u_task_requester == gs.getUserID();
+        var isReviewer = task.u_reviewer == gs.getUserID();
+        var isAssignedMember = task.assigned_to == gs.getUserID();
+        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
 
-					//KT: Show Confirmation Message
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);
-			}
-		} else gs.addErrorMessage(errorMessage);
-	},	
-	
-	uiAction_AcceptReverseApproval: function(task) {
-		task.state = 14;
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + ' has been sent to review');
+        grResponseLog.initialize();
+        grResponseLog.u_task_tree = task.u_task_tree;
+        grResponseLog.u_task = task.getUniqueValue();
+        grResponseLog.u_task_number = task.number;
+        grResponseLog.u_responded_by = gs.getUserID();
+        grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+        grResponseLog.response = task.comments_dt;
+        // TODO - multilanguage
+        grResponseLog.u_action_taken = 'abstain';
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        if (grOU.get(task.primary_assignee)) {
+            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+        }
+        grResponseLog.insert();
+        gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
+    },
 
-	},
-	
-	uiAction_CompleteInfoOnlyTask: function(task) {
-		
-		task.state = 3; 
-		// TODO - multilanguage
-		task.work_notes = "Task was marked as Read";
-		
-		task.active = 'false';
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + 'Task was marked as Read');
+    uiAction_AcceptAssignment: function(task) {
+        // TODO - multilanguage - this might be harder to do than most 
+        // we will need to make the task type field able to support multilanguage and then use a code here instead of a text value
+        if (task.tasker_type.getDisplayValue() == "Standard") {
+            task.state = 10; // Work in Progress
+        } else { //Other Task Types
+            task.state = 14; // In Review
+        }
+        // TODO - multilanguage
+        task.work_notes = "Assignment Accepted by " + task.assigned_to.getDisplayValue();
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + ' has been Accepted');
+    },
 
-	},
+    uiAction_AcceptExtensionRequest: function(request) {
+        // TODO - multilanguage
+        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
+        // TODO - multilanguage
+        // we will need to make the request type field able to support multilanguage and then use a code here instead of a text value
+        if (request.u_request_type == "Extension") {
+            // STRY0104533
+            var parentId = request.parent.toString();
+            var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                var allow = new uiConditionCheck().RespondExtension(grTask);
+                if (allow) {
+                    // STRY0097883 - DFCT0010462
+                    // TODO - multilanguage
+                    var taskWorkNotes = 'Extension Request has been approved by ' + gs.getUserDisplayName() +
+                        ' with the following comments: ' + this.trimComments(request.u_response_comments) +
+                        ' and the suspense date was ' + request.parent.suspense_date + '.  The extension date requested was ' + request.getDisplayValue('u_requested_suspense_date') + ' the new suspense date approved is ' + request.getDisplayValue('requested_suspense_date_approved');
 
-	uiAction_AcknowledgeTask: function(task) {
-		task.state = 3; 
-		// TODO - multilanguage
-		task.work_notes = "Task was marked as Acknowledged.";
-		
-		task.active = 'false';
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + ' Task was marked as Acknowledged.');
+                    // TODO - multilanguage
+                    grTask.extension_approval = 'Approved';
+                    grTask.extension_requested = false;
 
-	},
-	
-	uiAction_UpdateTaskAndResponseLog: function(DecisionToClose, actionTaken, task) {
-		var stateClosedFrom = task.state;
-		task.decision = DecisionToClose;
-		task.state = 3;
-		task.active = 'false';
-		var gdt = new GlideDateTime();
-		task.work_end = gdt.getValue();
-		if (task.suspense_date != '') {
-			if (task.suspense_date > gdt.getValue())
-				task.u_completed_on_time = true;
-			else
-				task.u_completed_on_time = false;
-		} else task.u_completed_on_time = true;
-		switch(actionTaken){
-			case 'reject':
-				// STRY0097883
-				task.work_notes = gs.getMessage('Tasker - Additional comments for the rejecting a Task Approval have been added by') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
-				break;
-			case 'approve':
-				task.work_notes = gs.getMessage('Tasker - This task has been approved by') + task.assigned_to.name;
-				break;
-			case 'concur': 
-				task.work_notes = gs.getMessage('Tasker - This task has been concurred by') + task.assigned_to.name;
-				break;
-			case 'nonconcur':
-				// STRY0097883
-				task.work_notes = gs.getMessage('Tasker - Additional comments for the Task non-concurring have been added by ') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
-				break;
-			case 'approve_sign':
-				task.work_notes = gs.getMessage('Tasker - This task has been signed by') + task.assigned_to.name;
-				break;
-			case 'concur_sign':
-				task.work_notes = gs.getMessage('Tasker - This task has been signed by') + task.assigned_to.name;
-				break;
-		case 'nonconcur_sign':
-				// STRY0097883
-				task.work_notes = gs.getMessage('Tasker - Additional comments for the Task non-concurring have been added by ') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
-				break;				
-		}
-		
-		
-		task.update();
-		var isTaskeOwner = task.u_task_requester == gs.getUserID();
-		var isReviewer = task.u_reviewer == gs.getUserID();
-		var isAssignedMember = task.assigned_to == gs.getUserID();
-		
-		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-		grResponseLog.initialize();
-		grResponseLog.u_task_tree = task.u_task_tree;
-		grResponseLog.u_task = task.getUniqueValue();
-		grResponseLog.u_task_number = task.number;
-		grResponseLog.u_responded_by = gs.getUserID();
-		if(stateClosedFrom == '14'){
-			grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-		} else{
-			grResponseLog.u_role = isAssignedMember? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
-		}
-		grResponseLog.response = task.comments_dt;
-		grResponseLog.u_action_taken = actionTaken;
-		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-		if (grOU.get(task.primary_assignee)){
-			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-		}
-		grResponseLog.insert();
-		gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
-	},
+                    //---
+                    if (grTask.original_suspense_date == '') {
+                        grTask.original_suspense_date = grTask.suspense_date;
+                        // TODO - multilanguage
+                        grTask.work_notes = "The Original Suspense Date was: " + grTask.original_suspense_date;
+                    }
+                    grTask.previous_suspense_date = grTask.suspense_date;
+                    grTask.suspense_date = request.u_requested_suspense_date;
+                    grTask.setValue('latest_extension_request_date', request.u_requested_suspense_date.dateNumericValue());
 
-	uiAction_MarkTaskCompleteAndUpdateResponseLog: function(task) {
-		// may need to compare to the function above there is a lot of overlap
-		var stateClosedFrom = task.getValue('state');
-		var isTaskeOwner = task.u_task_requester == gs.getUserID();
-		var isReviewer = task.u_reviewer == gs.getUserID();
-		var isAssignedMember = task.assigned_to == gs.getUserID();
+                    grTask.extended_suspense_date = '';
 
-		task.decision = 'N/A';
-		task.state = 3;
-		task.active = 'false';
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
 
-		var gdt = new GlideDateTime();
-		// STRY0094943
-		if(!task.work_start)
-			task.work_start= gdt.getValue();
-		task.work_end = gdt.getValue();
+                    //KT: Update Request table
+                    var todaysDate = new GlideDateTime();
+                    // TODO - multilanguage
+                    request.u_status = 'Completed'; //'Approved';
+                    // TODO - multilanguage
+                    request.u_response = 'Approved';
+                    request.u_responded_by = gs.getUserID();
+                    request.u_responded = todaysDate;
+                    request.update();
 
-		if (task.suspense_date != '') {
-			if (task.suspense_date > gdt.getValue())
-				task.u_completed_on_time = true;
-			else
-				task.u_completed_on_time = false;
-		} else task.u_completed_on_time = true;
-		task.update();
-		// if the task was closed from the review state, then we need 2 entries
-		// either way, we need to write the complete entry
-		// this first entry is for the assigned member or the task owner
-		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-		grResponseLog.initialize();
-		grResponseLog.u_task_tree = task.u_task_tree;
-		grResponseLog.u_task = task.getUniqueValue();
-		grResponseLog.u_task_number = task.number;
-		if(stateClosedFrom == '14'){
-			// making the entery for sent to review for the assigned member if state 14
-			grResponseLog.u_responded_by = task.assigned_to;
-			grResponseLog.u_role = 'assigned_member';
-			grResponseLog.response = task.response;
-			grResponseLog.u_action_taken = 'sent_to_review';
-		} else{
-			// making the entery for sent to review for the assigned member if state 14
-			grResponseLog.u_role = isAssignedMember? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
-			grResponseLog.u_responded_by = gs.getUserID();
-			grResponseLog.response = task.response;
-			grResponseLog.u_action_taken = 'completed';
-		}
-		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-		if (grOU.get(task.primary_assignee)){
-			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-		}
-		grResponseLog.insert();
-		// now create the Reviewer entre IF the state is 14
-		if(stateClosedFrom == '14'){
-			grResponseLog.initialize();
-			grResponseLog.u_task_tree = task.u_task_tree;
-			grResponseLog.u_task = task.getUniqueValue();
-			grResponseLog.u_task_number = task.number;
-			grResponseLog.u_responded_by = gs.getUserID();
-			grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-			grResponseLog.response = task.comments_dt;
-			grResponseLog.u_action_taken = 'completed';
-			grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-			grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-			grResponseLog.insert();
-		}
+                    //KT: Show Confirmation Message
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            }
+        } else gs.addErrorMessage(errorMessage);
+    },
 
-		gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
-	},
+    uiAction_AcceptReassignmentRequest: function(request) {
+        // TODO - multilanguage
+        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
 
-	uiAction_AssignTask: function(task) {
-		var now = new GlideDateTime();
-		var bDateOk = true;
-		if(gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true'){
-			if(now > task.suspense_date && task.suspense_date != ""){
-				// TODO - multilanguage
-				gs.addErrorMessage('The suspense date must be in the future.');
-				bDateOk = false;
-			}
-		}
-		
-		if (bDateOk){
-			if(task.assigned_to.nil() || task.primary_assignee.nil()) {
-				var assignee = task.primary_assignee.getDisplayValue();
-				task.state = -5;
-				// TODO - multilanguage
-				task.work_notes = "Assigned to " + assignee;
-				task.update();
-			} else{
-				var assigned_to = task.assigned_to.getDisplayValue();
-				task.state = 1;
-				// TODO - multilanguage
-				task.work_notes = "Assigned to " + assigned_to;
-				task.update();
-			}
-		}
-	},
-	
-	uiAction_CancelSuggestedTask: function(task) {
-		task.tasker_created = false;
-		task.ignored = true;
-		task.active = false;
-		task.update();		
-	},
-	
-	uiAction_CreateSubtasksforEachOUMember: function(task) {
-		if(!task.primary_assignee.nil()){
-			// Get the list of members in the office
-			var grMem = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-			grMem.addQuery('discover_office_hierarchy', task.primary_assignee);
-			//Only return members in the primary assignee office
-			grMem.query();
-			
-			// create a subtask with the same information as the parent for each member
-			while(grMem.next()){
-				this.private_functionCreateSubTaskFromParent(task, null, grMem);
-			}
-		}
-	},
+        // TODO - multilanguage
+        // STRY0102985 
+        if (request.u_request_type == "Reassignment") {
+            //KT: Update Task table
+            var parentId = request.parent.toString();
+            var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                var allow = new uiConditionCheck().RespondReassignment(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    var taskWorkNotes = 'Reassignment Request has been accepted by ' + gs.getUserDisplayName() +
+                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
 
-	uiAction_CreateSubtasksforEachSubOUs: function(task) {
-		if(!task.primary_assignee.nil()){
-			// Get the list of OUs that are direct children of the Primary Assignee OU
-			var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-			grOUs.addQuery('parent', task.primary_assignee);
-			//Only return members in the primary assignee office
-			grOUs.query();
-			// create a subtask with the same information as the parent for each member
-			while(grOUs.next()){
-				this.private_functionCreateSubTaskFromParent(task, grOUs, null);
-			}
-		}	
-	},
-	
-	private_functionCreateSubTaskFromParent: function(task, primaryAssignee, assignedMember){
-		var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
-		recTaskInst.initialize();
-		recTaskInst.instructions = task.instructions;
-		recTaskInst.category = task.category;
-		recTaskInst.warning_hours = task.warning_hours;
-		recTaskInst.classification = task.classification;
-		// Set the Primary Assignee OU to the Child OU
-		recTaskInst.primary_assignee = primaryAssignee ? primaryAssignee.sys_id : task.primary_assignee;
-		// NOTE: May need to add members to the Additional Assignee list
-		recTaskInst.assigned_to = assignedMember ? assignedMember.office_member.toString() : '';
-		
-		recTaskInst.primary_office = task.primary_office;
-		recTaskInst.tasking_authority = task.tasking_authority;
-		recTaskInst.short_description = task.short_description;
-		recTaskInst.sub_category = task.sub_category;
-		recTaskInst.parent = task.sys_id;
-		recTaskInst.task_order = 1;
-		// NOTE this should not be necessary, but the business rule that keeps these 2 in sync is not firing on this ui action
-		recTaskInst.order = 1;
-		// STRY0076880
-		recTaskInst.u_wait_for_subtasks_to_finish = task.u_wait_for_subtasks_to_finish;
-		// ***************** Start of changes	*****************
-		// STRY0011008 - RAJ 2018-02-23 add logic to set dates while creating sub tasks
-		//               the date logic used to be in a business rule, but that had negative impact on setting dates throughout a process tree
-		var gdt = new GlideDateTime();
-		var durationAdd;
-		// Use parent to set Estimated Start, if child estimated start not set
-		//  STRY0076973 - fix start date copy to subtask issue
-		if(!task.expected_start.nil()){
-			recTaskInst.setValue('expected_start', task.expected_start.dateNumericValue());
-			gdt.setValue(recTaskInst.expected_start.dateNumericValue());
-		} else{
-			recTaskInst.setValue('expected_start', gdt.getNumericValue());
-		}
-		// NOTE: logicall calculating the duration below will overwrite the suspsense date.
-		// if current record has no duration and no supsense date, and the parent has no suspense date, set it to the parent's duration
-		if(!task.calendar_duration.nil()){
-			recTaskInst.calendar_duration = task.calendar_duration;
-			durationAdd=task.calendar_duration.dateNumericValue();
-			gdt.add(durationAdd);
-			recTaskInst.setValue('suspense_date',gdt.getNumericValue());
-			recTaskInst.setValue('due_date',task.suspense_date.dateNumericValue());
-		}
-		//       If use the parent values for suspense date instead of calculating based on duration
-		if(!task.suspense_date.nil()) {
-			recTaskInst.setValue('suspense_date',task.suspense_date.dateNumericValue());
-			recTaskInst.setValue('due_date' ,task.suspense_date.dateNumericValue());
-		}
-		// ***************** End of changes	*****************
-		recTaskInst.originator = gs.getUserID();
-		recTaskInst.insert();
-	},
-	
-	uiAction_CreateSuggestedTask: function(action, suggestedTask) {
-		var taskerTable = 'x_153465_discovert_route_task_instance';
-		var grTasker = new GlideRecord(taskerTable);
-		var a_count = new GlideAggregate('sys_attachment');
-		a_count.addQuery('table_sys_id',suggestedTask.sys_id);
-		a_count.addAggregate('COUNT');
-		a_count.query();
-		var numAttachments = 0;
-		if(a_count.next())
-			numAttachments = a_count.getAggregate('COUNT');
-		grTasker.initialize();
-		grTasker.short_description = suggestedTask.suggested_short_description;
-		grTasker.instructions = suggestedTask.suggested_tasker_instructions;
-		// STRY0048709
-		grTasker.u_objective = suggestedTask.suggested_tasker_instructions;
-		grTasker.suggested_task = suggestedTask.sys_id;
-		//HT STRY0042785 set primary assignee, primary office and tasking authority to default OU of internal email sender
-		if(suggestedTask.sender_internal_user){
-			var defaultOU = '';
-			var grOM = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-			grOM.addQuery('office_member', suggestedTask.sender_internal_user);
-			grOM.setLimit(1);
-			grOM.query();
-			while(grOM.next()){
-				defaultOU = grOM.getValue("u_default_ou");
-			}
-			if(defaultOU){
-				grTasker.primary_assignee =  defaultOU;
-				grTasker.primary_office =    defaultOU;
-				grTasker.tasking_authority = defaultOU;
-			}
-		}
-		// TODO - multilanguage
-		grTasker.work_notes = "This task was created from Suggested Task #: " + suggestedTask.number.getDisplayValue()
-+ "\n Sender: "+ suggestedTask.sender_internal_user.name + "\n Sender Email: " + suggestedTask.senderemail + "\n Subject Line: " + suggestedTask.email_subject + "\n Date Emailed: " + suggestedTask.sys_created_on + "\n Number of attachments: " + numAttachments;
-		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
-		grTasker = new CustomTaskerFieldHelper().mapFieldDataOnAction('suggestedTasktoTask', suggestedTask, grTasker);
-		grTasker.insert();
-		suggestedTask.u_created_task = grTasker.sys_id;
-		suggestedTask.tasker_created = true;
-		suggestedTask.active = false;
-		suggestedTask.update();
-		// TODO - multilanguage
-		var infoMsg ='<a href="?id=discovertasker_taskdetails&table='+ taskerTable +'&sys_id=' + grTasker.sys_id+ '&spa=1" target="_top" >' + suggestedTask.u_created_task.getDisplayValue() + ' has been created based on this suggestion' + '</a>. Please Wait. You are being redirected to the new Task.' ;
-		gs.addInfoMessage(infoMsg);
-			// Redirect
-		if (typeof spModal == 'undefined' ) {
-			var redirectUrl = "?id=discovertasker_taskdetails&table=" + taskerTable + "&sys_id="+ grTasker.sys_id+ "&spa=1 target=_top";
-			//$location.url(redirectUrl);
-			action.setRedirectURL (grTasker) ;
-			//gs.setRedirect(grTasker);
-		}
+                    // TODO - multilanguage
+                    grTask.reassignment_approval = 'Approved';
+                    grTask.reassignment_requested = false;
+                    //05.13.20 
+                    grTask.previous_assigned_to = grTask.assigned_to;
+                    grTask.assigned_to = "";
+                    grTask.state = -5;
 
-	},
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
 
-	uiAction_CreateTask: function(action, task) {
-		// v2.5.13 | 08.08.2020 | STRY0076605:  Sequential Review
-		var insertTaskerHelper = new TaskerHelpers();
-		var initialState = insertTaskerHelper.getInitialState(task);
-		task.state = initialState;
-		// STRY0072379
-		var bDateOk = true;
-		var now = new GlideDateTime();
-		if (gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true') {
-			if (now > task.suspense_date && task.suspense_date != "") {
-				// TODO - multilanguage
-				gs.addErrorMessage('The suspense date must be in the future.');
-				bDateOk = false;
-			}
-		}
-		if (bDateOk) {
-			task.insert();
-			// Redirect
-			if (typeof spModal == 'undefined' ) {
-				action.setRedirectURL(task);
-			}
-		}
-	},
+                    //KT: Update Request table
+                    var todaysDate = new GlideDateTime();
+                    // TODO - multilanguage
+                    request.u_status = 'Completed';
+                    // TODO - multilanguage
+                    request.u_response = 'Approved';
+                    request.u_responded_by = gs.getUserID();
+                    request.u_responded = todaysDate;
+                    request.update();
 
-	uiAction_DisableSharedAttachments: function(task) {
-		if(!task.u_top_task.nil()){
-			task.u_shared_attachments = false;
-			task.update();
-		}
-	},
-	
-	uiAction_DisableSharedDocuments: function(task) {
-		if(!task.u_top_task.nil()){
-			task.u_shared_documents = false;
-			task.update();
-		}
-	},
-	
-	uiAction_EnableSharedAttachments: function(task) {
-		if(!task.u_top_task.nil()){
-			task.u_shared_attachments = true;
-			task.update();
-		}		
-	},
-	
-	uiAction_EnableSharedDocuments: function(task) {
-		if(!task.u_top_task.nil()){
-			task.u_shared_documents = true;
-			task.update();
-		}
-	},
+                    //KT: Show Confirmation Message
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            }
+        } else gs.addErrorMessage(errorMessage);
+    },
 
-	uiAction_MarkasCompleteLate: function(task) {
-		task.u_completed_on_time = false;
-		task.update();
-	},
+    uiAction_AcceptReverseApproval: function(task) {
+        task.state = 14;
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + ' has been sent to review');
 
-	uiAction_MarkasCompleteonTime: function(task) {
-		task.u_completed_on_time = true;
-		task.update();
-	},
-	
-	uiAction_Promote: function(task) {
-		var grParentInstance = new GlideRecord('x_153465_discovert_route_task_instance');
-		grParentInstance.initialize();
+    },
 
-		// skip assignment, it will be handled by tasking authority
-		//task.assigned_to = grSourceDefinition.assigned_to_individual;
-		grParentInstance.instructions = task.instructions;
-		grParentInstance.category = task.category;
-		grParentInstance.warning_hours = task.warning_hours;
-		grParentInstance.classification = task.classification;
-		// TODO, FIND PARENT OU OF CURRENT TASK
-		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-		grOU.addQuery('sys_id', task.primary_assignee);
-		grOU.query();
-		if(grOU.next()){
-			grParentInstance.primary_assignee = grOU.parent;
-		}
+    uiAction_CompleteInfoOnlyTask: function(task) {
 
-		grParentInstance.primary_office = task.primary_office;
-		grParentInstance.task_order = 1;
-		// TODO - don't do this with a single copy, need to determine the right way to do this
-		//grParentInstance.response
-		grParentInstance.short_description = task.short_description;
-		grParentInstance.sub_category = task.sub_category;
-		grParentInstance.calendar_duration = task.duration;
-		grParentInstance.tasker_type = task.tasker_type;
-		grParentInstance.tasking_authority = task.tasking_authority;
-		grParentInstance.demo_data = task.demo_data;
-		grParentInstance.originator = task.originator;
-		grParentInstance.insert();
-		task.parent = grParentInstance.sys_id;
-		task.update();
+        task.state = 3;
+        // TODO - multilanguage
+        task.work_notes = "Task was marked as Read";
 
-		// NOTE: we may want to also copy the response documents from source to destination.  Or, the attachments object might be just fine.
-		// TODO IF WE TURN THIS BACK ON, NEED TO ADD TO THE OTHER COPY MECHANISM SIMILAR TO CREATE WITH A PARENT, WE WILL NEED TO DO CREATE WITH A CHILD
-		GlideSysAttachment.copy('x_153465_discovert_route_task_instance', task.sys_id, 'x_153465_discovert_route_task_instance', grParentInstance.sys_id);
-	},
-	
-	uiAction_RejectAssignment: function(task) {
-		if (task.comments.nil()) {
-			gs.addErrorMessage(gs.getMessage('Additional comments are required when rejecting a Task'));
-		} else {
-			task.state = 11;
-			task.assigned_to = '';
-			// STRY0097883
-			var workNotes = gs.getMessage('Tasker - Additional comments for the Task Rejection have been added by');
-			workNotes = workNotes + gs.getMessage('Tasker -  (Assigned Member Rejecting):') + gs.getUserDisplayName();
-			workNotes = workNotes + gs.getMessage('Tasker -  (Comment):') + this.trimComments(task.comments);
-			task.work_notes =  workNotes;
-			
-			task.update();
-			gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been rejected'));
-			// Redirect
-			if (typeof spModal == 'undefined' ) {
-				// action.setRedirectURL(task);
-				gs.setRedirect(task);
-			}
-			
-		}
-	},
+        task.active = 'false';
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + 'Task was marked as Read');
 
-	uiAction_RejectExtensionRequest: function(request) {
-		// TODO - multilanguage
-		var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
+    },
 
-		// TODO - multilanguage
-		if (request.u_request_type == "Extension") {
-			// STRY0104533
-			var parentId = request.parent.toString();
-			var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				var allow = new uiConditionCheck().RespondExtension(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					var taskWorkNotes = 'Extension Request has been rejected by ' + gs.getUserDisplayName() +
-						' with the following comments: ' + this.trimComments(request.u_response_comments) + '. Note: The suspense date has not been updated.';
-			
-					grTask.latest_extension_request_date = request.u_requested_suspense_date;
-					grTask.extended_suspense_date = '';
-					// TODO - multilanguage
-					grTask.extension_approval = 'Rejected';
-					grTask.extension_requested = false;
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
-					
-					var todaysDate = new GlideDateTime();
-					// TODO - multilanguage
-					request.u_status = 'Completed'; //'Approved';
-					// TODO - multilanguage
-					request.u_response = 'Rejected';
-					request.u_responded_by = gs.getUserID();
-					request.u_responded = todaysDate;
-					request.update();
-					
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);
-			}
-		} else gs.addErrorMessage(errorMessage);
-	},
+    uiAction_AcknowledgeTask: function(task) {
+        task.state = 3;
+        // TODO - multilanguage
+        task.work_notes = "Task was marked as Acknowledged.";
 
-	uiAction_RejectReassignmentRequest: function(request) {
-		// TODO - multilanguage
-		var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
-		// STRY0102985 
-		if (request.u_request_type == "Reassignment") {
+        task.active = 'false';
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + ' Task was marked as Acknowledged.');
 
-			var parentId = request.parent.toString();
-			var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				var allow = new uiConditionCheck().RespondReassignment(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					var taskWorkNotes = 'Reassignment Request has been rejected by ' + gs.getUserDisplayName() +
-						' with the following comments: ' + this.trimComments(request.u_response_comments);
-					grTask.reassignment_approval = 'Rejected';
-					grTask.reassignment_requested = false;
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
-					
-					var todaysDate = new GlideDateTime();
-					// TODO - multilanguage
-					request.u_status = 'Completed'; //'Approved';
-					// TODO - multilanguage
-					request.u_response = 'Rejected';
-					request.u_responded_by = gs.getUserID();
-					request.u_responded = todaysDate;
-					request.update();
-					
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);
-			}
-		} else gs.addErrorMessage(errorMessage);
-	},
+    },
 
-	uiAction_RejectTaskForPrimaryAssignee: function(task) {
-		if (task.comments.nil()) {
-			gs.addErrorMessage(gs.getMessage('Comments are required when rejecting a Task'));
-		} else {
-			task.state = 11;
-			task.work_notes = gs.getMessage('Tasker - Comments for the Primary Assignee Task Rejection has been added by') + gs.getUserDisplayName();
-			task.primary_assignee = "";
-			task.update();
-			gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been rejected'));
-		}
-	},	
-	
-	uiAction_ReworkinProgress: function(task) {
-		task.state = 13;
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + ' is being reworked');
-	},
-	
-	uiAction_SaveTask: function(task) {
-		task.update();
-		gs.addInfoMessage(gs.getMessage('Tasker - Comments saved for Task')  + ' ' + task.number);
-	},
-	
-	uiAction_SaveAsTemplate: function(task) {
-		// start the process of creating a new process definition
-		// TODO - multilanguage
-		gs.eventQueue('x_153465_discovert.Save_as_Template', task, 'Save as Template',  gs.getUserID());
-		// TODO - multilanguage
-		gs.addInfoMessage("'"+ task.task_name + "'" + ' has been saved as a Template. You can find it under' + '<a href="?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template&filter=process_level%3Dglobal_process%5ENQprocess_level%3Dou_process%5ENQprocess_level%3Dmy_process%5Eprocess_ownerDYNAMIC90d1921e5f510100a9ad2572f2b477fe%5EEQ"> Personal Templates </a>');
-		
-		var templateName = task.short_description;
-		var gr = new GlideAggregate('x_153465_discovert_discover_routing_template');
-		gr.addQuery('template_name', templateName);
-		gr.setLimit(1);
-		gr.query();
-		if(gr.next()){
-			// TODO - multilanguage
-			gs.addInfoMessage("There is already a Template with that name.  Saving Template as a copy.");
-		}
-	},
-	
-	uiAction_SendEmail: function(taskerEmail) {	
-		taskerEmail.insert();
-		// RAJ - NOTE: these 2 lines go into UI Action script include in 2.6 and beyond
-		gs.eventQueue('x_153465_discovert.Tasker_Send_Email', current, gs.getUser().getEmail());
-	},
-	
-	uiAction_SendClarification: function(request) {
-		// TODO - multilanguage
-		var errorMessage = 'Request ' + request.number + ' did not meet the conditions to provide Clarification';
-		if (request.u_request_type == "Clarification") {
-			var parentId = request.parent.toString();
-			var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				var allow = new uiConditionCheck().RespondClarification(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					var taskWorkNotes = 'Clarification Request has been provided by ' + gs.getUserDisplayName() +
-						' with the following comments: ' + this.trimComments(request.u_response_comments);
-					
-					grTask.u_clarification_requested = false;
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
+    uiAction_UpdateTaskAndResponseLog: function(DecisionToClose, actionTaken, task) {
+        var stateClosedFrom = task.state;
+        task.decision = DecisionToClose;
+        task.state = 3;
+        task.active = 'false';
+        var gdt = new GlideDateTime();
+        task.work_end = gdt.getValue();
+        if (task.suspense_date != '') {
+            if (task.suspense_date > gdt.getValue())
+                task.u_completed_on_time = true;
+            else
+                task.u_completed_on_time = false;
+        } else task.u_completed_on_time = true;
+        switch (actionTaken) {
+            case 'reject':
+                // STRY0097883
+                task.work_notes = gs.getMessage('Tasker - Additional comments for the rejecting a Task Approval have been added by') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
+                break;
+            case 'approve':
+                task.work_notes = gs.getMessage('Tasker - This task has been approved by') + task.assigned_to.name;
+                break;
+            case 'concur':
+                task.work_notes = gs.getMessage('Tasker - This task has been concurred by') + task.assigned_to.name;
+                break;
+            case 'nonconcur':
+                // STRY0097883
+                task.work_notes = gs.getMessage('Tasker - Additional comments for the Task non-concurring have been added by ') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
+                break;
+            case 'approve_sign':
+                task.work_notes = gs.getMessage('Tasker - This task has been signed by') + task.assigned_to.name;
+                break;
+            case 'concur_sign':
+                task.work_notes = gs.getMessage('Tasker - This task has been signed by') + task.assigned_to.name;
+                break;
+            case 'nonconcur_sign':
+                // STRY0097883
+                task.work_notes = gs.getMessage('Tasker - Additional comments for the Task non-concurring have been added by ') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
+                break;
+        }
 
-					//KT: Update Request table
-					var todaysDate = new GlideDateTime();
-					// TODO - multilanguage
-					request.u_status = 'Completed'; //'Approved';
-					// TODO - multilanguage
-					request.u_response = 'Provided';
-					request.u_responded_by = gs.getUserID();
-					request.u_responded = todaysDate;
-					request.update();
 
-					//KT: Show Confirmation Message
-					if (gs.isMobile()){
-						// TODO - multilanguage
-						gs.addInfoMessage("Response submitted.");
-					} else {
-						gs.addInfoMessage(taskWorkNotes);
-					} 
+        task.update();
+        var isTaskeOwner = task.u_task_requester == gs.getUserID();
+        var isReviewer = task.u_reviewer == gs.getUserID();
+        var isAssignedMember = task.assigned_to == gs.getUserID();
 
-					//-------
-					//get the person who is going to receive
-					var clarificationProvider = gs.getUserDisplayName().toString();
-					var recipient = request.getValue('u_requested_by').toString();
-					// STRY0073598
-					// Assigned To, if active and assigned to is set
-					if(grTask.active && (grTask.assigned_to + '' != '')){						
-						recipient = recipient + ',' + grTask.getValue('assigned_to').toString();
-					}
-					if(grTask.active && (grTask.state == 14) && (grTask.u_reviewer + '' != '')){
-						recipient = recipient + ',' + grTask.getValue('u_reviewer').toString();
-					}
-					if(grTask.active && (grTask.assigned_to + '' == '') && (grTask.primary_assignee + '' != '') && (grTask.primary_assignee.tasking_authorities + '' != '')){
-						recipient = recipient + ',' + grTask.primary_assignee.tasking_authorities;
-					}
-					if(grTask.active && (grTask.assigned_to + '' == '') && (grTask.primary_assignee + '' == '')){
-						recipient = recipient + ',' + grTask.primary_office.u_global_authorities;
-					}
-					gs.eventQueue('x_153465_discovert.NotifClarificationPro', grTask, clarificationProvider, recipient);
-					//-------
-				} else gs.addErrorMessage(errorMessage);
-			}
-		} else gs.addErrorMessage(errorMessage);
-	},
+        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+        grResponseLog.initialize();
+        grResponseLog.u_task_tree = task.u_task_tree;
+        grResponseLog.u_task = task.getUniqueValue();
+        grResponseLog.u_task_number = task.number;
+        grResponseLog.u_responded_by = gs.getUserID();
+        if (stateClosedFrom == '14') {
+            grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+        } else {
+            grResponseLog.u_role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+        }
+        grResponseLog.response = task.comments_dt;
+        grResponseLog.u_action_taken = actionTaken;
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        if (grOU.get(task.primary_assignee)) {
+            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+        }
+        grResponseLog.insert();
+        gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
+    },
 
-	uiAction_SendToReview: function(task) {
-		// STRY0097883
-		task.work_notes = task.number + gs.getMessage('Tasker -  has been sent to review by') + ' ' + gs.getUserDisplayName() + gs.getMessage('Tasker - (Assigned Member):') + this.trimComments(task.response);
+    uiAction_MarkTaskCompleteAndUpdateResponseLog: function(task) {
+        // may need to compare to the function above there is a lot of overlap
+        var stateClosedFrom = task.getValue('state');
+        var isTaskeOwner = task.u_task_requester == gs.getUserID();
+        var isReviewer = task.u_reviewer == gs.getUserID();
+        var isAssignedMember = task.assigned_to == gs.getUserID();
 
-		// STRY0094943
-		var gdt = new GlideDateTime();
-		if(!task.work_start)
-			task.work_start= gdt.getValue();
-		
-		task.state = 14;
-		task.update();
+        task.decision = 'N/A';
+        task.state = 3;
+        task.active = 'false';
 
-		gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to review'));
-	},
-	
-	uiAction_SendToRework: function(task) {
-		// STRY0097883
-		task.work_notes = task.number + gs.getMessage('Tasker -  has been sent to rework by') + ' ' + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer)::') + this.trimComments(task.rework_comments);
-		task.state = 15;
-		task.update();
-		gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to rework'));
-	},
-	
-	uiAction_StartWork: function(task) {
-		var gdt = new GlideDateTime();
-		task.work_start= gdt.getValue();
-		task.state = 13;
-		task.update();
-		// TODO - multilanguage
-		gs.addInfoMessage(task.number + ' has been Started');
-	},
-	
-	// STRY0108329 - changed a function to make more specific to Task
-	uiAction_SubmitTaskRequest: function(request) {
-		var errorMessage = '';
-		var taskWorkNotes = '';
-		var grTask;
-		var parentId;
-		var allow;
-		var todaysDate = new GlideDateTime();
+        var gdt = new GlideDateTime();
+        // STRY0094943
+        if (!task.work_start)
+            task.work_start = gdt.getValue();
+        task.work_end = gdt.getValue();
 
-		//----------------------------------------------------------------------------------------------------------
-		// Request Clarification
-		//----------------------------------------------------------------------------------------------------------
-		if (request.u_request_type == "Clarification") {
-			// TODO - multilanguage
-			errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Clarification. Please validate that you are either the Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), and that you are not all three the Task Owner, Assigned Member and Reviewer';
+        if (task.suspense_date != '') {
+            if (task.suspense_date > gdt.getValue())
+                task.u_completed_on_time = true;
+            else
+                task.u_completed_on_time = false;
+        } else task.u_completed_on_time = true;
+        task.update();
+        // if the task was closed from the review state, then we need 2 entries
+        // either way, we need to write the complete entry
+        // this first entry is for the assigned member or the task owner
+        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+        grResponseLog.initialize();
+        grResponseLog.u_task_tree = task.u_task_tree;
+        grResponseLog.u_task = task.getUniqueValue();
+        grResponseLog.u_task_number = task.number;
+        if (stateClosedFrom == '14') {
+            // making the entery for sent to review for the assigned member if state 14
+            grResponseLog.u_responded_by = task.assigned_to;
+            grResponseLog.u_role = 'assigned_member';
+            grResponseLog.response = task.response;
+            grResponseLog.u_action_taken = 'sent_to_review';
+        } else {
+            // making the entery for sent to review for the assigned member if state 14
+            grResponseLog.u_role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+            grResponseLog.u_responded_by = gs.getUserID();
+            grResponseLog.response = task.response;
+            grResponseLog.u_action_taken = 'completed';
+        }
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        if (grOU.get(task.primary_assignee)) {
+            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+        }
+        grResponseLog.insert();
+        // now create the Reviewer entre IF the state is 14
+        if (stateClosedFrom == '14') {
+            grResponseLog.initialize();
+            grResponseLog.u_task_tree = task.u_task_tree;
+            grResponseLog.u_task = task.getUniqueValue();
+            grResponseLog.u_task_number = task.number;
+            grResponseLog.u_responded_by = gs.getUserID();
+            grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+            grResponseLog.response = task.comments_dt;
+            grResponseLog.u_action_taken = 'completed';
+            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+            grResponseLog.insert();
+        }
 
-			parentId = request.parent.toString();
-			grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				allow = new uiConditionCheck().RequestClarification(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					taskWorkNotes = 'Clarification Request has been created by ' + gs.getUserDisplayName() + ' with the following comments: ' + this.trimComments(request.u_request_comments);
-					grTask.u_clarification_requested = true;
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
+        gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
+    },
 
-					request.u_requested_by = gs.getUserID();
-					request.u_requested = todaysDate;
-					request.update();
+    uiAction_AssignTask: function(task) {
+        var now = new GlideDateTime();
+        var bDateOk = true;
+        if (gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true') {
+            if (now > task.suspense_date && task.suspense_date != "") {
+                // TODO - multilanguage
+                gs.addErrorMessage('The suspense date must be in the future.');
+                bDateOk = false;
+            }
+        }
 
-					gs.addInfoMessage(taskWorkNotes);
-					//get the person who is going to receive
-					var recipient = grTask.getValue('u_task_requester').toString();
-					var requestedby = gs.getUserDisplayName(); //request.getValue('u_requested_by').toString();
+        if (bDateOk) {
+            if (task.assigned_to.nil() || task.primary_assignee.nil()) {
+                var assignee = task.primary_assignee.getDisplayValue();
+                task.state = -5;
+                // TODO - multilanguage
+                task.work_notes = "Assigned to " + assignee;
+                task.update();
+            } else {
+                var assigned_to = task.assigned_to.getDisplayValue();
+                task.state = 1;
+                // TODO - multilanguage
+                task.work_notes = "Assigned to " + assigned_to;
+                task.update();
+            }
+        }
+    },
 
-					// STRY0071902
-					// Task Owner, if active and assigned to is set
-					if(grTask.active && (grTask.u_task_requester + '' != '')){
-						recipient = recipient + ',' + grTask.getValue('u_task_requester').toString();
-					}
-					// Assigned To, if active and assigned to is set
-					if(grTask.active && (grTask.assigned_to + '' != '')){
-						recipient = recipient + ',' + grTask.getValue('assigned_to').toString();
-					}
-					if(grTask.active && (grTask.state == 14) && (grTask.u_reviewer + '' != '')){
-						recipient = recipient + ',' + grTask.getValue('u_reviewer').toString();
-					}
-					// top Task, send request to Primary OU Task Managers
-					if(grTask.active && (grTask.parent + '' == '')){
-						recipient = recipient + ',' + grTask.primary_office.tasking_authorities;
-					}
-					// subTask, send request to Primary OU Task Managers
-					if(grTask.active && (grTask.parent + '' != '') && (grTask.primary_assignee + '' != '') && (grTask.primary_assignee.tasking_authorities + '' != '')){
-						recipient = recipient + ',' + grTask.primary_assignee.tasking_authorities;
-					}
-					// subTask, send request to Primary OU Task Managers
-					if(grTask.active && (grTask.parent + '' != '') && (grTask.primary_assignee + '' == '')){
-						recipient = recipient + ',' + grTask.primary_office.u_global_authorities;
-					}
+    uiAction_CancelSuggestedTask: function(task) {
+        task.tasker_created = false;
+        task.ignored = true;
+        task.active = false;
+        task.update();
+    },
 
-					gs.eventQueue('x_153465_discovert.NotifClarificationReq', grTask, requestedby, recipient);
-					//-------
-				} else gs.addErrorMessage(errorMessage);
-			} else gs.addErrorMessage(errorMessage);
-		}
+    uiAction_CreateSubtasksforEachOUMember: function(task) {
+        if (!task.primary_assignee.nil()) {
+            // Get the list of members in the office
+            var grMem = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+            grMem.addQuery('discover_office_hierarchy', task.primary_assignee);
+            //Only return members in the primary assignee office
+            grMem.query();
 
-		//----------------------------------------------------------------------------------------------------------
-		// Request Extension
-		//----------------------------------------------------------------------------------------------------------
-		if (request.u_request_type == "Extension") {
-			// TODO - multilanguage
-			errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Extension';
-			// STRY0104349 
-			parentId = request.parent.toString();
-			grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				allow = new uiConditionCheck().RequestExtension(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					taskWorkNotes = 'Extension Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the requested suspense date: ' + request.u_requested_suspense_date + ' and the following comments: ' + this.trimComments(request.u_request_comments);
-					grTask.extended_suspense_date = request.u_requested_suspense_date;
-					grTask.extension_approval = '';
-					grTask.extension_requested = true;
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
+            // create a subtask with the same information as the parent for each member
+            while (grMem.next()) {
+                this.private_functionCreateSubTaskFromParent(task, null, grMem);
+            }
+        }
+    },
 
-					request.u_requested_by = gs.getUserID();
-					request.u_requested = todaysDate;
-					request.update();
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);
-			} else gs.addErrorMessage(errorMessage);
-		}
+    uiAction_CreateSubtasksforEachSubOUs: function(task) {
+        if (!task.primary_assignee.nil()) {
+            // Get the list of OUs that are direct children of the Primary Assignee OU
+            var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+            grOUs.addQuery('parent', task.primary_assignee);
+            //Only return members in the primary assignee office
+            grOUs.query();
+            // create a subtask with the same information as the parent for each member
+            while (grOUs.next()) {
+                this.private_functionCreateSubTaskFromParent(task, grOUs, null);
+            }
+        }
+    },
 
-		//----------------------------------------------------------------------------------------------------------
-		// Request Reassignment
-		//----------------------------------------------------------------------------------------------------------
-		if (request.u_request_type == "Reassignment") {
-			// TODO - multilanguage
-			errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Reassignment';
+    private_functionCreateSubTaskFromParent: function(task, primaryAssignee, assignedMember) {
+        var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
+        recTaskInst.initialize();
+        recTaskInst.instructions = task.instructions;
+        recTaskInst.category = task.category;
+        recTaskInst.warning_hours = task.warning_hours;
+        recTaskInst.classification = task.classification;
+        // Set the Primary Assignee OU to the Child OU
+        recTaskInst.primary_assignee = primaryAssignee ? primaryAssignee.sys_id : task.primary_assignee;
+        // NOTE: May need to add members to the Additional Assignee list
+        recTaskInst.assigned_to = assignedMember ? assignedMember.office_member.toString() : '';
 
-			parentId = request.parent.toString();
-			grTask = new GlideRecord("x_153465_discovert_route_task_instance");
-			if (grTask.get(parentId)){
-				allow = new uiConditionCheck().RequestReassignment(grTask);
-				if (allow) {
-					// STRY0097883
-					// TODO - multilanguage
-					taskWorkNotes = 'Reassignment Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the following comments: ' + this.trimComments(request.u_request_comments);
-					grTask.reassignment_approval = '';
-					grTask.reassignment_requested = 'true';
-					grTask.work_notes = taskWorkNotes;
-					grTask.update();
+        recTaskInst.primary_office = task.primary_office;
+        recTaskInst.tasking_authority = task.tasking_authority;
+        recTaskInst.short_description = task.short_description;
+        recTaskInst.sub_category = task.sub_category;
+        recTaskInst.parent = task.sys_id;
+        recTaskInst.task_order = 1;
+        // NOTE this should not be necessary, but the business rule that keeps these 2 in sync is not firing on this ui action
+        recTaskInst.order = 1;
+        // STRY0076880
+        recTaskInst.u_wait_for_subtasks_to_finish = task.u_wait_for_subtasks_to_finish;
+        // ***************** Start of changes	*****************
+        // STRY0011008 - RAJ 2018-02-23 add logic to set dates while creating sub tasks
+        //               the date logic used to be in a business rule, but that had negative impact on setting dates throughout a process tree
+        var gdt = new GlideDateTime();
+        var durationAdd;
+        // Use parent to set Estimated Start, if child estimated start not set
+        //  STRY0076973 - fix start date copy to subtask issue
+        if (!task.expected_start.nil()) {
+            recTaskInst.setValue('expected_start', task.expected_start.dateNumericValue());
+            gdt.setValue(recTaskInst.expected_start.dateNumericValue());
+        } else {
+            recTaskInst.setValue('expected_start', gdt.getNumericValue());
+        }
+        // NOTE: logicall calculating the duration below will overwrite the suspsense date.
+        // if current record has no duration and no supsense date, and the parent has no suspense date, set it to the parent's duration
+        if (!task.calendar_duration.nil()) {
+            recTaskInst.calendar_duration = task.calendar_duration;
+            durationAdd = task.calendar_duration.dateNumericValue();
+            gdt.add(durationAdd);
+            recTaskInst.setValue('suspense_date', gdt.getNumericValue());
+            recTaskInst.setValue('due_date', task.suspense_date.dateNumericValue());
+        }
+        //       If use the parent values for suspense date instead of calculating based on duration
+        if (!task.suspense_date.nil()) {
+            recTaskInst.setValue('suspense_date', task.suspense_date.dateNumericValue());
+            recTaskInst.setValue('due_date', task.suspense_date.dateNumericValue());
+        }
+        // ***************** End of changes	*****************
+        recTaskInst.originator = gs.getUserID();
+        recTaskInst.insert();
+    },
 
-					request.u_requested_by = gs.getUserID();
-					request.u_requested = todaysDate;
-					request.update();
-					gs.addInfoMessage(taskWorkNotes);
-				} else gs.addErrorMessage(errorMessage);
-			} else gs.addErrorMessage(errorMessage);
-		}
-	},
-	
-	uiAction_Update: function(task) {
-		task.update();
-	},
-	
+    uiAction_CreateSuggestedTask: function(action, suggestedTask) {
+        var taskerTable = 'x_153465_discovert_route_task_instance';
+        var grTasker = new GlideRecord(taskerTable);
+        var a_count = new GlideAggregate('sys_attachment');
+        a_count.addQuery('table_sys_id', suggestedTask.sys_id);
+        a_count.addAggregate('COUNT');
+        a_count.query();
+        var numAttachments = 0;
+        if (a_count.next())
+            numAttachments = a_count.getAggregate('COUNT');
+        grTasker.initialize();
+        grTasker.short_description = suggestedTask.suggested_short_description;
+        grTasker.instructions = suggestedTask.suggested_tasker_instructions;
+        // STRY0048709
+        grTasker.u_objective = suggestedTask.suggested_tasker_instructions;
+        grTasker.suggested_task = suggestedTask.sys_id;
+        //HT STRY0042785 set primary assignee, primary office and tasking authority to default OU of internal email sender
+        if (suggestedTask.sender_internal_user) {
+            var defaultOU = '';
+            var grOM = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+            grOM.addQuery('office_member', suggestedTask.sender_internal_user);
+            grOM.setLimit(1);
+            grOM.query();
+            while (grOM.next()) {
+                defaultOU = grOM.getValue("u_default_ou");
+            }
+            if (defaultOU) {
+                grTasker.primary_assignee = defaultOU;
+                grTasker.primary_office = defaultOU;
+                grTasker.tasking_authority = defaultOU;
+            }
+        }
+        // TODO - multilanguage
+        grTasker.work_notes = "This task was created from Suggested Task #: " + suggestedTask.number.getDisplayValue() +
+            "\n Sender: " + suggestedTask.sender_internal_user.name + "\n Sender Email: " + suggestedTask.senderemail + "\n Subject Line: " + suggestedTask.email_subject + "\n Date Emailed: " + suggestedTask.sys_created_on + "\n Number of attachments: " + numAttachments;
+        // STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+        grTasker = new CustomTaskerFieldHelper().mapFieldDataOnAction('suggestedTasktoTask', suggestedTask, grTasker);
+        grTasker.insert();
+        suggestedTask.u_created_task = grTasker.sys_id;
+        suggestedTask.tasker_created = true;
+        suggestedTask.active = false;
+        suggestedTask.update();
+        // TODO - multilanguage
+        var infoMsg = '<a href="../discovertaskerportal?id=discovertasker_taskdetails&table=' + taskerTable + '&sys_id=' + grTasker.sys_id + '&spa=1" target="_top" >' + suggestedTask.u_created_task.getDisplayValue() + ' has been created based on this suggestion' + '</a>. Please Wait. You are being redirected to the new Task.';
+        gs.addInfoMessage(infoMsg);
+        // Redirect
+        if (typeof spModal == 'undefined') {
+            var redirectUrl = "../discovertaskerportal?id=discovertasker_taskdetails&table=" + taskerTable + "&sys_id=" + grTasker.sys_id + "&spa=1 target=_top";
+            //$location.url(redirectUrl);
+            action.setRedirectURL(grTasker);
+            //gs.setRedirect(grTasker);
+        }
+
+    },
+
+    uiAction_CreateTask: function(action, task) {
+        // v2.5.13 | 08.08.2020 | STRY0076605:  Sequential Review
+        var insertTaskerHelper = new TaskerHelpers();
+        var initialState = insertTaskerHelper.getInitialState(task);
+        task.state = initialState;
+        // STRY0072379
+        var bDateOk = true;
+        var now = new GlideDateTime();
+        if (gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true') {
+            if (now > task.suspense_date && task.suspense_date != "") {
+                // TODO - multilanguage
+                gs.addErrorMessage('The suspense date must be in the future.');
+                bDateOk = false;
+            }
+        }
+        if (bDateOk) {
+            task.insert();
+            // Redirect
+            if (typeof spModal == 'undefined') {
+                action.setRedirectURL(task);
+            }
+        }
+    },
+
+    uiAction_DisableSharedAttachments: function(task) {
+        if (!task.u_top_task.nil()) {
+            task.u_shared_attachments = false;
+            task.update();
+        }
+    },
+
+    uiAction_DisableSharedDocuments: function(task) {
+        if (!task.u_top_task.nil()) {
+            task.u_shared_documents = false;
+            task.update();
+        }
+    },
+
+    uiAction_EnableSharedAttachments: function(task) {
+        if (!task.u_top_task.nil()) {
+            task.u_shared_attachments = true;
+            task.update();
+        }
+    },
+
+    uiAction_EnableSharedDocuments: function(task) {
+        if (!task.u_top_task.nil()) {
+            task.u_shared_documents = true;
+            task.update();
+        }
+    },
+
+    uiAction_MarkasCompleteLate: function(task) {
+        task.u_completed_on_time = false;
+        task.update();
+    },
+
+    uiAction_MarkasCompleteonTime: function(task) {
+        task.u_completed_on_time = true;
+        task.update();
+    },
+
+    uiAction_Promote: function(task) {
+        var grParentInstance = new GlideRecord('x_153465_discovert_route_task_instance');
+        grParentInstance.initialize();
+
+        // skip assignment, it will be handled by tasking authority
+        //task.assigned_to = grSourceDefinition.assigned_to_individual;
+        grParentInstance.instructions = task.instructions;
+        grParentInstance.category = task.category;
+        grParentInstance.warning_hours = task.warning_hours;
+        grParentInstance.classification = task.classification;
+        // TODO, FIND PARENT OU OF CURRENT TASK
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        grOU.addQuery('sys_id', task.primary_assignee);
+        grOU.query();
+        if (grOU.next()) {
+            grParentInstance.primary_assignee = grOU.parent;
+        }
+
+        grParentInstance.primary_office = task.primary_office;
+        grParentInstance.task_order = 1;
+        // TODO - don't do this with a single copy, need to determine the right way to do this
+        //grParentInstance.response
+        grParentInstance.short_description = task.short_description;
+        grParentInstance.sub_category = task.sub_category;
+        grParentInstance.calendar_duration = task.duration;
+        grParentInstance.tasker_type = task.tasker_type;
+        grParentInstance.tasking_authority = task.tasking_authority;
+        grParentInstance.demo_data = task.demo_data;
+        grParentInstance.originator = task.originator;
+        grParentInstance.insert();
+        task.parent = grParentInstance.sys_id;
+        task.update();
+
+        // NOTE: we may want to also copy the response documents from source to destination.  Or, the attachments object might be just fine.
+        // TODO IF WE TURN THIS BACK ON, NEED TO ADD TO THE OTHER COPY MECHANISM SIMILAR TO CREATE WITH A PARENT, WE WILL NEED TO DO CREATE WITH A CHILD
+        GlideSysAttachment.copy('x_153465_discovert_route_task_instance', task.sys_id, 'x_153465_discovert_route_task_instance', grParentInstance.sys_id);
+    },
+
+    uiAction_RejectAssignment: function(task) {
+        if (task.comments.nil()) {
+            gs.addErrorMessage(gs.getMessage('Additional comments are required when rejecting a Task'));
+        } else {
+            task.state = 11;
+            task.assigned_to = '';
+            // STRY0097883
+            var workNotes = gs.getMessage('Tasker - Additional comments for the Task Rejection have been added by');
+            workNotes = workNotes + gs.getMessage('Tasker -  (Assigned Member Rejecting):') + gs.getUserDisplayName();
+            workNotes = workNotes + gs.getMessage('Tasker -  (Comment):') + this.trimComments(task.comments);
+            task.work_notes = workNotes;
+
+            task.update();
+            gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been rejected'));
+            // Redirect
+            if (typeof spModal == 'undefined') {
+                // action.setRedirectURL(task);
+                gs.setRedirect(task);
+            }
+
+        }
+    },
+
+    uiAction_RejectExtensionRequest: function(request) {
+        // TODO - multilanguage
+        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
+
+        // TODO - multilanguage
+        if (request.u_request_type == "Extension") {
+            // STRY0104533
+            var parentId = request.parent.toString();
+            var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                var allow = new uiConditionCheck().RespondExtension(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    var taskWorkNotes = 'Extension Request has been rejected by ' + gs.getUserDisplayName() +
+                        ' with the following comments: ' + this.trimComments(request.u_response_comments) + '. Note: The suspense date has not been updated.';
+
+                    grTask.latest_extension_request_date = request.u_requested_suspense_date;
+                    grTask.extended_suspense_date = '';
+                    // TODO - multilanguage
+                    grTask.extension_approval = 'Rejected';
+                    grTask.extension_requested = false;
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    var todaysDate = new GlideDateTime();
+                    // TODO - multilanguage
+                    request.u_status = 'Completed'; //'Approved';
+                    // TODO - multilanguage
+                    request.u_response = 'Rejected';
+                    request.u_responded_by = gs.getUserID();
+                    request.u_responded = todaysDate;
+                    request.update();
+
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            }
+        } else gs.addErrorMessage(errorMessage);
+    },
+
+    uiAction_RejectReassignmentRequest: function(request) {
+        // TODO - multilanguage
+        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
+        // STRY0102985 
+        if (request.u_request_type == "Reassignment") {
+
+            var parentId = request.parent.toString();
+            var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                var allow = new uiConditionCheck().RespondReassignment(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    var taskWorkNotes = 'Reassignment Request has been rejected by ' + gs.getUserDisplayName() +
+                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
+                    grTask.reassignment_approval = 'Rejected';
+                    grTask.reassignment_requested = false;
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    var todaysDate = new GlideDateTime();
+                    // TODO - multilanguage
+                    request.u_status = 'Completed'; //'Approved';
+                    // TODO - multilanguage
+                    request.u_response = 'Rejected';
+                    request.u_responded_by = gs.getUserID();
+                    request.u_responded = todaysDate;
+                    request.update();
+
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            }
+        } else gs.addErrorMessage(errorMessage);
+    },
+
+    uiAction_RejectTaskForPrimaryAssignee: function(task) {
+        if (task.comments.nil()) {
+            gs.addErrorMessage(gs.getMessage('Comments are required when rejecting a Task'));
+        } else {
+            task.state = 11;
+            task.work_notes = gs.getMessage('Tasker - Comments for the Primary Assignee Task Rejection has been added by') + gs.getUserDisplayName();
+            task.primary_assignee = "";
+            task.update();
+            gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been rejected'));
+        }
+    },
+
+    uiAction_ReworkinProgress: function(task) {
+        task.state = 13;
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + ' is being reworked');
+    },
+
+    uiAction_SaveTask: function(task) {
+        task.update();
+        gs.addInfoMessage(gs.getMessage('Tasker - Comments saved for Task') + ' ' + task.number);
+    },
+
+    uiAction_SaveAsTemplate: function(task) {
+        // start the process of creating a new process definition
+        // TODO - multilanguage
+        gs.eventQueue('x_153465_discovert.Save_as_Template', task, 'Save as Template', gs.getUserID());
+        // TODO - multilanguage
+        gs.addInfoMessage("'" + task.task_name + "'" + ' has been saved as a Template. You can find it under' + '<a href="../discovertaskerportal?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template&filter=process_level%3Dglobal_process%5ENQprocess_level%3Dou_process%5ENQprocess_level%3Dmy_process%5Eprocess_ownerDYNAMIC90d1921e5f510100a9ad2572f2b477fe%5EEQ"> Personal Templates </a>');
+
+        var templateName = task.short_description;
+        var gr = new GlideAggregate('x_153465_discovert_discover_routing_template');
+        gr.addQuery('template_name', templateName);
+        gr.setLimit(1);
+        gr.query();
+        if (gr.next()) {
+            // TODO - multilanguage
+            gs.addInfoMessage("There is already a Template with that name.  Saving Template as a copy.");
+        }
+    },
+
+    uiAction_SendEmail: function(taskerEmail) {
+        taskerEmail.insert();
+        // RAJ - NOTE: these 2 lines go into UI Action script include in 2.6 and beyond
+        gs.eventQueue('x_153465_discovert.Tasker_Send_Email', current, gs.getUser().getEmail());
+    },
+
+    uiAction_SendClarification: function(request) {
+        // TODO - multilanguage
+        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to provide Clarification';
+        if (request.u_request_type == "Clarification") {
+            var parentId = request.parent.toString();
+            var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                var allow = new uiConditionCheck().RespondClarification(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    var taskWorkNotes = 'Clarification Request has been provided by ' + gs.getUserDisplayName() +
+                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
+
+                    grTask.u_clarification_requested = false;
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    //KT: Update Request table
+                    var todaysDate = new GlideDateTime();
+                    // TODO - multilanguage
+                    request.u_status = 'Completed'; //'Approved';
+                    // TODO - multilanguage
+                    request.u_response = 'Provided';
+                    request.u_responded_by = gs.getUserID();
+                    request.u_responded = todaysDate;
+                    request.update();
+
+                    //KT: Show Confirmation Message
+                    if (gs.isMobile()) {
+                        // TODO - multilanguage
+                        gs.addInfoMessage("Response submitted.");
+                    } else {
+                        gs.addInfoMessage(taskWorkNotes);
+                    }
+
+                    //-------
+                    //get the person who is going to receive
+                    var clarificationProvider = gs.getUserDisplayName().toString();
+                    var recipient = request.getValue('u_requested_by').toString();
+                    // STRY0073598
+                    // Assigned To, if active and assigned to is set
+                    if (grTask.active && (grTask.assigned_to + '' != '')) {
+                        recipient = recipient + ',' + grTask.getValue('assigned_to').toString();
+                    }
+                    if (grTask.active && (grTask.state == 14) && (grTask.u_reviewer + '' != '')) {
+                        recipient = recipient + ',' + grTask.getValue('u_reviewer').toString();
+                    }
+                    if (grTask.active && (grTask.assigned_to + '' == '') && (grTask.primary_assignee + '' != '') && (grTask.primary_assignee.tasking_authorities + '' != '')) {
+                        recipient = recipient + ',' + grTask.primary_assignee.tasking_authorities;
+                    }
+                    if (grTask.active && (grTask.assigned_to + '' == '') && (grTask.primary_assignee + '' == '')) {
+                        recipient = recipient + ',' + grTask.primary_office.u_global_authorities;
+                    }
+                    gs.eventQueue('x_153465_discovert.NotifClarificationPro', grTask, clarificationProvider, recipient);
+                    //-------
+                } else gs.addErrorMessage(errorMessage);
+            }
+        } else gs.addErrorMessage(errorMessage);
+    },
+
+    uiAction_SendToReview: function(task) {
+        // STRY0097883
+        task.work_notes = task.number + gs.getMessage('Tasker -  has been sent to review by') + ' ' + gs.getUserDisplayName() + gs.getMessage('Tasker - (Assigned Member):') + this.trimComments(task.response);
+
+        // STRY0094943
+        var gdt = new GlideDateTime();
+        if (!task.work_start)
+            task.work_start = gdt.getValue();
+
+        task.state = 14;
+        task.update();
+
+        gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to review'));
+    },
+
+    uiAction_SendToRework: function(task) {
+        // STRY0097883
+        task.work_notes = task.number + gs.getMessage('Tasker -  has been sent to rework by') + ' ' + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer)::') + this.trimComments(task.rework_comments);
+        task.state = 15;
+        task.update();
+        gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to rework'));
+    },
+
+    uiAction_StartWork: function(task) {
+        var gdt = new GlideDateTime();
+        task.work_start = gdt.getValue();
+        task.state = 13;
+        task.update();
+        // TODO - multilanguage
+        gs.addInfoMessage(task.number + ' has been Started');
+    },
+
+    // STRY0108329 - changed a function to make more specific to Task
+    uiAction_SubmitTaskRequest: function(request) {
+        var errorMessage = '';
+        var taskWorkNotes = '';
+        var grTask;
+        var parentId;
+        var allow;
+        var todaysDate = new GlideDateTime();
+
+        //----------------------------------------------------------------------------------------------------------
+        // Request Clarification
+        //----------------------------------------------------------------------------------------------------------
+        if (request.u_request_type == "Clarification") {
+            // TODO - multilanguage
+            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Clarification. Please validate that you are either the Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), and that you are not all three the Task Owner, Assigned Member and Reviewer';
+
+            parentId = request.parent.toString();
+            grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                allow = new uiConditionCheck().RequestClarification(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    taskWorkNotes = 'Clarification Request has been created by ' + gs.getUserDisplayName() + ' with the following comments: ' + this.trimComments(request.u_request_comments);
+                    grTask.u_clarification_requested = true;
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    request.u_requested_by = gs.getUserID();
+                    request.u_requested = todaysDate;
+                    request.update();
+
+                    gs.addInfoMessage(taskWorkNotes);
+                    //get the person who is going to receive
+                    var recipient = grTask.getValue('u_task_requester').toString();
+                    var requestedby = gs.getUserDisplayName(); //request.getValue('u_requested_by').toString();
+
+                    // STRY0071902
+                    // Task Owner, if active and assigned to is set
+                    if (grTask.active && (grTask.u_task_requester + '' != '')) {
+                        recipient = recipient + ',' + grTask.getValue('u_task_requester').toString();
+                    }
+                    // Assigned To, if active and assigned to is set
+                    if (grTask.active && (grTask.assigned_to + '' != '')) {
+                        recipient = recipient + ',' + grTask.getValue('assigned_to').toString();
+                    }
+                    if (grTask.active && (grTask.state == 14) && (grTask.u_reviewer + '' != '')) {
+                        recipient = recipient + ',' + grTask.getValue('u_reviewer').toString();
+                    }
+                    // top Task, send request to Primary OU Task Managers
+                    if (grTask.active && (grTask.parent + '' == '')) {
+                        recipient = recipient + ',' + grTask.primary_office.tasking_authorities;
+                    }
+                    // subTask, send request to Primary OU Task Managers
+                    if (grTask.active && (grTask.parent + '' != '') && (grTask.primary_assignee + '' != '') && (grTask.primary_assignee.tasking_authorities + '' != '')) {
+                        recipient = recipient + ',' + grTask.primary_assignee.tasking_authorities;
+                    }
+                    // subTask, send request to Primary OU Task Managers
+                    if (grTask.active && (grTask.parent + '' != '') && (grTask.primary_assignee + '' == '')) {
+                        recipient = recipient + ',' + grTask.primary_office.u_global_authorities;
+                    }
+
+                    gs.eventQueue('x_153465_discovert.NotifClarificationReq', grTask, requestedby, recipient);
+                    //-------
+                } else gs.addErrorMessage(errorMessage);
+            } else gs.addErrorMessage(errorMessage);
+        }
+
+        //----------------------------------------------------------------------------------------------------------
+        // Request Extension
+        //----------------------------------------------------------------------------------------------------------
+        if (request.u_request_type == "Extension") {
+            // TODO - multilanguage
+            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Extension';
+            // STRY0104349 
+            parentId = request.parent.toString();
+            grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                allow = new uiConditionCheck().RequestExtension(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    taskWorkNotes = 'Extension Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the requested suspense date: ' + request.u_requested_suspense_date + ' and the following comments: ' + this.trimComments(request.u_request_comments);
+                    grTask.extended_suspense_date = request.u_requested_suspense_date;
+                    grTask.extension_approval = '';
+                    grTask.extension_requested = true;
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    request.u_requested_by = gs.getUserID();
+                    request.u_requested = todaysDate;
+                    request.update();
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            } else gs.addErrorMessage(errorMessage);
+        }
+
+        //----------------------------------------------------------------------------------------------------------
+        // Request Reassignment
+        //----------------------------------------------------------------------------------------------------------
+        if (request.u_request_type == "Reassignment") {
+            // TODO - multilanguage
+            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Reassignment';
+
+            parentId = request.parent.toString();
+            grTask = new GlideRecord("x_153465_discovert_route_task_instance");
+            if (grTask.get(parentId)) {
+                allow = new uiConditionCheck().RequestReassignment(grTask);
+                if (allow) {
+                    // STRY0097883
+                    // TODO - multilanguage
+                    taskWorkNotes = 'Reassignment Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the following comments: ' + this.trimComments(request.u_request_comments);
+                    grTask.reassignment_approval = '';
+                    grTask.reassignment_requested = 'true';
+                    grTask.work_notes = taskWorkNotes;
+                    grTask.update();
+
+                    request.u_requested_by = gs.getUserID();
+                    request.u_requested = todaysDate;
+                    request.update();
+                    gs.addInfoMessage(taskWorkNotes);
+                } else gs.addErrorMessage(errorMessage);
+            } else gs.addErrorMessage(errorMessage);
+        }
+    },
+
+    uiAction_Update: function(task) {
+        task.update();
+    },
+
     type: 'Task_uiAction'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
@@ -1156,14 +1214,14 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>176</sys_mod_count>
+        <sys_mod_count>177</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-03 13:40:13</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-06 16:56:48</sys_updated_on>
     </sys_script_include>
 </record_update>

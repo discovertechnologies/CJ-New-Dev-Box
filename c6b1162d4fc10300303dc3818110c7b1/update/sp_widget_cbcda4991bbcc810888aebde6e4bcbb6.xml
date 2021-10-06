@@ -1,117 +1,212 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function(spUtil, $location) {
-	/* widget controller */
-	
-	//AA - STRY0028805
-	var c = this;
-	c.reason = '';
-	c.confirmCancel = "";
-	$('#uiNotificationContainer').css("z-index","1000000");
-	c.submit = function(){
-		c.data.submit = true;
-		c.data.reason = c.reason;
-		spUtil.addInfoMessage("The task has been canceled");
-		c.server.update();
-		location.reload();
-	};
-	
-}]]></client_script>
+        <client_script><![CDATA[api.controller = function($scope) {
+    /* widget controller */
+    var c = this;
+
+    c.onCancel = function() {
+        $scope.$parent.$parent.$dismiss();
+    };
+
+    c.enableSubmitButton = function() {
+        if (c.data.newCancellationReason === undefined) {
+            c.data.isSubmitButtonDisabled = true;
+        } else {
+            c.data.isSubmitButtonDisabled = c.data.newCancellationReason.length === 0;
+        }
+    };
+
+    c.onSubmit = function() {
+        c.data.submit = true;
+        $scope.server.update().then(function() {
+            $scope.$parent.$parent.$dismiss();
+        });
+
+    };
+
+};]]></client_script>
         <controller_as>c</controller_as>
-        <css>//------------------------------------------------------------------------------------------------------------------------&#13;
-// COMPANY: DISCOVER TECHNOLOGIES&#13;
-// CUSTOMIZED BY: KARINA TORRES &#13;
-//------------------------------------------------------------------------------------------------------------------------&#13;
-//------------------------------------------------------------------------------------------------------------------------&#13;
-// 2.5.21 | 09.03.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)&#13;
-//------------------------------------------------------------------------------------------------------------------------&#13;
-// No updates needed on Tasker theme&#13;
-&#13;
-.astrik:before{&#13;
-   color: red;&#13;
-   content: "*";&#13;
-   position: absolute;&#13;
-   margin-left: -1%;&#13;
-}</css>
+        <css>/* No CSS here. Add via Tasker Theme */</css>
         <data_table>sp_instance</data_table>
         <demo_data/>
-        <description/>
+        <description>Create a new widget for cancel tasks modal popup, based off of widget Tasker Modal - Delete Task.&#13;
+&#13;
+V2.7&#13;
+2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification</description>
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
-        <id>tasker_modal_prompt</id>
+        <id>tasker_modal_cancel_tasks_prompt</id>
         <internal>false</internal>
-        <link/>
-        <name>Tasker Modal - Task Cancellation Comment</name>
+        <link><![CDATA[function link(scope, element, attrs, controller) { 
+
+ }]]></link>
+        <name>Tasker Modal - Cancel Tasks</name>
         <option_schema/>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[(function($sp, input, data, options, gs) {
-	/* populate the 'data' object */
-	/* e.g., data.table = $sp.getValue('table'); */
-	
-	data.submit = false;
-	data.uiAction = '';
-	data.taskNumber = '';
-	var currentUser = gs.getUserDisplayName();
-	if(input){
-		data.children = input.numberOfChildren;
-		data.taskNumber = input.taskNumber;
-		if(input.taskId){
-			data.taskId = input.taskId;
-		}
-		if(input.submit == true){
-			var gr = new GlideRecord('x_153465_discovert_route_task_instance'); //KT - STRY0063650
-			gr.addQuery('sys_id', data.taskId );
-			gr.query();
-			if(gr.next()){
-				gr.u_cancellation_reason = input.reason;
-				
-				
-				// STRY0097883
-				var maxComment = 500;
-				var strComment = input.reason + '';
-				var userComments = strComment.replace(/<\/?[^>]+(>|$)/g, "").toString();
-				userComments = userComments.length > maxComment ? userComments.substring(0,maxComment-3) + '...' : userComments;
-				gr.work_notes = "This task has been cancelled by: " + currentUser + "\nCancellation Reason: " + userComments;
-				gr.state = 7;
-				gr.update();
-			}
-		}
-	}
-})($sp, input, data, options, gs);]]></script>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// WIDGET BASE: Tasker Modal - Delete Task
+//------------------------------------------------------------------------------------------------------------------------
+// 2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification 
+//											In HTML, all new. var's msgBody# coded to match AC line #,
+//											  Submit button disabled while var newCancellationReason
+//											  length = 0.
+//											In CSS, No CSS here, put in Tasker Theme. 
+//											In Service script, all new. Grouped code into functions.
+//											In Client controller, all new. Grouped code into functions.
+//                                          Changes in HTML, CSS, Server script and Client controller
+//
+//------------------------------------------------------------------------------------------------------------------------
+
+(function($sp, input, data, options) {
+    var tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
+
+    main();
+
+    function main() {
+        if (input) {
+            if (input.submit == true) {
+                // run cancel step
+				var grTasksCancel = new GlideRecord(tableRouteTaskInstance);
+                if (grTasksCancel.get(input.taskSysId)) {
+					
+					var gdt2 = new GlideDateTime();
+                    new Task_uiAction().uiAction_CancelTasks(grTasksCancel, input.newCancellationReason, gdt2);
+                }
+            } else {
+                // copy to data[name] from input[name] || option[name]
+                _optCopy(['cancellationReason', 'taskSysId']);
+                _buildMessages();
+                _setDataDefaults();
+            }
+        }
+    }
+
+    function _buildMessages() {
+        data.cancelButtonText = gs.getMessage('cancel');
+        data.submitButtonText = gs.getMessage('Tasker - Button - Cancel Task(s)');
+        data.submitButtonTitle = gs.getMessage('Tasker - Sets the State to Cancelled');
+
+        data.msgBody3 = gs.getMessage('Tasker - Warning: You have {0} open subtasks', [_getDescendantsCount()]);
+        data.msgBody4 = gs.getMessage('Tasker - By cancelling this task, you will automatically cancel the subtasks as well');
+        data.msgBody5 = gs.getMessage('Tasker - Are you sure you would like to continue?');
+        data.msgBody6 = gs.getMessage('Tasker - Cancellation Reason');
+
+        data.msgYourReason = gs.getMessage('Type your reason here');
+        data.msgWarning = gs.getMessage('Warning');
+    }
+
+    function _getDescendantsCount() {
+
+        var countDescendants = 0;
+        var filter_ancestors = 'u_all_ancestors_tasksLIKE' + data.taskSysId;
+        var gaSubTasks = new GlideAggregate(tableRouteTaskInstance);
+
+        gaSubTasks.addEncodedQuery(filter_ancestors);
+        gaSubTasks.addQuery('state', 'NOT IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
+        gaSubTasks.addAggregate('COUNT');
+        gaSubTasks.query();
+
+        if (gaSubTasks.next()) {
+            // Need to subtract 1 since this task is also in the list of ancestors
+            countDescendants = gaSubTasks.getAggregate('COUNT') - 1;
+        }
+
+        return countDescendants.toFixed(0);
+    }
+
+
+    // copy to data from input or options
+    function _optCopy(names) {
+        names.forEach(function(name) {
+            data[name] = input[name] || options[name];
+        });
+    }
+
+    function _setDataDefaults() {
+        data.isSubmitButtonDisabled = true;
+        data.submit = false;
+        data.newCancellationReason = input.cancellationReason;
+        if (data.newCancellationReason === undefined) {
+            data.isSubmitButtonDisabled = true;
+        } else {
+            data.isSubmitButtonDisabled = data.newCancellationReason.length === 0;
+        }
+    }
+})($sp, input, data, options);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2019-10-28 18:18:03</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>cbcda4991bbcc810888aebde6e4bcbb6</sys_id>
-        <sys_mod_count>130</sys_mod_count>
-        <sys_name>Tasker Modal - Task Cancellation Comment</sys_name>
+        <sys_mod_count>132</sys_mod_count>
+        <sys_name>Tasker Modal - Cancel Tasks</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_cbcda4991bbcc810888aebde6e4bcbb6</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-07 16:41:51</sys_updated_on>
-        <template><![CDATA[<div ng-if="data.children > 0" class="alert alert-danger" role="alert">
-  This Task has {{data.children}} sub-tasks that are also going to be canceled. Do you want to continue?
-</div>
-<form name="modalForm">
-  <div class="form-group">
-    <label class="astrik" for="cancelationReason">Cancellation Reason</label>
-    <textarea type="text" class="form-control required" id="cancelationReason" ng-model="c.reason" ng-required="true" placeholder="Type here a cancellation reason" rows="4"></textarea>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-06 16:19:20</sys_updated_on>
+        <template><![CDATA[<div class="dtech-modal-widget-body">
+  <div class="dtech-text-center">
+    <img src="Warning64.svg"/>
   </div>
-  <div class="form-group">
-    <label class="astrik" for="confirmCancelation">Confirm Cancellation</label><br>
-    <input type="checkbox" class=" required" id="confirmCancelation" ng-model="c.confirmCancel" aria-describedby="confirmCancelationHelp" ng-required="true">
-    <small id="confirmCancelationHelp" class="form-text text-muted">Are you sure you want to cancel this task?</small>
-  </div>
-  <button type="submit" id="cancelTask" ng-click="modalForm.$valid && c.submit()" class="btn btn-danger">Cancel Task(s)</button>
-</form>
 
- ]]></template>
+  <div class="dtech-text-center">
+    <h1 class="text-uppercase">{{data.msgWarning}}!</h1>
+  </div>
+
+  <div class="dtech-text-center dtech-standard-text-color">
+    <span>
+      {{data.msgBody3}}
+    </span>
+  </div>
+  <br>
+  
+  <div class="dtech-text-center dtech-standard-text-color">
+    <span>
+      {{data.msgBody4}}
+    </span>
+  </div>
+  <br>
+  
+  <div class="dtech-text-center dtech-standard-text-color">
+    <span>
+      {{data.msgBody5}}
+    </span>
+  </div>
+  <br>
+  
+  <div class="container-fluid">
+    <label class="asterisk dtech-standard-text-color" for="cancellationReason">{{data.msgBody6}}</label>
+    <textarea type="text" class="form-control" id="cancellationReason" ng-model="data.newCancellationReason" ng-required="true" 
+              ng-change="c.enableSubmitButton()" placeholder="{{data.msgYourReason}}" rows="4"></textarea>
+  </div>
+  <br>
+</div>
+<div id="footer" class="dtech-modal-widget-footer dtech-box">
+
+  <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
+          type="button" title="{{data.cancelButtonText}}"
+          ng-click="c.onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
+  </button>
+
+  <button id="submit" class="btn btn-danger dtech-max-width-fit-content dtech-push-right"
+          type="submit" title="{{data.submitButtonTitle}}" ng-disabled="data.isSubmitButtonDisabled"
+          ng-click="c.onSubmit();">{{data.submitButtonText}}
+  </button>
+</div>
+]]></template>
     </sp_widget>
 </record_update>
