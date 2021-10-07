@@ -145,8 +145,18 @@
                 }
                 if (field.type == 'date') {
                     var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+                    // STRY0091251 - STRETCH-TUP(Estimated Duration Calculation)  - calculate Estimated Duration for Task Template Tree to show where Parent duration is shorter than sum of children
+                    // server is loading duration values in UTC
+                    var gdt = new Date();
+                    // returns the offset in minutes
+                    // updates offset to miliseconds
+                    date_number = date_number - (gdt.getTimezoneOffset() * 60 * 1000);
                     newNodeData[key] = date_number;
                 }
+								if (field.type=='time') {
+									var gdTime = new Date(record[key].value);
+									var time_number = (gdTime.getHours() * 60 + gdTime.getMinutes() * 60 + gdTime.getSeconds()) * 1000;
+								}							
             } //if field wasn't found do nothing
         }
         newNodeData.name = getTaskTitleNode(newNodeData);
@@ -156,6 +166,15 @@
         // STRY0095897
         newNodeData.warning.taskingAuthorityEmpty = ((newNodeData.tasking_authority == '' || newNodeData.tasking_authority == null));
         newNodeData.warning.primaryOfficeEmpty = ((newNodeData.primary_office == '' || newNodeData.primary_office == null));
+			
+				// STRY0110317 calculate the due date to be set using days and Time
+				newNodeData.actualTime = 0;
+				if(newNodeData.u_duration_days >= 0){
+					newNodeData.actualTime = newNodeData.u_duration_days * 86400000;
+				}
+				if(newNodeData.u_duration_time_due >= 0){
+					newNodeData.actualTime+= newNodeData.u_duration_time_due;
+				}			
 
         // if status is not provided on a new record, set to unkown
         if (!newNodeData.status)
@@ -203,10 +222,27 @@
                     // returns the offset in minutes
                     // updates offset to miliseconds
                     date_number = date_number - (gdt.getTimezoneOffset() * 60 * 1000);
-                    diagram.model.setDataProperty(nodeData, key, date_number);
+	                  diagram.model.setDataProperty(nodeData, key, date_number);
                 }
+								if (field.type=='time') {
+									var gdTime = new Date(record[key].value);
+									var time_number = (gdTime.getHours() * 60 + gdTime.getMinutes() * 60 + gdTime.getSeconds()) * 1000;
+                  diagram.model.setDataProperty(nodeData, key, time_number);
+								}
             } //if field wasn't found do nothing
         }
+				// STRY0110317 calculate the due date to be set using days and Time
+				var actualTime = 0;
+				if(nodeData.u_duration_days >= 0){
+					actualTime = nodeData.u_duration_days * 86400000;
+				}
+				if(nodeData.u_duration_time_due >= 0){
+					actualTime+= nodeData.u_duration_time_due;
+				}
+        if (nodeData.actualTime != actualTime) {
+            diagram.model.setDataProperty(nodeData, 'actualTime', actualTime);
+        }
+			
         var nameValue = getTaskTitleNode(nodeData);
         if (nodeData.name != nameValue) {
             diagram.model.setDataProperty(nodeData, 'name', nameValue);
@@ -245,6 +281,7 @@
     }
 
     function checkDateWarnings(changedNodeData) {
+debugger;			
         if (changedNodeData.parent != undefined && changedNodeData.parent != '') {
             var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
             compareParentDateToAllChildren(parentNodeData.sys_id);
@@ -274,15 +311,16 @@
                 orderMax = 0;
                 currentOrder = parseInt(node.data.route_order);
             }
-            if (node.data.duration > orderMax) {
-                orderMax = parseInt(node.data.duration);
+					
+						if (node.data.actualTime > orderMax) {
+                orderMax = parseInt(node.data.actualTime);
             }
+					
             // STRY0091251
-            if (node.data.duration > parentNode.data.duration) {
+            if (node.data.actualTime > parentNode.data.actualTime) {
                 singleSubtaskLongerThanParent = true;
                 thisSubtaskLongerThanParent = true;
             }
-
             // STRY0091251
             if (node.data.warning.isParentShorterThanThisTask != thisSubtaskLongerThanParent) {
                 diagram.model.setDataProperty(node.data.warning, 'isParentShorterThanThisTask', thisSubtaskLongerThanParent);
@@ -294,7 +332,7 @@
 
         var totalChildDuration = sumSubTaskTemplateDuration + orderMax;
         diagram.model.setDataProperty(parentNode.data, 'totalChildDuration', totalChildDuration);
-        diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.duration >= totalChildDuration)));
+        diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.actualTime >= totalChildDuration)));
         diagram.model.updateTargetBindings(parentNode.data);
     }
 
@@ -318,8 +356,42 @@
             case 'DurationIcon':
                 var durrationWarningCount = 1;
                 toolTip = $go(go.Panel, "Table",
-                    $go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ", {
+                    $go(go.TextBlock, c.data.fieldsInModel.u_duration_days.fieldLabel + ": ", {
                         row: 0,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+                            return data.u_duration_days_DisplayValue;
+                        }), {
+                            row: 0,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.u_duration_time_due.fieldLabel + ": ", {
+                        row: 1,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+										$go(go.TextBlock,															
+                        new go.Binding("text", "", function(data) {
+                            return data.u_duration_time_due_DisplayValue;
+                        }), {
+                            row: 1,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ", {
+                        row: 2,
                         column: 0,
                         alignment: go.Spot.Right,
                         margin: 2,
@@ -329,7 +401,7 @@
                         new go.Binding("text", "", function(data) {
                             return data.duration_DisplayValue;
                         }), {
-                            row: 0,
+                            row: 2,
                             column: 1,
                             alignment: go.Spot.Left,
                             margin: 2,
@@ -337,7 +409,7 @@
                         }),
                     $go(go.TextBlock, c.data.durationWarningWaitState, {
                             visible: false,
-                            row: 1,
+                            row: 3,
                             column: 0,
                             columnSpan: 2,
                             alignment: go.Spot.Left,
@@ -350,7 +422,7 @@
                     // STRY0091251
                     $go(go.TextBlock, c.data.durationWarningParentLessThanCombinedSubtasks, {
                             visible: false,
-                            row: 2,
+                            row: 4,
                             column: 0,
                             columnSpan: 2,
                             alignment: go.Spot.Left,
@@ -364,7 +436,7 @@
                         })),
                     $go(go.TextBlock, c.data.durationWarningIsSubTaskLongerThanParent, {
                             visible: false,
-                            row: 3,
+                            row: 5,
                             column: 0,
                             columnSpan: 2,
                             alignment: go.Spot.Left,
@@ -378,7 +450,7 @@
                         })),
                     $go(go.TextBlock, c.data.durationWarningisParentShorterThanThisTask, {
                             visible: false,
-                            row: 4,
+                            row: 6,
                             column: 0,
                             columnSpan: 2,
                             alignment: go.Spot.Left,
@@ -1373,7 +1445,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>1822</sys_mod_count>
+        <sys_mod_count>1839</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1381,7 +1453,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-05 04:17:32</sys_updated_on>
+        <sys_updated_on>2021-10-06 00:19:10</sys_updated_on>
         <template><![CDATA[
 <div class="panel panel-default">
     <div class="panel-heading">
