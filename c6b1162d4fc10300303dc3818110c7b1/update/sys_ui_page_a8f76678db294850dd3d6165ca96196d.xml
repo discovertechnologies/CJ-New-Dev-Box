@@ -1,134 +1,211 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
     <sys_ui_page action="INSERT_OR_UPDATE">
         <category>general</category>
-        <client_script><![CDATA[var $jj = jQuery;
-function cancelTask(){
-var reason = false;
-var confirmed = false;
-var cancellationReason = document.getElementById("cancellationReason").value;
-var confirm_cancellation = document.getElementById('confirm_cancellation').checked;
+        <client_script><![CDATA[initPage();
 
-if(cancellationReason < 2 ){
-	document.getElementById('reason').style.borderBottom = "1px solid red";
-	reason = false;
-}else{
-	document.getElementById('reason').style.borderBottom = 'none';
-	reason = true;
+// Use this function to remove the disabled attribute from the submit button
+function enableSubmitButton() {
+	gel('submit').disabled = gel('newCancellationReason').value.length == 0;
 }
-if(confirm_cancellation == false ){
-	document.getElementById('confirm').style.borderBottom = "1px solid red";
-	confirmed = false;
-}else{
-	document.getElementById('confirm').style.borderBottom = 'none';
-	confirmed = true;
+
+// Use this function to initialize variables at page load
+function initPage() {
+	gel('newCancellationReason').value = gel('newCancellationReason').value.trim();
+	var reasonLength = gel('newCancellationReason').value.length;
+	
+	if (reasonLength == 0) {
+		gel('submit').disabled = true;
+	} else {
+		gel('submit').disabled = false;
+	}
 }
-if(confirmed && reason){
-	return true;
-}else{
-	return false;
+
+// dialog_button id="cancel" was clicked, user does not want to delete the task
+function onCancel() {
+    // below will auto close popup
+    GlideDialogWindow.get().destroy();
+    return false;
 }
+
+// dialog_button id="submit" was clicked, user confirms wanting to delete the task
+function onSubmit() {
+    return true;
 }]]></client_script>
-        <description>x_153465_discovert_cancel_prompt&#13;
+        <description>UI Page to prompt from Platform about cancellation of Tasks and subtasks; renamed cancel_prompt to cancel_task_prompt&#13;
+&#13;
+v2.7&#13;
+2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification&#13;
+    renamed cancel_prompt to cancel_task_prompt; total rewrite&#13;
+    &#13;
 &#13;
 2.5.3 - 325 - corrected spelling error on the cancellation reason field when writing to Task field from page</description>
         <direct>false</direct>
-        <endpoint>x_153465_discovert_cancel_prompt.do</endpoint>
+        <endpoint>x_153465_discovert_cancel_task_prompt.do</endpoint>
         <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
 <j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
-  <g:ui_form>
 
-      <j:set var="jvar_taskOwner" value="${sysparm_taskOwner}"/>
-      <j:set var="jvar_numberOfSubTasks" value="${sysparm_numberOfSubTasks}"/>
-      <j:set var="jvar_taskSysId" value="${sysparm_taskSysId}"/>
-	   
-	  <input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
+	<!-- Import a style sheet that the customer can edit -->
+	<!-- Tasker Theme Stytle Sheet use GlideRecord tablename: sp.css  is not accessible-->
+	<!-- Content Management > Design > Style Sheets use GlideRecord tablename: content.css -->
+	<g:evaluate object="true">
+		<!-- can have multiple stylesheets -->
+		var styleSheets = [];
 
-      <g:evaluate> 
-         var gr = new GlideAggregate("x_153465_discovert_route_task_instance");
-         gr.addQuery("parent", '${jvar_taskSysId}');
-         gr.addAggregate('COUNT');
-         gr.query();
-      </g:evaluate>
-      <div class="modal-body">
-      <j:while test = "${gr.next()}">
-      </j:while>
-      <j:if test="${gr.getAggregate('COUNT') > 0}">
-         <div   class="warning_notification alert alert-danger" role="alert">
-            This Task has ${gr.getAggregate('COUNT')} Subtask(s) that are also going to be canceled. Do you want to continue?
-         </div>
-      </j:if>
-      <form>
-         <div class="form-group">
-            <label class="required" for="cancelationReason" id="reason">
-               <g:form_label>
-                  Cancellation Reason:
-               </g:form_label>
-            </label>
-            <textarea type="text" class="form-control required" id="cancellationReason" name="cancellationReason"  placeholder="Type here a cancelation reason" rows="4" ></textarea>
-         </div>
-		  <br></br>
-         <div class="form-group">
-            <label class="astrik" for="confirmCancelation" id="confirm">
-               <g:form_label>
-                  Confirm Cancellation:
-               </g:form_label>
-            </label>
-			 <br></br>
-            <input type="checkbox" class="required" id="confirm_cancellation" name="confirm_cancellation" aria-describedby="confirmCancelationHelp" required="true "/>
-			 <small id="confirmCancelationHelp" class="form-text"  style="padding-left:5px;">Are you sure you want to cancel this task?</small>
-         </div>
-     
-      <footer class="modal-footer flex">
-         <g:dialog_button 
-            id="cancel"
-            title="${gs.getMessage('Cancel')}"
-            type="${jvar_cancel_type}"
-            style_class="btn btn-danger"
-            onclick="return cancelTask();"
-            style="min-width: 5em;">${gs.getMessage('Cancel')}
-         </g:dialog_button>
-      </footer>
-		   </form>
-		  	   </div>
+		styleSheets.push("tasker-modal-prompt-UIPages.css");
 
-   </g:ui_form>
+		var linkTags = [];
+		for (var sheet in styleSheets) {
+		var css = new GlideRecord("content_css");
+		css.addQuery("name", styleSheets[sheet]);
+		css.query();
+		css.next();
+		linkTags.push(css.sys_id+".cssdbx?ver="+css.sys_updated_on);
+		}
+	</g:evaluate>
+	<j:forEach var="jvar_link" items="${linkTags}">
+		<link href="${jvar_link}" rel="stylesheet" type="text/css"></link>
+	</j:forEach>
+
+
+
+	<!-- Cache static messages -->
+	<g:messages>
+		Warning
+		Tasker - Warning: You have {0} open subtasks
+		Tasker - By cancelling this task, you will automatically cancel the subtasks as well
+		Tasker - Are you sure you would like to continue?
+		Tasker - Cancellation Reason
+		Tasker - Type your reason here
+		cancel
+		Tasker - Button - Cancel Task(s)
+		Tasker - Sets the State to Cancelled
+	</g:messages>
+
+	<g:ui_form>
+		<!-- pass variables from the Client Script (where spModal.open is or new GlideModal is) -->
+		<j:set var="jvar_cancellationReason" value="${sysparm_cancellationReason}"/>
+		<j:set var="jvar_taskSysId" value="${sysparm_taskSysId}"/>
+
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<!--<input type="hidden" id="cancelReason" name="cancelReason" value="${jvar_cancellationReason}"/>-->
+		<input type="hidden" id="sysid" name="sysid" value="${jvar_taskSysId}"/>
+
+		<div class="dtech-modal-widget-body">
+			<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
+			<g:evaluate var="jvar_messageOpenTasksCount" jelly="true">
+				var messageOpenTasksCount = '';
+				var descendantsCount = 0;
+				var	taskSys_Id = jelly.jvar_taskSysId;
+				var filter_ancestors = 'u_all_ancestors_tasksLIKE' + taskSys_Id;
+
+				var gaSubTasks = new GlideAggregate("x_153465_discovert_route_task_instance");
+				gaSubTasks.addEncodedQuery(filter_ancestors);
+				gaSubTasks.addQuery('state', 'NOT IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
+				gaSubTasks.addAggregate('COUNT');
+				gaSubTasks.query();
+
+				if (gaSubTasks.next()) {
+				// Need to subtract 1 since this task is also in the list of ancestors
+				descendantsCount = gaSubTasks.getAggregate('COUNT') - 1;
+				}
+
+				descendantsCount = descendantsCount.toFixed(0);
+				messDescendantsCount = gs.getMessage('Tasker - Warning: You have {0} open subtasks', [descendantsCount]);
+			</g:evaluate>
+
+			<div class="dtech-text-center">
+				<img src="Warning64.svg"/>
+			</div>
+
+			<div class="dtech-text-center">
+				<h1 class="text-uppercase">${gs.getMessage('Warning')}!</h1>
+			</div>
+
+			<div class="dtech-text-center dtech-standard-text-color">
+				<span id="msgBody3">
+					${jvar_messageOpenTasksCount}
+				</span>
+			</div>
+			<br></br>
+
+			<div class="dtech-text-center dtech-standard-text-color">
+				<span id="msgBody4">
+					${gs.getMessage('Tasker - By cancelling this task, you will automatically cancel the subtasks as well')}
+				</span>
+			</div>
+			<br></br>
+
+			<div class="dtech-text-center dtech-standard-text-color">
+				<span id="msgBody5">
+					${gs.getMessage('Tasker - Are you sure you would like to continue?')}
+				</span>
+			</div>
+			<br></br>
+
+			<form>
+				<div class="form-group">
+					<label class="asterisk dtech-standard-text-color" for="newCancellationReason" id="reason">
+						<g:form_label>
+							${gs.getMessage('Tasker - Cancellation Reason')}
+						</g:form_label>
+					</label>
+					<textarea type="text" class="form-control" id="newCancellationReason" name="newCancellationReason" oninput="enableSubmitButton()"
+							  placeholder="${gs.getMessage('Type your reason here')}" rows="4" >${jvar_cancellationReason}</textarea>
+				</div>
+				<br></br>
+
+				<div id="footer" class="dtech-modal-widget-footer dtech-box">
+					<g:dialog_button 
+									 id="cancel"
+									 title="${gs.getMessage('cancel')}"
+									 type="button"
+									 style_class="btn btn-default dtech-max-width-fit-content"
+									 onclick="return onCancel();"
+									 >${gs.getMessage('cancel')}
+					</g:dialog_button>
+					<g:dialog_button 
+									 id="submit"
+									 title="${gs.getMessage('Tasker - Sets the State to Cancelled')}"
+									 type="submit"
+									 style_class="btn btn-danger dtech-max-width-fit-content dtech-push-right "
+									 onclick="return onSubmit();"
+									 >${gs.getMessage('Tasker - Button - Cancel Task(s)')}
+					</g:dialog_button>
+				</div>
+			</form>
+		</div>
+
+	</g:ui_form>
 </j:jelly>]]></html>
-        <name>cancel_prompt</name>
+        <name>cancel_task_prompt</name>
         <processing_script><![CDATA[cancel();
-//
-function cancel(){
-	var currentUser = gs.getUserDisplayName();
-	var gr = new GlideRecord("x_153465_discovert_route_task_instance");
-	gr.addQuery('sys_id', sysid);
-	gr.query();
-	if(gr.next()){
-		gr.u_cancellation_reason = cancellationReason;
 
-		// STRY0097883
-		var maxComment = 500;
-		var strComment = cancellationReason + '';
-		var userComments = strComment.replace(/<\/?[^>]+(>|$)/g, "").toString();
-		userComments = userComments.length > maxComment ? userComments.substring(0,maxComment-3) + '...' : userComments;
-		
-		gr.work_notes = "This task has been cancelled by: " + currentUser + "\nCancellation Reason: " + userComments;
-		gr.state = 7;
-		gr.update();		
-	}
-	response.sendRedirect("/x_153465_discovert_route_task_instance.do?sys_id=" + sysid);
+function cancel() {
+    var grTasksCancel = new GlideRecord("x_153465_discovert_route_task_instance");
+    grTasksCancel.addQuery('sys_id', sysid);
+    grTasksCancel.query();
+
+    if (grTasksCancel.next()) {
+		var gdt2 = new GlideDateTime();
+		// newCancellationReason is the name attribute on HTML textarea tag
+        new Task_uiAction().uiAction_CancelTasks(grTasksCancel, newCancellationReason, gdt2);
+    }
+	
+    response.sendRedirect("/x_153465_discovert_route_task_instance.do?sys_id=" + sysid);
 }]]></processing_script>
         <sys_class_name>sys_ui_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2019-12-03 20:43:04</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>a8f76678db294850dd3d6165ca96196d</sys_id>
-        <sys_mod_count>25</sys_mod_count>
-        <sys_name>cancel_prompt</sys_name>
+        <sys_mod_count>102</sys_mod_count>
+        <sys_name>cancel_task_prompt</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_page_a8f76678db294850dd3d6165ca96196d</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-04-07 17:02:00</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-06 15:39:51</sys_updated_on>
     </sys_ui_page>
 </record_update>

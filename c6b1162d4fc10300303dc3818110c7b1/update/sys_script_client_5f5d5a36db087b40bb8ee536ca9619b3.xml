@@ -3,81 +3,69 @@
         <active>true</active>
         <applies_extended>false</applies_extended>
         <condition/>
-        <description>Confirms and prompts the user to provide a reason to cancel the task, triggered by cancel ui-action</description>
+        <description>Confirms and prompts the user to provide a reason to cancel the task, triggered by cancel ui-action&#13;
+&#13;
+v2.7&#13;
+2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification&#13;
+    Updated to be able to show a widget for the Portal and an UI Page for Platform&#13;
+    </description>
         <field>calchaschildren</field>
         <global>true</global>
         <isolate_script>true</isolate_script>
-        <messages/>
+        <messages>cancel</messages>
         <name>Task - onSubmit prompt cancel reason</name>
         <order/>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
-*  The Government's rights to use, display, or disclose this software are restricted.
-*  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. */
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 function onSubmit() {
-	
-	var subTasks = g_form.getValue('calchaschildren');
-	var taskNumber = g_form.getValue('number');
-	var cancelation_confirmation;
-	var currentUser = g_user.getFullName();
-	var cancelation_reason= '';
-	
-	function getCancelationReason() {
+
+    if (g_form.getActionName() == 'cancel') {
+        confirmTaskCancellation();
+		return false;
+    }
+
+    function confirmTaskCancellation() {
+		// u_cancellation_reason data type is HTML, but not using a control that shows it so strip off tags
+		var formCancellationReason = g_form.getValue('u_cancellation_reason').replace(/<\/?[^>]+(>|$)/g, "");
+		var formTaskSysId = g_form.getUniqueValue();
+		var taskNumberShortDescription = g_form.getValue('taskernumber') + ': ' + g_form.getValue('short_description');
+		var messageTitle = getMessage('cancel') + ' ' + taskNumberShortDescription + '?';
 		
-		cancelation_reason = prompt("Please provide a reason to why you want to cancel this task: ");
-		try {
-			if(cancelation_reason == null)
-				return false;
-			if (cancelation_reason == '' || cancelation_reason == undefined) {
-				
-				throw err;
-			} else {
-				g_form.setValue('u_cancellation_reason', cancelation_reason);
-				g_form.setValue('u_canceled_by',currentUser);
-				
-			}
-		} catch (e){
-			alert("You must provide a cancelation reason");
-			getCancelationReason();
-		}
-	}
-	// cancel ui aciton for platform cancelation prompt
-	if (g_form.getActionName() == 'cancel') {
-		
-		if (subTasks > 0) {
-			cancelation_confirmation = confirm("Are you sure you want to cancel this task? " + taskNumber + " has " + subTasks + " Subtasks that are also going to be canceled. Do you want to continue?");
-		} else {
-			cancelation_confirmation = confirm("Are you sure you want to cancel this task?");
-		}
-		
-		if (cancelation_confirmation == true) {
-			
-			getCancelationReason();
-			if(cancelation_reason == null)
-				return false;
-		}else {
-			return false;
-		}
-	}
-	
-	// cancel ui action for serviceportal prompt via modal
-	if(g_form.getActionName() == 'sp_cancel'){
-		if (typeof spModal != 'undefined' ) {
-			spModal.open({
-				title: 'Cancel ' + g_form.getValue("number") + "?",
-				backdrop:'static',
-				widget: 'tasker_modal_prompt',
-				widgetInput: {'uiAction' : 'cancel', 'taskId': g_form.getUniqueValue(), 'numberOfChildren': g_form.getValue('calchaschildren'), 'taskNumber': g_form.getValue('number')},
-					buttons: []
-				}).then(function(){
-					//jslog("numberofsubtasks");
-				}) ;
-				return false;	}
-			}
-			
-		}]]></script>
+        // Use widget for Portal
+        if (typeof spModal != 'undefined') {
+            spModal.open({
+                title: messageTitle,
+                backdrop: 'static',
+                widget: 'tasker_modal_cancel_tasks_prompt',
+                widgetInput: {
+                    'cancellationReason': formCancellationReason,
+					'taskSysId': formTaskSysId
+                },
+                buttons: [],
+                // Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+                footerStyle: {
+                    'display': 'none'
+                }
+            }).then(function() {
+                //jslog('numberofsubtasks');
+            });
+            return false;
+        } else if (typeof spModal == 'undefined') {
+            // For Platform use UI Page named: 
+            var gm = new GlideModal('x_153465_discovert_cancel_task_prompt');
+            gm.setTitle(messageTitle);
+			gm.setPreference('sysparm_cancellationReason', formCancellationReason);
+            gm.setPreference('sysparm_taskSysId', formTaskSysId);
+            
+            gm.setWidth(550);
+            gm.render();
+        }
+    }
+}]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-03-11 15:18:56</sys_created_on>
@@ -85,7 +73,7 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>5f5d5a36db087b40bb8ee536ca9619b3</sys_id>
-        <sys_mod_count>73</sys_mod_count>
+        <sys_mod_count>101</sys_mod_count>
         <sys_name>Task - onSubmit prompt cancel reason</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -93,8 +81,8 @@ function onSubmit() {
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_5f5d5a36db087b40bb8ee536ca9619b3</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:40</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-05 19:17:02</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>

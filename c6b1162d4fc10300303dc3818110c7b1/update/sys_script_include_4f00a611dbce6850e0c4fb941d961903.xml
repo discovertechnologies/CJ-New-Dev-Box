@@ -15,6 +15,7 @@ STRY0105845 - DIA- Draft Scheduled Tasks- Create Draft Task State&#13;
 STRY0108329 - DIA- Org Hierarchy– OU Request Form- Email Notification - changed a function to make more specific to Task&#13;
 DFCT0010462 - Spelling mistakes - "Activity" tab in the work notes " extenstion and  suspesne  are misspelled. &#13;
 2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
+STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
 &#13;
 2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
@@ -606,20 +607,27 @@ Task_uiAction.prototype = {
 		} else{
 			recTaskInst.setValue('expected_start', gdt.getNumericValue());
 		}
-		// NOTE: logicall calculating the duration below will overwrite the suspsense date.
-		// if current record has no duration and no supsense date, and the parent has no suspense date, set it to the parent's duration
-		if(!task.calendar_duration.nil()){
-			recTaskInst.calendar_duration = task.calendar_duration;
-			durationAdd=task.calendar_duration.dateNumericValue();
-			gdt.add(durationAdd);
-			recTaskInst.setValue('suspense_date',gdt.getNumericValue());
-			recTaskInst.setValue('due_date',task.suspense_date.dateNumericValue());
-		}
+		
 		//       If use the parent values for suspense date instead of calculating based on duration
 		if(!task.suspense_date.nil()) {
 			recTaskInst.setValue('suspense_date',task.suspense_date.dateNumericValue());
 			recTaskInst.setValue('due_date' ,task.suspense_date.dateNumericValue());
+		} else {
+			// NOTE: logicall calculating the duration below should only be done if the parent task has no suspsense date
+			// if current record has no duration and no supsense date, and the parent has no suspense date
+			// then, set the task's date to add the the parent's duration
+			if(!task.calendar_duration.nil()){
+				// STRY0110317 - updated to use schedule on when creating subtasks where there is no suspense date
+				//               and a duration on the parent task
+				var tdc = new TaskerDurationCalculator();
+				recTaskInst.calendar_duration = task.calendar_duration;
+				durationAdd=task.calendar_duration.dateNumericValue();
+				gdt.setValue(tdc.calculateEndDate(recTopTempTask, (durationAdd), gdt));
+				recTaskInst.setValue('suspense_date',gdt.getValue());
+				recTaskInst.setValue('due_date',task.suspense_date.dateNumericValue());
+			}
 		}
+		
 		// ***************** End of changes	*****************
 		recTaskInst.originator = gs.getUserID();
 		recTaskInst.insert();
@@ -766,7 +774,7 @@ Task_uiAction.prototype = {
 		//grParentInstance.response
 		grParentInstance.short_description = task.short_description;
 		grParentInstance.sub_category = task.sub_category;
-		grParentInstance.calendar_duration = task.duration;
+		grParentInstance.calendar_duration = task.calendar_duration;
 		grParentInstance.tasker_type = task.tasker_type;
 		grParentInstance.tasking_authority = task.tasking_authority;
 		grParentInstance.demo_data = task.demo_data;
@@ -1156,7 +1164,7 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>176</sys_mod_count>
+        <sys_mod_count>179</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1164,6 +1172,6 @@ Task_uiAction.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-03 13:40:13</sys_updated_on>
+        <sys_updated_on>2021-10-06 03:27:51</sys_updated_on>
     </sys_script_include>
 </record_update>

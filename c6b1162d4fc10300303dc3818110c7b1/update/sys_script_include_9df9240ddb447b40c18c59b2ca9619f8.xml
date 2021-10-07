@@ -7,6 +7,7 @@
         <client_callable>false</client_callable>
         <description>2.7&#13;
 STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
+STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
 &#13;
 2.6 - moved duration code in here from Task Helper as this duration logic is related to template, not task&#13;
 &#13;
@@ -37,8 +38,63 @@ var TaskTemplateHelpers = Class.create();
 TaskTemplateHelpers.prototype = {
     initialize: function() {
     },
+	
+	getDurationDaysAndTimeDue: function (gr) {
+		var objDuration = {"u_duration_days":0,"u_duration_time_due":0};
+		var duration;
+		if(!gr.u_duration_days.nil()){
+			objDuration.u_duration_days = gr.u_duration_days;
+		} else if(!gr.u_duration.nil()){
+			// STRY0110317
+			duration = new GlideDateTime(gr.getValue('u_duration'));
+			// get duration into miliseconds
+			duration = duration.getNumericValue();
+			// this will set the day field
+			objDuration.u_duration_days = this.calculateDaysFromDuration(duration);
+		}
+		// if time set, return time
+		if(!gr.u_duration_time_due.nil()){
+			duration = new GlideDateTime(gr.getValue('u_duration_time_due'));
+			objDuration.u_duration_time_due = duration.getNumericValue();
+		} else{
+			// if time not set, return system default
+			var eod_string = new tasking_System_Settings_Scripts().getDefaultTime(gr);
+			duration = new GlideDateTime(eod_string);
+			// get duration into miliseconds
+			duration = duration.getNumericValue();
+			objDuration.u_duration_time_due = this.calculateTimeFromDuration(duration);
+		}
+		return objDuration;
+	},
+	calculateDaysFromDuration: function(durationMS){
+		var days = 0;
+		var dueTime = 0;
+		var oneDay = (24 * 60 * 60) * 1000;
+		if (durationMS >= oneDay) {
+			days = parseInt(durationMS / oneDay);
+		}
+		return days;
+	},
+
+	
+	calculateTimeFromDuration: function(durationMS){
+		var dueTime;
+		var days = this.calculateDaysFromDuration(durationMS);
+		var oneDay = (24 * 60 * 60) * 1000;
+		if (days > 0) {
+			// get time by subtracting the value of all the days in milliseconds from the durationMS var
+			dueTime = durationMS - (days * oneDay);
+		} else {
+			dueTime = durationMS;
+		}
+	
+		return dueTime;
+	},
+	
 	// NOTE the math in this function needs to stay in sync with getTemplateTreeLeveln as bothare setting warnings
 	getTemplateTaskDurationOfChildren: function (sys_id) {
+		// STRY0110317 
+		var tdc = new TaskerDurationCalculator();
 		var grTempTask = new GlideRecordSecure('x_153465_discovert_route_tasks');
 		grTempTask.addQuery('parent', sys_id);
 		grTempTask.orderBy('route_order');
@@ -55,8 +111,16 @@ TaskTemplateHelpers.prototype = {
 				orderMax = 0;
 				currentOrder = parseInt(grTempTask.route_order);
 			}
-			if (grTempTask.duration.dateNumericValue() > orderMax){
-				orderMax = parseInt(grTempTask.duration.dateNumericValue());
+			// STRY0110317 calculate the due date to be set using days and Time
+			var taskActualTime = 0;
+			if(grTempTask.u_duration_days > 0){
+				taskActualTime = grTempTask.u_duration_days * 86400000;
+			}
+			if(!grTempTask.u_duration_time_due.nil()){
+				taskActualTime+= grTempTask.duration.u_duration_time_due.dateNumericValue();
+			}
+			if (taskActualTime > orderMax){
+				orderMax = parseInt(taskActualTime);
 			}
 		}
 		return sumSubTaskTemplateDuration + orderMax;
@@ -746,7 +810,7 @@ TaskTemplateHelpers.prototype = {
         <sys_created_on>2019-03-05 20:30:26</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>9df9240ddb447b40c18c59b2ca9619f8</sys_id>
-        <sys_mod_count>126</sys_mod_count>
+        <sys_mod_count>137</sys_mod_count>
         <sys_name>TaskTemplateHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
@@ -754,6 +818,6 @@ TaskTemplateHelpers.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9df9240ddb447b40c18c59b2ca9619f8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-07-11 03:56:22</sys_updated_on>
+        <sys_updated_on>2021-10-06 21:48:20</sys_updated_on>
     </sys_script_include>
 </record_update>

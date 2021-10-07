@@ -7,6 +7,8 @@
         <client_callable>false</client_callable>
         <description>2.7 combined Template Widget Data into here, added convertHtmlToSimpleString; Update .href to use dot notation for state and order &#13;
 STRY0109208 , STRY0109209 - Add Create Icon&#13;
+STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
+&#13;
 2.6 Performance Updates - move Task Tree List load and configuration into a seperate file</description>
         <name>TaskWidgetData</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
@@ -366,6 +368,24 @@ TaskWidgetData.prototype = {
                 hasDiplayValue: true,
                 maxChars: 0
             },
+            'u_duration_days': {
+                fieldName: 'u_duration_days',
+                fieldLabel: gr.u_duration_days.getLabel(),
+                type: 'number',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: true,
+                maxChars: 0
+            },
+            'u_duration_time_due': {
+                fieldName: 'u_duration_time_due',
+                fieldLabel: gr.u_duration_time_due.getLabel(),
+                type: 'time',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: true,
+                maxChars: 0
+            },			
             'instructions': {
                 fieldName: 'instructions',
                 fieldLabel: gr.instructions.getLabel(),
@@ -568,17 +588,19 @@ TaskWidgetData.prototype = {
                 orderMax = 0;
                 currentOrder = parseInt(grTempTask.route_order);
             }
+
             // STRY0091251
-            taskLevelO.warning.isParentShorterThanThisTask = (taskLevelO.duration > TemplateTaskO.duration);
+            taskLevelO.warning.isParentShorterThanThisTask = (taskLevelO.actualTime > TemplateTaskO.actualTime);
             map.push(taskLevelO);
             this.getTemplateTasks(widgetId, fields, map, level + 1, taskLevelO, grTempTask.getUniqueValue());
-            // check duration ageainst current max for the order
-            if (taskLevelO.duration > orderMax) {
-                orderMax = parseInt(taskLevelO.duration);
+            // check duration against current max for the order
+            if (taskLevelO.actualTime > orderMax) {
+                orderMax = parseInt(taskLevelO.actualTime);
             }
             // STRY0091251
-            if (taskLevelO.duration > TemplateTaskO.duration) {
+            if (taskLevelO.actualTime > TemplateTaskO.actualTime) {
                 singleSubtaskLongerThanParent = true;
+				taskLevelO.warning.isParentShorterThanThisTask = true;
             }
         }
         if (widgetId == 'discovertasker-processtemplatetreegraph') {
@@ -589,7 +611,7 @@ TaskWidgetData.prototype = {
             TemplateTaskO.warning.waitStatewithNoSubtasks = (TemplateTaskO.u_wait_for_subtasks_to_finish && (TemplateTaskO.calchaschildren == 0));
             // STRY0091251 - if a single child is longer than the parent, only show that message, and don't show the some of children message
             if (parseInt(TemplateTaskO.calchaschildren) > 0 && !singleSubtaskLongerThanParent)
-                TemplateTaskO.warning.isParentLongEnough = (TemplateTaskO.duration >= TemplateTaskO.totalChildDuration);
+                TemplateTaskO.warning.isParentLongEnough = (TemplateTaskO.actualTime >= TemplateTaskO.totalChildDuration);
             else
                 TemplateTaskO.warning.isParentLongEnough = true;
 
@@ -645,6 +667,15 @@ TaskWidgetData.prototype = {
                 var date_number = record[key].dateNumericValue();
                 newNodeData[key] = date_number;
             }
+            if (field.type == 'time') {
+				var time_number = 0;
+				if(record.getValue(key) && record[key].dateNumericValue()>0){
+					var gdTime = new GlideDateTime(record.getValue(key));  
+					var localTime = gdTime.getLocalTime();
+					time_number = (localTime.getHourOfDayLocalTime() * 60 + localTime.getMinutesLocalTime() * 60 + localTime.getSeconds()) * 1000;
+				}
+				newNodeData[key] = time_number;
+            }			
             if (field.type == 'boolean') {
                 var boolean_value = record[key] == 1;
                 newNodeData[key] = boolean_value;
@@ -682,6 +713,15 @@ TaskWidgetData.prototype = {
         if (widgetId == 'discovertasker-processtemplatetreegraph') {
             newNodeData.name = this.getTemplateTitleNode(record);
             newNodeData.warning = {};
+			// STRY0110317 calculate the due date to be set using days and Time
+			newNodeData.actualTime = 0;
+			if(newNodeData.u_duration_days >= 0){
+				newNodeData.actualTime = newNodeData.u_duration_days * 86400000;
+			}
+			if(newNodeData.u_duration_time_due >= 0){
+				newNodeData.actualTime+= newNodeData.u_duration_time_due;
+			}
+			
         }
         return newNodeData;
     },
@@ -766,7 +806,7 @@ TaskWidgetData.prototype = {
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>138</sys_mod_count>
+        <sys_mod_count>154</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -774,6 +814,6 @@ TaskWidgetData.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-03 13:26:29</sys_updated_on>
+        <sys_updated_on>2021-10-06 00:05:09</sys_updated_on>
     </sys_script_include>
 </record_update>
