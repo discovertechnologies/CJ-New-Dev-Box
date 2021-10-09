@@ -11,16 +11,7 @@
 	
 	c.onSubmit = function() {
 		c.data.submit = true;
-		$scope.server.update().then(function(){
-			
-			// DFCT0010541
-			var srch = $location.search();
-			if (c.data.parent != ''){
-				srch.sys_id = c.data.parent;
-				$location.search(srch);
-			} else {
-				window.location.href = '../discovertaskerportal';
-			}
+		$scope.server.update().then(function(){			
 			$scope.$parent.$parent.$dismiss();
 		});
 	};
@@ -33,7 +24,9 @@
         <description>2.7.0 Create a new widget for delete task modal popup, based  off of widget Tasker Modal - Task Cancellation Comment.&#13;
 2.7.0 | 2021-08-29 | mmcc | STRY0107404 - Draft Scheduled Tasks – UI – Delete Modal &#13;
 2.7.0 | 2021-09-03 | mmcc | DFCT0010476 - "Acknowledgement Prompt" does not have an "Acknowledge" button so users cannot use Tasker&#13;
-2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)</description>
+2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
+2.7.0 | 2021-10-8 | mmcc | STRY0109110 - Draft Scheduled Tasks – UI – Delete Modal- Add Descendant tasks count&#13;
+</description>
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
@@ -74,24 +67,27 @@
 //											   In Sever script, changed deleteButton* to submitButton*.
 //											   In Client controller (and HTML), changed deleteTask to onSubmit; changed cancelDeleteTask to onCancel.
 //                                          Changes in HTML, Server script and Client controller
-//
 // 2.7.0 | 2021-09-26 | raj | DFCT0010541 - When deleting "Draft Scheduled Tasks", it does NOT redirect anywhere.
 //                         In Server script, set data.parent object
 //                         In client script, redirect to parent or home page
+// 2.7.0 | 2021-10-8 | mmcc | STRY0109110 - Draft Scheduled Tasks – UI – Delete Modal- Add Descendant tasks count
+//											In HTML, var's msgBody# coded to match AC line #
+//											In Service script, Using TaskerHelpers().getDescendantsCount()
+//											In Client controller, removed code added from DFCT0010541 as the
+//											  Tasker Form with Tabs will handle broadcast and reload
+//                                          Changes in HTML, Server script and Client controller
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options) {
     main();
 
     function main() {
-        _buildMessages();
-        _setDataDefaults();
-
         if (input) {
             if (input.submit == true) {
                 // run delete step
                 var gr = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-                if (gr.get(input.taskId)) {
+                if (gr.get(input.taskSysId)) {
                     // DFCT0010541
                     data.parent = gr.parent ? gr.getValue('parent') + '' : '';
                     new Task_uiAction().uiAction_DeleteTasks(gr);
@@ -99,7 +95,9 @@
 
             } else {
                 // copy to data[name] from input[name] || option[name]
-                _optCopy(['taskId', 'taskNumberShortDescription']);
+                _optCopy(['taskSysId', 'taskNumberShortDescription']);
+				_buildMessages();
+				_setDataDefaults();
             }
         }
     }
@@ -109,9 +107,21 @@
         data.submitButtonText = gs.getMessage('Tasker - Button - Delete Task');
         data.submitButtonTitle = gs.getMessage('Delete');
 
-        data.msgPermanentlyDelete = gs.getMessage('Tasker - You are about to permanently delete this task. Are you sure you want to continue?');
-        data.msgSubTasksAlsoDeleted = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
-        data.msgWarning = gs.getMessage('Warning');
+		data.msgBody2 = gs.getMessage('Warning');
+		data.msgBody3 = input.taskNumberShortDescription;
+		data.msgBody4 = gs.getMessage('Tasker - You are about to permanently delete this task with all its {0} subtasks', [_getDescendantsCount()]);
+        data.msgBody5 = gs.getMessage('Tasker - Are you sure you would like to continue?');
+        data.msgBody6 = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
+    }
+	
+	function _getDescendantsCount() {
+		var details = {
+			taskSysId: data.taskSysId,
+			countType: 'DELETE'
+		};
+		
+		var taskerHelpers = new TaskerHelpers();
+		return taskerHelpers.getDescendantsCount(details);
     }
 
     // copy to data from input or options
@@ -129,38 +139,45 @@
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-08-30 00:00:04</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>48be459ddb9e3c101048570bd396197d</sys_id>
-        <sys_mod_count>77</sys_mod_count>
+        <sys_mod_count>89</sys_mod_count>
         <sys_name>Tasker Modal - Delete Task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_48be459ddb9e3c101048570bd396197d</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-27 13:38:47</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-09 01:47:09</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
   <div class="dtech-text-center">
-    <img src="Warning64.svg"/>
+    <img id="msgBody1" src="Warning64.svg"/>
   </div>
 
   <div class="dtech-text-center">
-    <h1 class="text-uppercase">{{data.msgWarning}}!</h1>
+    <h1 class="text-uppercase">{{data.msgBody2}}!</h1>
   </div>
 
   <div class="dtech-text-center dtech-task-name">
-    <span>{{data.taskNumberShortDescription}}</span>
+    <span>{{data.msgBody3}}</span>
   </div>
+  
+  <div class="dtech-text-center dtech-task-name">
+    <span>{{data.msgBody4}}</span>
+  </div>
+  <br>
 
   <div class="dtech-text-center dtech-standard-text-color">
     <span>
-      {{data.msgPermanentlyDelete}}
+      {{data.msgBody5}}
     </span>
   </div>
   <br>
 
   <div class="dtech-text-center">
     <img src="InfoRound24.svg"/>
-    <span class="dtech-subtasks-also-deleted">{{data.msgSubTasksAlsoDeleted}}</span>
+    <span class="dtech-subtasks-also-deleted">{{data.msgBody6}}</span>
   </div>
   <br>
 </div>

@@ -10,6 +10,8 @@ v2.7&#13;
 STRY0095102 - Stretch- HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
 STRY0105125 - DIA - Draft Scheduled Tasks - Banner Notification&#13;
 STRY0105845 - As a system, I need a draft task state in order to fulfill customer needs&#13;
+2.7.0 | 2021-10-8 | mmcc | STRY0109110 - Draft Scheduled Tasks – UI – Delete Modal- Add Descendant tasks count&#13;
+    Added getDescendantsCount(); params is an object with two fields: taskSysId and countType&#13;
 &#13;
 2.6 &#13;
 STRY0091307 - Advanced Task - (Suspense Dates)  - find all suspense date where the parent suspense date is earlier than a child supsense date&#13;
@@ -41,7 +43,35 @@ v2.5.11:&#13;
 // Script Continued Below
 var TaskerHelpers = Class.create();
 TaskerHelpers.prototype = {
-	initialize: function() {},
+	initialize: function() {
+		this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
+	},
+	
+	// 2.7.0 | 2021-10-8 | mmcc | STRY0109110 - Draft Scheduled Tasks – UI – Delete Modal- Add Descendant tasks count
+	getDescendantsCount: function (params) {
+
+        var countDescendants = '0';
+        var filter_ancestors = 'u_all_ancestors_tasksLIKE' + params.taskSysId;
+        var gaSubTasks = new GlideAggregate(this.tableRouteTaskInstance);
+
+        gaSubTasks.addEncodedQuery(filter_ancestors);
+		gaSubTasks.addQuery('sys_id', '!=', params.taskSysId);
+		
+		if (params.countType == 'CANCEL') {
+			gaSubTasks.addQuery('state', 'NOT IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
+		}
+		
+        gaSubTasks.addAggregate('COUNT');
+        gaSubTasks.query();
+
+        if (gaSubTasks.next()) {
+            // Need to subtract 1 since this task is also in the list of ancestors
+            countDescendants = gaSubTasks.getAggregate('COUNT');
+        }
+		
+		// returns a string
+		return countDescendants;
+    },
 	
 	// 2.5.3 - STRY0085438 
 	updateTaskPermission: function(current)
@@ -713,14 +743,16 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
-        <sys_mod_count>251</sys_mod_count>
+        <sys_mod_count>257</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-08-17 22:12:40</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2021-10-08 23:45:55</sys_updated_on>
     </sys_script_include>
 </record_update>
