@@ -8,6 +8,7 @@
         <description>2.7&#13;
 STRY0100724 - DEV Story- Performance Improvements -  Running Templates - This is a new script include that replaces the workflow.  It also udpates the template instance status to track completion&#13;
 STRY0105125 - DIA - Draft Scheduled Tasks - Banner Notification&#13;
+STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
 &#13;
 This script include takes a Template and builds the associated Task Tree</description>
         <name>Tasker_GenerateTaskFromTemplate</name>
@@ -21,6 +22,8 @@ var Tasker_GenerateTaskFromTemplate = Class.create();
 Tasker_GenerateTaskFromTemplate.prototype = {
     initialize: function() {
 		gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - initialize');
+		// STRY0110317 
+		this.tdc = new TaskerDurationCalculator();
     },
 
 	startTemplate: function(recTempInstance){
@@ -29,9 +32,13 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			recTempInstance.setWorkflow(false);
 			recTempInstance.u_status = 'initialized';
 			recTempInstance.update();
-			var recTaskInst = this.initiateTemplate(recTempInstance);
+			// STRY0110317
+			var startTime = new GlideDateTime();
+			var longestEndTime = new GlideDateTime();
 
-			this.buildTemplateTask(recTaskInst, recTempInstance);
+			var recTaskInst = this.initiateTemplate(recTempInstance, startTime, longestEndTime);
+
+			this.buildTemplateTask(recTaskInst, recTempInstance, startTime, longestEndTime);
 			recTempInstance.u_status = 'completed';
 			recTempInstance.update();
 		} catch(e) {
@@ -44,13 +51,12 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			
 	},
 	
-	initiateTemplate: function(recTempInstance){
+	initiateTemplate: function(recTempInstance, startTime, longestEndTime){
 		try {
 			// do not run template if the template or the top template task are inactive.
 			// routing_template_ref.u_active=true^routing_template_ref.parent_task_def.active=true^EQ
 
 			// STRY0047782
-			var tdc = new TaskerDurationCalculator();
 			var recProcessDef = new GlideRecord('x_153465_discovert_discover_routing_template');
 			// STRY0090463
 			if (recProcessDef.get(recTempInstance.getValue('routing_template_ref'))) {
@@ -125,17 +131,9 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 				var recTopTempTask = new GlideRecord('x_153465_discovert_route_tasks');
 				// STRY0090463
 				if (recTopTempTask.get(recProcessDef.getValue('parent_task_def'))) {
-					// this should always be entered
-					if(!recTopTempTask.duration.nil()){
-						var durationAdd=recTopTempTask.duration.dateNumericValue();
-						// STRY0047782 
-						gdt.setValue(tdc.calculateEndDate(recTopTempTask, (durationAdd), gdt));
-						// gdt.add(durationAdd);
-					}			
+					// STRY0110317
+					this._setTaskDates(recTopTempTask, recTaskInst, startTime, longestEndTime);
 				}
-				// STRY0098078
-				recTaskInst.setValue('suspense_date', gdt.getValue());
-				recTaskInst.setValue('due_date', gdt.getValue());
 
 				recTaskInst.insert();
 
@@ -153,22 +151,30 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			
 	},
 
-	buildTemplateTask: function(recTaskInst, recTempInstance) {
+	buildTemplateTask: function(recTaskInst, recTempInstance, startTime, longestEndTime) {
 		try{
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - buildTemplateTask start');
 
-			var oTaskInstnace = {};
-			oTaskInstnace.recTaskInst = recTaskInst;
-			oTaskInstnace.u_total_Tasks = 0;
-			oTaskInstnace.u_Tasks_loaded_count = 0;
-			oTaskInstnace.u_Task_route_order_count = 0;
-			oTaskInstnace.u_current_duration_offset = 0;
+			var oTaskInstance = {};
+			oTaskInstance.recTaskInst = recTaskInst;
+			oTaskInstance.u_total_Tasks = 0;
+			oTaskInstance.u_Tasks_loaded_count = 0;
+			oTaskInstance.u_Task_route_order_count = 0;
+			oTaskInstance.u_current_duration_offset = 0;
+			oTaskInstance.startTime = new GlideDateTime(startTime);
+			// when this returns, it will have set the longestEndTime to the end time of the top Task
+			// The longest end time needs to be reset at each level down the tree as it only moves forward when a new order for a level is hit
+			// this way, all items whose parents have the same order will start at the same time
+			oTaskInstance.longestEndTime = new GlideDateTime(startTime);
 
-			this.loadTemplateTask(oTaskInstnace);
-			while (oTaskInstnace.u_Tasks_loaded_count < oTaskInstnace.u_total_Tasks) {
+			this.loadTemplateTask(oTaskInstance);
+			while (oTaskInstance.u_Tasks_loaded_count < oTaskInstance.u_total_Tasks) {
 				// createTasksForOrderOnTemplateTask creates all of the tasks for a single order on the template task
-				this.createTasksForOrderOnTemplateTask(oTaskInstnace, recTempInstance);
+				this.createTasksForOrderOnTemplateTask(oTaskInstance, recTempInstance);
+
 			}
+			// once the level is complete, set the end time passed out to be the end time of the level
+			
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - buildTemplateTask end');
 		} catch(e) {
 			recTempInstance.u_status = 'error';
@@ -179,20 +185,20 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			
 	},
 
-	loadTemplateTask: function(oTaskInstnace){		
+	loadTemplateTask: function(oTaskInstance){		
 		try{
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask start');
 			var taskDefQ = new GlideAggregate('x_153465_discovert_route_tasks');
-			taskDefQ.addQuery('parent', oTaskInstnace.recTaskInst.source_definition);
+			taskDefQ.addQuery('parent', oTaskInstance.recTaskInst.source_definition);
 			// STRY0085827 - do not run task templates that were deactivated
 			taskDefQ.addQuery('active', true);
 
 			taskDefQ.addAggregate('COUNT');
 			taskDefQ.query();
 			if (taskDefQ.next()){
-				oTaskInstnace.u_total_Tasks = taskDefQ.getAggregate('COUNT');
+				oTaskInstance.u_total_Tasks = taskDefQ.getAggregate('COUNT');
 			}
-			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask - oTaskInstnace.u_total_Tasks: ' + oTaskInstnace.u_total_Tasks);
+			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask - oTaskInstance.u_total_Tasks: ' + oTaskInstance.u_total_Tasks);
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - loadTemplateTask end');
 		} catch(e) {
 			recTempInstance.u_status = 'error';
@@ -202,91 +208,57 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 		}
 	},	
 	
-	createTasksForOrderOnTemplateTask: function(oTaskInstnace, recTempInstance){
+	createTasksForOrderOnTemplateTask: function(oTaskInstance, recTempInstance){
 		try{
+			var startTime = new GlideDateTime(oTaskInstance.startTime);
+			var longestEndTime = new GlideDateTime(oTaskInstance.longestEndTime);
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - createTasksForOrderOnTemplateTask start');
-			// STRY0047782
-			var tdc = new TaskerDurationCalculator();
 
-			oTaskInstnace.u_Task_route_order_count +=1;
+			oTaskInstance.u_Task_route_order_count +=1;
 			// we query to get the list of all Task Defs in this "route order"
 			// the loop below will process each Task Defs in this route order
 			// it will increment the total Task Defs processed for each order
 			var taskDefQ = new GlideRecord('x_153465_discovert_route_tasks');
-			taskDefQ.addQuery('parent',oTaskInstnace.recTaskInst.source_definition);
+			taskDefQ.addQuery('parent',oTaskInstance.recTaskInst.source_definition);
 			// if this is the fisrt pass, the route order is 1 b/c it started at 0
 			// the order default is 1.  there should be nothing that is 0 
-			if (oTaskInstnace.u_Task_route_order_count>0){
-				taskDefQ.addQuery('route_order',oTaskInstnace.u_Task_route_order_count);
+			if (oTaskInstance.u_Task_route_order_count>0){
+				taskDefQ.addQuery('route_order',oTaskInstance.u_Task_route_order_count);
 			}
 			// STRY0085827 - do not run task templates that were deactivated
 			taskDefQ.addQuery('active', true);
 			taskDefQ.query();
 
-			var maxTaskOrderOffset = 0;
 			while (taskDefQ.next()){
 				var recTaskInst = new GlideRecord('x_153465_discovert_route_task_instance');
 				recTaskInst.initialize();
 				//  this is the relationship to the route instance
 				recTaskInst.source_definition = taskDefQ.sys_id;
-				recTaskInst.parent = oTaskInstnace.recTaskInst.sys_id;
+				recTaskInst.parent = oTaskInstance.recTaskInst.sys_id;
 
-				recTaskInst.u_task_requester = oTaskInstnace.recTaskInst.parent.originator;
+				recTaskInst.u_task_requester = oTaskInstance.recTaskInst.parent.originator;
 
-				var gdt = new GlideDateTime();
-				if(!oTaskInstnace.recTaskInst.expected_start.nil()){
-					gdt.setValue(oTaskInstnace.recTaskInst.expected_start);
-				}
-				var durationAdd;
-				// Set estimated Start and Estimated Duration
-				if (oTaskInstnace.u_current_duration_offset > 0 )
-				{
-// STRY0110317
-// YOU ARE HERE
-// will need to go away from duration offset b/c we are now defaulting to a time of day X days in the future
-// The duration offset in this scenario will be a start time where the next set of days will be added
-// we will add an offset value that is the number of calendar days in 9 hour days (or, pull that from a "global" setting from the tdc object)
-// once we move the day forward, we will check to see if we are in a schedule (if the calc end doesn't already do that)
-// once we get to a specific day, we will add the date part of the day to the Time of day setting and that will be the time set 
-// for each task in the order, add the days and set the time
-//   as the tree recurses, send the start time down instead of the duration to add
-// we will save the "max" end time for the order as that will become the start time for the next order instead of adding a duration value to set the start
+				// STRY0110317
+				this._setTaskDates(taskDefQ, recTaskInst, startTime, longestEndTime);
 
-					durationAdd=oTaskInstnace.u_current_duration_offset;
-					// STRY0047782 
-					gdt.setValue(tdc.calculateEndDate(taskDefQ, (durationAdd), gdt));
-					//gdt.add(durationAdd);
-				}
-				// STRY0098078
-				recTaskInst.setValue('expected_start', gdt.getValue());
-
-				if(!taskDefQ.duration.nil()){
-					durationAdd=taskDefQ.duration.dateNumericValue();
-					// if this is the max duration for the route in the current Route Order, reset within the loop
-					if(durationAdd>maxTaskOrderOffset){
-						maxTaskOrderOffset = durationAdd;
-					}
-					// STRY0047782 
-					gdt.setValue(tdc.calculateEndDate(taskDefQ, (durationAdd), gdt));
-					//gdt.add(durationAdd);
-				}
-				// STRY0098078
-				recTaskInst.setValue('suspense_date',gdt.getValue());
-				recTaskInst.setValue('due_date', gdt.getValue());
-
-				recTaskInst.tasker_process_instance = oTaskInstnace.recTaskInst.tasker_process_instance.sys_id;
+				recTaskInst.tasker_process_instance = oTaskInstance.recTaskInst.tasker_process_instance.sys_id;
 				recTaskInst.source_definition = taskDefQ.sys_id;
 				// NOTE: TODO: set number to parent number here...
 				recTaskInst.insert();
 
 				// buildTemplateTask is called again to initiate the next level down the Template Tree
 				var nextLevel =  new Tasker_GenerateTaskFromTemplate();
-				nextLevel.buildTemplateTask(recTaskInst, recTempInstance);
+				// set to current task instance's start time and end time to its children, NOTE, the end time gets reset to the start time in the next level
+				var nextLevelStart = new GlideDateTime(oTaskInstance.startTime);
+				var nextLevelLongestEndTime = new GlideDateTime(oTaskInstance.longestEndTime);
+				nextLevel.buildTemplateTask(recTaskInst, recTempInstance, nextLevelStart, nextLevelLongestEndTime);
 
 				// increment the total routes processed for each route in this order
-				oTaskInstnace.u_Tasks_loaded_count +=1;
+				oTaskInstance.u_Tasks_loaded_count +=1;
 			}
-			oTaskInstnace.u_current_duration_offset = oTaskInstnace.u_current_duration_offset + maxTaskOrderOffset;
+			oTaskInstance.longestEndTime = new GlideDateTime(longestEndTime);
+			// the order is complete, move start time to end time
+			oTaskInstance.startTime = new GlideDateTime(oTaskInstance.longestEndTime);
 			gs.debug('x_153465_discovert.Tasker_GenerateTaskFromTemplate - createTasksForOrderOnTemplateTask end');
 		} catch(e) {
 			recTempInstance.u_status = 'error';
@@ -297,6 +269,42 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			
 	},
 		
+	// grTempTask              - GlideRecord       - Template Task 
+	// grTask                  - GlideRecord       - Template Task 
+	// startTime               - GlideDateTime     - Start time, this is updated in this method
+	// longestEndTime          - GlideDateTime     - Current Latest end time for the Order, updated in this method
+	_setTaskDates: function(grTempTask, grTask, startTime, longestEndTime){
+		var gdt = new GlideDateTime();
+		gdt.setGlideDateTime(startTime);
+
+		// STRY0110317 - get the start time based on schedule
+		gdt = this.tdc.checkStartTime(grTempTask, gdt);
+		// update the start time to what is returned
+		startTime.setGlideDateTime(gdt);
+		// set the start time
+		grTask.setValue('expected_start', gdt.getValue());
+		if(grTempTask.u_duration_days>0){
+			gdt = this.tdc.calculateDateOfAddedBusinessDays(grTempTask, grTempTask.u_duration_days, gdt);
+		}
+		// add the due time to the start time
+		if(grTempTask.u_duration_time_due){
+			gdt = new GlideDateTime(gdt.getLocalDate());
+			var gdTime = new GlideDateTime(); 
+			gdTime.setDisplayValue(grTempTask.getValue('u_duration_time_due'));
+			gdt.add(gdTime.getNumericValue());
+
+		} else {
+			// set to eand of day
+			gdt = this.tdc.calculateEndOfDay (grTempTask, gdt);
+		}
+		if(gdt.getNumericValue() > longestEndTime.getNumericValue()){
+			longestEndTime.setGlideDateTime(gdt);
+		}
+		// STRY0098078
+		grTask.setValue('suspense_date', gdt.getValue());
+		grTask.setValue('due_date', gdt.getValue());
+	},
+
     type: 'Tasker_GenerateTaskFromTemplate'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
@@ -304,7 +312,7 @@ Tasker_GenerateTaskFromTemplate.prototype = {
         <sys_created_on>2021-03-23 15:40:04</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>feb6fc46db432010029db298f4961915</sys_id>
-        <sys_mod_count>33</sys_mod_count>
+        <sys_mod_count>58</sys_mod_count>
         <sys_name>Tasker_GenerateTaskFromTemplate</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -312,6 +320,6 @@ Tasker_GenerateTaskFromTemplate.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_feb6fc46db432010029db298f4961915</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-07 04:47:40</sys_updated_on>
+        <sys_updated_on>2021-10-11 23:03:52</sys_updated_on>
     </sys_script_include>
 </record_update>
