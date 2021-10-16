@@ -21,6 +21,7 @@ DFCT0010462 - Spelling mistakes - "Activity" tab in the work notes " extenstion 
 STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
 2.7.0 | 2021-10-7 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
      Updated key for Message that goes into var msgReopenedBy&#13;
+2.7.0 | 2021-10-16 | raj | DFCT0010577 - 'Mass Reopen' Task Tree Issues&#13;
 &#13;
 2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
@@ -52,6 +53,132 @@ Task_uiAction.prototype = {
     initialize: function() {
         this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
     },
+	
+	// DFCT0010577 - this was moved out of the business rule and performed here
+	_closeRelatedTasks: function(task){
+		if(task.parent){
+			this._closeParentRecursive(task);
+		}
+		this._closeSubTasksRecursive(task);
+		
+		// STRY0076618 - check to see what tasks come out of wait state
+		var TaskerHelper = new TaskerHelpers();
+		TaskerHelper.onCloseCheckIfNewOrderStarts(current);
+	},
+	
+	// DFCT0010577 - this was moved out of the business rule and performed here
+	_closeParentRecursive: function(task){
+		// STRY0076599
+		// TechDebt the text Rejected should be moved into a "constant" so all places use that constant
+		var sRejected = 'Rejected';
+		var TaskerHelper = new TaskerHelpers();
+		if(task.parent){
+			var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if (grParent.get(task.parent)){
+				if( grParent.u_wait_for_subtasks_to_finish == true){
+					if(grParent.work_item_type == "review_item" && task.decision == sRejected){
+						// Parent task is also a task with an approve reject task type, cancel the parent
+						// *************************************************************************************
+						grParent.work_notes = 'This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by ' + gs.getUserDisplayName() + ' (Reviewer): ' + task.comments;
+						grParent.decision = sRejected;
+						grParent.state = 4; // closed incomplete this should be in an application constant
+						grParent.active = 'false';
+						var gdt = new GlideDateTime();
+						grParent.work_end = gdt.getValue();
+						grParent.update();
+						// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
+						gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
+// TODO - UPDATE RESPONSE LOG SO CHILD RESPONSE LOG ENTRIES ARE CREATED TO SHOW PARENT CLOSED THE CHILD						
+						// DFCT0010577 - recursively move up
+						if(grParent.parent){
+							this._closeParentRecursive(grParent);
+						}
+					} else{
+						// STRY0076597 - a child closed, check to see if all siblings for this task are closed.  If all siblings are closed and parent is in wait state, wake it up
+						grParent.state = TaskerHelper.getUpdatedState(grParent);
+						grParent.update();
+					}
+				}
+			}
+		}
+	},
+
+	// DFCT0010577 - this was moved out of the business rule and performed here
+	_closeSubTasksRecursive: function(task){
+		// STRY0097131
+		// This business rule didn't process these types before.  
+		// To ensure Wait states of the next order and the parent are started, this business rule was turned on for theses types.
+		// This if statement was added to prevent closing children when a parent sees or acknowledges one of these tasks.
+		if(task.tasker_type.getDisplayValue() != "Acknowledgement"  && task.tasker_type.getDisplayValue() != "Information Only"){
+			// if any subtaskers are still open close complete, close incomplete, or cancel them
+			var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+			grSubTasks.addQuery('parent', task.getUniqueValue());
+			grSubTasks.addQuery('state', '!=', 3);
+			grSubTasks.addQuery('state', '!=', 4);
+			grSubTasks.addQuery('state', '!=', 7);
+			grSubTasks.query();
+
+			// STRY0076598
+			// set state based on how the task was closed
+			var stateToSetSubtasks = null;
+			if (task.u_wait_for_subtasks_to_finish == true && task.decision == sRejected){   
+				// if this task was waiting for children to finish and this task was rejected and there are subtasks still open...
+				// then this task was rejected b/c a subtask was rejected.  This Tasks subtasks will be closed incomplete.
+				stateToSetSubtasks = 4; // closed incomplete this should be in an application constant
+			} else {
+				// otherwise, pass the state of this task down to its subtasks
+				stateToSetSubtasks = task.state;
+			}
+
+			while (grSubTasks.next()){
+				// STRY0076599
+				grSubTasks.state = stateToSetSubtasks;
+				grSubTasks.active = 'false';
+				var gdt2 = new GlideDateTime();
+				grSubTasks.work_end = gdt2.getValue();
+
+				// TODO, change text to pull from message for multi language support
+				var msg = 'Parent set to:';
+				// check to see if parent information is already in the close note.
+				// this should only be added at the top level
+				// as it flows down the chain, the top message pushes down
+				if(task.close_notes.toString().indexOf(msg)==0)
+					grSubTasks.close_notes = msg + ' (' + task.state + ') - Organizational Unit: (' + task.primary_assignee + ') - Close Note:'  + task.close_notes;
+				else
+					grSubTasks.close_notes = task.close_notes;
+				
+				grSubTasks.update();
+// TODO - UPDATE RESPONSE LOG SO CHILD RESPONSE LOG ENTRIES ARE CREATED TO SHOW PARENT CLOSED THE CHILD										
+				this._closeSubTasksRecursive(grSubTasks);
+			}
+		}
+
+	},
+	
+	// DFCT0010577 - this was moved out of the business rule and performed here
+	_clearOpenRequestsForTask: function(task){
+		var task_state = parseInt(task.getValue('state'));
+		
+		// STRY0106180 - Find all open requests for the task and close them.
+		var requests = new GlideRecord('x_153465_discovert_tasker_requests');
+		requests.addQuery('u_status', 'In progress');
+		requests.addQuery('parent', task.sys_id);
+		requests.query();
+		while(requests.next()) {
+			requests.setValue("u_status", 'Completed');
+			switch (task_state) {
+				// Task was cancelled
+				case 7:
+					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for cancelled task'));
+					break;
+				// Task was completed
+				case 3: case 4:
+					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for Closed tasks'));
+					break;
+			}
+			requests.update();
+		}
+	},
 
     // STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)
     uiAction_ReopenTasks: function(task, process) {
@@ -149,7 +276,8 @@ Task_uiAction.prototype = {
             grSubtasksToReopen.addQuery('parent', current.getUniqueValue());
             grSubtasksToReopen.addQuery('state', 'IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
 
-            if (taskClosedDate != undefined) {
+			// DFCT0010577 comparing to undefined wasn't working
+            if (taskClosedDate !== '') {
                 grSubtasksToReopen.addQuery('closed_at', '>=', new GlideDateTime(taskClosedDate));
             }
 
@@ -473,8 +601,15 @@ Task_uiAction.prototype = {
                 break;
         }
 
+		// STRY0106180 - clear all request fields
+		task.u_clarification_requested = false;
+		task.extension_requested = false;
+		task.reassignment_requested = false;
+		task.extended_suspense_date = null;
 
         task.update();
+		// DFCT0010577 - this was moved out of the business rule and performed here
+		this._clearOpenRequestsForTask(task);
         var isTaskeOwner = task.u_task_requester == gs.getUserID();
         var isReviewer = task.u_reviewer == gs.getUserID();
         var isAssignedMember = task.assigned_to == gs.getUserID();
@@ -499,6 +634,9 @@ Task_uiAction.prototype = {
         }
         grResponseLog.insert();
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
+		
+		// DFCT0010577 - this was moved out of the business rule and performed here
+		this._closeRelatedTasks(task);
     },
 
     uiAction_MarkTaskCompleteAndUpdateResponseLog: function(task) {
@@ -524,7 +662,16 @@ Task_uiAction.prototype = {
             else
                 task.u_completed_on_time = false;
         } else task.u_completed_on_time = true;
+		// STRY0106180 - clear all request fields
+		task.u_clarification_requested = false;
+		task.extension_requested = false;
+		task.reassignment_requested = false;
+		task.extended_suspense_date = null;
+		
         task.update();
+		// DFCT0010577 - this was moved out of the business rule and performed here
+		this._clearOpenRequestsForTask(task);
+		
         // if the task was closed from the review state, then we need 2 entries
         // either way, we need to write the complete entry
         // this first entry is for the assigned member or the task owner
@@ -568,6 +715,8 @@ Task_uiAction.prototype = {
         }
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
+		// DFCT0010577 - this was moved out of the business rule and performed here
+		this._closeRelatedTasks(task);
     },
 
     uiAction_AssignTask: function(task) {
@@ -1226,14 +1375,14 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>185</sys_mod_count>
+        <sys_mod_count>198</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-10-08 03:51:38</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-10-16 22:28:45</sys_updated_on>
     </sys_script_include>
 </record_update>
