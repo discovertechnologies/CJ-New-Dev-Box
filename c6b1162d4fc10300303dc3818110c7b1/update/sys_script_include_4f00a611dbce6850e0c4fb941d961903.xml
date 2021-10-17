@@ -54,6 +54,26 @@ Task_uiAction.prototype = {
         this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
     },
 	
+	// DFCT0010577 
+	_addResponseLog: function (task, role, respondedBy, actionTaken, response) {
+		var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
+        grResponseLog.initialize();
+        grResponseLog.u_task_tree = task.u_task_tree;
+        grResponseLog.u_task = task.getUniqueValue();
+        grResponseLog.u_task_number = task.number;
+        grResponseLog.u_responded_by = respondedBy;
+		grResponseLog.u_role = role;
+
+        grResponseLog.response =  response;
+        grResponseLog.u_action_taken = actionTaken;
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        if (grOU.get(task.primary_assignee)) {
+            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
+            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
+        }
+        grResponseLog.insert();
+	},
+	
 	// DFCT0010577 - this was moved out of the business rule and performed here
 	_closeRelatedTasks: function(task){
 		if(task.parent){
@@ -88,7 +108,8 @@ Task_uiAction.prototype = {
 						grParent.update();
 						// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
 						gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
-// TODO - UPDATE RESPONSE LOG SO CHILD RESPONSE LOG ENTRIES ARE CREATED TO SHOW PARENT CLOSED THE CHILD						
+						
+						// If we want to add parent close response log entry when a child rejection closes it, make the call right here
 						// DFCT0010577 - recursively move up
 						if(grParent.parent){
 							this._closeParentRecursive(grParent);
@@ -148,7 +169,7 @@ Task_uiAction.prototype = {
 					grSubTasks.close_notes = task.close_notes;
 				
 				grSubTasks.update();
-// TODO - UPDATE RESPONSE LOG SO CHILD RESPONSE LOG ENTRIES ARE CREATED TO SHOW PARENT CLOSED THE CHILD										
+				// If we want to add subtask close response log entry when parent closes it, make the call right here
 				this._closeSubTasksRecursive(grSubTasks);
 			}
 		}
@@ -379,40 +400,6 @@ Task_uiAction.prototype = {
 
     },
 
-    uiAction_Abstain: function(DecisionToClose, task) {
-        var stateClosedFrom = task.state;
-        task.decision = DecisionToClose;
-        // TODO - multilanguage
-        task.work_notes = "Reviewer Decision: " + task.decision + " by " + task.assigned_to.getDisplayValue().toString();
-        task.state = 3;
-        task.active = 'false';
-        var gdt = new GlideDateTime();
-        task.work_end = gdt.getValue();
-        task.update();
-
-        var isTaskeOwner = task.u_task_requester == gs.getUserID();
-        var isReviewer = task.u_reviewer == gs.getUserID();
-        var isAssignedMember = task.assigned_to == gs.getUserID();
-        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-
-        grResponseLog.initialize();
-        grResponseLog.u_task_tree = task.u_task_tree;
-        grResponseLog.u_task = task.getUniqueValue();
-        grResponseLog.u_task_number = task.number;
-        grResponseLog.u_responded_by = gs.getUserID();
-        grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-        grResponseLog.response = task.comments_dt;
-        // TODO - multilanguage
-        grResponseLog.u_action_taken = 'abstain';
-        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-        if (grOU.get(task.primary_assignee)) {
-            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-        }
-        grResponseLog.insert();
-        gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
-    },
-
     uiAction_AcceptAssignment: function(task) {
         // TODO - multilanguage - this might be harder to do than most 
         // we will need to make the task type field able to support multilanguage and then use a code here instead of a text value
@@ -575,6 +562,10 @@ Task_uiAction.prototype = {
                 task.u_completed_on_time = false;
         } else task.u_completed_on_time = true;
         switch (actionTaken) {
+			case 'abstain':
+				// TODO - multilanguage
+				task.work_notes = "Reviewer Decision: " + task.decision + " by " + task.assigned_to.getDisplayValue().toString();
+				break;
             case 'reject':
                 // STRY0097883
                 task.work_notes = gs.getMessage('Tasker - Additional comments for the rejecting a Task Approval have been added by') + gs.getUserDisplayName() + gs.getMessage('Tasker - (Reviewer):') + this.trimComments(task.comments_dt);
@@ -610,29 +601,20 @@ Task_uiAction.prototype = {
         task.update();
 		// DFCT0010577 - this was moved out of the business rule and performed here
 		this._clearOpenRequestsForTask(task);
-        var isTaskeOwner = task.u_task_requester == gs.getUserID();
-        var isReviewer = task.u_reviewer == gs.getUserID();
-        var isAssignedMember = task.assigned_to == gs.getUserID();
-
-        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-        grResponseLog.initialize();
-        grResponseLog.u_task_tree = task.u_task_tree;
-        grResponseLog.u_task = task.getUniqueValue();
-        grResponseLog.u_task_number = task.number;
-        grResponseLog.u_responded_by = gs.getUserID();
-        if (stateClosedFrom == '14') {
-            grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+		var currentUser =  gs.getUserID();
+        var isTaskeOwner = task.u_task_requester == currentUser;
+        var isReviewer = task.u_reviewer == currentUser;
+        var isAssignedMember = task.assigned_to == currentUser;
+		
+		// DFCT0010577 
+		var role = '';
+		if (stateClosedFrom == '14') {
+            role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
         } else {
-            grResponseLog.u_role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+            role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
         }
-        grResponseLog.response = task.comments_dt;
-        grResponseLog.u_action_taken = actionTaken;
-        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-        if (grOU.get(task.primary_assignee)) {
-            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-        }
-        grResponseLog.insert();
+		this._addResponseLog(task, role, currentUser, actionTaken, task.comments_dt);
+
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
 		
 		// DFCT0010577 - this was moved out of the business rule and performed here
@@ -672,46 +654,28 @@ Task_uiAction.prototype = {
 		// DFCT0010577 - this was moved out of the business rule and performed here
 		this._clearOpenRequestsForTask(task);
 		
-        // if the task was closed from the review state, then we need 2 entries
-        // either way, we need to write the complete entry
-        // this first entry is for the assigned member or the task owner
-        var grResponseLog = new GlideRecordSecure('x_153465_discovert_discover_tasker_response');
-        grResponseLog.initialize();
-        grResponseLog.u_task_tree = task.u_task_tree;
-        grResponseLog.u_task = task.getUniqueValue();
-        grResponseLog.u_task_number = task.number;
+		// DFCT0010577 
+		var role = '';
+		var respondedBy = '';
+		var actionTaken = '';
         if (stateClosedFrom == '14') {
             // making the entery for sent to review for the assigned member if state 14
-            grResponseLog.u_responded_by = task.assigned_to;
-            grResponseLog.u_role = 'assigned_member';
-            grResponseLog.response = task.response;
-            grResponseLog.u_action_taken = 'sent_to_review';
+            role = 'assigned_member';
+            respondedBy = task.assigned_to;
+            actionTaken = 'sent_to_review';
         } else {
             // making the entery for sent to review for the assigned member if state 14
-            grResponseLog.u_role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
-            grResponseLog.u_responded_by = gs.getUserID();
-            grResponseLog.response = task.response;
-            grResponseLog.u_action_taken = 'completed';
+            role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+            respondedBy = gs.getUserID();
+            actionTaken = 'completed';
         }
-        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-        if (grOU.get(task.primary_assignee)) {
-            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-        }
-        grResponseLog.insert();
+		this._addResponseLog(task, role, respondedBy, actionTaken, task.response);
+
         // now create the Reviewer entre IF the state is 14
         if (stateClosedFrom == '14') {
-            grResponseLog.initialize();
-            grResponseLog.u_task_tree = task.u_task_tree;
-            grResponseLog.u_task = task.getUniqueValue();
-            grResponseLog.u_task_number = task.number;
-            grResponseLog.u_responded_by = gs.getUserID();
-            grResponseLog.u_role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-            grResponseLog.response = task.comments_dt;
-            grResponseLog.u_action_taken = 'completed';
-            grResponseLog.u_primary_assignee = grOU.getValue('office_abbreviation');
-            grResponseLog.u_primary_assignee_office_name = grOU.getValue('office_name');
-            grResponseLog.insert();
+            role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+            actionTaken = 'completed';
+			this._addResponseLog(task, role, gs.getUserID(), actionTaken, task.comments_dt);
         }
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
@@ -1375,7 +1339,7 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>198</sys_mod_count>
+        <sys_mod_count>202</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1383,6 +1347,6 @@ Task_uiAction.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-16 22:28:45</sys_updated_on>
+        <sys_updated_on>2021-10-17 14:38:35</sys_updated_on>
     </sys_script_include>
 </record_update>
