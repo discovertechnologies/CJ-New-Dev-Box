@@ -292,19 +292,41 @@
 		return toolDataListJSON;
 	}
 
-	function addImage(imgSrc, opacity, toolTiptextHeader, toolTipBindingList) {
+		// STRY0108231
+	function toolTipSimple(object) {
+		var toolTip;
+		var underline = '_';
+		
+		var $go = go.GraphObject.make; // for conciseness in defining templates
+		var toolDataListJSON = 
+				$go(go.Adornment, "Spot", "Auto",
+						$go(go.Shape, "RoundedRectangle", {fill: toolTipBackgroundColor}),
+						$go(go.Panel, "Auto", //{width:300},
+								$go(go.Panel, "Vertical", {defaultAlignment: go.Spot.Left},
+										$go(go.Panel, {defaultAlignment: go.Spot.Left},
+												$go(go.TextBlock, 
+														object.title, 
+														{textAlign:"left", margin:4, background: toolTipBackgroundColor}
+													 )
+											 )
+									 )
+							 )
+					 );
+		return toolDataListJSON;
+	}
+	function addImage(img, opacity, toolTiptextHeader, toolTipBindingList) {
 		var $go = go.GraphObject.make; // for conciseness in defining templates
 // NOTE: put go.picture in a function and pass what you need to clean this up
 
 		// STRY0101474 - if the image wasn't laoded, don't add the image NOTE: we may wat to put placeholder here IF it is defined to keep the space
-		if(imgSrc == undefined){
-			imgSrc = '';
+		if(img.src == undefined){
+			img.src = '';
 		}
 		var imageJSON =
 			$go(go.Picture, 
 				{margin: new go.Margin(5, 3, 5, 3),
 				 alignment: go.Spot.TopRight,
-				 source: imgSrc,
+				 source: img.src,
 				 opacity: opacity}, 
 					new go.Binding("opacity", toolTipBindingList, function(data){
 														var lOpacity;
@@ -318,21 +340,21 @@
 													}),
 					new go.Binding("source", '', function(data){
 													var lSource;
-													switch (imgSrc){
-														case c.data.ouProcessRequestImage:
-															lSource = data.outStandingRequestCount > 0?imgSrc:'';
+													switch (img.src){
+														case c.data.ouProcessRequestImage.src:
+															lSource = data.outStandingRequestCount > 0?img.src:'';
 															break;
-														case c.data.ouRequestChangeImage:
-															lSource = !data.isAdmin?imgSrc:'';
+														case c.data.ouRequestChangeImage.src:
+															lSource = !data.isAdmin?img.src:'';
 															break;
-														case c.data.createSubOUImage:
-															lSource = data.isAdmin?imgSrc:'';
+														case c.data.createSubOUImage.src:
+															lSource = data.isAdmin?img.src:'';
 															break;
 														case c.data.dividerImage:
-															lSource = data.isAdmin?imgSrc:'';
+															lSource = data.isAdmin?img.src:'';
 															break;
 														default:
-															lSource = imgSrc;
+															lSource = img.src;
 															break;
 													}
 													return lSource;
@@ -415,13 +437,15 @@
 					 e.handled = true;
 				 }		 
 				},
-/*					new go.Binding("opacity", "taskManagersValue", 
-													function(data){
-														return data != ''? 1.0:0.0;
-													}
-												),
-*/												
-					{toolTip: toolTiptextHeader!='' ? toolTipDataListJSON(toolTiptextHeader, toolTipBindingList) : ''}
+					new go.Binding("toolTip", "", function(){
+						var toolTip = '';
+						if(toolTiptextHeader!=''){
+							toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
+						} else if(img.title != ''){
+							toolTip = toolTipSimple(img);
+						}
+						return toolTip;
+					})
 				 );
 		return imageJSON;
 	}	
@@ -756,6 +780,10 @@
 //																				Changes in Client script
 // 2.7.0 | 2021-10-15 | raj | STRY0111888 - added permissinve graphics and updated profile picture
 //																				Changes in Server script and Client Script
+// 2.7.0 | 2021-10-20 | raj | STRY0112710 - HHS- Strong Matrix- Permissive OU Tasking- Visual Indicators- Tooltips
+//                            STRY0111072 - Organizational Hierarchy Full-screen–- OU Management Icons- Add Tooltips  
+//                            STRY0111076 - Organizational Hierarchy Full-screen– Adjust Ordering of Icons- Related Tasks Icon  
+//																				Changes in Server script and Client Script
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -870,33 +898,72 @@
 	// STRY0108231
 	// RAJ - NOTE performance, load these 1 time, added if logic.  also moved into fucntion to clean up code
 	// --- Get Task Manager Image
-	data.taskManagerImage = !data.ouMembersImage?getImage('Tie16.svg'):data.ouMembersImage;
+	// STRY0111072 - STRY0111072
+	data.taskManagerImage = {"src":!data.ouMembersImage?getImage('Tie16.svg'):data.ouMembersImage.src,
+													 "title": '', "alt": ''};
 	// --- Get Admin Image
-	data.Admin16Image = !data.Admin16Image?getImage('Admin16.svg'):data.Admin16Image;
+	// STRY0111072 - STRY0111072
+	data.Admin16Image = {"src":!data.Admin16Image?getImage('Admin16.svg'):data.Admin16Image.src,
+													 "title": '', "alt": ''};
 	// STRY0101474 
 	// --- Get Related Tasks Image
-	data.ouRequestChangeImage = !data.ouRequestChangeImage?getImage('Request16.svg'):data.ouRequestChangeImage;	
+	// STRY0111072 - STRY0111072
+	data.ouRequestChangeImage = {"src":!data.ouRequestChangeImage?getImage('Request16.svg'):data.ouRequestChangeImage.src,
+													 "title": gs.getMessage("Open Request Organizational Update"),
+														"alt": gs.getMessage("Open Request")};	
 	// --- Get OU Process Request Image
-	data.ouProcessRequestImage = !data.ouProcessRequestImage?getImage('ProcessRequest16.svg'):data.ouProcessRequestImage;
+	// STRY0111072 - STRY0111072
+	data.ouProcessRequestImage = {"src":!data.ouProcessRequestImage?getImage('ProcessRequest16.svg'):data.ouProcessRequestImage.src,
+													 "title": gs.getMessage("Go to Request List"),
+														"alt": gs.getMessage("Open Request List")};	
 	// --- Get OU Information Image
-	data.ouInformationImage = !data.ouInformationImage?getImage('Information16.svg'):data.ouInformationImage;
-	// --- Get Sub OU Image
-	data.ouSubOUImage = !data.ouSubOUImage?getImage('SubOU16.svg'):data.ouSubOUImage;
+	// STRY0111072 - STRY0111072
+	data.ouInformationImage = {"src":!data.ouInformationImage?getImage('Information16.svg'):data.ouInformationImage.src,
+													 "title": gs.getMessage("Open Organizational Unit Information"),
+														"alt": gs.getMessage("Open Information")};		// --- Get Sub OU Image
+	// STRY0111072 - STRY0111072
+	data.ouSubOUImage = {"src":!data.ouSubOUImage?getImage('SubOU16.svg'):data.ouSubOUImage.src,
+													 "title": gs.getMessage("Open List of Sub Organization Units"),
+														"alt": gs.getMessage("Open Sub Organization Unit List")};	
+
 	// --- Get OU Members Image
-	data.ouMembersImage = !data.ouMembersImage?getImage('OUMembers16.svg'):data.ouMembersImage;
+	// STRY0111072 - STRY0111072
+	data.ouMembersImage = {"src":!data.ouMembersImage?getImage('OUMembers16.svg'):data.ouMembersImage.src,
+													 "title": gs.getMessage("Open List of Members"),
+														"alt": gs.getMessage("Open Member List")};	
+
 	// --- Get OU Contacts Image
-	data.ouContactsImage = !data.ouContactsImage?getImage('Contacts16.svg'):data.ouContactsImage;	
+	// STRY0111072 - STRY0111072
+	data.ouContactsImage = {"src":!data.ouContactsImage?getImage('Contacts16.svg'):data.ouContactsImage.src,
+													 "title": gs.getMessage("Open List of Contacts"),
+														"alt": gs.getMessage("Open Contact List")};	
 	// --- Get OU Reports Image
-	data.ouReportImage = !data.ouReportImage?getImage('Reports16.svg'):data.ouReportImage;	
+	// STRY0111072 - STRY0111072
+	data.ouReportImage = {"src":!data.ouReportImage?getImage('Reports16.svg'):data.ouReportImage.src,
+													 "title": gs.getMessage("Go to Reports"),
+														"alt": gs.getMessage("Open Reports")};	
 	// STRY0101474
 	// --- Get Related Tasks Image
-	data.ouRelatedTasksImage = !data.ouRelatedTasksImage?getImage('RelatedTasks16.svg'):data.ouRelatedTasksImage;	
+	// STRY0111072 - STRY0111072
+	data.ouRelatedTasksImage = {"src":!data.ouRelatedTasksImage?getImage('RelatedTasks16.svg'):data.ouRelatedTasksImage.src,
+													 "title": gs.getMessage("Open Related Tasks"),
+														"alt": gs.getMessage("Open Task List")};	
+
 	// --- Get Divider Image
-	data.dividerImage = !data.dividerImage?getImage('Divider.svg'):data.dividerImage;	
+	// STRY0111072 - STRY0111072
+	data.dividerImage = {"src":!data.dividerImage?getImage('Divider.svg'):data.dividerImage.src,
+													 "title": "",
+														"alt": ""};	
 	// --- Get Create Sub OU Image
-	data.createSubOUImage = !data.createSubOUImage?getImage('GenericAddSub16.svg'):data.createSubOUImage;	
-	// STRY0111888
-	data.LockOpenBadge24 = !data.LockOpenBadge24?getImage('LockOpenBadge24.svg'):data.LockOpenBadge24;	
+	// STRY0111072 - STRY0111072
+	data.createSubOUImage = {"src":!data.createSubOUImage?getImage('GenericAddSub16.svg'):data.createSubOUImage.src,
+													 "title": gs.getMessage("Create Sub OU"),
+														"alt": gs.getMessage("Add Sub OU")};	
+
+	// STRY0111888 - STRY0111072 - STRY0111072
+	data.LockOpenBadge24 = {"src":!data.LockOpenBadge24?getImage('LockOpenBadge24.svg'):data.LockOpenBadge24.src,
+													 "title": gs.getMessage("Permissive Organizational Unit"),
+														"alt": gs.getMessage("OU is Permissive")};	
 
 	// STRY0101474
 
@@ -1017,7 +1084,7 @@
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>1187</sys_mod_count>
+        <sys_mod_count>1212</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1025,7 +1092,7 @@
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-20 20:07:31</sys_updated_on>
+        <sys_updated_on>2021-10-21 03:39:31</sys_updated_on>
         <template><![CDATA[<style>
 
   
