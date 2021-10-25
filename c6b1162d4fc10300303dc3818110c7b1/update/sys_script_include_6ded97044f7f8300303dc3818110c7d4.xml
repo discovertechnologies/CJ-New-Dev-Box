@@ -8,7 +8,8 @@
         <description>v2.7&#13;
 STRY0095102 - HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
 STRY0096033 - Remove restriction group type hardcode sysid in Tasker&#13;
-javascript: new taskerDynamicFilters().getTaskingOfficeList('internal')&#13;
+STRY0111621 - Task Forms - New Constraint for selecting "Reviewers" and "On Behalf Of"&#13;
+&#13;
 v 2.6&#13;
 STRY0099013 - change filter for Task Owner&#13;
 v 2.5 P3 &#13;
@@ -27,6 +28,25 @@ v2.5.13 &#13;
 // Script Continued Below
 var taskerDynamicFilters = Class.create();
 taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+	// STRY0111621
+	getReviewers: function() {
+		return this.getAllMembersCurrentUserCanTask();
+	},
+	// STRY0111621
+	getOnBehalfOf: function() {
+		return this.getAllMembersCurrentUserCanTask();
+	},
+	
+	// STRY0111621
+	getTemplateReviewers: function(){
+		return this.getOUSubTaskMembersInTemplates();
+	},
+	
+	// STRY0111621
+	getTemplateOnBehalfOf: function(){
+		return this.getOUSubTaskMembersInTemplates();
+	},
+	
 	// STRY0096033 - Remove restriction group type hardcode sysid in Tasker
 	getMyRestrictedGroups: function() {
 		var myGroups = 'none';
@@ -544,52 +564,53 @@ getOfficePicker : function()
 		return strArrOUs; 
 	},
 
-	getOnBehalfOf: function() {
-		// STRY0064991 - get users for onBehalfOf
-		// TODO NOTE: if we remove the dependency on Prmiary Assignee, then we will need to get All OUs for Task Administrator
-		//            and all members for all ous (set return value to all).  If Task manager of multiple OUs, then 
-		//            get all OUs where user is a Task Manager and pull all members from all of them.
-		var taskingScripts = new tasking_System_Settings_Scripts();
-		var UserPermissions  = new UserInfoScripts();
-		var onBehalfArr = [];
-		var strArrOUs = [];
+	// STRY0111621 - Removed for full list of users the user can task above
+// 	getOnBehalfOf: function() {
+// 		// STRY0064991 - get users for onBehalfOf
+// 		// TODO NOTE: if we remove the dependency on Prmiary Assignee, then we will need to get All OUs for Task Administrator
+// 		//            and all members for all ous (set return value to all).  If Task manager of multiple OUs, then 
+// 		//            get all OUs where user is a Task Manager and pull all members from all of them.
+// 		var taskingScripts = new tasking_System_Settings_Scripts();
+// 		var UserPermissions  = new UserInfoScripts();
+// 		var onBehalfArr = [];
+// 		var strArrOUs = [];
 
-		// if user is a Task Administrator, return all users
-		if (UserPermissions.IsUserTaskAdministrator()){
-			if (current.getValue('primary_assignee') != ''){
-				strArrOUs.push(current.getValue('primary_assignee'));
-				// based on note above, if this isn't limitted to primary assignee, just return that load
-				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-			} else{
-				// If no Primary assignee set, then return no records
-				onBehalfArr = [];
-			}
-		}
-		// now determine if user is a the Task Manager for the selected Primary Assignee
-		else if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
-			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
-			if (current.getValue('primary_assignee') != ''){
-				strArrOUs.push(current.getValue('primary_assignee'));
-				// based on note above, if this isn't limitted to primary assignee, just return that load
-				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-			} else{
-				// If no Primary assignee set, then return no records
-				onBehalfArr = [];
-			}
-		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
-		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
-		// Return this user only as they can work on behalf of
-		} else { //} if(UserPermissions.IsUserInOU(current.primary_assignee,gs.getUserID())){
-			onBehalfArr.push(gs.getUserID());
-		}			
-		// now limit to restricted group, if necessary
-		if ( current.getValue('assignment_group') != '') 
-			onBehalfArr = this.limitUsersToRestrictedGroup(onBehalfArr, current.getValue('assignment_group'));
-		// turn array into a comma delimitted string.
-		var sOnBehalfOf = onBehalfArr.join(',');
-		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
-		return 'sys_id IN ' + sOnBehalfOf  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
-	},	
+// 		// if user is a Task Administrator, return all users
+// 		if (UserPermissions.IsUserTaskAdministrator()){
+// 			if (current.getValue('primary_assignee') != ''){
+// 				strArrOUs.push(current.getValue('primary_assignee'));
+// 				// based on note above, if this isn't limitted to primary assignee, just return that load
+// 				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+// 			} else{
+// 				// If no Primary assignee set, then return no records
+// 				onBehalfArr = [];
+// 			}
+// 		}
+// 		// now determine if user is a the Task Manager for the selected Primary Assignee
+// 		else if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
+// 			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
+// 			if (current.getValue('primary_assignee') != ''){
+// 				strArrOUs.push(current.getValue('primary_assignee'));
+// 				// based on note above, if this isn't limitted to primary assignee, just return that load
+// 				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+// 			} else{
+// 				// If no Primary assignee set, then return no records
+// 				onBehalfArr = [];
+// 			}
+// 		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
+// 		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
+// 		// Return this user only as they can work on behalf of
+// 		} else { //} if(UserPermissions.IsUserInOU(current.primary_assignee,gs.getUserID())){
+// 			onBehalfArr.push(gs.getUserID());
+// 		}			
+// 		// now limit to restricted group, if necessary
+// 		if ( current.getValue('assignment_group') != '') 
+// 			onBehalfArr = this.limitUsersToRestrictedGroup(onBehalfArr, current.getValue('assignment_group'));
+// 		// turn array into a comma delimitted string.
+// 		var sOnBehalfOf = onBehalfArr.join(',');
+// 		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
+// 		return 'sys_id IN ' + sOnBehalfOf  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
+// 	},	
 	
 	// receives memberArr and restricted group
 	// returnes a memberArr restricted to people in the restricted group
@@ -623,7 +644,7 @@ getOfficePicker : function()
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>270</sys_mod_count>
+        <sys_mod_count>273</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -631,6 +652,6 @@ getOfficePicker : function()
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-06-11 04:52:19</sys_updated_on>
+        <sys_updated_on>2021-10-25 03:00:48</sys_updated_on>
     </sys_script_include>
 </record_update>
