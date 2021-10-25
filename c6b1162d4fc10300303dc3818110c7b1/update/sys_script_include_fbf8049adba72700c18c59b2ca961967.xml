@@ -19,6 +19,7 @@ STRY0108513 - added a condition check for the Response field and the Response bu
 DFCT0010482 - Any Tasker User can create a subtask on ANY task in the system&#13;
 DFCT0010539 - Any Tasker user with Template permissions can run anyone's templates and view/start "Restricted" templates&#13;
 DFCT0010482 - Any Tasker User can create a subtask on ANY task in the system&#13;
+STRY0112587 - ICE-CMS- Task Executive- Permissions/Capabilities&#13;
 &#13;
 v2.6&#13;
 Updated to put all UI Actions condition checks into this file&#13;
@@ -273,8 +274,9 @@ uiConditionCheck.prototype = {
 			var UserPermissions  = new UserInfoScripts();
 			// STRY0085827
 			if(isActive && isRestrictedGroupAllowed){
+				//STRY0112587 
 				if (processLevel == 'global_process') 
-					return UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+					return UserPermissions.IsUserTaskAdministrator(gs.getUserID()) || UserPermissions.IsUserTaskExecutive(gs.getUserID());
 				else if (processLevel == 'ou_process')
 					return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemp.getValue('process_ou'));
 				else if (processLevel == 'my_process')
@@ -981,7 +983,10 @@ uiConditionCheck.prototype = {
 		// see if User is a task manager for the Task owner
 		var isTaskManagerOfTaskOwner = new UserInfoScripts().IsUserOUTAOfAnotherUser(taskOwner, currentUser);
 		var isUserTaskAdministrator =  new UserInfoScripts().IsUserTaskAdministrator(currentUser);
-		if(canRead && isActive == true && UserCanRespond && extension_requested == true && (isTaskOwner || isTaskManagerOfTaskOwner || isUserTaskAdministrator)){
+		//STRY0112587 
+		var isUserTaskExecutive =  new UserInfoScripts().IsUserTaskExecutive(currentUser);
+		//STRY0112587 
+		if(canRead && isActive == true && UserCanRespond && extension_requested == true && (isTaskOwner || isTaskManagerOfTaskOwner || isUserTaskAdministrator || isUserTaskExecutive)){
 			return true;
 		} else{
 			return false;
@@ -1033,13 +1038,16 @@ uiConditionCheck.prototype = {
 				var arrayUtil = new global.ArrayUtil();
 				var arrayPrimaryAssigneeOUTAs = [];
 				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+				// STRY0112587
+				var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
 				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
 				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
-				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
-				
-				//As an Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
+				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+				// As an Assigned Member or Reviewer or Primary Assignee Task Manager(OUTA) OR Task Administrator (GTA),
+				// I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
+				// STRY0112587
 				if ( canRead && clarificationRequested == false  &&
-					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA ) &&
+					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA || isTE) &&
 					(unassigned || assigned || accepted || workInProgress || inReview || reWork )){
 					return true;
 				}else{
@@ -1075,13 +1083,16 @@ uiConditionCheck.prototype = {
 				var arrayUtil = new global.ArrayUtil();
 				var arrayPrimaryAssigneeOUTAs = [];
 				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+				// STRY0112587
+				var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
 				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
 				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
 				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
 				
 				//As an Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
+				// STRY0112587
 				if ( canRead && clarificationRequested == false && 
-					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA ) &&
+					(currentUserIsAssignedMember || currentUserIsReviewer || isPrimaryAssigneeOUTA || isGTA || isTE) &&
 					(unassigned || assigned || accepted || workInProgress || inReview || reWork )){
 					return true;
 				}else{
@@ -1283,8 +1294,9 @@ uiConditionCheck.prototype = {
 		var UserPermissions  = new UserInfoScripts();
 		// STRY0085827
 		if(canRead && (newRecord != -1) && isActive == true ){
+			//STRY0112587 
 			if (processLevel == 'global_process') 
-				return UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+				return UserPermissions.IsUserTaskAdministrator(gs.getUserID()) || UserPermissions.IsUserTaskExecutive(gs.getUserID());
 			else if (processLevel == 'ou_process')
 				return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemplate.getValue('process_ou'));
 			else if (processLevel == 'my_process')
@@ -1301,7 +1313,8 @@ uiConditionCheck.prototype = {
 		// use the standard UserInfo scripts to check user permissions
 		var UserPermissions  = new UserInfoScripts();
 		//var tasker_process_template_global = UserPermissions.userHasGlobalProcessRights();
-		var tasker_process_template_global = UserPermissions.IsUserTaskAdministrator();
+		//STRY0112587 
+		var tasker_process_template_global = UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive();
 		
 		var task_process_template_ou = false;
 		if(gr.getValue('primary_assignee') + '' != ''){
@@ -1326,8 +1339,7 @@ uiConditionCheck.prototype = {
 		var workInProgress = (gr.state == "13");
 		var inReview = (gr.state == "14");
 		var reWork = (gr.state == "15");
-		//check the to see if the current logged in user has any of the following tasker roles
-		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+		
 		var taskOwner = (gr.u_task_requester == currentUser);
 		var currentUserIsAssignedMember = (gr.assigned_to == currentUser);
 		var currentUserIsReviewer = (gr.u_reviewer == currentUser);
@@ -1400,9 +1412,12 @@ uiConditionCheck.prototype = {
 			var taskOwnerAllowed = (taskOwner == user);
 			var isTaskOwnerOUTA = uis.IsUserOUTAOfAnotherUser(taskOwner, user);
 			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-			var onBehalfOfAllowed = ((taskRecord.parent && taskRecord.parent.on_behalf_of == user) || (!taskRecord.parent && taskRecord.on_behalf_of == user));
+			// STRY0112587
+			var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
 			
-			if(globalTAAllowed || isTaskOwnerOUTA || taskOwnerAllowed || onBehalfOfAllowed ) {
+			var onBehalfOfAllowed = ((taskRecord.parent && taskRecord.parent.on_behalf_of == user) || (!taskRecord.parent && taskRecord.on_behalf_of == user));
+			// STRY0112587
+			if(globalTAAllowed || isTE || isTaskOwnerOUTA || taskOwnerAllowed || onBehalfOfAllowed ) {
 				return true;
 			}
 		}catch(e) {
@@ -1426,8 +1441,10 @@ uiConditionCheck.prototype = {
 			var assigneeOU = ous.GetUserDefaultOU(assignee);
 			var isAssigneeOUTA = new UserInfoScripts().IsUserTaskingAuthority(assigneeOU, user);
 			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+			// STRY0112587
+			var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");			
 			
-			if(globalTAAllowed || isAssigneeOUTA || taskOwnerAllowed || assigneeAllowed ) {
+			if(globalTAAllowed || isTE || isAssigneeOUTA || taskOwnerAllowed || assigneeAllowed ) {
 				return true;
 			}
 		}catch(e) {
@@ -1466,8 +1483,10 @@ uiConditionCheck.prototype = {
 		
 		var isOnBehalfOf = (task.on_behalf_of && task.on_behalf_of == userId);
 		var isTaskAdministrator = user.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-		
-		var userCanReOpen = (isTaskOwner || isOnBehalfOf || isReviewer || isAssignedMember || isTaskAdministrator);
+		// STRY0112587
+		var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");			
+		// STRY0112587
+		var userCanReOpen = (isTaskOwner || isOnBehalfOf || isReviewer || isAssignedMember || isTaskAdministrator || isTE);
 		var answer = canRead && !isNewRecord && !isActive && userCanReOpen;
 		
 		return answer;
@@ -1531,7 +1550,10 @@ uiConditionCheck.prototype = {
 		var inReview = (current.state == "14");
 		var reWork = (current.state == "15");
 		//check the to see if the current logged in user has any of the following tasker roles
-		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(gs.getUserID());
+		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(currentUser);
+		//STRY0112587 
+		var isUserTaskExecutive =  new UserInfoScripts().IsUserTaskExecutive(currentUser);
+		
 		var taskOwner = (current.u_task_requester == currentUser);
 		var currentUserIsAssignedMember = (current.assigned_to == currentUser);
 		var currentUserIsReviewer = (current.u_reviewer == currentUser);
@@ -1564,7 +1586,7 @@ uiConditionCheck.prototype = {
 		// v2.5.13 - STRY0073150 - removed task_process_template_ou 
 		// The template is saved as a Personal Template, the user does not need OU Template rights to do that.
 		if(canRead && !isNewRecord &&(task_process_template_admin || tasker_process_template_global || tasker_process_template_user)){
-			if(userIsTaskAdministrator || taskOwner || isTaskingAuthorityOUTA || isPrimaryOfficeOUTA || isPrimaryAssigneeOUTA){
+			if(userIsTaskAdministrator || isUserTaskExecutive || taskOwner || isTaskingAuthorityOUTA || isPrimaryOfficeOUTA || isPrimaryAssigneeOUTA){
 				return true;
 			} else if(currentUserIsAssignedMember && !unassigned && !assigned){
 				return true;
@@ -1733,7 +1755,7 @@ uiConditionCheck.prototype = {
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>506</sys_mod_count>
+        <sys_mod_count>509</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1741,6 +1763,6 @@ uiConditionCheck.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-24 02:03:07</sys_updated_on>
+        <sys_updated_on>2021-10-25 18:52:12</sys_updated_on>
     </sys_script_include>
 </record_update>
