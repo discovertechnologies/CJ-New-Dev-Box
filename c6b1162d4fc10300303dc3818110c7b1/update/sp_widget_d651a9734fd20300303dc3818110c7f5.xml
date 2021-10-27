@@ -281,7 +281,6 @@
     }
 
     function checkDateWarnings(changedNodeData) {
-debugger;			
         if (changedNodeData.parent != undefined && changedNodeData.parent != '') {
             var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
             compareParentDateToAllChildren(parentNodeData.sys_id);
@@ -302,9 +301,8 @@ debugger;
         var parentNode = diagram.findNodeForKey(parentKey);
         var childrenNodes = parentNode.findTreeChildrenNodes();
         // STRY0091251
-        var singleSubtaskLongerThanParent = false;
+        var subtaskProjectedDateLongerThanParent = false;
         while (childrenNodes.next()) {
-            var thisSubtaskLongerThanParent = false;
             var node = childrenNodes.value;
             if (currentOrder != node.data.route_order) {
                 sumSubTaskTemplateDuration += orderMax;
@@ -313,26 +311,21 @@ debugger;
             }
 					
 						if (node.data.actualTime > orderMax) {
-                orderMax = parseInt(node.data.actualTime);
+              orderMax = parseInt(node.data.actualTime);
+							if(orderMax + sumSubTaskTemplateDuration > parentNode.data.actualTime){
+								subtaskProjectedDateLongerThanParent=true;
+							}
             }
-					
-            // STRY0091251
-            if (node.data.actualTime > parentNode.data.actualTime) {
-                singleSubtaskLongerThanParent = true;
-                thisSubtaskLongerThanParent = true;
-            }
-            // STRY0091251
-            if (node.data.warning.isParentShorterThanThisTask != thisSubtaskLongerThanParent) {
-                diagram.model.setDataProperty(node.data.warning, 'isParentShorterThanThisTask', thisSubtaskLongerThanParent);
+					// STRY0091251
+            if (node.data.warning.isParentShorterThanThisTask != subtaskProjectedDateLongerThanParent) {
+                diagram.model.setDataProperty(node.data.warning, 'isParentShorterThanThisTask', subtaskProjectedDateLongerThanParent);
                 diagram.model.updateTargetBindings(node.data);
             }
-        }
-        // STRY0091251
-        diagram.model.setDataProperty(parentNode.data.warning, 'isSubTaskLongerThanParent', singleSubtaskLongerThanParent);
 
+        }
         var totalChildDuration = sumSubTaskTemplateDuration + orderMax;
         diagram.model.setDataProperty(parentNode.data, 'totalChildDuration', totalChildDuration);
-        diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', (singleSubtaskLongerThanParent || (parentNode.data.actualTime >= totalChildDuration)));
+        diagram.model.setDataProperty(parentNode.data.warning, 'isParentLongEnough', ((parentNode.data.actualTime >= totalChildDuration)));
         diagram.model.updateTargetBindings(parentNode.data);
     }
 
@@ -356,7 +349,8 @@ debugger;
             case 'DurationIcon':
                 var durrationWarningCount = 1;
                 toolTip = $go(go.Panel, "Table",
-                    $go(go.TextBlock, c.data.fieldsInModel.u_duration_days.fieldLabel + ": ", {
+										// STRY0113121
+                    $go(go.TextBlock, c.data.fieldsInModel.DaysCaption + ": ", {
                         row: 0,
                         column: 0,
                         alignment: go.Spot.Right,
@@ -373,7 +367,8 @@ debugger;
                             margin: 2,
                             background: toolTipBackgroundColor
                         }),
-                    $go(go.TextBlock, c.data.fieldsInModel.u_duration_time_due.fieldLabel + ": ", {
+										// STRY0113121
+                    $go(go.TextBlock, c.data.fieldsInModel.TimeDueCaption + ": ", {
                         row: 1,
                         column: 0,
                         alignment: go.Spot.Right,
@@ -390,8 +385,34 @@ debugger;
                             margin: 2,
                             background: toolTipBackgroundColor
                         }),
-                    $go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ", {
+												
+										// STRY0113121
+                    $go(go.TextBlock, c.data.fieldsInModel.warning_hours.fieldLabel + ": ", {
                         row: 2,
+                        column: 0,
+                        alignment: go.Spot.Right,
+                        margin: 2,
+                        background: toolTipBackgroundColor
+                    }),
+                    $go(go.TextBlock,
+                        new go.Binding("text", "", function(data) {
+														var warningDays = parseInt(data.warning_hours_DisplayValue);
+														var warningDaysText = '';
+														if(warningDays>0){
+															warningDaysText = c.data.fieldsInModel.WarningCaption.replace('{0}', data.warning_hours_DisplayValue);
+														} else {
+															warningDaysText = c.data.fieldsInModel.WarningNotSetCaption;
+														}
+                            return warningDaysText;
+                        }), {
+                            row: 2,
+                            column: 1,
+                            alignment: go.Spot.Left,
+                            margin: 2,
+                            background: toolTipBackgroundColor
+                        }),
+                    $go(go.TextBlock, c.data.fieldsInModel.duration.fieldLabel + ": ", {
+                        row: 3,
                         column: 0,
                         alignment: go.Spot.Right,
                         margin: 2,
@@ -401,7 +422,7 @@ debugger;
                         new go.Binding("text", "", function(data) {
                             return data.duration_DisplayValue;
                         }), {
-                            row: 2,
+                            row: 3,
                             column: 1,
                             alignment: go.Spot.Left,
                             margin: 2,
@@ -409,7 +430,7 @@ debugger;
                         }),
                     $go(go.TextBlock, c.data.durationWarningWaitState, {
                             visible: false,
-                            row: 3,
+                            row: 4,
                             column: 0,
                             columnSpan: 2,
                             alignment: go.Spot.Left,
@@ -420,21 +441,7 @@ debugger;
                             return (data.warning.waitStatewithNoSubtasks == true);
                         })),
                     // STRY0091251
-                    $go(go.TextBlock, c.data.durationWarningParentLessThanCombinedSubtasks, {
-                            visible: false,
-                            row: 4,
-                            column: 0,
-                            columnSpan: 2,
-                            alignment: go.Spot.Left,
-                            margin: 5,
-                            background: toolTipBackgroundColor,
-                            width: 600,
-                            wrap: go.TextBlock.WrapFit
-                        },
-                        new go.Binding("visible", "", function(data) {
-                            return (data.warning.isParentLongEnough != true);
-                        })),
-                    $go(go.TextBlock, c.data.durationWarningIsSubTaskLongerThanParent, {
+                    $go(go.TextBlock, c.data.warningProjectedDateOfParentBeforeLastSubtasks, {
                             visible: false,
                             row: 5,
                             column: 0,
@@ -446,9 +453,9 @@ debugger;
                             wrap: go.TextBlock.WrapFit
                         },
                         new go.Binding("visible", "", function(data) {
-                            return (data.warning.isSubTaskLongerThanParent == true);
+                            return (data.warning.isParentLongEnough != true);
                         })),
-                    $go(go.TextBlock, c.data.durationWarningisParentShorterThanThisTask, {
+                    $go(go.TextBlock, c.data.durationWarningProjectedDateOfParentBeforeThisTask, {
                             visible: false,
                             row: 6,
                             column: 0,
@@ -683,7 +690,7 @@ debugger;
                             background: toolTipBackgroundColor
                         },
                         new go.Binding("visible", "", function(data) {
-                            return (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks);
+                            return (!data.warning.isParentLongEnough || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks);
                         })),
                     $go(go.TextBlock, c.data.assignmentWarning, {
                             visible: false,
@@ -1080,7 +1087,7 @@ debugger;
                             //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
                             //the fake logic here is if level is 1 then warning color, otherwise use the default color.
                             new go.Binding("stroke", "", function(data) {
-                                if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks)
+                                if (!data.warning.isParentLongEnough || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks)
                                     return icon_warning_stroke;
                                 else
                                     return icon_normal_stroke;
@@ -1178,7 +1185,7 @@ debugger;
                             //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
                             //the fake logic here is if level is 1 then warning color, otherwise use the default color.
                             new go.Binding("text", "", function(data) {
-                                if (!data.warning.isParentLongEnough || data.warning.isSubTaskLongerThanParent || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks || data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
+                                if (!data.warning.isParentLongEnough || data.warning.isParentShorterThanThisTask || data.warning.waitStatewithNoSubtasks || data.warning.primaryAssigneeEmpty || data.warning.taskingAuthorityEmpty || data.warning.primaryOfficeEmpty)
                                     return font_awesome_exclamation_triangle_o;
                                 else
                                     return '';
@@ -1347,12 +1354,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 		// STRY0109209 - Add Create Icon
 		data.createTemplateTaskTitle = gs.getMessage('Create Subtask');	
 	
-    data.durationWarningParentLessThanCombinedSubtasks = gs.getMessage('Tasker - Warning: Parent duration shorter than the durations of subtasks');
-    data.durationWarningIsSubTaskLongerThanParent = gs.getMessage('Tasker - Warning: Parent Duration is Shorter than a subtasks');
-    data.durationWarningisParentShorterThanThisTask = gs.getMessage('Tasker - Warning: Subtask Duration is longer than parent');
-
     data.durationWarningWaitState = gs.getMessage('Tasker - Warning: Wait state set with no subtasks');
-    data.durationWarning = gs.getMessage('Tasker -  Warning Duration');
     data.assignmentWarning = gs.getMessage('Tasker -  Warning Assignment');
 
     //data.placeholderMsg = gs.getMessage("Select Template ...");
@@ -1436,6 +1438,23 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         var taskWidgetData = new TaskWidgetData();
         data.fieldsInModel = taskWidgetData.loadTemplateTreeFieldsInModelAndFieldLabels(gr);
         taskWidgetData.buildTaskMap('discovertasker-processtemplatetreegraph', map, gr, data.fieldsInModel);
+			
+				// STRY0113121
+				data.fieldsInModel.DaysCaption = gs.getMessage('{0} for Completion', [data.fieldsInModel.u_duration_days.fieldLabel])
+				data.fieldsInModel.TimeDueCaption = gs.getMessage('{0} set to', [data.fieldsInModel.u_duration_time_due.fieldLabel])
+				data.fieldsInModel.WarningCaption = gs.getMessage(' Reminder {0} days before {1}');
+				data.fieldsInModel.WarningCaption = data.fieldsInModel.WarningCaption.replace('{1}', gr.u_suspense_date.getLabel());
+				data.fieldsInModel.WarningNotSetCaption = gs.getMessage('No warning reminder set');
+				data.warningProjectedDateOfParentBeforeLastSubtasks = gs.getMessage(
+					'The projected {0} of one (1) or more Subtasks exceeds the projected {1} of this task',
+					[gr.u_suspense_date.getLabel(),gr.u_suspense_date.getLabel()]);
+			
+				data.durationWarningProjectedDateOfParentBeforeThisTask = gs.getMessage(
+					'This Subtask’s projected {0}  exceeds the projected {1} of the Parent Task',
+					[gr.u_suspense_date.getLabel(),gr.u_suspense_date.getLabel()]);
+			
+		    data.durationWarning = gs.getMessage('Tasker -  Warning Duration');
+
     }
 
 })();]]></script>
@@ -1445,7 +1464,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>1839</sys_mod_count>
+        <sys_mod_count>1857</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1453,7 +1472,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-06 00:19:10</sys_updated_on>
+        <sys_updated_on>2021-10-27 03:49:04</sys_updated_on>
         <template><![CDATA[
 <div class="panel panel-default">
     <div class="panel-heading">
