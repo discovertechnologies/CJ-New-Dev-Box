@@ -8,6 +8,7 @@
         <description>2.7&#13;
 STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
 STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
+STRY0113048 - Template Form- Duration fields- Add Warning Messages &#13;
 &#13;
 2.6 - moved duration code in here from Task Helper as this duration logic is related to template, not task&#13;
 &#13;
@@ -39,6 +40,141 @@ TaskTemplateHelpers.prototype = {
     initialize: function() {
     },
 	
+	// STRY0113048
+	// based on the change to this task, check and update the warnings for siblings in orders after this task
+	checkAndTemplateWarnings: function (grCurrentTT) {
+		var grParent = new GlideRecord('x_153465_discovert_route_tasks');
+		if(grCurrentTT.parent){
+			if(grParent.get(grCurrentTT.parent)){
+				// calculate parent projected due date to be set using days and Time
+				var parentActualTime = this._calculateActualTime(grParent);
+
+				// total all orders before the task given and the tasks days and time and compare to parent
+				var grTempTask = new GlideRecord('x_153465_discovert_route_tasks');
+				grTempTask.addQuery('parent', grParent.getUniqueValue());
+//				grTempTask.addQuery('route_order','>', parseInt(grCurrentTT.route_order));
+				grTempTask.orderBy('route_order');
+				grTempTask.query();
+				
+				// these the variables are used to check the duration total at each level
+				var sumSubTaskTemplateDuration = 0;
+				var currentOrder = 0;
+				var orderMax = 0;
+				var afterParent = false;
+				while (grTempTask.next()) {
+					// order changed, reset orderMax and update running total of last task sum
+					if (currentOrder != grTempTask.route_order){
+						sumSubTaskTemplateDuration += orderMax;
+						orderMax = 0;
+						currentOrder = parseInt(grTempTask.route_order);
+					}
+					var taskActualTime = this._calculateActualTime(grTempTask);
+					afterParent = taskActualTime + sumSubTaskTemplateDuration > parentActualTime;
+					// if a sibling warning value changed, update it
+					if(afterParent !=grTempTask.u_warning_projected_due_date_after_parent){
+						grTempTask.u_warning_projected_due_date_after_parent = afterParent;
+						grTempTask.setWorkflow(false);
+						grTempTask.update();
+					}
+					if (taskActualTime > orderMax){
+						orderMax = parseInt(taskActualTime);
+					}
+				}
+				// now, update the parent if the value should change
+				if(afterParent != grParent.u_warning_projected_due_date_before_child){
+					grParent.u_warning_projected_due_date_before_child = afterParent;
+					grParent.setWorkflow(false);
+					grParent.update();
+				}
+			}
+		}
+		// should always be populated
+		if(grCurrentTT.tasker_process_definition){
+			var numWarnings = 0;
+			var grTemp = new GlideRecord('x_153465_discovert_discover_routing_template');
+			if(grTemp.get(grCurrentTT.getValue('tasker_process_definition'))){
+				var gaWarnings = new GlideAggregate('x_153465_discovert_route_tasks');
+				// find all task templates in this template with duration warnings
+				gaWarnings.addEncodedQuery('tasker_process_definition=' + grCurrentTT.getValue('tasker_process_definition') +
+											'^u_warning_projected_due_date_after_parent=true' +
+											'^ORu_warning_projected_due_date_before_child=true');
+				
+				gaWarnings.addAggregate('COUNT');
+				gaWarnings.query();				
+				if(gaWarnings.next()){
+					numWarnings = gaWarnings.getAggregate('COUNT');									
+				}
+				// update template warning field if the warning state changed
+				if(numWarnings == 0 && grTemp.u_template_has_date_warning){
+					grTemp.u_template_has_date_warning = false;
+					grTemp.setWorkflow(false);
+					grTemp.update();
+				} else if(numWarnings > 0 && !grTemp.u_template_has_date_warning){
+					grTemp.u_template_has_date_warning = true;
+					grTemp.setWorkflow(false);
+					grTemp.update();
+				}
+			}
+		}
+	},
+	
+	// Check longer projected suspense after parent
+	isAfterParent: function (grCurrentTT) {
+		var afterParent = false;
+		var grParent = new GlideRecordSecure('x_153465_discovert_route_tasks');
+		if(grCurrentTT.parent){
+			if(grParent.get(grCurrentTT.parent)){
+				// calculate parent projected due date to be set using days and Time
+				var parentActualTime = this._calculateActualTime(grParent);
+				var updatedTime = this._calculateActualTime(grCurrentTT);
+
+				// total all orders before the task given and the tasks days and time and compare to parent
+				var grTempTask = new GlideRecordSecure('x_153465_discovert_route_tasks');
+				grTempTask.addQuery('parent', grParent.getUniqueValue());
+				grTempTask.orderBy('route_order');
+				grTempTask.query();
+				
+				// these the variables are used to check the duration total at each level
+				var sumSubTaskTemplateDuration = 0;
+				var currentOrder = 0;
+				var orderMax = 0;
+				while (grTempTask.next()) {
+					// order changed, reset orderMax and update running total of last task sum
+					if (currentOrder != grTempTask.route_order){
+						sumSubTaskTemplateDuration += orderMax;
+						orderMax = 0;
+						currentOrder = parseInt(grTempTask.route_order);
+					}
+					var taskActualTime = this._calculateActualTime(grTempTask);
+					// if found the order of current task, then compare to parent
+					if(grTempTask.route_order == grCurrentTT.route_order){
+						if(updatedTime + sumSubTaskTemplateDuration > parentActualTime){
+							afterParent = true;
+						}
+						break;
+					}
+					if (taskActualTime > orderMax){
+						orderMax = parseInt(taskActualTime);
+					}					
+				}
+			}
+		}
+		return afterParent;
+	},
+
+	// private function returns a calculated duration based on Days and Time Due fields
+	_calculateActualTime: function(grTT){
+		// calculate the projected due date to be set using days and Time
+		var actualTime = 0;
+		if(grTT.u_duration_days > 0){
+			actualTime = grTT.u_duration_days * 86400000;
+		}
+		if(!grTT.u_duration_time_due.nil()){
+			actualTime+= grTT.u_duration_time_due.dateNumericValue();
+		}
+		return actualTime;
+	},
+
 	getDurationDaysAndTimeDue: function (gr) {
 		var objDuration = {"u_duration_days":0,"u_duration_time_due":0};
 		var duration;
@@ -91,41 +227,6 @@ TaskTemplateHelpers.prototype = {
 		return dueTime;
 	},
 	
-	// NOTE the math in this function needs to stay in sync with getTemplateTreeLeveln as bothare setting warnings
-	getTemplateTaskDurationOfChildren: function (sys_id) {
-		// STRY0110317 
-		var tdc = new TaskerDurationCalculator();
-		var grTempTask = new GlideRecordSecure('x_153465_discovert_route_tasks');
-		grTempTask.addQuery('parent', sys_id);
-		grTempTask.orderBy('route_order');
-		grTempTask.query();
-
-		// these the variables are used to build the duration total at each level
-		var sumSubTaskTemplateDuration = 0;
-		var currentOrder = 0;
-		var orderMax = 0;
-		while (grTempTask.next()) {
-			// order changed, reset orderMax
-			if (currentOrder != grTempTask.route_order){
-				sumSubTaskTemplateDuration += orderMax;
-				orderMax = 0;
-				currentOrder = parseInt(grTempTask.route_order);
-			}
-			// STRY0110317 calculate the due date to be set using days and Time
-			var taskActualTime = 0;
-			if(grTempTask.u_duration_days > 0){
-				taskActualTime = grTempTask.u_duration_days * 86400000;
-			}
-			if(!grTempTask.u_duration_time_due.nil()){
-				taskActualTime+= grTempTask.u_duration_time_due.dateNumericValue();
-			}
-			if (taskActualTime > orderMax){
-				orderMax = parseInt(taskActualTime);
-			}
-		}
-		return sumSubTaskTemplateDuration + orderMax;
-	},
-
  	// RETURN - --------------------------------------------------------------------- 
  	//   JSON object with the following values
  	//                  templateName
@@ -810,7 +911,7 @@ TaskTemplateHelpers.prototype = {
         <sys_created_on>2019-03-05 20:30:26</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>9df9240ddb447b40c18c59b2ca9619f8</sys_id>
-        <sys_mod_count>138</sys_mod_count>
+        <sys_mod_count>164</sys_mod_count>
         <sys_name>TaskTemplateHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
@@ -818,6 +919,6 @@ TaskTemplateHelpers.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9df9240ddb447b40c18c59b2ca9619f8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-26 18:53:26</sys_updated_on>
+        <sys_updated_on>2021-10-29 02:30:28</sys_updated_on>
     </sys_script_include>
 </record_update>

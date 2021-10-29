@@ -3,30 +3,30 @@
         <abort_action>false</abort_action>
         <access>package_private</access>
         <action_delete>false</action_delete>
-        <action_insert>false</action_insert>
+        <action_insert>true</action_insert>
         <action_query>false</action_query>
         <action_update>true</action_update>
-        <active>false</active>
+        <active>true</active>
         <add_message>false</add_message>
         <advanced>true</advanced>
         <change_fields>false</change_fields>
         <client_callable>false</client_callable>
-        <collection>x_153465_discovert_route_task_instance</collection>
+        <collection>x_153465_discovert_route_tasks</collection>
         <condition/>
         <description>2.5.5: Condition updated:&#13;
 If the task is other than ACK and ITT task type, and any subtasks  are still open (no close complete, no close incomplete, or no cancel), all other subtasks will be close as well&#13;
 STRY0053207: ACK&#13;
 STRY0053216: ITT</description>
         <execute_function>false</execute_function>
-        <filter_condition table="x_153465_discovert_route_task_instance">activeCHANGESTOfalse^tasker_type!=f6b066b11b1b00104f5221b5ec4bcb92^tasker_type!=b0e0aa711b1b00104f5221b5ec4bcb3d^EQ<item endquery="false" field="active" goto="false" newquery="false" operator="CHANGESTO" or="false" value="false"/>
-            <item display_table="x_153465_discovert_tasker_type" display_value="Acknowledgement" endquery="false" field="tasker_type" goto="false" newquery="false" operator="!=" or="false" value="f6b066b11b1b00104f5221b5ec4bcb92"/>
-            <item display_table="x_153465_discovert_tasker_type" display_value="Information Only" endquery="false" field="tasker_type" goto="false" newquery="false" operator="!=" or="false" value="b0e0aa711b1b00104f5221b5ec4bcb3d"/>
+        <filter_condition table="x_153465_discovert_route_tasks">sys_created_onISEMPTY^ORu_duration_daysVALCHANGES^ORu_duration_time_dueVALCHANGES^EQ<item endquery="false" field="sys_created_on" goto="false" newquery="false" operator="ISEMPTY" or="false" value=""/>
+            <item endquery="false" field="u_duration_days" goto="false" newquery="false" operator="VALCHANGES" or="true" value=""/>
+            <item endquery="false" field="u_duration_time_due" goto="false" newquery="false" operator="VALCHANGES" or="true" value=""/>
             <item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
         </filter_condition>
         <is_rest>false</is_rest>
         <message/>
-        <name>DEPRECATED-Task -Mark Completed/Inactive</name>
-        <order>500</order>
+        <name>Temp Task - b4 Update-Validate set Flags</name>
+        <order>100</order>
         <priority>100</priority>
         <rest_method/>
         <rest_method_text/>
@@ -41,57 +41,9 @@ STRY0053216: ITT</description>
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 (function executeRule(current, previous /*null when async*/) {
-	var taskTable = "x_153465_discovert_route_task_instance";
-	var scriptLogTag = "(Business Rule) Task - Mark Completed / Inactive: ";
-	
-	var fRecurseUpdate = function(active, task) {
-		task.setValue("active", active);
-		// STRY0106180 - clear all request fields
-		task.u_clarification_requested = false;
-		task.extension_requested = false;
-		task.reassignment_requested = false;
-		task.extended_suspense_date = null;
-		var task_state = parseInt(task.getValue('state'));
-		task.update();
-		
-		// STRY0106180 - Find all open requests for the task and close them.
-		var requests = new GlideRecord('x_153465_discovert_tasker_requests');
-		requests.addQuery('u_status', 'In progress');
-		requests.addQuery('parent', task.sys_id);
-		requests.query();
-		while(requests.next()) {
-			requests.setValue("u_status", 'Completed');
-			switch (task_state) {
-				// Task was cancelled
-				case 7:
-					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for cancelled task'));
-					break;
-				// Task was completed
-				case 3: case 4:
-					requests.setValue("u_response_comments", gs.getMessage('Tasker - Open Request Comment for Closed tasks'));
-					break;
-			}
-			requests.update();
-		}
-		// 2.7.0 | 2021-09-22 | mmcc | STRY0108861 - DIA- Cancel from Top Task Notification 
-//		// find all tasks where this task is parent task and
-// 		var children = new GlideRecord(taskTable);
-// 		children.addQuery("parent", task.sys_id);
-// 		//children.addEncodedQuery('tasker_type!=f6b066b11b1b00104f5221b5ec4bcb92');//KT ACK: STRY0053207
-// 		//children.addEncodedQuery('tasker_type!=b0e0aa711b1b00104f5221b5ec4bcb3d');//KT ITT: STRY0053216
-// 		children.query();
-// 		while(children.next()) {
-// 			children.setValue("active", active);
-// 			children.update();
-// 		}
-	};
-	try {
-		var active = current.getValue("active");
-		fRecurseUpdate(active, current);
-	} catch(outerException) {
-		gs.warn(scriptLogTag + outerException);
-	}
-	
+	// STRY0113048
+	var afterParent = new TaskTemplateHelpers().isAfterParent(current);
+	current.u_warning_projected_due_date_after_parent = afterParent;
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>kbaton</sys_created_by>
@@ -100,8 +52,8 @@ STRY0053216: ITT</description>
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>11c033aadbf32340c18c59b2ca96196b</sys_id>
-        <sys_mod_count>45</sys_mod_count>
-        <sys_name>DEPRECATED-Task -Mark Completed/Inactive</sys_name>
+        <sys_mod_count>52</sys_mod_count>
+        <sys_name>Temp Task - b4 Update-Validate set Flags</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -109,7 +61,7 @@ STRY0053216: ITT</description>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_11c033aadbf32340c18c59b2ca96196b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-16 21:48:49</sys_updated_on>
+        <sys_updated_on>2021-10-28 03:41:55</sys_updated_on>
         <template/>
         <when>before</when>
     </sys_script>
