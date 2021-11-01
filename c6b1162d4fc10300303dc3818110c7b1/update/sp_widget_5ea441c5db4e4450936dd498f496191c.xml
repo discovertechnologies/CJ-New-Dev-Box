@@ -52,6 +52,8 @@
 		});
 		
 		$scope.$on("dropdownMenuClicked", function(evt,data){
+			// DFCT0010617
+			c.data.menuChanged = true;
 			// STRY0113382
 			c.data.newFilterTitle = data.filter_label;
 			// NOTE all the data updates below this line can probably be dropped as they are reloaded on the server
@@ -72,7 +74,9 @@
 				c.data.field_list = undefined;
 			}
 			// STRY0101803 added this call so the data table is reset on the filter every time
+			$scope.loadingData = true;
 			$scope.server.update().then(function() {
+				$scope.loadingData = false;
 				loadFilterWidget();
 			});
 		});
@@ -470,6 +474,9 @@
 				
 				// Makes Widget Async
 				$scope.data = $scope.options;
+				// DFCT0010617
+				$scope.data.initialLoad = true;
+	
 				$scope.loadingData = true;
 				$scope.server.update().then(function() {
 					if ($scope.data.newButtonUnsupported)
@@ -1108,6 +1115,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 //                                         Changes made in Client script
 // 2.7.0 | 2021-10-29 | raj  | STRY0113382 - Landing Page - Default Task list to last filter selected by the user
 //                                         Changes made in Server Script
+// 2.7.0 | 2021-10-29 | raj  | DFCT0010617 - Users can no longer run a custom filter on the "Modern Portal"	
+//                                         Changes made in Server Script and Client Script
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1174,10 +1183,14 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 	
 		// if usser preference was saved and the user has not selected a filter, load default filter
 		// if there is no user default and no input, then the option will already be loaded in data
-		if(data.userDefaultMenuTitle) {
+		// DFCT0010617
+		if(data.userDefaultMenuTitle && (input.initialLoad || input.menuChanged)) {
 			// load data with user's default menu.  The async post back and the poor structure of this code
 			// forces data to be passed in and out of the function, but this should be cleaned up
 			data = loadDefaultMenu(data.userDefaultMenuTitle, data.filters, data);
+			// DFCT0010617
+			data.initialLoad = false;
+			data.menuChanged = false;
 		}
 
     if (!data.table) {
@@ -1668,7 +1681,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1083</sys_mod_count>
+        <sys_mod_count>1088</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1676,7 +1689,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-30 05:32:51</sys_updated_on>
+        <sys_updated_on>2021-11-01 05:19:08</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -1765,7 +1778,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
       <fa name="spinner" spin="true"></fa>
       ${Loading data}...
     </div>
-    <table class="table table-striped table-responsive" ng-if="data.list.length">
+    <table class="table table-striped table-responsive" ng-if="data.list.length && !loadingData">
       <thead>
         <tr>
           <th style="width: 60px"></th>

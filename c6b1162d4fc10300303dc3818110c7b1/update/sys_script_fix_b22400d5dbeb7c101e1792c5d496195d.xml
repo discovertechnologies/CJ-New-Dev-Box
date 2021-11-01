@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>2.7 - Templates used duration to generate due dates on tasks.  This was confusing and required the user to calculate hours to get to a due time based on the time the template was run.  The updates will allow users to set a scheduled number of days for a task and set a time the task is due on that day.</description>
+        <name>Tasker 2.7-Convert Duration to Days/Time</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// Change Test from true to false to performm the updates
+// To run a single Template set the TemplateId
+
+// to run all, reccomend running test with Verbose false to see counts that will change
+// then set test to false and verbose to true
+// then make sure the counts returned in the test and the verbose are the same
+// the full list of items changed will be in the log if you need to review later
+// Also recommended to set a sys_id on a template and run one or 2 to test before running all
+
+var test = false;
+var verbose = true;
+var templateId = '';
+var templateCount = 0;
+var totalTemplateTaskConut = 0;
+if(templateId){
+	var grTemplate = new GlideRecord('x_153465_discovert_discover_routing_template');
+	if(grTemplate.get(templateId)){
+		gs.info('Tasker 2.7-Convert Duration to Days/Time - Converting Single Template.  Name: (' + grTemplate.template_name + ') - sys_id:' + templateId );
+		totalTemplateTaskConut =  count_Template_Tasks_to_Change(templateId);
+		var convertedTemplateTasks = convertTemplateDurations(grTemplate);
+		gs.info('Tasker 2.7-Convert Duration to Days/Time - Template converted - Name: (' + grTemplate.template_name + ') template tasks converted (' + convertedTemplateTasks + ') of (' + totalTemplateTaskConut + ') active template tasks.');
+	}
+} else {
+	templateCount = count_Templates_to_Change();
+	totalTemplateTaskConut = count_Template_Tasks_to_Change();
+	convertAllTemplateDurations();
+}
+
+function convertAllTemplateDurations(){
+	var convertedCount = 0;
+	var convertedTemplateTasks = 0;
+	var grTemplate = new GlideRecord('x_153465_discovert_discover_routing_template');
+	grTemplate.addQuery('u_active', true);
+	grTemplate.query();
+	while (grTemplate.next()){
+		var iTemplateTask = count_Template_Tasks_to_Change(grTemplate.getUniqueValue());
+		var iConvertedTasks = convertTemplateDurations(grTemplate);
+		convertedTemplateTasks += iConvertedTasks;
+		if (verbose){
+			gs.info('Tasker 2.7-Convert Duration to Days/Time - Template converted - Name: (' + grTemplate.template_name + ') template tasks converted (' + iConvertedTasks + ') of (' + iTemplateTask + ') active template tasks.');
+		}
+		convertedCount++;
+	}
+	
+	gs.info('Tasker 2.7-Convert Duration to Days/Time - Number of Templates converted: (' + convertedCount + ') of (' + convertedCount + ') active Templates.  Converted a total of (' + convertedTemplateTasks + ') of (' + totalTemplateTaskConut + ') active template tasks.');
+	
+	return convertedCount;
+}
+
+function convertTemplateDurations(grTemplate){
+	var convertedTemplateTasks = 0;
+	if (verbose){
+		gs.info('Tasker 2.7-Convert Duration to Days/Time - Converting Template.  Name: (' + grTemplate.template_name + ') - sys_id:' + templateId );
+	}
+	
+	var grTemplateTask = new GlideRecord('x_153465_discovert_route_tasks');
+	grTemplateTask.addQuery('tasker_process_definition', grTemplate.getUniqueValue());
+	// get the top task, then get the rest of the tree below
+	grTemplateTask.addNullQuery('parent');
+	grTemplateTask.addQuery('active', true);
+	grTemplateTask.query();
+	if(grTemplateTask.next()){
+		convertedTemplateTasks += convertTaskDuration(grTemplateTask);
+	}
+	return convertedTemplateTasks;
+}
+
+function convertTaskDuration(grTempTask){
+	var convertedTemplateTasks = 0;
+	var grTempSubTask = new GlideRecord('x_153465_discovert_route_tasks');
+	// get the top task, then get the rest of the tree below
+	grTempSubTask.addQuery('parent', grTempTask.getUniqueValue());
+	grTempSubTask.addQuery('active', true);
+	grTempSubTask.query();
+	// process all subtasks
+	while(grTempSubTask.next()){
+		convertedTemplateTasks += convertTaskDuration(grTempSubTask);
+	}
+	// then update this task template
+	// notice workflow was not turned off.  
+	// This will allow the other business rules already performaing the setting of warnings to fire.  
+	// NOTE: this is NOT the most performant way to do it as the calculations will be run for
+	//       for each sub orders at least 2 times.  Once the correct value is set, it won't update
+	//       multiple times, but the calculations will be run.  There may be a way to make it perform
+	//       better with another 1-2 days of effort.
+	var objDuration = new TaskTemplateHelpers().getDurationDaysAndTimeDue(grTempTask, grTempTask.getValue('duration'));
+	grTempTask.u_duration_days = objDuration.u_duration_days;
+	var u_time = new GlideTime(objDuration.u_duration_time_due);
+	grTempTask.setValue('u_duration_time_due', u_time.getValue());
+	if(!test){
+		grTempTask.update();
+		convertedTemplateTasks++;
+	}	
+	return convertedTemplateTasks;
+}
+
+// count templates and write to the log, return count
+function count_Templates_to_Change(){
+	var templateCount = 0;
+	var gaTemplates = new GlideAggregate('x_153465_discovert_discover_routing_template');
+	gaTemplates.addEncodedQuery('u_active=true');
+	gaTemplates.addAggregate("COUNT");
+	gaTemplates.query();
+	if(gaTemplates.next()){
+		templateCount = gaTemplates.getAggregate("COUNT");
+	}
+	
+	gs.info('Tasker 2.7-Convert Duration to Days/Time - Number of Templates to convert: (' + templateCount + ')');
+	return templateCount;
+
+}
+
+// count templates and write to the log, return count
+function count_Template_Tasks_to_Change(templateId){
+	var tempTaskCount = 0;
+	var gaTempTasks = new GlideAggregate('x_153465_discovert_route_tasks');
+	gaTempTasks.addEncodedQuery('active=true^tasker_process_definition.u_active=true');
+	
+	if(templateId){
+		gaTempTasks.addQuery('tasker_process_definition', templateId);
+	}
+	gaTempTasks.addAggregate("COUNT");
+	gaTempTasks.query();
+	if(gaTempTasks.next()){
+		tempTaskCount = gaTempTasks.getAggregate("COUNT");
+	}
+	if (verbose || !templateId){
+		gs.info('Tasker 2.7-Convert Duration to Days/Time - Number of Template Tasks to convert: (' + tempTaskCount + ')');
+	}
+	return tempTaskCount;
+
+}]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-10-30 21:00:29</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>b22400d5dbeb7c101e1792c5d496195d</sys_id>
+        <sys_mod_count>35</sys_mod_count>
+        <sys_name>Tasker 2.7-Convert Duration to Days/Time</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_b22400d5dbeb7c101e1792c5d496195d</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-11-01 04:14:15</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
