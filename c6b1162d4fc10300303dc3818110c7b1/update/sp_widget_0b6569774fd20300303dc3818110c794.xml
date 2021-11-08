@@ -12,6 +12,7 @@
 	//------------------------------------------------------------------------------------------------------------------------
 	// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
 	var node_active_bg = '#33738e';
+	var node_active_gradient_bg = '#33738E00';
 	var node_inactive_bg = '#787878';
 	var node_selected_border = '#FFD247';
 	
@@ -94,7 +95,8 @@
 	var c = this;
 	
 	c.data.topIconOpacity = c.data.isFullScreen? icon_opacity_normal:0.0;
-
+	c.data.showIcons = false;
+	
 	// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
 	var  diagramMinHeight = 150;
 	c.data.topOU="";
@@ -329,36 +331,36 @@
 				 source: img.src,
 				 opacity: opacity}, 
 					new go.Binding("opacity", toolTipBindingList, function(data){
-														var lOpacity;
-														if(toolTipBindingList == ''){
-															// for now, leave always on
-															lOpacity = opacity;
-														} else {
-															lOpacity = data != ''? icon_opacity_normal:0.0;
-														}
-														return lOpacity != ''? icon_opacity_normal:0.0;
-													}),
+							var lOpacity;
+							if(toolTipBindingList == ''){
+								// for now, leave always on
+								lOpacity = opacity;
+							} else {
+								lOpacity = data != ''? icon_opacity_normal:0.0;
+							}
+							return lOpacity != ''? icon_opacity_normal:0.0;
+						}),
 					new go.Binding("source", '', function(data){
-													var lSource;
-													switch (img.src){
-														case c.data.ouProcessRequestImage.src:
-															lSource = data.outStandingRequestCount > 0?img.src:'';
-															break;
-														case c.data.ouRequestChangeImage.src:
-															lSource = !data.isAdmin?img.src:'';
-															break;
-														case c.data.createSubOUImage.src:
-															lSource = data.isAdmin?img.src:'';
-															break;
-														case c.data.dividerImage:
-															lSource = data.isAdmin?img.src:'';
-															break;
-														default:
-															lSource = img.src;
-															break;
-													}
-													return lSource;
-												}),					
+							var lSource;
+							switch (img.src){
+								case c.data.ouProcessRequestImage.src:
+									lSource = data.isAdmin && data.outStandingRequestCount > 0?img.src:'';
+									break;
+								case c.data.ouRequestChangeImage.src:
+									lSource = !data.isAdmin?img.src:'';
+									break;
+								case c.data.createSubOUImage.src:
+									lSource = data.isAdmin?img.src:'';
+									break;
+								case c.data.dividerImage:
+									lSource = data.isAdmin?img.src:'';
+									break;
+								default:
+									lSource = img.src;
+									break;
+							}
+							return lSource;
+						}),					
 				{mouseEnter: function(e, obj) {
 					 obj.saveOpacity = obj.opacity;
 					 obj.opacity = icon_opacity_hover;
@@ -585,10 +587,23 @@
 					 isTreeExpanded: true,
 					 isTreeLeaf: true
 					},  // this event handler is defined below
+					
+					// on hover over node, show the icons
+					{mouseEnter: function(e, obj) {
+						obj.findObject('gradientRectangle').opacity =  c.data.isFullScreen ? icon_opacity_normal : 0.0;
+						obj.findObject('Icons').visible=c.data.isFullScreen;
+					},
+					 mouseLeave: function(e, obj) {
+						 obj.findObject('gradientRectangle').opacity = 0.0;
+						 obj.findObject('Icons').visible=false;
+					 }
+					},
+					
 					// STRY0111888 - changed to spot panel
 					$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
 							//STRY0111888 - set width and height
 							$go(go.Shape, "RoundedRectangle", { strokeWidth: 3, width:310, height:70},
+									// if selected, outline the rectangle
 									new go.Binding("stroke", "isSelected", function(s){
 										if (s)
 											return node_selected_border; 
@@ -610,8 +625,14 @@
 											return c.data.isFullScreen && c.data.include_poc_avatar;
 										else
 											return false;}),
-									new go.Binding("fill", "active", function (t){
-										if(t)
+									// if selected, outline the circle
+									new go.Binding("fill", "isSelected", function(s){
+										if (s)
+											return node_selected_border; 
+										else
+											return null;}).ofObject(""),
+									new go.Binding("fill", "", function (data){
+										if (data.active)
 											return node_active_bg;
 										else
 											return node_inactive_bg;})
@@ -633,46 +654,66 @@
 											new go.Binding("source", "photo"), 
 											new go.Binding("name","photoName")
 										 ) // end image picture object
-								 ), // end panel holding circle and picture
-
+								), // end panel holding circle and picture
 							// STRY0111888 - if permissive show open lock (this graphic has an outter band.  so, don't need the border circle)
+							$go(go.Shape, "Circle", { width: 29, strokeWidth: 0,
+																			 alignment: new go.Spot(0, 1, 10, 0) },
+									new go.Binding("visible", "permissive", function (permissive){
+										if(permissive)
+											return c.data.isFullScreen && c.data.permissiveOn;
+										else
+											return false;}),
+									// if selected, outline the circle
+									new go.Binding("fill", "isSelected", function(s){
+										if (s)
+											return node_selected_border; 
+										else
+											return null;}).ofObject("")
+								 ),
 							$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
 									{alignment: new go.Spot(0, 1, 10, 0)}, 
 									new go.Binding("visible", "permissive", function (permissive){
 										if(permissive)
-											return c.data.permissiveOn;
+											return c.data.isFullScreen && c.data.permissiveOn;
 										else
 											return false;}),
 									addImage(c.data.LockOpenBadge24, icon_opacity_normal, '', '')
 								 ), // end panel holding circle and unlock icon
-							
+							$go(go.Shape, "Circle", 
+									{visible: false,
+									 width: 29, height: 29, strokeWidth: 0, fill: node_active_bg,
+									 alignment: new go.Spot(1, 1, -10, 0)},
+									
+									new go.Binding("visible", "", function (data){
+										if(data.outStandingRequestCount && c.data.isFullScreen)
+											return data.isAdmin && data.outStandingRequestCount > 0;
+										else
+											return false;}),
+									new go.Binding("fill", "active", function (t){
+										if(t)
+											return node_active_bg;
+										else
+											return node_inactive_bg;}),
+									// if selected, outline the circle
+									new go.Binding("fill", "isSelected", function(s){
+										if (s)
+											return node_selected_border; 
+										else
+											return null;}).ofObject("")
+								 ),
+							$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+									{alignment: new go.Spot(1, 1, -10, 0)}, 
+									new go.Binding("visible", "", function (data){
+										if(data.outStandingRequestCount && c.data.isFullScreen)
+											return data.isAdmin && data.outStandingRequestCount > 0;
+										else
+											return false;}),
+									addImage(c.data.ouProcessRequestImage, c.data.topIconOpacity, '', '')
+								 ), // end panel holding circle and unlock icon
 							$go(go.Panel, "Auto", 
-									$go(go.Panel, "Vertical", // Vertical Row for Image and Icons
-											// ************************************************************************
-											// NOTE: the block is FULL SCREEN ONLY
-											// ************************************************************************
-											$go(go.Panel, "Horizontal",  // Horizontal panel for Image and Icons
-													{visible: c.data.isFullScreen},
-													$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
-															{alignment: go.Spot.TopRight, width: 300, isOpposite: true},
-															addImage(c.data.createSubOUImage, c.data.topIconOpacity, '', ''),
-															// STRY0101474
-															addImage(c.data.dividerImage, c.data.topIconOpacity, '', ''),
-															// DFCT0010634 - removed for initial release until we know what report to load in the modal
-															//addImage(c.data.ouReportImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouRelatedTasksImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouContactsImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouMembersImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouSubOUImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouInformationImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouRequestChangeImage, c.data.topIconOpacity, '', ''),
-															addImage(c.data.ouProcessRequestImage, c.data.topIconOpacity, '', '')
-														 ) // end horizontal panel holding the icons	
-												 ), // end horizontal Panel holding Images and icons
-											// ************************************************************************
-											// NOTE: the block is FULL SCREEN ONLY
-											// ************************************************************************
-											// STRY0108231
+									// STRY0108231
+									$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
+											{alignment: go.Spot.Left},
 											$go(go.Panel,  "Horizontal", // Horizontal panel for Task Manager, Administrator and Text
 													{alignment: go.Spot.Left},
 													$go(go.Panel, "Horizontal", {alignment: go.Spot.Left},  // Horizontal panel for Task Manager and Administrator
@@ -682,8 +723,39 @@
 													$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: fontStyle, stroke: "white", margin: 5, minSize: new go.Size(250, 0), maxSize: new go.Size(250, 30) },
 															new go.Binding("text", "name"))
 												 )  // close horizontal panel for Task Manager, Administrator and Text
-										 ) // close vertical panel for Task Manager, Administrator and Text
-								 )
+										 ),
+									// ************************************************************************
+									// NOTE: the block is FULL SCREEN ONLY
+									// ************************************************************************
+									$go(go.Shape, "Rectangle",  // Horizontal panel for Image and Icons
+											{opacity: 0.0,
+											 name: "gradientRectangle",
+											 strokeWidth: 0, 
+											 alignment: go.Spot.Right,
+											 width:40, height:250, // this is ODD, but it is turned at a 90 degree angle for the linear gradient.  So, Height and widht are swapped
+											 fill: $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"}),angle:90}),
+									$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
+											{name: "Icons",
+											 visible: false,
+											 alignment: go.Spot.Right},
+											$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
+													{visible: c.data.isFullScreen,
+													 alignment: go.Spot.Right, width: 250, isOpposite: true},
+													addImage(c.data.createSubOUImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouRequestChangeImage, c.data.topIconOpacity, '', ''),
+													// STRY0101474
+
+													addImage(c.data.dividerImage, c.data.topIconOpacity, '', ''),
+													// DFCT0010634 - removed for initial release until we know what report to load in the modal
+													//addImage(c.data.ouReportImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouRelatedTasksImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouContactsImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouMembersImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouSubOUImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.ouInformationImage, c.data.topIconOpacity, '', '')
+												 ) // end horizontal panel holding the icons	
+										 ) // end horizontal Panel holding Images and icons
+								 ) // close vertical panel for Task Manager, Administrator and Text
 						 ),
 					$go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
 				 );
@@ -931,7 +1003,7 @@
 																		 });		
 		// --- Get OU Process Request Image
 		// STRY0111072 - STRY0111072
-		data.ouProcessRequestImage = buildIcon({imageName: 'ProcessRequest16.svg',
+		data.ouProcessRequestImage = buildIcon({imageName: 'ProcessRequestBadge24.svg',
 																			title: 'Go to Request List',
 																			alt:'Open Request List'
 																		 });
@@ -1116,15 +1188,17 @@
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>1219</sys_mod_count>
+        <sys_mod_count>1395</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-02 04:51:04</sys_updated_on>
+        <sys_updated_on>2021-11-07 23:43:57</sys_updated_on>
         <template><![CDATA[<style>
 
   
