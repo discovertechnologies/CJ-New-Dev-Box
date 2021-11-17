@@ -136,12 +136,13 @@
 // 			$("#floaty").css("display", "none");
 			
 // 		};
-
 		c.openNewPage = function(table, sys_id, item){
 			// TODO, LOOK UP PAGE AND VIEWS SOMEHOW MAYBE A CLIENT SCRIPT CALLBACK
 			// NOTE: remove item when calling server
-			var portal_url_ref = '../discovertaskerportal';
+			// STRY0113838
+			var portal_url_ref = '../' + $scope.portal.url_suffix;
 			var pageId; 
+			var url;
 			var pageTable;
 			var view = 'sp';
 			// STRY0108629
@@ -164,34 +165,17 @@
 				case 'x_153465_discovert_route_task_instance':
 					pageId = 'discovertasker_taskdetails';
 					pageTable = table;
-// TODO - QUESTION SHOULD THE BE ON SERVER TO GET FULL TASK RECORD?
-					var getFormToLoadOptions = c.data.userPreferences.filter(function (pref){
-					var matchFailure = 
-							(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value.toString().indexOf(c.data.userID)==-1) || 
-							(pref.u_task_category.displayValue != '' && pref.u_task_category.displayValue != null  && pref.u_task_category.value.toString().indexOf(item.category.value)==-1) ||
-							(pref.u_tasker_sub_category.displayValue != '' && pref.u_tasker_sub_category.displayValue != null  && pref.u_tasker_sub_category.value.toString().indexOf(item.sub_category.value)==-1) || 
-							(pref.u_task_state.displayValue != '' && pref.u_task_state.displayValue != null  && pref.u_task_state.displayValue.toString().indexOf(item.state.display_value)==-1) ||
-							(pref.u_task_task_type.displayValue != '' && pref.u_task_task_type.displayValue != null  && pref.u_task_task_type.value.toString().indexOf(item.tasker_type.value)==-1);
-						if(!matchFailure){
-							return pref;
-						}
+					c.data.getURL=true;
+					c.data.sys_id=sys_id;
+					c.data.view =view;
+					$scope.server.update().then(function(data) {
+						url = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+						openTaskInNewWindow(url);
 					});
-					// If a match was found for this task, then use first item as 
-					// form preferences were loaded in order by the ORDER 
-					// to override the default settings
-					if(getFormToLoadOptions.length > 0){
-						var formToLoad = getFormToLoadOptions[0];
-						if(formToLoad.u_servicenow_portal_page.displayValue != '' && formToLoad.u_servicenow_portal_page.displayValue != null){
-							pageId = formToLoad.u_servicenow_portal_page.value;	
-						}
-						if(formToLoad.u_servicenow_form_view.displayValue != '' && formToLoad.u_servicenow_form_view.displayValue != null){
-							view = formToLoad.u_servicenow_form_view.value;	
-						}
-						if(formToLoad.u_service_portal.displayValue != '' && formToLoad.u_service_portal.displayValue != null){
-							portal_url_ref = '../' + formToLoad.u_service_portal.value;	
-						}
-						
-					}
+					
+					// the page to go to is being loaded by the post back, so don't complete below
+					// might be a better way to organize this code...
+					return;
 					break;
 				default:
 					pageId = 'discovertasker_taskdetails';
@@ -201,7 +185,6 @@
 					break;
 			}
 			// STRY0108629
-			var url;
 			if(c.data.DiscoverControllerURL){
 				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
 				url = portal_url_ref + '?id=' +  pageId + '&dcu_sys_id=' + sys_id + '&dcu_table=' + pageTable + '&dcu_ref=' + ref_field_name + '&dcu_view=' + view + '&query=' + c.data.filter + '&o=' + c.data.o + "&d=" + c.data.d;
@@ -209,10 +192,12 @@
 				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
 				url = portal_url_ref + '?id=' +  pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
 			}
-			window.open(url, '_blank');
+			openTaskInNewWindow(url);
 		};
 
-	
+		function openTaskInNewWindow(url) {
+			window.open(url, '_blank');
+		}
 		// open quickview modal
 		c.quickView = function(table, sys_id, widgetId, item) {
 			var title;
@@ -1119,6 +1104,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 //                                         Changes made in Server Script and Client Script
 // 2.7.0 | 2021-11-01 | raj  | DFCT0010620 - Body & Subject Incorrect: Response for OU Request Email is going to ${Responder} NOT ${Requestor} , URL for Order By was not right.
 //                                         Changes made in Client Script
+// 2.7.0 | 2021-11-16 | raj  | STRY0113838 - Tasker Settings- Allow for custom "URL Suffix" for Tasker Portal
+//                                         Changes made in Server Script, Client Controller and HTML
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1139,9 +1126,21 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
     }
     var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
     data.userPreferences = oUserPref.loadMyFormPreferences(data.OUsWhereIamAMember, data.OUsWhereIamATaskManager);
-
     if (!input) // asynch load list
         return;
+	
+		if (input && input.getURL==true){
+			// if just getting the URL, then get URL and return
+			var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id,input.view);
+			data.sys_id = input.sys_id;
+			data.pageId = url_Properties.pageId;
+			data.pageTable = url_Properties.pageTable;
+			data.view = url_Properties.view;
+			data.portal_url_ref = url_Properties.portal_url_ref;
+			// only call once
+			data.getURL = false;
+			return;
+		}
 	
 		// STRY0113382
 		if(input.newFilterTitle && input.newFilterTitle != data.userDefaultMenuTitle){
@@ -1681,7 +1680,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1092</sys_mod_count>
+        <sys_mod_count>1117</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1689,7 +1688,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-15 23:36:14</sys_updated_on>
+        <sys_updated_on>2021-11-17 04:35:38</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -1702,7 +1701,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <ul class="dropdown-menu" aria-labelledby="optionsMenu">
           <!-- 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform  -->
           <li ng-if="::data.hasRoleTaskerUser">
-            <a href="discovertaskerportal/{{data.table}}_list.do?sysparm_query={{data.filter}}&sysparm_view={{data.view}}&sysparm_fields={{data.field_list}}"
+            <a href="{{data.portal_url_ref}}/{{data.table}}_list.do?sysparm_query={{data.filter}}&sysparm_view={{data.view}}&sysparm_fields={{data.field_list}}"
                target="_blank">${Open in platform}
             </a>
           </li>

@@ -103,8 +103,21 @@ tasker_User_Form_Preferences.prototype = {
 			taskUserFormPreferences.Preferences.push(userPrefernce);
 		}	
 		taskUserFormPreferences.lastRefreshDateTime =  new GlideDateTime().getNumericValue();
+		
+		// STRY0113838
+		taskUserFormPreferences.defaultServicePortal = this._getDefaultServicePortalSuffix();
 		return taskUserFormPreferences;
 	},
+	
+	_getDefaultServicePortalSuffix: function(){
+		var gr_sp_portal = new GlideRecord('sp_portal');
+		gr_sp_portal.addQuery('default', 'true');
+		gr_sp_portal.query();
+		if (gr_sp_portal.next()) {
+			return gr_sp_portal.getValue('url_suffix');
+		}		
+	},
+
 	
 	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager){
 		var userID = gs.getUserID();
@@ -112,6 +125,10 @@ tasker_User_Form_Preferences.prototype = {
 		// if user's OUs are not passed in, load them
 		if(!OUsWhereIamAMember)
 			OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
+		
+		if (!OUsWhereIamATaskManager) {
+			OUsWhereIamATaskManager = new x_153465_discovert.tasking_System_Settings_Scripts().getMyOUTaskManagers();
+		}
 		
 		var isTaskManager = (OUsWhereIamATaskManager.length > 0);
 
@@ -135,6 +152,46 @@ tasker_User_Form_Preferences.prototype = {
 		return myUserPreferences;
 	},
 
+	get_URL_Properties_for_Task_Based_on_Prefrences: function(sys_id, current_view){
+		var currentUserId = gs.getUserID();
+		// set defaults
+		var url_Properties = {};
+		url_Properties.pageId = 'discovertasker_taskdetails';
+		url_Properties.pageTable = 'x_153465_discovert_route_task_instance';
+		url_Properties.view = current_view;
+		url_Properties.portal_url_ref = g_taskUserFormPreferences.defaultServicePortal;
+		var gr_task_pref = new GlideRecordSecure(url_Properties.pageTable);
+		if(gr_task_pref.get(sys_id)){
+			var getFormToLoadOptions = g_taskUserFormPreferences.Preferences.filter(function (pref){
+				var matchFailure = 
+					(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value.toString().indexOf(currentUserId)==-1) || 
+					(pref.u_task_category.displayValue != '' && pref.u_task_category.displayValue != null  && pref.u_task_category.value.toString().indexOf(gr_task_pref.getValue('category'))==-1) ||
+					(pref.u_tasker_sub_category.displayValue != '' && pref.u_tasker_sub_category.displayValue != null  && pref.u_tasker_sub_category.value.toString().indexOf(gr_task_pref.getValue('sub_category'))==-1) || 
+					(pref.u_task_state.displayValue != '' && pref.u_task_state.displayValue != null  && pref.u_task_state.displayValue.toString().indexOf(gr_task_pref.getDisplayValue('state'))==-1) ||
+					(pref.u_task_task_type.displayValue != '' && pref.u_task_task_type.displayValue != null  && pref.u_task_task_type.value.toString().indexOf(gr_task_pref.getValue('tasker_type'))==-1);
+				if(!matchFailure){
+					return pref;
+				}
+			});
+			
+			// If a match was found for this task, then use first item as 
+			// form preferences were loaded in order by the ORDER 
+			// to override the default settings
+			if(getFormToLoadOptions.length > 0){
+				var formToLoad = getFormToLoadOptions[0];
+				if(formToLoad.u_servicenow_portal_page.displayValue != '' && formToLoad.u_servicenow_portal_page.displayValue != null){
+					url_Properties.pageId = formToLoad.u_servicenow_portal_page.value;	
+				}
+				if(formToLoad.u_servicenow_form_view.displayValue != '' && formToLoad.u_servicenow_form_view.displayValue != null){
+					url_Properties.view = formToLoad.u_servicenow_form_view.value;	
+				}
+				if(formToLoad.u_service_portal.displayValue != '' && formToLoad.u_service_portal.displayValue != null){
+					url_Properties.portal_url_ref = '../' + formToLoad.u_service_portal.value;	
+				}
+			}				
+		}
+		return url_Properties;
+	},
     type: 'tasker_User_Form_Preferences'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
@@ -142,7 +199,7 @@ tasker_User_Form_Preferences.prototype = {
         <sys_created_on>2021-07-21 01:42:57</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
-        <sys_mod_count>66</sys_mod_count>
+        <sys_mod_count>78</sys_mod_count>
         <sys_name>tasker_User_Form_Preferences</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -150,6 +207,6 @@ tasker_User_Form_Preferences.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-15 23:55:26</sys_updated_on>
+        <sys_updated_on>2021-11-16 23:21:10</sys_updated_on>
     </sys_script_include>
 </record_update>
