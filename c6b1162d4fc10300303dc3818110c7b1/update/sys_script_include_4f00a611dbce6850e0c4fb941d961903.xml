@@ -26,6 +26,8 @@ STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating
 NOTE: this is because task was not closing related tasks correctly.  This has been fixed.&#13;
 2.7.0 | 2021-10-21 | raj | DFCT0010597- Time zone on "Closed" Date and "Actual End" is wrong if user profile is NOT on GMT&#13;
 2.7.0 | 2021-11-16 | raj  | STRY0113839 - Technical Story: Pages/Portal/Page should be picked up from the "Form preferences"&#13;
+2.7.0 | 2021-11-18 | raj  | STRY0114416 - 5- The list below should be fixed to re-submit for certification.&#13;
+&#13;
 &#13;
 2.6 - Tasker Moible&#13;
 STRY0073598 - FIX- CLA - Clarification Provided Email Notification - Assigned Member, Reviewer, Task manager of the Primary Office (OUTA) or Task Administrator (GTA)&#13;
@@ -280,37 +282,37 @@ Task_uiAction.prototype = {
     },
 
 
-    // STRY0076598: New method to Reopen a Task
-    reopenTaskInernal: function(current, reopenSubtasks, taskClosedDate) {
+    // STRY0076598: New method to Reopen a Task - STRY0114416 - 5 - GlideRecordSecure - changing current
+    reopenTaskInernal: function(gr_task_reopen, reopenSubtasks, taskClosedDate) {
         // this was pulled from the previous function, but needs to be updated to account for wait state
         var TaskerHelper = new TaskerHelpers();
-        var msgReopenedBy = gs.getMessage('Tasker - {0} has been reopened by {1}', [current.number, gs.getUserDisplayName()]);
+        var msgReopenedBy = gs.getMessage('Tasker - {0} has been reopened by {1}', [gr_task_reopen.number, gs.getUserDisplayName()]);
         var childOpening = false;
 
-        current.active = true;
+        gr_task_reopen.active = true;
 
         // STRY0108861 - DIA- Cancel from Top Task Notification
-        current.closed_at = '';
-        current.closed_by = '';
-        current.work_end = '';
+        gr_task_reopen.closed_at = '';
+        gr_task_reopen.closed_by = '';
+        gr_task_reopen.work_end = '';
 
         // STRY0108861 - DIA- Cancel from Top Task Notification
         // use the previous Status, a nightly process should update
         // NOTE this was copied from reopen, this should be set based on a function, not hard coded
-        //current.status = "Projected on time";
+        //gr_task_reopen.status = "Projected on time";
 
         // STRY0079667
-        current.u_reviewer_signed = false;
-        current.u_completed_on_time = false;
+        gr_task_reopen.u_reviewer_signed = false;
+        gr_task_reopen.u_completed_on_time = false;
 
-        current.work_notes = msgReopenedBy;
+        gr_task_reopen.work_notes = msgReopenedBy;
         gs.addInfoMessage(msgReopenedBy);
 
         if (reopenSubtasks) {
             // Glide Record Secure will break this b/c of the Task Table.
             // TODO: research this and determine the right Dictionary override to allow the use of glide record secure
             var grSubtasksToReopen = new GlideRecord('x_153465_discovert_route_task_instance');
-            grSubtasksToReopen.addQuery('parent', current.getUniqueValue());
+            grSubtasksToReopen.addQuery('parent', gr_task_reopen.getUniqueValue());
             grSubtasksToReopen.addQuery('state', 'IN', '3, 4, 7'); // 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled
 
 			// DFCT0010577 comparing to undefined wasn't working
@@ -327,13 +329,13 @@ Task_uiAction.prototype = {
                 childOpening = true;
 
                 // if we find a subtask that is reopening and the parent waits for subtasks to complete, then this task should go into wait state.
-                if (current.u_wait_for_subtasks_to_finish == true) {
-                    current.state = -3; // -3 Waiting
+                if (gr_task_reopen.u_wait_for_subtasks_to_finish == true) {
+                    gr_task_reopen.state = -3; // -3 Waiting
                 } else {
-                    current.state = TaskerHelper.getUpdatedState(current);
+                    gr_task_reopen.state = TaskerHelper.getUpdatedState(gr_task_reopen);
                 }
 
-                current.update();
+                gr_task_reopen.update();
 
                 this.reopenTaskInernal(grSubtasksToReopen, true, taskClosedDate);
             }
@@ -347,16 +349,16 @@ Task_uiAction.prototype = {
 
         // no subtasks were opened, set the state based on the task values
         if (!childOpening) {
-            current.state = TaskerHelper.getUpdatedState(current);
-            current.update();
+            gr_task_reopen.state = TaskerHelper.getUpdatedState(gr_task_reopen);
+            gr_task_reopen.update();
         }
 
         // check the parent to see if it has the wait flag set.  If it does then reopening the child should put it in wait state
-        if (current.parent) {
+        if (gr_task_reopen.parent) {
             // Glide Record Secure will break this b/c of the Task Table.
             // TODO: research this and determine the right Dictionary override to allow the use of glide record secure
             var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
-            if (grTaskParent.get(current.getValue("parent"))) {
+            if (grTaskParent.get(gr_task_reopen.getValue("parent"))) {
                 if (grTaskParent.u_wait_for_subtasks_to_finish == true) {
                     grTaskParent.state = -3; // -3 Waiting
                     grTaskParent.setWorkflow(false);
@@ -1361,7 +1363,7 @@ Task_uiAction.prototype = {
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>211</sys_mod_count>
+        <sys_mod_count>213</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
@@ -1369,6 +1371,6 @@ Task_uiAction.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-16 23:25:37</sys_updated_on>
+        <sys_updated_on>2021-11-18 14:50:31</sys_updated_on>
     </sys_script_include>
 </record_update>
