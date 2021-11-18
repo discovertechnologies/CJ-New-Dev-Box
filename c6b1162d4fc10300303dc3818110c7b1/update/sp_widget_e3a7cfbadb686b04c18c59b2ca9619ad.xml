@@ -236,6 +236,8 @@ IMG.img-sm {
 // 2.7.0 | 2021-11-16 | raj  | STRY0113839 - Technical Story: Pages/Portal/Page should be picked up from the "Form preferences"
 //																					Changes made in Client Script and HTML
 //																					NOTE: href was no longer used.  So, removed completely to avoid future confusion
+// 2.7.0 | 2021-11-18 | raj  | STRY0114416 - 4 - 2.7 Certification Fixes
+//                                         Changes made in Server Script
 //------------------------------------------------------------------------------------------------------------------------
 (function () {
 	data.filterMsg = gs.getMessage("Filter...");
@@ -250,23 +252,23 @@ IMG.img-sm {
 	if (!options.table)
 		return;
 
-	
-	var gr = new GlideRecordSecure(options.table); // does ACL checking for us
-	if(!gr.isValid()) {
+	// STRY0114416 - 4
+	var gr_Simple_Task = new GlideRecordSecure(options.table); // does ACL checking for us
+	if(!gr_Simple_Task.isValid()) {
 		data.isValid = false;
 		return;
 	} else
 		data.isValid = true;
 	// grTemp is used to check isValidField since using GlideRecordSecure fails for date/time fields
 	var grTemp = new GlideRecord(options.table);
-	gr.addEncodedQuery(options.filter);
-	options.title = options.title;// || gr.getPlural();
+	gr_Simple_Task.addEncodedQuery(options.filter);
+	options.title = options.title;// || gr_Simple_Task.getPlural();
 	options.display_field = $sp.getParameter('f') || options.display_field;
 	if (!options.display_field || !grTemp.isValidField(options.display_field))
-		options.display_field = gr.getDisplayName();
+		options.display_field = gr_Simple_Task.getDisplayName();
 
 	if (input && input.filterText) {
-		gr.addEncodedQuery(options.display_field + "LIKE" + input.filterText);
+		gr_Simple_Task.addEncodedQuery(options.display_field + "LIKE" + input.filterText);
 	} 
 	//KTorres: ---------------------------------------------------------------------------------------------------------------
 	data.sys_id = $sp.getParameter("sys_id");
@@ -319,14 +321,14 @@ IMG.img-sm {
 	if (options.table == "x_153465_discovert_m2m_tasker_instance"){
 		queryString = "tasker_instance_from=" + data.sys_id;
 		data.filter = queryString;
-		gr.addEncodedQuery(queryString);
+		gr_Simple_Task.addEncodedQuery(queryString);
 		data.relatedtaskpageurl = "?id=discovertasker_relatedtasks&sys_id="+data.sys_id+"&table=x_153465_discovert_route_task_instance";
 	}
 	
 	
   //------------------------------------------------------------------------------------------------------------------------
 
-	options.title = options.title;// || gr.getPlural();
+	options.title = options.title;// || gr_Simple_Task.getPlural();
 	options.secondary_fields = options.secondary_fields || "";
 	options.secondary_fields = options.secondary_fields.split(",");
 	if (!options.order_by || !grTemp.isValidField(options.order_by))
@@ -341,43 +343,43 @@ IMG.img-sm {
 
 	// redo query with limit
 	if (options.order_direction == "asc")
-		gr.orderBy(options.order_by);
+		gr_Simple_Task.orderBy(options.order_by);
 	else
-		gr.orderByDesc(options.order_by);
+		gr_Simple_Task.orderByDesc(options.order_by);
 
 	data.maxCount = 500;
-	gr.setLimit(data.maxCount);
-	gr.query();
+	gr_Simple_Task.setLimit(data.maxCount);
+	gr_Simple_Task.query();
 
 	
-	data.count = gr.getRowCount();
+	data.count = gr_Simple_Task.getRowCount();
 	data.actions = getActions();
 	data.list = [];
 	var recordIdx = 0;
-	while (gr.next()) {
+	while (gr_Simple_Task.next()) {
 		
 		if (options.maximum_entries && recordIdx == options.maximum_entries)
 			break;
 
 		var record = {};
 		if (data.actions.length > 0) {
-			var fields = gr.getFields();
+			var fields = gr_Simple_Task.getFields();
 			for (var i = 0; i < fields.size(); i++) {
 				var glideElement = fields.get(i);
 				var name = glideElement.getName();
 				if (name.indexOf("sys_") == -1)
-					record[name] = gr.getValue(name);
+					record[name] = gr_Simple_Task.getValue(name);
 			}
 		}
 
-		record.sys_id = gr.getValue('sys_id');
-		record.className = gr.getRecordClassName();
+		record.sys_id = gr_Simple_Task.getValue('sys_id');
+		record.className = gr_Simple_Task.getRecordClassName();
 		
 		//KTorres: Get sys id from Task table --------------------------------------------------------------------------------
 		if (record.className == "x_153465_discovert_m2m_tasker_instance"){ 
 			
-			data.relatedtasksy_id = gr.tasker_instance_to;
-			data.relatedtasknumber = gr.tasker_instance_to.number;
+			data.relatedtasksy_id = gr_Simple_Task.tasker_instance_to;
+			data.relatedtasknumber = gr_Simple_Task.tasker_instance_to.number;
 
 			var grTaskInstance = new GlideRecord('x_153465_discovert_route_task_instance');
 			if(grTaskInstance.get('number', data.relatedtasknumber)){
@@ -392,17 +394,17 @@ IMG.img-sm {
 		
 		
 		if (options.image_field) {
-			record.image_field = gr.getDisplayValue(options.image_field);
+			record.image_field = gr_Simple_Task.getDisplayValue(options.image_field);
 			if (!record.image_field)
 				record.image_field = "noimage.pngx";
 		}
 
 		if (options.display_field)
-			record.display_field = getField(gr, options.display_field);
+			record.display_field = getField(gr_Simple_Task, options.display_field);
 			
 		record.secondary_fields = [];
 		options.secondary_fields.forEach(function(f) {
-			record.secondary_fields.push(getField(gr, f));
+			record.secondary_fields.push(getField(gr_Simple_Task, f));
 		});
 
 		if (options.sp_page) {
@@ -423,11 +425,11 @@ IMG.img-sm {
 		recordIdx++;
 	}
 
-	function getField(gr, name) {
+	function getField(gr_field, name) {
 		var f = {};
-		f.display_value = gr.getDisplayValue(name);
-		f.value = gr.getValue(name);
-		var ge = gr.getElement(name);
+		f.display_value = gr_field.getDisplayValue(name);
+		f.value = gr_field.getValue(name);
+		var ge = gr_field.getElement(name);
 			if (ge == null)
 				return f;
 
@@ -455,7 +457,7 @@ IMG.img-sm {
         <sys_created_on>2018-09-18 18:43:14</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>e3a7cfbadb686b04c18c59b2ca9619ad</sys_id>
-        <sys_mod_count>246</sys_mod_count>
+        <sys_mod_count>247</sys_mod_count>
         <sys_name>Tasker Simple List</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -463,7 +465,7 @@ IMG.img-sm {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_e3a7cfbadb686b04c18c59b2ca9619ad</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-17 06:57:42</sys_updated_on>
+        <sys_updated_on>2021-11-18 05:33:06</sys_updated_on>
         <template><![CDATA[
 <div class="panel panel-{{::c.options.color}} b" ng-if="c.data.isValid && (c.options.always_show || c.data.filterText || c.data.list.length)">
   <div class="panel-heading" ng-if="::!c.options.hide_header">
