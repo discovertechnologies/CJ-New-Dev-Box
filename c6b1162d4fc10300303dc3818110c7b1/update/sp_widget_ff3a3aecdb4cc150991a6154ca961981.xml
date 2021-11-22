@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function($rootScope, $scope, $timeout) {
+
+	var c = this;
+	var reportId = c.options.report_id || '';
+
+	reloadReport(reportId);
+	
+	function reloadReport(reportId){
+		c.rectangleId = c.widget.rectangle_id || c.data.rectangleId;
+		c.showTitle = (c.options.show_title === true || c.options.show_title === 'true');
+		c.title = c.options.title || '';
+		
+		// c.options.widget_parameters - need to figure out how to switch when filter comes in
+		
+		if (reportId){
+			c.initialMessage = c.data.ch.i18n.building;
+			window.chartHelpers = window.chartHelpers || {};
+			$.extend(window.chartHelpers, c.data.ch);
+			$timeout(function(){
+				var targetEl = $("#report-widget-"+c.rectangleId);
+// need to add if here for when options say use filter or just replace
+
+//var params = {sysparm_title: "Average for all ratings", sysparm_field: "category", sysparm_type: "bar", sysparm_table: "asmt_category_result", sysparm_aggregate: "AVG", sysparm_sumfield: "rating"};
+//          var div = $j("#report_stuff");
+
+				if(c.options.widget_parameters){
+					c.options.widget_parameters.jvar_report_id = reportId;
+//					c.options.widget_parameters.sysparm_report_id = reportId;
+
+					embedReportByParams(targetEl, c.options.widget_parameters);
+				} else {
+					embedReportById(targetEl, reportId);	
+				}
+			});
+		}
+		else {
+			c.initialMessage = c.data.ch.i18n.selectReport;
+		}
+	}		
+	// switch forms
+	var unregister_data_table_click = $rootScope.$on('data_table.click', onListClick);
+	var unregister_sp_list_click = $rootScope.$on('$sp.list.click', onListClick);
+	
+	$scope.$on("$destroy", function() {
+		unregister_data_table_click();
+		unregister_sp_list_click();
+	});
+
+	function onListClick(evt, arg) {
+		if(c.data.report_id != arg.sys_id){
+			c.data.report_id = arg.sys_id;
+			reloadReport(arg.sys_id);
+		}
+	}
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.report-widget-wrap {&#13;
+	background:#fff;&#13;
+  padding:15px;&#13;
+  margin: 0 0 15px 0;&#13;
+}&#13;
+&#13;
+.report-widget-title {&#13;
+	padding:0 0 15px;&#13;
+  font-weight:bold;&#13;
+  font-size: 14px;&#13;
+  margin-top: 0;&#13;
+  margin-bottom: 0;&#13;
+}&#13;
+&#13;
+.highcharts-container g.highcharts-button *,&#13;
+.highcharts-container image.hc-image {&#13;
+  transition: fill-opacity 0.3s linear, stroke-opacity 0.3s linear, opacity 0.3s linear;&#13;
+  fill-opacity: 0;&#13;
+  stroke-opacity: 0;&#13;
+  opacity:0;&#13;
+}&#13;
+&#13;
+.highcharts-container:hover g.highcharts-button *,&#13;
+.highcharts-container:hover image.hc-image {&#13;
+  fill-opacity: 1;&#13;
+  stroke-opacity: 1;&#13;
+  opacity:1;&#13;
+}&#13;
+&#13;
+.highcharts-legend-item span::after,&#13;
+.highcharts-legend-item::after {&#13;
+  content: "\200E";&#13;
+}&#13;
+&#13;
+table.wide .pivot_cell,&#13;
+table.wide .pivot_caption,&#13;
+table.wide .pivot_caption_dark {&#13;
+	padding: 3px 5px;&#13;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description>Widget for embedding reports on the Service Portal.</description>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>ou_report</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>OU Report</name>
+        <option_schema>[{"displayValue":"Report","name":"report_id","label":"Report","type":"reference","value":"sys_report","ed":{"reference":"sys_report"}},{"hint":"","name":"show_title","default_value":"true","label":"Show title","type":"boolean"}]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[(function() {
+	// EH 5/27/20
+	// Added url parameter for mobile
+	options.report_id = (input || {}).report_id || options.report_id || $sp.getParameter("report_id") || '';
+	options.widget_parameters = (input || {}).widget_parameters || options.widget_parameters;
+	
+	if (options.report_id !== '') {
+		var reportGr = new GlideRecord('sys_report');
+		if (reportGr.canRead())
+			options.title = reportGr.getValue('title');
+	}
+	
+	var chartHelpers = chartHelpers || {};
+	chartHelpers.i18n = chartHelpers.i18n || {};
+
+	chartHelpers.i18n.selectReport = gs.getMessage('Select a report in widget options!');
+	chartHelpers.i18n.building = gs.getMessage('Building chart, please wait...');
+	chartHelpers.i18n.total = gs.getMessage('Total');
+	chartHelpers.i18n.maxCells = gs.getMessage('The size of the pivot table is too big. Use filters to reduce it or switch to a modern browser.');
+	chartHelpers.i18n.chartGenerationError = gs.getMessage('An error occurred while generating chart. Please try again later.');
+
+	chartHelpers.i18n.showAsHeatmap = gs.getMessage('Show data as a heatmap visualization');
+	chartHelpers.i18n.showAsMarkers = gs.getMessage('Show data using latitude and longitude');
+
+	chartHelpers.i18n.highlightBasedOn = gs.getMessage('Highlight based on:');
+	// EH 5/27/20
+	// This is causing errors and seems not that important atm, however 
+	// we need to watch this for internationalization
+	// chartHelpers.i18n.isRTL = GlideI18NStyle().getDirection().equals('rtl');
+	chartHelpers.i18n.weekNumberTitle = gs.getMessage('Week');
+	chartHelpers.i18n.weekNumberTitleShort = gs.getMessage('W');
+	chartHelpers.i18n.seeMoreEvents = gs.getMessage('See {0} more events');
+	chartHelpers.i18n.viewEventsInList = gs.getMessage('View {0} events in a list');
+	chartHelpers.i18n.viewAllEventsInList = gs.getMessage('View all events in a list');
+	chartHelpers.i18n.viewAllRecords = gs.getMessage('View all records');
+	chartHelpers.i18n.none = gs.getMessage('None');
+	chartHelpers.i18n.plusMany = gs.getMessage('+ many');
+	chartHelpers.i18n.plusMore = gs.getMessage('+ {0} more');
+	chartHelpers.i18n.buttonText = {
+		prevYear: "",
+		nextYear: "",
+		today: gs.getMessage('today'),
+		year:	gs.getMessage('year'),
+		month:gs.getMessage('month'),
+		week:gs.getMessage('week'),
+		day:gs.getMessage('day')
+	};
+	chartHelpers.i18n.allDayHtml = gs.getMessage('all-day');
+	chartHelpers.i18n.daysNames = [
+		gs.getMessage('Sunday'),
+		gs.getMessage('Monday'),
+		gs.getMessage('Tuesday'),
+		gs.getMessage('Wednesday'),
+		gs.getMessage('Thursday'),
+		gs.getMessage('Friday'),
+		gs.getMessage('Saturday')
+	];
+	chartHelpers.i18n.dayNamesShort = [
+		gs.getMessage('Sun'),
+		gs.getMessage('Mon'),
+		gs.getMessage('Tue'),
+		gs.getMessage('Wed'),
+		gs.getMessage('Thu'),
+		gs.getMessage('Fri'),
+		gs.getMessage('Sat')
+	];
+	chartHelpers.i18n.monthNames = [
+		gs.getMessage('January'),
+		gs.getMessage('February'),
+		gs.getMessage('March'),
+		gs.getMessage('April'),
+		gs.getMessage('May'),
+		gs.getMessage('June'),
+		gs.getMessage('July'),
+		gs.getMessage('August'),
+		gs.getMessage('September'),
+		gs.getMessage('October'),
+		gs.getMessage('November'),
+		gs.getMessage('December')
+	];
+	chartHelpers.i18n.monthNamesShort = [
+		gs.getMessage('Jan'),
+		gs.getMessage('Feb'),
+		gs.getMessage('Mar'),
+		gs.getMessage('Apr'),
+		gs.getMessage('May'),
+		gs.getMessage('Jun'),
+		gs.getMessage('Jul'),
+		gs.getMessage('Aug'),
+		gs.getMessage('Sep'),
+		gs.getMessage('Oct'),
+		gs.getMessage('Nov'),
+		gs.getMessage('Dec')
+	];
+	chartHelpers.i18n.none = gs.getMessage('-- None --');
+	chartHelpers.i18n.groupBy = gs.getMessage('Group by');
+	chartHelpers.i18n.groupByTitle = gs.getMessage('Select a different group by field');
+	chartHelpers.i18n.stackBy = gs.getMessage('Stacked by');
+	chartHelpers.i18n.stackByTitle = gs.getMessage('Select a different stacked by field');
+	chartHelpers.device = {};
+	// EH 5/27/20 
+	// We are always on mobile for this widget
+	// chartHelpers.device.type = GlideMobileExtensions.getDeviceType();
+	chartHelpers.device.type = 'mobile';
+
+	chartHelpers.systemParams = {
+		firstDay: (gs.getProperty("glide.ui.date_format.first_day_of_week", 2) - 1) % 7,
+	//	defaultDate: SNC.ReportUtil.getNowTimeInUSFormat(),
+		maxEventsDisplayedPerCell: gs.getProperty("glide.report.calendar.max_events_displayed_per_cell", 3),
+		maxMoreEventsPerDay: gs.getProperty("glide.report.calendar.max_more_events_per_day", 30),
+		defaultEventDuration: gs.getProperty("glide.report.calendar.default_event_duration", "01:00:00"),
+		maxDaysBack: gs.getProperty("glide.report.calendar.max_days_back", 30),
+		enablePreviewOnHover: gs.getProperty("glide.report.calendar.enable_preview_on_hover", false)
+	};
+
+		data.rectangleId = gs.generateGUID();
+		data.ch = chartHelpers;
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2021-11-22 22:33:46</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>ff3a3aecdb4cc150991a6154ca961981</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>OU Report</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_ff3a3aecdb4cc150991a6154ca961981</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-11-22 22:34:58</sys_updated_on>
+        <template><![CDATA[<div class="panel panel-{{::options.color}}" >
+  <div class="panel-heading" ng-if="data.f.title.length" >
+  </div>
+  <div class="panel-body">
+    <div class="report-widget-wrap">
+
+      <h2 ng-if="c.showTitle" tabindex="0" id="{{'title-' + c.widget.rectangle_id}}" class="report-widget-title">{{c.title}}</h2>
+      <div id="report-widget-{{c.rectangleId}}">
+        {{::c.initialMessage}}
+      </div>
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>
