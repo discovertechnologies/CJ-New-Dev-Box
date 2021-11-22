@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskerSchedulerScript</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>Rolled back run 2 times fix</description>
+        <description>Rolled back run 2 times fix&#13;
+DFCT0010422 - DIA: Schedules are running twice</description>
         <name>TaskerSchedulerScript</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -175,11 +176,10 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				return gDate;
 			}
 			var last_run_date;
-			if(taskerSchedule.last_run > 0){
+			if(taskerSchedule.last_run){
 				last_run_date = GlideDateTime(taskerSchedule.last_run).getDate();	
 			}
 			var daysApart = GlideDateTime.subtract(taskerSchedule_Start, today_date_only);		
-			
 			var dayDiff;
 			var days_to_add;
 
@@ -210,11 +210,12 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// add the Mod to the current date to get the next run
 				// we patterned off of outlook.  Outlook doesn't look at LAST_RUN. Outlook calculates based on pattern and start date
 				dayDiff = parseInt(daysApart.getDayPart()) % parseInt(taskerSchedule.repeat_count);
-				days_to_add = parseInt(taskerSchedule.repeat_count) - dayDiff;					
+				days_to_add = parseInt(taskerSchedule.repeat_count) - dayDiff;
 				gDate.addDaysLocalTime(parseInt(days_to_add));
 				// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
 				// second part accounts for it running today and the patter changing or it running today, but the pattern was off
-				if(last_run_date > 0){
+				// DFCT0010422 
+				if(last_run_date){
 					if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
 						gDate.addDaysLocalTime(parseInt(taskerSchedule.repeat_count));
 					}
@@ -230,7 +231,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				gDate.addDaysLocalTime(parseInt(days_to_add));
 				// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
 				// second part accounts for it running today and the patter changing or it running today, but the pattern was off
-					if(last_run_date > 0){
+					if(last_run_date){
 						if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
 							gDate.addDaysLocalTime((7*parseInt(taskerSchedule.repeat_count)));
 						}
@@ -279,7 +280,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// account for it having run already this month
 				if ((mos_since_last_scheudled_run==0)){
 					var start_of_last_run_mo = new GlideDateTime(this.padStart(parseInt(cur_mo),0, 2) + '-' + this.padStart(1,0, 2) + '-' + cur_yr);	
-					if(last_run_date > 0){
+					if(last_run_date){
 						if (last_run_date.compareTo(start_of_last_run_mo) >= 0) { 
 							mos_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count);	
 						}
@@ -451,21 +452,22 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 
 				// account for it having run already this year
 				if ((yrs_since_last_scheudled_run==0)){
-					var start_of_last_run_yr = new GlideDateTime(this.padStart(1,0, 2) + '-' + this.padStart(1,0, 2) + '-' + cur_yr);	
-					if(last_run_date > 0){
+					var start_of_last_run_yr = new GlideDateTime(this.padStart(1,0, 2) + '-' + this.padStart(1,0, 2) + '-' + cur_yr);
+					// DFCT0010422
+					if(last_run_date){
 						if (last_run_date.compareTo(start_of_last_run_yr) >= 0) { 
-							yrs_since_last_scheudled_run = parseInt(taskerSchedule.repeat_count);	
+							// DFCT0010422
+							yrs_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count);
 						}
 					}
-				}
-					
+				}				
 				// add this many months to the current month and we are golden!
 				mo_to_run = start_mo;
 				yr_to_run = cur_yr + yrs_until_next_scheudled_run;
 
 				last_day_of_Month = this.getLastDayOfMonth(parseInt(mo_to_run));
 				day_to_run = 0;
-				
+
 				if (taskerSchedule.yearly_type == 'doy'){
 					// set day_to_run equal to start dom for montly type 'Day of the Month' as it will always run on the same day
 					if(start_dom > last_day_of_Month)
@@ -477,13 +479,12 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 					if(start_dom > last_day_of_Month)
 						init_next_run_Date = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(last_day_of_Month,0, 2) + '-' + yr_to_run);
 					else
-						init_next_run_Date = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(start_dom,0, 2) + '-' + yr_to_run);					
+						init_next_run_Date = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(start_dom,0, 2) + '-' + yr_to_run);
 					// start with the month determined above
 					// add 7 days for each day of the week unless "first or last"
 					// for example, if text says "third week" start on day 21 and see what day of the week it is 
 					// Day 21 is the first day that would be the third mon,tue,wed... for that month
 					next_run_dow = init_next_run_Date.getDayOfWeekUTC();
-					
 					// note, both start in the same wom
 					// we need to shift the date to stay in the right wom, and move to the correct dow
 					switch (start_wom) {
@@ -569,7 +570,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 									break;
 							}
 							break;
-					}					
+					}
 				}
 				gDate = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(day_to_run,0, 2) + '-' + yr_to_run);
 				return gDate.getDate();
@@ -594,7 +595,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
         <sys_created_on>2018-06-05 00:02:15</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>0e841e30dbee57003a8d6be3ca9619f9</sys_id>
-        <sys_mod_count>217</sys_mod_count>
+        <sys_mod_count>227</sys_mod_count>
         <sys_name>TaskerSchedulerScript</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -602,6 +603,6 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0e841e30dbee57003a8d6be3ca9619f9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-19 21:19:12</sys_updated_on>
+        <sys_updated_on>2021-11-21 03:45:28</sys_updated_on>
     </sys_script_include>
 </record_update>
