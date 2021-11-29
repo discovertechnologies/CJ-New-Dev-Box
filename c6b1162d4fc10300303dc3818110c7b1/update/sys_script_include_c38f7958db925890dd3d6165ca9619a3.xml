@@ -5,8 +5,9 @@
         <api_name>x_153465_discovert.ClientTaskTemplateHelpers</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.7&#13;
-STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
+        <description>2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee&#13;
+&#13;
+2.7.0 STRY0100724 - DEV Story- Performance Improvements -  Running Templates&#13;
 &#13;
 2.5 P3&#13;
 - STRY0085078 - TUP - Add Reviewer field on Template Instance - Controlled Organization Tasking Permissions&#13;
@@ -23,6 +24,93 @@ v 2.5.13 &#13;
 // Script Continued Below
 var ClientTaskTemplateHelpers = Class.create();
 ClientTaskTemplateHelpers.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+	
+		// 2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee
+	// NOTE, caller should only provide task id if the form does not have restricted group on it
+	getTemplateDefaultPrimaryAssignee: function (){
+		var arrUtil = new global.ArrayUtil();
+		var default_primary_assignee = '';
+		var sys_id = this.getParameter('sysparm_sys_id');
+		var table = this.getParameter('sysparm_table');
+		var restricted_group = this.getParameter('sysparm_restricted_group');
+		var assigned_member = this.getParameter('sysparm_assigned_member');
+		var template = this.getParameter('sysparm_template');
+		var template_level = this.getParameter('sysparm_template_level');
+		var template_ou = this.getParameter('sysparm_template_ou');
+		// if assigned_member passed as blank, do nothing
+		if(assigned_member && assigned_member != ''){
+			if((sys_id && sys_id != '-1')){
+				var restricted_group_field_name;
+				var grTempRec = new GlideRecordSecure(table);
+				var tempDef = '';
+
+				// get task record and see if restricted group is set
+				if(grTempRec.get(sys_id)){
+				// if restricted is blank and sys_id is not, then the form didn't have restricted group, look up in task record
+				// NOTE, caller should only provide task id if the form does not have restricted group on it
+					if( (!restricted_group || restricted_group == '')){
+						switch(table){
+							case 'x_153465_discovert_discover_routing_template':
+								restricted_group_field_name = 'u_restricted_group';
+								tempDef = sys_id;
+								break;
+							case 'x_153465_discovert_discover_routing_runtime':
+								restricted_group_field_name = 'u_restricted_group';
+								tempDef = grTempRec.getValue('routing_template_ref');
+								break;
+							case 'x_153465_discovert_route_tasks':
+								restricted_group_field_name = 'assigned_to_group';
+								tempDef = grTempRec.getValue('tasker_process_definition');
+								break;
+						}
+						restricted_group = grTempRec.getValue(restricted_group_field_name)==null ? '' : grTempRec.getValue(restricted_group_field_name) + '';
+					}
+					var grTempDef = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+					if( (!template_level || template_level == '')){
+						switch(table){
+							case 'x_153465_discovert_discover_routing_template':
+								template_level = grTempRec.getValue('process_level');
+								break;
+							case 'x_153465_discovert_route_tasks':
+							case 'x_153465_discovert_discover_routing_runtime':
+								if(grTempDef.get(tempDef)){
+									template_level = grTempDef.getValue('process_level');
+									template_level = grTempDef.getValue('process_level');
+								}
+								break;
+						}
+					}
+					if( (!template_ou || template_ou == '') && template_level == 'ou_process'){
+						switch(table){
+							case 'x_153465_discovert_discover_routing_template':
+								template_ou = grTempRec.getValue('process_ou');
+								break;
+							case 'x_153465_discovert_route_tasks':
+							case 'x_153465_discovert_discover_routing_runtime':
+								if(grTempDef.get(tempDef)){
+									template_ou = grTempDef.getValue('process_ou');
+								}
+						}
+					}
+				}
+			}
+			// get list of ous the user can task based on and assigned member
+			var aOUs = new taskerDynamicFilters().getTemplateOfficeArray('internal', assigned_member, restricted_group, template_level, template_ou);
+
+			// get user's default ou
+			var defaultOU = new OrganizationalScripts().GetUserDefaultOU(assigned_member);
+			// if user can task default ou of the assigned member, then return it
+			if(arrUtil.indexOf(aOUs, defaultOU)>= 0){
+				default_primary_assignee = defaultOU;
+			} else {
+				aOUs.sort();
+				if(aOUs.length > 0){
+					default_primary_assignee = aOUs[0];
+				}
+			}
+		}
+		return default_primary_assignee;
+	},
 	// STRY0085078 - TUP - Add Reviewer field on Template Instance - Controlled Organization Tasking Permissions
 	getTemplateTopTaskerType: function(){
 		var templateId = this.getParameter('templateId');
@@ -106,13 +194,13 @@ ClientTaskTemplateHelpers.prototype = Object.extendsObject(global.AbstractAjaxPr
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-07-25 07:26:37</sys_created_on>
         <sys_id>c38f7958db925890dd3d6165ca9619a3</sys_id>
-        <sys_mod_count>35</sys_mod_count>
+        <sys_mod_count>50</sys_mod_count>
         <sys_name>ClientTaskTemplateHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_c38f7958db925890dd3d6165ca9619a3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-07-10 19:27:00</sys_updated_on>
+        <sys_updated_on>2021-11-29 18:42:21</sys_updated_on>
     </sys_script_include>
 </record_update>

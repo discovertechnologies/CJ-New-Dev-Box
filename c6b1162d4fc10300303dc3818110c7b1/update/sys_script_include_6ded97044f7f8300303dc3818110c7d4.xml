@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>v2.7&#13;
+        <description>2.7.1 | 2021-11-26 | raj  | STRY0114393 - Task Forms- Assigned Member- Add new constraint logic&#13;
+2.7.1 | 2021-11-26 | raj  | STRY0114396 - Task Forms- Primary Assignee- Add new constraint logic&#13;
+&#13;
+v2.7&#13;
 STRY0095102 - HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
 STRY0096033 - Remove restriction group type hardcode sysid in Tasker&#13;
 STRY0111621 - Task Forms - New Constraint for selecting "Reviewers" and "On Behalf Of"&#13;
@@ -93,7 +96,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		}
 		
 		var ouMemArr = [];
-		var strArrOUs = [];
+		var arrOUs = [];
 		// if user is a Task Administrator, return all users
 		// STRY0112587
 		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive()){
@@ -110,13 +113,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		// now determine if user is a the Task Manager for the selected Primary Assignee
 		else {
 			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
-			strArrOUs = taskingScripts.getMyOUTaskManagers(gs.getUserID());
+			arrOUs = taskingScripts.getMyOUTaskManagers(gs.getUserID());
 			// STRY0112462
 			var permissiveOffices = taskingScripts.getPermissiveOUs();
-			strArrOUs = strArrOUs.concat(permissiveOffices);
+			arrOUs = arrOUs.concat(permissiveOffices);
 			
-			if (strArrOUs.length > 0 ){
-				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+			if (arrOUs.length > 0 ){
+				ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 			} else{  // if the user has no members returned from the taking management role, just set add the user
 				ouMemArr.push(gs.getUserID());
 			}			
@@ -221,7 +224,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		var UserPermissions  = new UserInfoScripts();
 		var ouMemArr = [];
-		var strArrOUs = [];
+		var arrOUs = [];
 		templateData = this.getTemplateInfo();
 
 		// handle my-template first as it is the easiest
@@ -234,24 +237,26 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
 				// for the template, the selected OU selected for the process also has match the primary assignee for the user to be able to 
 				// select users from the OU.
-				if (templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
-					strArrOUs.push(templateData.primary_assignee);
+				if (templateData.primary_assignee && templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
+					arrOUs.push(templateData.primary_assignee);
 					// based on note above, if this isn't limitted to primary assignee, just return that load
-					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+					ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 				} else{
-					// If no Primary assignee set, then return no records
-					ouMemArr = ['none'];
+					// STRY0065247 - If no Primary assignee set, then return all members based on Template and user
+					ouMemArr = this._getAllMembersTemplateCanTask();
 				}	
 			}
 		} else if (templateData.template_level == 'global_process') {
 			if (UserPermissions.userHasGlobalProcessRights()){
-				if (templateData.primary_assignee != ''){
-					strArrOUs.push(templateData.primary_assignee);
+				if (templateData.primary_assignee && templateData.primary_assignee != ''){
+					arrOUs.push(templateData.primary_assignee);
 					// member field is limtted to the selected Primary Assignee
-					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+					ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 				} else{
-					// If no Primary assignee set, then return no records
-					ouMemArr = ['none'];
+					// restricted group is handled below.  So, if not restricted group, let the global designer pick anyone
+					if (!templateData.restricted_group || templateData.restricted_group != '') {
+						return '^roles=x_153465_discovert.tasker_user^active=true';
+					}					
 				}
 			}
 		}		
@@ -270,7 +275,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		var UserPermissions  = new UserInfoScripts();
 		var ouMemArr = [];
-		var strArrOUs = [];
+		var arrOUs = [];
 		templateData = this.getTemplateInfo();
 
 		// handle my-template first as it is the easiest
@@ -282,13 +287,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
 				// for the template, the selected OU selected for the process also has match the primary assignee for the user to be able to 
 				// select users from the OU.
-				if (templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
-					strArrOUs.push(templateData.primary_assignee);
+				if (templateData.primary_assignee && templateData.primary_assignee != '' && templateData.primary_assignee == templateData.template_ou ){
+					arrOUs.push(templateData.primary_assignee);
 					// based on note above, if this isn't limitted to primary assignee, just return that load
-					ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
+					ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 				} else{
-					// If no Primary assignee set, then return no records
-					ouMemArr = ['none'];
+					// STRY0065247 - If no Primary assignee set, then return all members based on Template and user
+					ouMemArr = this._getAllMembersTemplateCanTask();
 				}	
 			}
 		} else if (templateData.template_level == 'global_process') {
@@ -322,31 +327,28 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		var UserPermissions  = new UserInfoScripts();
 		var ouMemArr = [];
-		var strArrOUs = [];
+		var arrOUs = [];
 		// if user is a Task Administrator, return all users
+		
+		// STRY0114393 - reorganize code since all cases check Primary Assignee
+		if (primary_assignee == undefined || primary_assignee  == ''){
+			// STRY0114393 - If no Primary assignee set, then return all members a user can task
+			// NOTE: this routine handles all roles and accounts for Restricted Groups
+			return this.getAllMembersCurrentUserCanTask();
+		}
+		
 		// STRY0112587 - STRY0112462
 		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive() || taskingScripts.ouIsPermissive(primary_assignee)){
-			if (primary_assignee != ''){
-				strArrOUs.push(primary_assignee);
-				// based on note above, if this isn't limitted to primary assignee, just return that load
-				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-			} else{
-				// If no Primary assignee set, then return no records
-				ouMemArr = ['none'];
-			}
+			arrOUs.push(primary_assignee);
+			// based on note above, if this isn't limitted to primary assignee, just return that load
+			ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 		}
 		// now determine if user is a the Task Manager for the selected Primary Assignee
 		// now determine if user is a the Task Manager for the selected Primary Assignee
 		else if(UserPermissions.IsUserTaskingAuthority(primary_assignee,gs.getUserID())){
-			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
-			if (primary_assignee != ''){
-				strArrOUs.push(primary_assignee);
-				// based on note above, if this isn't limitted to primary assignee, just return that load
-				ouMemArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-			} else{
-				// If no Primary assignee set, then return no records
-				ouMemArr = ['none'];
-			}
+			arrOUs.push(primary_assignee);
+			// based on note above, if this isn't limitted to primary assignee, just return that load
+			ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
 		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
 		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
 		// Return this user only as they can work on behalf of
@@ -367,29 +369,31 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		return 'sys_id IN ' + sMems  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
 		
 	},
-getOfficePicker : function()
-{
-	var UserPermissions  = new UserInfoScripts();
-	//if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
-		
+	
+	// STRY0064996 - fixed the formatting for this function (no changes made in teh funtion)
+	getOfficePicker : function()
+	{
+		var UserPermissions  = new UserInfoScripts();
+		//if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
+
 		var currentPrimmaryAssignee = current.primary_assignee;//'5ecc47ed4fca0300303dc3818110c7af';// J1
 		var ouOfficePickerArr = '';
 		var ouDownOfficePickerArr = '';
 		var grParentOffice = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-	if(grParentOffice.get(currentPrimmaryAssignee)){
-		
-		
-		//KTORRES: GET SAME LEVEL OFFICES, BASED ON THE SAME PARENT OFFICE
-		ouOfficePickerArr = this.getOfficePickerBasedonParent(grParentOffice.parent);
-		
-		//KTORRES: GET THEIR OWN CHAIN OFFICES
-		ouDownOfficePickerArr = this.getOfficePickerBasedonParent(currentPrimmaryAssignee);
-		
-		if (ouDownOfficePickerArr != '')
-			ouOfficePickerArr += (',' +  ouDownOfficePickerArr);
-	}
+		if(grParentOffice.get(currentPrimmaryAssignee)){
+
+
+			//KTORRES: GET SAME LEVEL OFFICES, BASED ON THE SAME PARENT OFFICE
+			ouOfficePickerArr = this.getOfficePickerBasedonParent(grParentOffice.parent);
+
+			//KTORRES: GET THEIR OWN CHAIN OFFICES
+			ouDownOfficePickerArr = this.getOfficePickerBasedonParent(currentPrimmaryAssignee);
+
+			if (ouDownOfficePickerArr != '')
+				ouOfficePickerArr += (',' +  ouDownOfficePickerArr);
+		}
 		return 'sys_id IN' + ouOfficePickerArr+'';
-		
+
 		//}
 	},
 	
@@ -414,38 +418,77 @@ getOfficePicker : function()
 		return ouChildOfficePickerArr;
 		
 	},
-	
+
 	// STRY0064996 - load the list of Primary Offices on the TAsk for based on user permissions and system settings
 	// STRY0080468 - oType added, Filter OUs internal/external/all
 	getTaskingOfficeList: function(oType) {
+		var restrictedGroup = current.getValue('assignment_group') + '';
+		var assignedMember = current.getValue('assigned_to') + "";
+		return this._getTaskingOfficeList (oType, assignedMember, restrictedGroup);
+	},
+	
+	// STRY0064996
+	getTaskingOfficeArray: function(oType, assigned_to, restricted_group){
+		var strFilter = this._getTaskingOfficeList (oType, assigned_to, restricted_group);
+		var offices = [];
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		grOUs.addEncodedQuery(strFilter);
+		grOUs.query();
+		while(grOUs.next()){
+			offices.push(grOUs.getUniqueValue());
+		}
+		if (offices.length > 0){
+			var au = new global.ArrayUtil();
+			offices = au.unique(offices);
+		}
+		return offices;
+	},
+
+	// STRY0064996 - load the list of Primary Offices on the TAsk for based on user permissions and system settings
+	// STRY0080468 - oType added, Filter OUs internal/external/all
+	_getTaskingOfficeList: function(oType, assigned_to, restricted_group) {
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		var UserPermissions  = new UserInfoScripts();
 		var ArrOUs = [];
 		var strArrOUs = '';
 		// STRY0078831
 		var ArrRestrictedOUs = [];
-		var restrictedGroup = current.assignment_group + '';
-		// STRY0078831 - fixed issue where OUs were not restricted to groups containing members of the restricted group
-		if (restrictedGroup != '') {
-			ArrRestrictedOUs = UserPermissions.getOUsForRestrictedGroup(restrictedGroup);
+		// STRY0114396
+		var au = new global.ArrayUtil();
+		var arrUserOUs = [];
+		if(assigned_to != ""){
+			arrUserOUs = UserPermissions.getUserOffices(assigned_to);
 		}
+		// STRY0078831 - fixed issue where OUs were not restricted to groups containing members of the restricted group
+		if (restricted_group != '') {
+			ArrRestrictedOUs = UserPermissions.getOUsForRestrictedGroup(restricted_group);
+		}
+		// STRY0114396 - if assigned member selected, limit to list of OUs for the user
+		var aOUResrcictAndUserOnly = [];
+		// restricted populated and user ous populated
+		if(ArrRestrictedOUs.length > 0 && arrUserOUs.length > 0){
+			// restricted group ou's found, union with ou's found for htis user
+			aOUResrcictAndUserOnly = au.intersect(arrUserOUs, ArrRestrictedOUs);
+		// only restricted array populated
+		} else if (ArrRestrictedOUs.length > 0) {
+			aOUResrcictAndUserOnly = ArrRestrictedOUs;
+		// only user ou array  populated
+		} else if (arrUserOUs.length > 0) {
+			aOUResrcictAndUserOnly = arrUserOUs;
+		}
+		
 		// STRY0112587
 		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive()){
 			// do not add any groups restricting permissions
-			if(ArrRestrictedOUs.length > 0) {
-				strArrOUs = 'sys_id IN ' + ArrRestrictedOUs.join(',');
+			if(aOUResrcictAndUserOnly.length > 0) {
+				strArrOUs = 'sys_id IN ' + aOUResrcictAndUserOnly.join(',');
 			}
 		} else {
 			ArrOUs = taskingScripts.retrieveTaskOUs(gs.getUserID());
-		}
-		if(ArrOUs.length > 0) {
-			// OUs found for this user found, not all ous
-			if(ArrRestrictedOUs.length > 0){
-				// restricted group ou's found, union with ou's found for htis user
-				var au = new global.ArrayUtil();
-				var ArrResrictIntersect = au.intersect(ArrOUs,ArrRestrictedOUs);
-				strArrOUs = 'sys_id IN ' + ArrResrictIntersect.join(',');
-			}else {  // no restricted group set, provide OUs back to user
+			if(ArrOUs.length > 0) {
+				if (aOUResrcictAndUserOnly.length > 0) {
+					ArrOUs = au.intersect(ArrOUs, aOUResrcictAndUserOnly);
+				}
 				strArrOUs = 'sys_id IN ' + ArrOUs.join(',');
 			}
 		}
@@ -463,8 +506,7 @@ getOfficePicker : function()
 		}
 
 		return strArrOUs; 
-	},
-
+	},		
 	// STRY0065017 - this information is needed in multiple places in the Template Screens for permissions
 	getTemplateInfo: function() {
 		var templateData = {};
@@ -515,46 +557,114 @@ getOfficePicker : function()
 		return templateData;
 		
 	},
+
+	// STRY0065247 - load the list of members a user can task for an OU Template when Primary Assignee not set
+	_getAllMembersTemplateCanTask: function (){
+		var strFilter = this.getTemplateOfficeList('internal');
+		var arrOUs = this._getTemplateOfficeArrayFromFilter(strFilter);
+		// based on note above, if this isn't limitted to primary assignee, just return that load
+		var ouMemArr = new tasking_System_Settings_Scripts().retrieveMembersInOus(arrOUs);
+		// if no members found, return none
+		if(ouMemArr.lengh == 0){
+			ouMemArr = ['none'];
+		}
+		return ouMemArr;
+	},
+	
+	// STRY0064996
+	getTemplateOfficeArray: function(oType, assigned_member, restricted_group, template_level, template_ou){
+		var strFilter = this._getTemplateOfficeList(oType, restricted_group, assigned_member, template_level, template_ou);
+		return this._getTemplateOfficeArrayFromFilter(strFilter);
+	},
+	
 	// STRY0065247 - load the list of offices for template design fields
 	// STRY0080468 - oType added, Filter OUs internal/external/all
 	getTemplateOfficeList: function(oType) {
-		var templateData = {};
+		var restrictedGroup = '';
+		var assigned_member = '';
+		var recordTable = current.getTableName();
+		if(recordTable == 'x_153465_discovert_discover_routing_template'){
+			restrictedGroup = current.getValue('u_restricted_group');
+			assigned_member = current.getValue('u_assigned_member') + '';
+		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
+			restrictedGroup = current.getValue('assigned_to_group'); 
+			assigned_member = current.getValue('assigned_to_individual') + '';
+		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
+			restrictedGroup = current.getValue('u_restricted_group');
+			assigned_member = current.getValue('u_assigned_member') + '';
+		}
+		var templateData = this.getTemplateInfo();
+		var template_level = templateData.template_level;
+		var template_ou = templateData.template_ou;
 
+		return this._getTemplateOfficeList(oType, restrictedGroup, assigned_member, template_level, template_ou);
+
+	},
+	
+	// STRY0065247 - load the list of offices for template design fields
+	_getTemplateOfficeArrayFromFilter: function(strFilter){
+		var offices = [];
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		grOUs.addEncodedQuery(strFilter);
+		grOUs.query();
+		while(grOUs.next()){
+			offices.push(grOUs.getUniqueValue());
+		}
+		if (offices.length > 0){
+			var au = new global.ArrayUtil();
+			offices = au.unique(offices);
+		}
+		return offices;
+	},
+
+	// STRY0065247 - load the list of offices for template design fields
+	// STRY0080468 - oType added, Filter OUs internal/external/all
+	_getTemplateOfficeList: function(oType, restrictedGroup, assigned_member, template_level, template_ou) {
+		var templateData = {};
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		var UserPermissions  = new UserInfoScripts();
 		var ArrOUs = [];
 		var strArrOUs = '';
 		// STRY0078831
 		var ArrRestrictedOUs = [];
-		var restrictedGroup = '';
-		var recordTable = current.getTableName();
-		if(recordTable == 'x_153465_discovert_discover_routing_template'){
-			restrictedGroup = current.getValue('u_restricted_group');
-		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
-			restrictedGroup = current.getValue('assigned_to_group'); 
-		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
-			restrictedGroup = current.getValue('u_restricted_group');
+		// STRY0114396
+		var au = new global.ArrayUtil();
+		var arrUserOUs = [];
+		if(assigned_member != ""){
+			arrUserOUs = UserPermissions.getUserOffices(assigned_member);
 		}
 		if (restrictedGroup != '') {
 			ArrRestrictedOUs = UserPermissions.getOUsForRestrictedGroup(restrictedGroup);
-		}		
+		}
+		// STRY0114396 - if assigned member selected, limit to list of OUs for the user
+		var aOUResrcictAndUserOnly = [];
+		// restricted populated and user ous populated
+		if(ArrRestrictedOUs.length > 0 && arrUserOUs.length > 0){
+			// restricted group ou's found, union with ou's found for htis user
+			aOUResrcictAndUserOnly = au.intersect(arrUserOUs, ArrRestrictedOUs);
+		// only restricted array populated
+		} else if (ArrRestrictedOUs.length > 0) {
+			aOUResrcictAndUserOnly = ArrRestrictedOUs;
+		// only user ou array  populated
+		} else if (arrUserOUs.length > 0) {
+			aOUResrcictAndUserOnly = arrUserOUs;
+		}
 		// Get the Template Level, need to check if this object is a Template or a Template Task and grab the Template information based on where coming from
-		templateData = this.getTemplateInfo();
-		ArrOUs = taskingScripts.retrieveTemplateOUs(gs.getUserID(), templateData.template_level, templateData.template_ou);
+		ArrOUs = taskingScripts.retrieveTemplateOUs(gs.getUserID(), template_level, template_ou);
+		
 		if(ArrOUs.length > 0){
 			// OUs found for this user found, not all ous
-			if(ArrRestrictedOUs.length > 0){
+			if(aOUResrcictAndUserOnly.length > 0){
 				// restricted group ou's found, union with ou's found for htis user
-				var au = new global.ArrayUtil();
-				var ArrResrictIntersect = au.intersect(ArrOUs,ArrRestrictedOUs);
-				strArrOUs = 'sys_id IN ' + ArrResrictIntersect.join(',');
+				aOUResrcictAndUserOnly = au.intersect(ArrOUs,aOUResrcictAndUserOnly);
+				strArrOUs = 'sys_id IN ' + aOUResrcictAndUserOnly.join(',');
 			}else {  // no restricted group set, provide OUs back to user
 				strArrOUs = 'sys_id IN ' + ArrOUs.join(',');
 			}
 		} else {
-			if(ArrRestrictedOUs.length > 0){
+			if(aOUResrcictAndUserOnly.length > 0){
 				// restricted group ou's found and no other OU's found, put only the restricted groups in here
-				strArrOUs = 'sys_id IN ' + ArrRestrictedOUs.join(',');
+				strArrOUs = 'sys_id IN ' + aOUResrcictAndUserOnly.join(',');
 			}
 		}
 		strArrOUs = strArrOUs + '^active=true';
@@ -569,10 +679,8 @@ getOfficePicker : function()
 			case 'all':
 				break;
 		}
-		
 		return strArrOUs; 
 	},
-
 	// STRY0111621 - Removed for full list of users the user can task above
 // 	getOnBehalfOf: function() {
 // 		// STRY0064991 - get users for onBehalfOf
@@ -652,13 +760,13 @@ getOfficePicker : function()
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>279</sys_mod_count>
+        <sys_mod_count>316</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-26 19:01:20</sys_updated_on>
+        <sys_updated_on>2021-11-29 18:40:50</sys_updated_on>
     </sys_script_include>
 </record_update>

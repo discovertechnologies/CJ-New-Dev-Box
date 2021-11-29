@@ -5,8 +5,9 @@
         <api_name>x_153465_discovert.ClientTaskInfo</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.7 &#13;
-STRY0102134 - Apply Default Schedule to Task Information&#13;
+        <description>2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee&#13;
+&#13;
+2.7.0                                              STRY0102134 - Apply Default Schedule to Task Information&#13;
 2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
 2.7.0 | 2021-11-16 | raj  | STRY0113838 - Tasker Settings- Allow for custom "URL Suffix" for Tasker Portal&#13;
 - chagned this function :   taskGetTaskSysId()  to  taskGetRedirectURL and moved to client_tasker_User_Form_Preferences&#13;
@@ -45,6 +46,44 @@ Has two funcitons: &#13;
 var ClientTaskInfo = Class.create();
 ClientTaskInfo.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
 
+	// 2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee
+	// NOTE, caller should only provide task id if the form does not have restricted group on it
+	getTaskDefaultPrimaryAssignee: function (){
+		var arrUtil = new global.ArrayUtil();
+		var default_primary_assignee = '';
+		var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+		var task_id = this.getParameter('sysparm_task_id');
+		var restricted_group = this.getParameter('sysparm_restricted_group');
+		var assigned_member = this.getParameter('sysparm_assigned_member');
+		// if assigned_member passed as blank, do nothing
+		if(assigned_member && assigned_member != ''){
+			// if restricted is blank and task_id is not, then the form didn't have restricted group, look up in task record
+			// NOTE, caller should only provide task id if the form does not have restricted group on it
+			if( (!restricted_group || restricted_group == '') && 
+				(task_id && task_id != '-1')){
+				// get task record and see if restricted group is set
+				if(grTask.get(task_id)){
+					// reset resticted group variable to blank or a value based on the task record
+					restricted_group = grTask.getValue('assignment_group') + '';
+				}
+			}
+			// get list of ous the user can task based on and assigned member
+			var aOUs = new taskerDynamicFilters().getTaskingOfficeArray('internal', assigned_member, restricted_group);
+			// get user's default ou
+			var defaultOU = new OrganizationalScripts().GetUserDefaultOU(assigned_member);
+			// if user can task default ou of the assigned member, then return it
+			if(arrUtil.indexOf(aOUs, defaultOU)>= 0){
+				default_primary_assignee = defaultOU;
+			} else {
+				aOUs.sort();
+				if(aOUs.length > 0){
+					default_primary_assignee = aOUs[0];
+				}
+			}
+		}
+		return default_primary_assignee;
+	},
+	
 	// STRY0082087, STRY0083025, STRY0083027
 	getMembersAndOUsForRestrictedGroup: function()
 	{
@@ -273,13 +312,13 @@ ClientTaskInfo.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-26 18:04:26</sys_created_on>
         <sys_id>eca4cc3edbffab00bb8ee536ca961995</sys_id>
-        <sys_mod_count>293</sys_mod_count>
+        <sys_mod_count>307</sys_mod_count>
         <sys_name>ClientTaskInfo</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_eca4cc3edbffab00bb8ee536ca961995</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-17 02:30:04</sys_updated_on>
+        <sys_updated_on>2021-11-28 23:00:21</sys_updated_on>
     </sys_script_include>
 </record_update>
