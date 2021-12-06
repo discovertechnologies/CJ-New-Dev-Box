@@ -44,41 +44,63 @@
 	
 		afterLoadFormReturns();
 	
-		// STRY0069986- RJ - Cert Push - Template DocInt Fix
-		function loadDocIntWidgets() {
-			// STRY0086644 - added check for DocId not provided
-			if (c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
-					(c.data.table == 'x_153465_discovert_route_task_instance' ||
-           c.data.table == 'x_153465_discovert_discover_routing_template' ||
-           c.data.table == 'x_153465_discovert_route_tasks')) {
-				if (c.data.table != "x_153465_discovert_discover_routing_template") {
-								c.data.widgetDocIntegration=null;								
-								spUtil.get('docint-list-items', {
-									vw: c.data.DocIntViewSysID,
-									mapRowSysId: c.data.sys_id + "",
-									readonly_flag: c.data.isActive,
-									lw_name: 'widgetDocIntegration'
-								}).then(function(response) {
-									c.data.widgetDocIntegration = response;
-								});								
-								
-        }
-        if (c.data.DocIntShareFolderON) {
-					c.data.widgetDocIntegrationSharedDocs = null;
-					spUtil.get('docint-list-items', {
-						vw: c.data.DocIntSharedDocsViewSysID,
-						mapRowSysId: c.data.sharedDocSys_ID + "",
-						readonly_flag: c.data.isActive,
-						lw_name: 'widgetDocIntegrationSharedDocs'
-					}).then(function(response) {
-						c.data.widgetDocIntegrationSharedDocs = response;
-					});								
-        }
-			}
-			
+	// STRY0069986- RJ - Cert Push - Template DocInt Fix
+	function loadDocIntWidgets() {
+		// STRY0086644 - added check for DocId not provided
+		if (c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
+				(c.data.table == 'x_153465_discovert_route_task_instance' ||
+				 c.data.table == 'x_153465_discovert_discover_routing_template' ||
+				 c.data.table == 'x_153465_discovert_route_tasks')) {
+			loadDynamicDocIntWidgets();	
 		}
 
-    function addActiveCssClass() {
+
+	}
+	//STRY0042748 | DI Integration: Tab Count for DocIntegrator List View provided
+	//STRY0059178 | Shared Documents Folder  YOU ARE HERE!  nEED TO FIGURE OUT HOW TO ADD ANOTHER TAB.  ALSO NEED TO FIGURE OUT HOW TO GET THE DOCUMENT COUNT BELOW
+
+	// RAJ - NOTE: - I put all of the DocInt code in one place so it is easy to find
+	// We need to think about IF the counts could be in a DocInt Widget that adds multiple Tabs.
+	// I am not sure that this can be done, but, if possible, we could drop the tab header as one javascript loaded file with this in it or some other way
+	// IF this could be hidden in the DocInt widget, it would make it easier to add on widgets
+	// the config should definitely be hidden in a DocInt widget that is added as one of the list of widgets only when admin
+	// *******************************************************************************************************************************************************
+	// for now, copy everything in this code block into widgets that want to use DocInt
+	// *******************************************************************************************************************************************************
+	//extension
+	//This runs at first load.
+	function loadDynamicDocIntWidgets() {
+		for (var i in $scope.data._docint_widget._docint_tabs) {
+			var _tab = $scope.data._docint_widget._docint_tabs[i];
+
+			// only clear the tab if it isn't the default empty tab
+			if((c.data.DocIntShareFolderON || $scope.data._docint_widget._docint_tabs[i].caption != 'Shared Documents') ){
+				loadDocIntWidget($scope.data._docint_widget._docint_tabs[i]);
+			}
+		}
+	}
+
+	function loadDocIntWidget(tab){
+		tab.widget=null;
+		var widget_name = tab.widget_name;
+		var widget_parameters = tab.widgetParameter;
+		if(widget_name == 'docint-list-items') {
+			widget_parameters = {
+				vw: tab.config["docintegrator_view-refValue"],
+				mapRowSysId: c.data.sys_id + "",
+				readonly_flag: c.data.isActive,
+				lw_name: tab.id + tab.caption,
+				window_size: 20,
+				config_sys_id: tab.id
+			};
+		}
+		// STRY0111049 - moved outside the IF statement and also set to use widgetname 
+		spUtil.get(widget_name, widget_parameters).then(function(response) {
+			tab.widget = response;
+		});
+
+	}
+	function addActiveCssClass() {
 			var resetActiveTabe = false;
 			if ((c.data.table == 'x_153465_discovert_discover_office_hierarchy' && 
 					 $scope.data.page_id == 'discovertasker_officehierarchy') ||
@@ -102,35 +124,6 @@
 			}
     }
 	
-	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; not used in Mobile
-	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count
-	//     $rootScope.$on("sp.DiscoverListItem.Deleted", function(event, params) {
-	// 			updateRelatedListcount("sp.DiscoverListItem.Deleted", params);
-	// 		});
-
-	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; not used in Mobile
-	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count
-	// 		$rootScope.$on("sp.DiscoverListItem.Added", function(event, params) {
-	// 			updateRelatedListcount("sp.DiscoverListItem.Added", params);
-	// 		});
-
-	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; not used in Mobile
-	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
-	// 	function updateRelatedListcount(action, params) {
-	// 		for (var i in c.data.f._related_lists) {
-	// 			var rl = c.data.f._related_lists[i];
-	// 			if(rl.table == params.table && rl.filter == params.filter ){
-	// 				if(action == 'sp.DiscoverListItem.Added'){
-	// 					// add 1 to the count
-	// 					rl.count = rl.count + 1;
-	// 				} else if(action == 'sp.DiscoverListItem.Deleted'){
-	// 					// subtract 1 from the count
-	// 					rl.count = rl.count - 1;
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-				
     // STRY0059178 | Shared Documents Folder
     $scope.$on("tasker_task_attachments.count", function(event, e) {
 
@@ -787,6 +780,10 @@ This widget is not using the below CSS selector&#13;
 //                                          Changes in CSS
 // 2.7.0 | 2021-11-16 | raj  | STRY0113838 - Tasker Settings- Allow for custom "URL Suffix" for Tasker Portal
 //                                         Changes made in Server Script, Client Controller and HTML
+// 2.7.1 | 2021-12-06 | raj  | DFCT0010692 - View/Attach Document on Tasker Mobile does NOT redirect user to the "Standard Form" widget with the correct DocInt Views
+//														 DFCT0010583 - Tasker 2.7/DocInt 2.8 Integration - "Sections" added to a "ServiceNow View" for "DocIntegrator Integration" purposes should NOT be displayed on PORTAL
+//														 STRY0111049 - Standard Task Form Widget Updater – Placeholder Story
+//                                         Changes made in Client Script, Server Script and HTML
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -1235,77 +1232,13 @@ This widget is not using the below CSS selector&#13;
         (data.table == 'x_153465_discovert_route_task_instance' ||
             data.table == 'x_153465_discovert_discover_routing_template' ||
             data.table == 'x_153465_discovert_route_tasks')) {
-        // STRY0063505
-        var DocIntViewSysID = '';
-        var DocIntSharedDocsViewSysID = '';
-        var sharedMappedTableName = '';
-
-        // STRY0063505
-        var sharedDocSys_ID = data.sys_id; // set to the defualt
-        if (data.table == "x_153465_discovert_route_task_instance") {
-            sharedMappedTableName = data.table;
-            sharedDocSys_ID = data.sys_id;
-            DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntViewSysIDTasks');
-            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks');
-        }
-
-        if (data.table == "x_153465_discovert_discover_routing_template") {
-            sharedDocSys_ID = data.sys_id;
-            // STRY0063505
-            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessSharedDocumentsViewSysIDTasks');
-            sharedMappedTableName = 'x_153465_discovert_discover_routing_template';
-        }
-
-        if (data.table == "x_153465_discovert_route_tasks") {
-            DocIntViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessTaskViewSysIDTasks');
-            // STRY0063505
-            DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntProcessSharedDocumentsViewSysIDTasks');
-            // Use .dot walking in the code to keep from needing 2 different DocInt views for Process Shared Documents
-            sharedDocSys_ID = rec.tasker_process_definition.sys_id;
-            sharedMappedTableName = 'x_153465_discovert_discover_routing_template';
-        }
 
         // STRY0063505 | Added a check for both boolean and string value of true
         if (data.isActive == "true" || data.isActive == true) data.isActive = true;
         else data.isActive = false;
 
-        // STRY0063505 |	The only table we will not share DocIntegration "My Documents" on is the Process Template table.  
-        // It only needs the shared documents folder.
-			
-				// ******************************************************
-				// BEGIN STRY0069986- RJ - Cert Push - Template DocInt Fix
-				// ******************************************************
-				// To enable refreshing the widget without a post back, 
-				// the widget creation 
-        //if (data.table != "x_153465_discovert_discover_routing_template") {
-				//
-				//	if(!data.widgetDocIntegration){
-				//			data.widgetDocIntegration = $sp.getWidget('docint-list-items', {
-				//					vw: DocIntViewSysID,
-				//					mapRowSysId: data.sys_id + "",
-				//					readonly_flag: data.isActive,
-				//					lw_name: 'widgetDocIntegration'
-				//			});
-				//	}
-        //}
-        // STRY0059178 | Shared Documents Folder
-        //if (data.DocIntShareFolderON) {
-				//	if(!data.widgetDocIntegrationSharedDocs){
-				//			data.widgetDocIntegrationSharedDocs = $sp.getWidget('docint-list-items', {
-				//					vw: DocIntSharedDocsViewSysID,
-				//					mapRowSysId: sharedDocSys_ID + "",
-				//					readonly_flag: data.isActive,
-				//					lw_name: 'widgetDocIntegrationSharedDocs'
-				//			});
-				//	}
-        //}
-				// STRY0069986
-				data.DocIntSharedDocsViewSysID = DocIntSharedDocsViewSysID;
-				data.DocIntViewSysID = DocIntViewSysID;
-				data.sharedDocSys_ID = sharedDocSys_ID + "";
-				// ******************************************************
-				// END STRY0069986- RJ - Cert Push - Template DocInt Fix
-				// ******************************************************
+				// STRY0111049
+				data._docint_widget = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(data.table, data.view, data.sys_id);
 			
     }
 
@@ -1438,14 +1371,14 @@ This widget is not using the below CSS selector&#13;
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-03-18 02:11:38</sys_created_on>
         <sys_id>31ae08581b0be8d03dc8eb96624bcb52</sys_id>
-        <sys_mod_count>14</sys_mod_count>
+        <sys_mod_count>16</sys_mod_count>
         <sys_name>Tasker Mobile Documents</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_31ae08581b0be8d03dc8eb96624bcb52</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-17 06:14:42</sys_updated_on>
+        <sys_updated_on>2021-12-06 05:44:11</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && !data.emptyStateTemplate" class="panel panel-default">
   <div class="panel-body wrapper-lg text-center">
 
@@ -1514,31 +1447,21 @@ This widget is not using the below CSS selector&#13;
             <li class="active">
               <a ng-class='active' data-target="#Information" aria-controls="Information" role="tab" data-toggle="tab">Information</a> <!-- href="#Information"  -->
             </li>
-
+            
             <!-- STRY0042042 | DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments -->
-            <!-- STRY0063505 | Add My Documents on the Process Template Task -->
-            <!-- STRY0063505 | NOTE: the only table we won't show "My Documents on is the Process Template object.  It is a shared only table -->
-            <!-- STRY0086644 - added check for DocId not provided -->
-            <li ng-if="data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks')">
-              <!-- STRY0061245 | In the My Documents and Shared Documents tabs, the information message will state "Documents are stored in SharePoint via Doc. Integrator" -->
-              <!-- RJ TODO, INTERNATIONALIZATION CHECK OUT THIS LINK https://www.yansa.io/yds/#tooltip_uib -->
-              <a data-target="#DocIntDocuments" aria-controls="DocIntDocuments" title="Documents are stored in SharePoint via Doc. Integrator" data-toggle="tab">My Documents
-                <!-- STRY0082941 - Task form - Icon with value "-1" appears by default for all tasks in "My Documents" and "Shared Documents" tab of the task form -->
-                <span class="label label-as-badge label-primary" ng-if="data.docintCount && data.docintCount!=-1">{{data.docintCount}}</span>
-                <span class="fa fa-exclamation-circle" ng-if="data.docintCount==-1" ></span>
+            <!-- Controlls which tab label to be seen -->
+            <!-- ******************************************************************************** -->
+            <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
+            <!-- ******************************************************************************** -->
+            <li id="sp" ng-show="true" role="presentation" ng-repeat="rs in data._docint_widget._docint_tabs"
+                ng-if="rs.table != 'sys_attachment' && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')">
+              <a href="#{{rs.id}}" role="tab" data-toggle="tab"
+                 data-target="#{{rs.id}}" aria-controls="rs.id" title="Documents are stored in SharePoint via Doc. Integrator"
+                 >{{rs.caption}}
+                <span class="label label-as-badge label-primary" ng-show= "rs.count && rs.count>0">{{rs.count}}</span>
               </a>
             </li>
-            <!-- STRY0059178 | Add Shared Documents if enabled -->
-            <!-- STRY0063505 | Add Shared Attachments on the Process Template, and Process Template Task -->
-            <!-- STRY0086644 - added check for DocId not provided -->
-            <li ng-if="data.DocIntShareFolderON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks')">
-              <a data-target="#DocIntSharedDocuments" aria-controls="DocIntSharedDocuments" title="Documents are stored in SharePoint via Doc. Integrator" data-toggle="tab">Shared Documents
-                <!-- STRY0059178 | DocInt Shared Folder - get the count   -->
-                <!-- STRY0082941 - Task form - Icon with value "-1" appears by default for all tasks in "My Documents" and "Shared Documents" tab of the task form -->
-                <span class="label label-as-badge label-primary" ng-if="data.docintSharedCount && data.docintSharedCount!=-1">{{data.docintSharedCount}}</span>
-                <span class="fa fa-exclamation-circle" ng-if="data.docintSharedCount==-1" ></span>
-              </a>
-            </li>
+            <!-- ******************************************************************************** -->
           </ul>
         </div>
       </div>
@@ -1550,22 +1473,15 @@ This widget is not using the below CSS selector&#13;
           </div>
         </div>
 
-        <!-- STRY0042042 | DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments -->
-        <!-- STRY0063505 | Add My Documents on the Process Template, and Process Template Task -->
-        <div ng-if="data.widgetDocIntegration && data.DocIntON == true && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks')" class="tab-pane" id="DocIntDocuments">
-          <div style="margin-top: -1px;">
-            <sp-widget widget="data.widgetDocIntegration"></sp-widget>
-          </div>
+        <!-- ******************************************************************************** -->
+        <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
+        <!-- ******************************************************************************** -->
+        <div id="{{rs.id}}" class="tab-pane"
+             ng-repeat="rs in data._docint_widget._docint_tabs"
+             ng-if="data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')">
+          <sp-widget widget="rs.widget"></sp-widget>
         </div>
-        <!-- STRY0059178 | Add Shared Documents if enabled -->
-        <!-- STRY0063505 | Add Shared Attachments on the Process Template, and Process Template Task -->
-        <div ng-if="data.widgetDocIntegrationSharedDocs && data.DocIntShareFolderON == true && (data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks')" class="tab-pane" id="DocIntSharedDocuments">
-          <div style="margin-top: -1px;">
-            <!-- STRY0059178  -->
-            <sp-widget widget="data.widgetDocIntegrationSharedDocs"></sp-widget>
-          </div>
-        </div>
-
+        <!-- ******************************************************************************** -->
       </div>
 
     </div>
