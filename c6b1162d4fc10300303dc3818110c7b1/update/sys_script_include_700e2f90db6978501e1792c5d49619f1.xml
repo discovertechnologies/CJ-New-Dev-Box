@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.tasker_User_Form_Preferences</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>This Script was designed to load the </description>
+        <description>This Script was designed to load the  form preferences for any task&#13;
+&#13;
+DFCT0010708 - Form Customization - Email Notification Links does not recognize the Form Preferences when it loads the form</description>
         <name>tasker_User_Form_Preferences</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -128,42 +130,57 @@ tasker_User_Form_Preferences.prototype = {
 		}		
 	},
 
-	
 	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager){
 		var userID = gs.getUserID();
 		
 		// if user's OUs are not passed in, load them
+		// USE this for all loadMy - because it uses session variable to avoid loading
 		if(!OUsWhereIamAMember)
 			OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
 		
 		if (!OUsWhereIamATaskManager) {
 			OUsWhereIamATaskManager = new x_153465_discovert.tasking_System_Settings_Scripts().getMyOUTaskManagers();
 		}
+	
+		// DFCT0010708
+		return this._userFormPreferences(userID, OUsWhereIamAMember, OUsWhereIamATaskManager);		
+	},
+	
+	// DFCT0010708
+	loadUserFormPreferences: function (userID){
+		var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
+		var OUsWhereUserIsAMember = tsss.getOUsWhereUserIsAMember(userID);
+		var OUsWhereUserIsTaskManager = tsss.getUserOUTaskManagers(userID);
 		
-		var isTaskManager = (OUsWhereIamATaskManager.length > 0);
-
+		return this._userFormPreferences(userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager);
+	},
+	
+	// DFCT0010708
+	_userFormPreferences: function (userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager){
+		var userInfo = new x_153465_discovert.UserInfoScripts();
+		var isAdministrator = userInfo.UserHasRoleScoped('x_153465_discovert.tasker_global_Tasking_Authority_member_admin', userID);
+		var isTaskExecutive = userInfo.UserHasRoleScoped('x_153465_discovert.Task_Executive', userID);
+		var isTaskManager = (OUsWhereUserIsTaskManager.length > 0);
+		
 		// TODO - need to define function for get my top OUs in order to use this field - u_user_in_top_ou
-		// TODO - ADD ROLES, ADD TASK CHECKS for Hierarchy
+		// TODO - ADD TASK CHECKS for Hierarchy
 		// load global preferences, things that apply to all users
-		var myUserPreferences = this.g_taskUserFormPreferences.Preferences.filter(function (pref){
+		var userPreferences = this.g_taskUserFormPreferences.Preferences.filter(function (pref){
 			var matchFailure = 
 				(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value != userID) || 
-				(pref.u_user_in_ou.displayValue != '' && pref.u_user_in_ou.displayValue != null  && OUsWhereIamAMember.indexOf(pref.u_user_in_ou.value)<0) ||
-				(pref.u_user_in_ou.value == 'task_manager' && isTaskManager != true)  ||
-				(pref.u_user_in_ou.value == 'task_administrator' && 
-					gs.getUser().hasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin') != true) ||
-				(pref.u_user_in_ou.value == 'task_executive' && 
-					gs.getUser().hasRole('x_153465_discovert.Task_Executive') != true);
+				((pref.u_user_in_ou.displayValue != '' && pref.u_user_in_ou.displayValue != null)  && (OUsWhereUserIsAMember.indexOf(pref.u_user_in_ou.value)<0)) ||
+				(pref.u_user_in_role.value == 'task_manager' && isTaskManager != true)  ||
+				(pref.u_user_in_role.value == 'task_administrator' && isAdministrator != true) ||
+				(pref.u_user_in_role.value == 'task_executive' && isTaskExecutive != true);
 			if(!matchFailure){
 				return pref;
 			}
 		});
-		
-		return myUserPreferences;
+		return userPreferences;
 	},
 
-	get_URL_Properties_for_Task_Based_on_Prefrences: function(sys_id, current_view){
-		var currentUserId = gs.getUserID();
+	// DFCT0010708
+	get_URL_Properties_for_Task_and_User_Based_on_Prefrences: function (userID, sys_id, current_view){
 		// set defaults
 		var url_Properties = {};
 		url_Properties.pageId = 'discovertasker_taskdetails';
@@ -174,7 +191,7 @@ tasker_User_Form_Preferences.prototype = {
 		if(gr_task_pref.get(sys_id)){
 			var getFormToLoadOptions = this.g_taskUserFormPreferences.Preferences.filter(function (pref){
 				var matchFailure = 
-					(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value.toString().indexOf(currentUserId)==-1) || 
+					(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value.toString().indexOf(userID)==-1) || 
 					(pref.u_task_category.displayValue != '' && pref.u_task_category.displayValue != null  && pref.u_task_category.value.toString().indexOf(gr_task_pref.getValue('category'))==-1) ||
 					(pref.u_tasker_sub_category.displayValue != '' && pref.u_tasker_sub_category.displayValue != null  && pref.u_tasker_sub_category.value.toString().indexOf(gr_task_pref.getValue('sub_category'))==-1) || 
 					(pref.u_task_state.displayValue != '' && pref.u_task_state.displayValue != null  && pref.u_task_state.displayValue.toString().indexOf(gr_task_pref.getDisplayValue('state'))==-1) ||
@@ -202,19 +219,62 @@ tasker_User_Form_Preferences.prototype = {
 		}
 		return url_Properties;
 	},
+
+	// DFCT0010708
+	get_URL_Properties_for_Task_Based_on_Prefrences: function(sys_id, current_view){
+		var currentUserId = gs.getUserID();
+		return this.get_URL_Properties_for_Task_and_User_Based_on_Prefrences (currentUserId, sys_id, current_view);
+	},
+	
+	
+	// DFCT0010708
+	getEmailLink: function(currentTask){
+		//create a task link using form preferences and the current sys_id
+		var task_url = this.getEmailUrl(currentTask);
+		
+		// TODO, NEED TO TAKE STYLING OUT OF HERE!
+		var task_link = "<span style='font-family: georgia, palatino; font-size: 12pt;'><a href='" + task_url + "'>" + 
+			currentTask.number + " - " + currentTask.task_name +
+			"</a></span>";
+		return task_link;
+
+	},
+	// DFCT0010708
+	getEmailUrl: function(currentTask){
+		// check for assigned member
+		var userID = currentTask.getValue('assigned_to') + '';
+		if(userID == ''){
+			// check for Task Onwer
+			userID = currentTask.getValue('u_task_requester') + '';
+		}
+		if(userID == ''){
+			// use originator
+			userID = currentTask.getValue('originator') + '';
+		}
+		var userPreferences =  this.loadUserFormPreferences(userID);
+		var url_Properties = this.get_URL_Properties_for_Task_and_User_Based_on_Prefrences(userID, currentTask.getUniqueValue(),'sp');
+
+		var pageId = url_Properties.pageId && url_Properties.pageId != '' ? url_Properties.pageId : 'discovertasker_taskdetails';
+		var view = url_Properties.view && url_Properties.view != '' ? url_Properties.view : 'sp';
+
+		//create a task link using form preferences and the current sys_id
+		return task_url = url_Properties.portal_url_ref + '?sys_id='+ currentTask.sys_id +'&view=' + view + '&id=' + pageId + '&table=x_153465_discovert_route_task_instance';
+
+	},
+	
     type: 'tasker_User_Form_Preferences'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-07-21 01:42:57</sys_created_on>
         <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
-        <sys_mod_count>93</sys_mod_count>
+        <sys_mod_count>101</sys_mod_count>
         <sys_name>tasker_User_Form_Preferences</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-23 18:31:33</sys_updated_on>
+        <sys_updated_on>2021-12-14 22:33:09</sys_updated_on>
     </sys_script_include>
 </record_update>
