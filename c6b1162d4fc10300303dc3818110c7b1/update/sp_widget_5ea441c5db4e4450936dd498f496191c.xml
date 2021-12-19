@@ -217,6 +217,7 @@
 		// open quickview modal
 		c.quickView = function(table, sys_id, widgetId, item) {
 			var title;
+			var omitIcons;
 			// STRY0101803 - if user didn't set the title fields, use a default setting
 			// account for original hard coded settings on rows that don't get updated
 			if (c.data.modal_title_fields_array.length == 0){
@@ -236,8 +237,30 @@
 				title = item[c.data.modal_title_fields_array[0]].display_value;
 				for (i = 1; i < c.data.modal_title_fields_array.length; i++) {
 					title += c.data.modal_title_field_separator + item[c.data.modal_title_fields_array[i]].display_value;
-				}				
+				}
 			}
+			
+			// // DFCT0010720 - get view based on form preferences
+			// set default view to service portal
+			var view = 'sp';
+			if(table == 'x_153465_discovert_route_task_instance'){
+				pageId = 'discovertasker_taskdetails';
+				pageTable = table;
+				c.data.getURL=true;
+				c.data.sys_id=sys_id;
+				c.data.view =view;
+				$scope.server.update().then(function(data) {
+					// url = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+					view = data.view;
+					openModalView(title, widgetId, omitIcons, table, sys_id, view);
+				});
+			} else {
+				openModalView(title, widgetId, omitIcons, table, sys_id, view);
+			}
+		};
+
+		// DFCT0010720
+		function openModalView(title, widgetId, omitIcons, table, sys_id, view) {
 			spModal.open({
 				title: title,
 				backdrop:'static',
@@ -247,9 +270,9 @@
 				widgetInput: {
 					isModal: true,
 					omit_icons: omitIcons, 
-					table: $scope.data.table,
+					table: table,
 					sys_id: sys_id,
-					view: 'sp'
+					view: view
 				},
 				size: 'lg',
 				buttons: [],
@@ -259,9 +282,11 @@
 				}
 
 			}).then( function(){
-					/* update model after return from modal */
-				});
-			};
+				/* update model after return from modal */
+			});
+
+		}
+	
 			
 			// AAlzyoud custom ends here
 			//-----------------------------------------------------------------------------
@@ -464,6 +489,8 @@
 				
 				$scope.$on('widget-filter-breadcrumbs.queryModified', function(e, newFilter){
 					$scope.data.filter = newFilter;
+					// DFCT0010709
+					$scope.data.breadcrumb_change=true;
 					$scope.setSearch(true);
 				});
 				
@@ -1148,30 +1175,41 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 //											In Client, added to quick view omitIcons false, widget input isModal: true 
 //											and footer style display none
 //                                         Changes made in Client controller
-//
+// 2.7.1 | 2021-12-17 | raj  | DFCT0010709 - "Modern Portal" filters does NOT allow user to remove the last condition
+//                             DFCT0010720 - Task Portal Board with Filters does not open Modal forms with the right view
+//                                         Changes made in Server Script and Client Controller
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
-
+	// moved back to the top.  Since this is async, there is no reason to set any values on data
+    if (!input) // asynch load list
+        return;
 		// STRY0113382
-		var strPreferenceDefaultMenuTitle = 'DTechApps.Tasker.LandingPage.UserDefaultMenuTitle';
-		if(!data.userDefaultMenuTitle){
+		if(!input.userDefaultMenuTitle){
+			var strPreferenceDefaultMenuTitle = 'DTechApps.Tasker.LandingPage.UserDefaultMenuTitle';
 			data.userDefaultMenuTitle = gs.getUser().getPreference(strPreferenceDefaultMenuTitle);
+		} else {
+			data.userDefaultMenuTitle = input.userDefaultMenuTitle;
 		}
-	
     data.userID = gs.getUserID();
     // STRY0101803 - load user preferences object for use when opening forms
     // only load this one time
-    if (!data.OUsWhereIamAMember)
-        data.OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
-	
-    var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
-		// DFCT0010669
-    data.userPreferences = oUserPref.loadMyFormPreferences();
-    if (!input) // asynch load list
-        return;
+    var OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
+
+		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
+		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
+		//               this prevented the user from completely clearing the filter
+		//               a new variable was added in the client script when the filter is changed from the breadcrumb
+		//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
+		if(input.breadcrumb_change==true){
+			data.filter = input.filter;
+			options.filter = input.filter;
+		}
 	
 		if (input && input.getURL==true){
+			var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+			// DFCT0010669
+			var userPreferences = oUserPref.loadMyFormPreferences();
 			// if just getting the URL, then get URL and return
 			var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id,input.view);
 			data.sys_id = input.sys_id;
@@ -1190,7 +1228,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 			gs.getUser().savePreference(strPreferenceDefaultMenuTitle, data.userDefaultMenuTitle);
 		}
 		// STRY0113382 - reorganized and moved the loading of filters up so we could set the default to the user if one existed
-		data.filters = loadFilters(data.OUsWhereIamAMember);
+		data.filters = loadFilters(OUsWhereIamAMember);
 
     // 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform
     data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
@@ -1251,7 +1289,16 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
 
     data.view = data.view || 'mobile';
     data.table = data.table || $sp.getValue('table');
-    data.filter = data.filter || $sp.getValue('filter');
+		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
+		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
+		//               this prevented the user from completely clearing the filter
+		//               a new variable was added in the client script when the filter is changed from the breadcrumb
+		//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
+		if(input.breadcrumb_change==true){
+				data.filter = input.filter;
+		} else {
+			data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
+		}
 
     // STRY0101803 -default to true if not set
     if (data.include_comments == undefined)
@@ -1759,14 +1806,14 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1155</sys_mod_count>
+        <sys_mod_count>1170</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-12-14 08:45:30</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-12-19 04:32:49</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
