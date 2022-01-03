@@ -1,178 +1,127 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
     <sys_script_include action="INSERT_OR_UPDATE">
         <access>package_private</access>
-        <active>false</active>
-        <api_name>x_153465_discovert.Deprecated - TaskerAttachmentFunctions</api_name>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskTreeACLs</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>This contains functions to copy records and to copy attachments.</description>
-        <name>Deprecated - TaskerAttachmentFunctions</name>
+        <description>2.7.101 | 2021-12-23 | raj  | DFCT0010729 - Shared Attachment - Only Tasker Application Admin is able to upload documents to Shared Attachment.&#13;
+&#13;
+This function contains methods for task tree ACLs</description>
+        <name>TaskTreeACLs</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
 *  The Government's rights to use, display, or disclose this software are restricted.
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-var TaskerAttachmentFunctions = Class.create();
-TaskerAttachmentFunctions.prototype = {
-	initialize: function() {
-	},
-	
-	copySingleAttachment: function(donorTable, donorID, recipientTable, recipientID, fileName, attach_sys_id)
-	{
-		var gsisAttachment;  // GlideScriptableInputStram returned from getContentStream
-		var recipientRec;
-		var donorAttSysID;
-		var donorAttContentType;
-		var newAttSysId;
-		
-		var attRecord = new GlideRecord('sys_attachment');
-		if(attach_sys_id + '' != ''){
-			attRecord.addQuery('sys_id', attach_sys_id);
-		}
-		else {
-			attRecord.addQuery('table_name', donorTable);
-			attRecord.addQuery('table_sys_id', donorID);
-			attRecord.addQuery('file_name', fileName);
-		}
-		
-		attRecord.query();
-		if (attRecord.next()) {
-			donorAttSysID = attRecord.getValue('sys_id');
-			
-			donorAttContentType = attRecord.getValue('content_type');
-			
-			// get the attachment into a content stream
-			gsisAttachment = new GlideSysAttachment().getContentStream(donorAttSysID);
-			
-			// get a reference to the record for the recipient table
-			recipientRec = new GlideRecord(recipientTable);
-			recipientRec.get(recipientID);
-					
-			// write the content stream pulled based on the provided Attachment sys_id into the new table
-			newAttSysId = new GlideSysAttachment().writeContentStream(recipientRec, fileName, donorAttContentType, gsisAttachment);
+var TaskTreeACLs = Class.create();
+TaskTreeACLs.prototype = {
+	initialize: function(grTaskTree) {
+		this.grTree = grTaskTree;
+		this.treeId = grTaskTree.getUniqueValue();
+		this.active = false;
+		this.isTaskManagerOUTA = false;
+		var primary_assignee = '';
 
-			return newAttSysId;
+		if(grTaskTree.u_task_ref){
+			var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			if(grTopTask.get(grTaskTree.u_task_ref)){
+				this.active = grTopTask.active;
+				// check if task manager of the top task Primary Assignee
+				var UserPermissions = new UserInfoScripts();			
+				primary_assignee = grTopTask.getValue("primary_assignee") + '';
+			}
 		}
-	},
-	
-	copySpecificAttachment: function(donorTable, donorID, recipientTable, recipientID, fileName, attach_sys_id)
-	{
-		// set up variables
-		var donorAttSysID;
-		var newAttRecord;
-		var linkToNewRecord;
-		var attDataRecord;
-		var newDocRecord;
-		// Get a GlideRecord with the actual sys_attachment record we're looking to copy.
-		var attRecord = new GlideRecord('sys_attachment');
-		if(attach_sys_id + '' != ''){
-			attRecord.addQuery('sys_id', attach_sys_id);
-		}
-		else {
-			attRecord.addQuery('table_name', donorTable);
-			attRecord.addQuery('table_sys_id', donorID);
-			attRecord.addQuery('file_name', fileName);
-		}
-		
-		attRecord.query();
-	
-		// if a filename is passed in and the same file appears more than once, the while loop could run more than once.
-		// the return value will return the last file copied, which MAY not be the desired outcome.
-		while (attRecord.next()) {
 
-			donorAttSysID = attRecord.getValue('sys_id');
-			// Copy sys_attachment record, using, the sys_attachment record essentially just contains metadata about the attachment.
-			// The actual bytes contained within the file, are stored in the sys_attachment_doc table!
-			newAttRecord = this.copyRecord(attRecord);
-			
-			// the copyRecord function returns the GlideRecord object for the newly created record
-			// now modify the table_name and table_sys_id fields.
-			// This creates an exact copy of the record we passed into the function, except for the two changes made below.
-			/// These 2 changes associate the new sys_attachment record to our "recipient" record.
-			newAttRecord.setValue('table_name', recipientTable);
-			newAttRecord.setValue('table_sys_id', recipientID);
-			newAttRecord.update();
-			
-			linkToNewRecord = gs.getProperty('glide.servlet.uri') + newAttRecord.getLink();
-			// Create a new GlideRecord for the sys_attachment_doc table
-			// this is where the data for the attachments is actually stored, so these entries need to be copied too
-			attDataRecord = new GlideRecord('sys_attachment_doc');
-			// Query to get all of the sys_attachment_doc records related to our specific sys_attachment record
-			attDataRecord.addQuery('sys_attachment', donorAttSysID);
-			attDataRecord.query();
-			while (attDataRecord.next()) {
-				
-				// pass each sys_attachment_doc record for the attachment into the copyRecord function.
-				newDocRecord = this.copyRecord(attDataRecord);
-				
-				// Modify the returned GlideRecord containing the new sys_attach_doc records to point at the new sys_id.
-				newDocRecord.setValue('sys_attachment', newAttRecord.getValue('sys_id'));
-				
-				// and then .update()
-				newDocRecord.update();
-				
-			}
-		}
+		// for now check to make sure the user has a role
+		this.userHasTaskRole = this.userHasRole();
+		// these can be used later IF specific roles needed
+		// put in later IF needed and check performance as 4 count queries will be run instead of 1
+		//this.isTaskOwner = this.userHasSpecificRole("Owner");
+		//this.isAssignedMember = this.userHasSpecificRole("Assigned Member");
+		//this.isReviewer = this.userHasSpecificRole("Reviewer");
+		//this.isOnBehalfOf = this.userHasSpecificRole("OnBehalfOf");
 		
-		// added to return the new attachment to the caller.
-		return newAttRecord;
+		this.isTaskManagerOUTA = UserPermissions.IsUserOUTA(gs.getUserID(),primary_assignee);		
+		this.isTaskerApplicationAdmin = gs.getUser().hasRole("x_153465_discovert.tasker_application_admin");
+		this.isTaskAdministratorGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+		this.isTaskExecutive = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
 	},
 	
-	// copyRecord function.
-	// This super nifty function grabs all the fields on a given record, and makes a duplicate
-	// it copyies over the values of every field (except sys_id, and number).
-	copyRecord: function(record)
-	{
-	
-		var recordElement;
-		var recordElementName;
-		var recordTable = record.getTableName();
-		var newRecord = new GlideRecord(recordTable);
-		newRecord.initialize();
-		
-		var elements = record.getElements();
-		var i;
-		var element;
-		if (typeof elements.size != 'undefined') {
-			//we are in global scope, so iterate
-			for (i=0; i<elements.size(); i++) {
-				element = elements.get(i);
-				if(element.getName() != 'sys_id' && element.getName() != 'number' && element.getName() != 'sys_mod_count' && element.getName() != 'sys_tags')
-					{
-					recordElementName = element.getName();
-					newRecord.setValue(recordElementName, record.getValue(recordElementName));
-				}
-			}
-		} else {
-			//we are in scope, so loop over the array
-			for (i=0; i<elements.length; i++) {
-				element = elements[i];
-				if(element.getName() != 'sys_id' && element.getName() != 'number' && element.getName() != 'sys_mod_count' && element.getName() != 'sys_tags')
-					{
-					recordElementName = element.getName();
-					newRecord.setValue(recordElementName, record.getValue(recordElementName));
-				}
-			}
+	userHasRole: function(){
+		var answer = false;
+		var currentUser= gs.getUserID();
+		var query = "u_task_tree=" + this.treeId;
+		var count = 0;
+		query = query + "^u_task_requester=" + currentUser + "^ORoriginator=" + currentUser +
+			"^ORassigned_to=" + currentUser + "^ORu_reviewer=" + currentUser +
+			"^ORon_behalf_of=" + currentUser;
+		var gaRoleCheck = new GlideAggregate('x_153465_discovert_route_task_instance');
+		gaRoleCheck.addEncodedQuery(query);
+		gaRoleCheck.addAggregate("COUNT");
+		gaRoleCheck.query();
+		if(gaRoleCheck.next()){
+			count = gaRoleCheck.getAggregate("COUNT");
 		}
-		
-		var newSysId = newRecord.insert();
-		return newRecord;
+		answer = (count>0);
+		return answer;
+	},	
+	// this function will be used IF individual roles matter, but for now it is not used
+	userHasSpecificRole: function(role){
+		var answer = false;
+		var currentUser= gs.getUserID();
+		var query = "u_task_tree=" + this.treeId;
+		var count = 0;
+		switch (role){
+			case "Owner":
+				query = query + "^u_task_requester=" + currentUser + "^ORoriginator=" + currentUser;
+				break;
+			case "Assigned Member":
+				query = query + "^assigned_to=" + currentUser;
+				break;
+			case "Reviewer":
+				query = query + "^u_reviewer=" + currentUser;
+				break;
+			case "OnBehalfOf":
+				query = query + "^on_behalf_of=" + currentUser;
+				break;				
+		}
+		var gaRoleCheck = new GlideAggregate('x_153465_discovert_route_task_instance');
+		gaRoleCheck.addEncodedQuery(query);
+		gaRoleCheck.addAggregate("COUNT");
+		gaRoleCheck.query();
+		if(gaRoleCheck.next()){
+			count = gaRoleCheck.getAggregate("COUNT");
+		}
+		answer = (count>0);
+		return answer;
 	},
 	
-	type: 'Deprecated - TaskerAttachmentFunctions'
+	canWrite: function (){
+		var answer = false;
+		// is the top task active
+		if(this.active){
+			answer = (this.userHasTaskRole || this.isTaskManagerOUTA || this.isTaskerApplicationAdmin ||
+						this.isTaskAdministratorGTA || this.isTaskExecutive);
+		}
+		return answer;
+	},
+	
+	
+	type: 'TaskTreeACLs'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-04-03 15:57:52</sys_created_on>
         <sys_id>e94395bcdb9d13403a8d6be3ca961933</sys_id>
-        <sys_mod_count>26</sys_mod_count>
-        <sys_name>Deprecated - TaskerAttachmentFunctions</sys_name>
+        <sys_mod_count>32</sys_mod_count>
+        <sys_name>TaskTreeACLs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_e94395bcdb9d13403a8d6be3ca961933</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2021-04-29 15:55:51</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2021-12-23 18:48:05</sys_updated_on>
     </sys_script_include>
 </record_update>
