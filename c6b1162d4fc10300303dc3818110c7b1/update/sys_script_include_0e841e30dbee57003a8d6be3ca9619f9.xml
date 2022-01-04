@@ -9,7 +9,7 @@
 2.7.1 | 2021-12-21 | RAJ | DFCT0010422 - DIA: Schedules are running twice&#13;
 2.7.1 | 2021-12-21 | RAJ | DFCT0010726	- "Draft" Monthly Scheduled Tasks shows the incorrect "Next Run Date"&#13;
 2.7.101 | 2022-01-03 | RAJ | DFCT0010736 - Monthly Scheduled Tasks shows the incorrect "Next Run Date" (DAY OF THE WEEK as Monthly Type)&#13;
-&#13;
+2.7.101 | 2022-01-04 | RAJ | DFCT0010742 - Daily and Weekly Schedule were skipping their start date&#13;
 </description>
         <name>TaskerSchedulerScript</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
@@ -178,14 +178,15 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				last_run_date = GlideDateTime(taskerSchedule.last_run).getDate();	
 			}
 			// DFCT0010422 - added if last_run_date < today_date_only - if already run today, then this script should be run to process the next run date based on today.
-			if(today_date_only <= taskerSchedule.start_date && last_run_date < today_date_only){
+			if(today_date_only <= taskerSchedule.start_date && (!last_run_date || last_run_date.compareTo(today_date_only) < 0)){
 				// use last run if it has been run before
 				// use start_date if not
 				// if the start date was updated to be later than last run, we may want to reopen
 				gDate.setValue(taskerSchedule.start_date);
 				return gDate;
 			}
-			var daysApart = GlideDateTime.subtract(taskerSchedule_Start, today_date_only);		
+			// DFCT0010742
+			var daysApart = GlideDateTime.subtract(today_date_only, taskerSchedule_Start);		
 			var dayDiff;
 			var days_to_add;
 
@@ -215,15 +216,20 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// take a mod based on the difference between current date and the pattern
 				// add the Mod to the current date to get the next run
 				// we patterned off of outlook.  Outlook doesn't look at LAST_RUN. Outlook calculates based on pattern and start date
-				dayDiff = parseInt(daysApart.getDayPart()) % parseInt(taskerSchedule.repeat_count);
-				days_to_add = parseInt(taskerSchedule.repeat_count) - dayDiff;
-				gDate.addDaysLocalTime(parseInt(days_to_add));
-				// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
-				// second part accounts for it running today and the patter changing or it running today, but the pattern was off
-				// DFCT0010422 
-				if(last_run_date){
-					if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
-						gDate.addDaysLocalTime(parseInt(taskerSchedule.repeat_count));
+				// DFCT0010742
+				if(daysApart.getDayPart() > 0 && (!last_run_date || last_run_date.compareTo(today_date_only) >= 0) ||
+					daysApart.getDayPart() == 0 && last_run_date.compareTo(today_date_only) == 0){
+					
+					dayDiff = parseInt(daysApart.getDayPart()) % parseInt(taskerSchedule.repeat_count);
+					days_to_add = parseInt(taskerSchedule.repeat_count) - dayDiff;
+					gDate.addDaysLocalTime(parseInt(days_to_add));
+					// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
+					// second part accounts for it running today and the patter changing or it running today, but the pattern was off
+					// DFCT0010422 
+					if(last_run_date){
+						if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
+							gDate.addDaysLocalTime(parseInt(taskerSchedule.repeat_count));
+						}
 					}
 				}
 				return gDate;
@@ -232,16 +238,21 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// TODO: we may want to add a "force run" flag to force it to run today.
 				// take start date, subract today's date divide by 7 times the number of weeks
 				// take the remainder and add it to today's date and that should be your next run date
-				dayDiff = parseInt(daysApart.getDayPart()) % (7*parseInt(taskerSchedule.repeat_count));
-				days_to_add = (7*parseInt(taskerSchedule.repeat_count)) - dayDiff;
-				gDate.addDaysLocalTime(parseInt(days_to_add));
-				// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
-				// second part accounts for it running today and the patter changing or it running today, but the pattern was off
+				// DFCT0010742
+				if(daysApart.getDayPart() < 7 && (!last_run_date || last_run_date.compareTo(today_date_only) > 0)){
+					return taskerSchedule_Start;
+				} else {					
+					dayDiff = parseInt(daysApart.getDayPart()) % (7*parseInt(taskerSchedule.repeat_count));
+					days_to_add = (7*parseInt(taskerSchedule.repeat_count)) - dayDiff;
+					gDate.addDaysLocalTime(parseInt(days_to_add));
+					// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
+					// second part accounts for it running today and the patter changing or it running today, but the pattern was off
 					if(last_run_date){
 						if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
 							gDate.addDaysLocalTime((7*parseInt(taskerSchedule.repeat_count)));
 						}
 					}
+				}
 				return gDate;
 				case 'monthly':
 				// get the day of the month from the start date
@@ -604,13 +615,13 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-06-05 00:02:15</sys_created_on>
         <sys_id>0e841e30dbee57003a8d6be3ca9619f9</sys_id>
-        <sys_mod_count>248</sys_mod_count>
+        <sys_mod_count>255</sys_mod_count>
         <sys_name>TaskerSchedulerScript</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0e841e30dbee57003a8d6be3ca9619f9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-04 05:42:30</sys_updated_on>
+        <sys_updated_on>2022-01-04 18:37:21</sys_updated_on>
     </sys_script_include>
 </record_update>
