@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.TaskerSchedulerScript</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>Rolled back run 2 times fix&#13;
+        <description>2.7.2 | 2022-01-08 | RAJ | STRY0116680 - Reorganize code for getnextrundate to make the logic testable from api and automated script with no database read or write&#13;
+&#13;
+Rolled back run 2 times fix&#13;
 2.7.1 | 2021-12-21 | RAJ | DFCT0010422 - DIA: Schedules are running twice&#13;
 2.7.1 | 2021-12-21 | RAJ | DFCT0010726	- "Draft" Monthly Scheduled Tasks shows the incorrect "Next Run Date"&#13;
 2.7.101 | 2022-01-03 | RAJ | DFCT0010736 - Monthly Scheduled Tasks shows the incorrect "Next Run Date" (DAY OF THE WEEK as Monthly Type)&#13;
@@ -20,36 +22,36 @@
 // Script Continued Below
 var TaskerSchedulerScript = Class.create();
 TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
-	
+
 	ajaxFunction_scheduleTime: function() {
 		return this.getRepeatDescription(
-		this.getParameter('sysparm_repeat_type'),
-		this.getParameter('sysparm_repeat_count'),
-		this.getParameter('sysparm_start_date'),
-		this.getParameter('sysparm_days_of_week'),
-		this.getParameter('sysparm_monthly_type'),
-		this.getParameter('sysparm_yearly_type'),
-		this.getParameter('sysparm_month'));
+			this.getParameter('sysparm_repeat_type'),
+			this.getParameter('sysparm_repeat_count'),
+			this.getParameter('sysparm_start_date'),
+			this.getParameter('sysparm_days_of_week'),
+			this.getParameter('sysparm_monthly_type'),
+			this.getParameter('sysparm_yearly_type'),
+			this.getParameter('sysparm_month'));
 	},
-	
+
 	// 	ajaxFunction_scheduleDateTime: function() {
-		// 		var sdt = new ScheduleDateTime(this.getParameter('sysparm_dt_tm'));
-		// 		if (this.getParameter('sysparm_include_z_format') == 'false')
-		// 			sdt.setIncludeZFormat(false);
-		// 		return sdt.convertTimeZone(this.getParameter('sysparm_current_timezone'),this.getParameter('sysparm_new_timezone'));
-		// 	},
-		
-		getRepeatDescription : function(type, count, start, days, monthly, yearly, month) {
-			var answer;
-			var answerEndSingular = '';
-			var answerEndPlural = '';
-			var startDate = GlideDateTime(start);
-			switch (type) {
-				case 'daily':
+	// 		var sdt = new ScheduleDateTime(this.getParameter('sysparm_dt_tm'));
+	// 		if (this.getParameter('sysparm_include_z_format') == 'false')
+	// 			sdt.setIncludeZFormat(false);
+	// 		return sdt.convertTimeZone(this.getParameter('sysparm_current_timezone'),this.getParameter('sysparm_new_timezone'));
+	// 	},
+
+	getRepeatDescription : function(type, count, start, days, monthly, yearly, month) {
+		var answer;
+		var answerEndSingular = '';
+		var answerEndPlural = '';
+		var startDate = GlideDateTime(start);
+		switch (type) {
+			case 'daily':
 				answerEndSingular = 'day';
 				answerEndPlural = 'days';
 				break;
-				case 'weekly':
+			case 'weekly':
 				answerEndSingular = 'week';
 				answerEndPlural = 'weeks';
 				var startDOW = startDate.getDayOfWeekUTC();
@@ -61,7 +63,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				answerEndSingular = answerEndSingular + ' on ' + this.getDayOfWeekText(startDOW);
 				answerEndPlural = answerEndPlural + ' on ' + this.getDayOfWeekText(startDOW);
 				break;
-				case 'monthly':
+			case 'monthly':
 				answerEndSingular = 'month';
 				answerEndPlural = 'months';
 				if(monthly == 'dom'){
@@ -73,188 +75,230 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 					answerEndPlural = answerEndPlural + ' on the ' + this.getDayOfWeekOfMonth(start);
 				}
 				break;
-				case 'yearly':
+			case 'yearly':
 				answerEndSingular = 'year';
 				answerEndPlural = 'years';
 				var moyInt = startDate.getMonthUTC();
 				if(yearly=='doy'){
 					answerEndSingular = answerEndSingular + ' on ' + this.getMonthText(moyInt) + ' ' +  startDate.getDayOfMonthUTC();
 					answerEndPlural = answerEndPlural + ' on ' + this.getMonthText(moyInt) + ' ' +  startDate.getDayOfMonthUTC();
-					
+
 				}
 				else {
 					answerEndSingular = answerEndSingular + ' on the ' + this.getDayOfWeekOfMonth(start) + ' of ' +  this.getMonthText(moyInt);
 					answerEndPlural = answerEndPlural + ' on the ' + this.getDayOfWeekOfMonth(start) + ' of ' +  this.getMonthText(moyInt);
 				}
 				break;
-				default:
+			default:
 				answer = 'Error, invalid type - ' + type.toString() + ' ' + count.toString() + ' ' + start.toString() + ' ' + days.toString() + ' ' + monthly.toString() + ' ' + yearly.toString() + ' ' + month.toString();
-			}
-			
-			if (count<=0) {
-				answer = '<b>Repeat every</b> must be specified';
-			}
-			else if(count==1){
-				answer = 'Every ' + answerEndSingular;
-			}
-			else {
-				answer = 'Every ' + count + ' ' + answerEndPlural;
-			}
-			return answer;
-		},
-		
-		getDayOfWeekOfMonth : function(inputDate) {
-			var varDate = GlideDateTime(inputDate);
-			var dom = varDate.getDayOfMonthUTC();
-			var dow = varDate.getDayOfWeekUTC();
-			var dowText = this.getDayOfWeekText(dow);
-			var sWeekNum = this.getWeekOfMonth(dom, dow);
-			
-			// number from dow starts at 1, arrays start at zero.  subtract one
-			return sWeekNum + ' ' + dowText;
-		},
+		}
 
-		getWeekOfMonth : function(dom, dow) {
-			var sWeekNum;
-			switch (true) {
-				case (dom<=dow): sWeekNum = 'First'; break;
-				case ((dom-7)<=0): sWeekNum = 'First'; break;
-				case ((dom-14)<=0): sWeekNum = 'Second'; break;
-				case ((dom-21)<=0): sWeekNum = 'Third'; break;
-				case ((dom-28)<=0): sWeekNum = 'Fourth'; break;
-				default: sWeekNum = 'Last';
-			}
-			// number from dow starts at 1, arrays start at zero.  subtract one
-			return sWeekNum;
-		},
+		if (count<=0) {
+			answer = '<b>Repeat every</b> must be specified';
+		}
+		else if(count==1){
+			answer = 'Every ' + answerEndSingular;
+		}
+		else {
+			answer = 'Every ' + count + ' ' + answerEndPlural;
+		}
+		return answer;
+	},
+
+	getDayOfWeekOfMonth : function(inputDate) {
+		var varDate = GlideDateTime(inputDate);
+		var dom = varDate.getDayOfMonthUTC();
+		var dow = varDate.getDayOfWeekUTC();
+		var dowText = this.getDayOfWeekText(dow);
+		var sWeekNum = this.getWeekOfMonth(dom, dow);
+
+		// number from dow starts at 1, arrays start at zero.  subtract one
+		return sWeekNum + ' ' + dowText;
+	},
+
+	getWeekOfMonth : function(dom, dow) {
+		var sWeekNum;
+		switch (true) {
+			case (dom<=dow): sWeekNum = 'First'; break;
+			case ((dom-7)<=0): sWeekNum = 'First'; break;
+			case ((dom-14)<=0): sWeekNum = 'Second'; break;
+			case ((dom-21)<=0): sWeekNum = 'Third'; break;
+			case ((dom-28)<=0): sWeekNum = 'Fourth'; break;
+			default: sWeekNum = 'Last';
+		}
+		// number from dow starts at 1, arrays start at zero.  subtract one
+		return sWeekNum;
+	},
+
+	getDayOfWeekText: function(dowInt) {
+		var aDOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+		// number from dow starts at 1, arrays start at zero.  subtract one
+		return aDOW[dowInt-1];
+	},
+
+	getMonthText: function(moyInt) {
+		var aMOY = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+		// number from dow starts at 1, arrays start at zero.  subtract one
+		return aMOY[moyInt-1];
+	},
+
+	getLastDayOfMonth: function(moyInt) {
+		var aMOY = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+		// number from dow starts at 1, arrays start at zero.  subtract one
+		return aMOY[moyInt-1];
+	},
+
+	ajaxFunction_getDayOfWeek: function() {
+		var inputDate = this.getParameter('sysparm_start_date');
+		var varDate = GlideDateTime(inputDate);
+		var dow = varDate.getDayOfWeekUTC();
+		return dow;
+	},
+
+	// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
+	ajaxFunction_getProcessName: function() {
+		var strTaskerProcess = this.getParameter('sysparm_Tasker_Process');
+
+		var grTaskerProcessTemplate = new GlideRecord('x_153465_discovert_discover_routing_template');
+		if(grTaskerProcessTemplate.get(strTaskerProcess))
+			return grTaskerProcessTemplate.template_name;
+		else
+			return "";
+	},
 	
-		getDayOfWeekText: function(dowInt) {
-			var aDOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-			// number from dow starts at 1, arrays start at zero.  subtract one
-			return aDOW[dowInt-1];
-		},
-		
-		getMonthText: function(moyInt) {
-			var aMOY = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-			// number from dow starts at 1, arrays start at zero.  subtract one
-			return aMOY[moyInt-1];
-		},
-
-		getLastDayOfMonth: function(moyInt) {
-			var aMOY = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-			// number from dow starts at 1, arrays start at zero.  subtract one
-			return aMOY[moyInt-1];
-		},
+	// STRY0116680 - Reformatted the code to make it easier to read
+	// created an external and an internal call to allow for the internal call to be tested without database fields.
+	getNextRunDate : function(taskerSchedule) {
+		var start_date_time = taskerSchedule.start_date;
+		var current_date_time = new GlideDateTime();
+		var isScheduleComplete = taskerSchedule.schedule_complete_flag;
+		var last_run_date;
+		if(taskerSchedule.last_run){
+			last_run_date = GlideDateTime(taskerSchedule.last_run).getDate();	
+		}
+		var strRepeat_type = taskerSchedule.repeat_type.toString();
+		var repeat_count = taskerSchedule.repeat_count;
+		var monthly_type = taskerSchedule.monthly_type;
+		var yearly_type = taskerSchedule.yearly_type;
+		return this._getNextRunDate(start_date_time, current_date_time, isScheduleComplete, last_run_date, strRepeat_type, repeat_count, monthly_type, yearly_type);
+	},
 	
-		ajaxFunction_getDayOfWeek: function() {
-			var inputDate = this.getParameter('sysparm_start_date');
-			var varDate = GlideDateTime(inputDate);
-			var dow = varDate.getDayOfWeekUTC();
-			return dow;
-		},
-		
-		// RAJ 2018-07-19 - STRY0012696 - added this to remove the getReference calls
-		ajaxFunction_getProcessName: function() {
-			var strTaskerProcess = this.getParameter('sysparm_Tasker_Process');
-			
-			var grTaskerProcessTemplate = new GlideRecord('x_153465_discovert_discover_routing_template');
-			if(grTaskerProcessTemplate.get(strTaskerProcess))
-				return grTaskerProcessTemplate.template_name;
-			else
-				return "";
-		},
-		
-		getNextRunDate : function(taskerSchedule) {
-			var gDate = new GlideDateTime();
-			// DFCT0010736 - Changed this to get the date value the same way we are getting the date value of the Start Date below
-			var taskerSchedule_Start = new GlideDateTime(taskerSchedule.start_date).getDate();
-			var today_date_only = gDate.getDate();
-			if (taskerSchedule.schedule_complete_flag){
-				gs.addErrorMessage('Tasker Schedule is complete.  Uncheck the complete flag and change the "Repeat until" type to "no end", extend the end date, or increase the number of occurrences to extend the schedule.');
-				return null;
-			}
-			var last_run_date;
-			if(taskerSchedule.last_run){
-				last_run_date = GlideDateTime(taskerSchedule.last_run).getDate();	
-			}
-			// DFCT0010422 - added if last_run_date < today_date_only - if already run today, then this script should be run to process the next run date based on today.
-			if(today_date_only <= taskerSchedule.start_date && (!last_run_date || last_run_date.compareTo(today_date_only) < 0)){
-				// use last run if it has been run before
-				// use start_date if not
-				// if the start date was updated to be later than last run, we may want to reopen
-				gDate.setValue(taskerSchedule.start_date);
-				return gDate;
-			}
-			// DFCT0010742
-			var daysApart = GlideDateTime.subtract(today_date_only, taskerSchedule_Start);		
-			var dayDiff;
-			var days_to_add;
+	// STRY0116680  - internal call and the call used by the test harness to test all of the different scenarios associated with dates
+	// start_date_time   - GlideDateTime (this is the value from the database.  So, it might need the numeric value of the date time, not an actual GDT object)
+	//                     start date and time for the schedule.  
+	//                     This would be in the start date and time in the database.  
+	//                     As schedules are run by admin account off horus, this will most likely be pulled out of the database in server time
+	// current_date_time - GlideDateTime object
+	//                     when called from code, the current date and time will be passed in. 
+	//                     when called from API for testing, ANY value could be passed in to allow for future date and different date scenarios to all be tested on the same day
+	// isScheduleComplete - Boolean
+	//                      this is the database field [schedule_complete_flag], it will be true if the # of occurrances or the end date are met
+	// last_run_date      - GlideDateTime (this is the value from the database.  So, it might need the numeric value of the date time, not an actual GDT object)
+	//                      if the schedule has not been run, then this will be null from the database
+	//                      this contains the date and time of the last run from the database when run from code
+	//                      when run from api, this can be set to any date to test different data/time scenarios
+	// strRepeat_type     - string
+	//                      contains repeat type from data base.  
+	//                      Any repeat type can be passed in api for testing
+	//                      possible values: 'daily', 'weekly', 'monthly', 'yearly'
+	// repeat_count       - integer
+	//                      number of days, weeks, months, or years between each occurrance in the schedule
+	//                      must be greater than 0
+	// monthly_type       - choice
+	//                      Only used when repeat typeisf monthly
+	//                      possible values: dom, nth
+	// yearly_type        - choice
+	//                      Only used when repeat type is yearly
+	//                      possible values: doy, float
+	_getNextRunDate : function(start_date_time, current_date_time, isScheduleComplete, last_run_date, strRepeat_type, repeat_count, monthly_type, yearly_type) {
+		// date only version of start date
+		var start_date = new GlideDateTime(start_date_time).getDate();
+		// gDate wil be returned in most places, the default is the current date and time
+		var gDate = current_date_time;
+		// DFCT0010736 - Changed this to get the date value the same way we are getting the date value of the Start Date below
+		var today_date_only = gDate.getDate();
+		if (isScheduleComplete){
+			gs.addErrorMessage('Tasker Schedule is complete.  Uncheck the complete flag and change the "Repeat until" type to "no end", extend the end date, or increase the number of occurrences to extend the schedule.');
+			return null;
+		}
+		// DFCT0010422 - added if last_run_date < today_date_only - if already run today, then this script should be run to process the next run date based on today.
+		if(today_date_only <= start_date_time && (!last_run_date || last_run_date.compareTo(today_date_only) < 0)){
+			// use last run if it has been run before
+			// use start_date if not
+			// if the start date was updated to be later than last run, we may want to reopen
+			gDate.setValue(start_date_time);
+			return gDate;
+		}
+		// DFCT0010742
+		var daysApart = GlideDateTime.subtract(today_date_only, start_date);		
+		var dayDiff;
+		var days_to_add;
 
-			// get start date values
-			var start_dom = taskerSchedule_Start.getDayOfMonthUTC();
-			var start_mo = taskerSchedule_Start.getMonthUTC();
-			var start_yr = taskerSchedule_Start.getYearUTC();
-			var start_dow = taskerSchedule_Start.getDayOfWeekUTC();
-			var start_wom = this.getWeekOfMonth(start_dom, start_dow);
+		// get start date values
+		var start_dom = start_date.getDayOfMonthUTC();
+		var start_mo = start_date.getMonthUTC();
+		var start_yr = start_date.getYearUTC();
+		var start_dow = start_date.getDayOfWeekUTC();
+		var start_wom = this.getWeekOfMonth(start_dom, start_dow);
 
-			// get current date values
-			var cur_dom = gDate.getDayOfMonthUTC();
-			var cur_mo = gDate.getMonthUTC();
-			var cur_yr = gDate.getYearUTC();
-			var cur_dow = gDate.getDayOfWeekUTC();
-			var cur_wom = this.getWeekOfMonth(cur_dom, cur_dow);
-			var init_next_run_Date;
-			var next_run_dow;
-			var last_day_of_mo;
-			var last_day_dow;
-			var last_dom;
-			var mos_until_next_scheudled_run;
-			// from here down, use the last_run_date and the schedule to determine next_run_date
-			switch (taskerSchedule.repeat_type.toString()) {
-				case 'daily':
+		// get current date values
+		var cur_dom = gDate.getDayOfMonthUTC();
+		var cur_mo = gDate.getMonthUTC();
+		var cur_yr = gDate.getYearUTC();
+		var cur_dow = gDate.getDayOfWeekUTC();
+		var cur_wom = this.getWeekOfMonth(cur_dom, cur_dow);
+		var init_next_run_Date;
+		var next_run_dow;
+		var last_day_of_mo;
+		var last_day_dow;
+		var last_dom;
+		var mos_until_next_scheudled_run;
+		// from here down, use the last_run_date and the schedule to determine next_run_date
+		switch (strRepeat_type) {
+			case 'daily':
 				// on a daily run, calculate the pattern back to the start date
 				// take a mod based on the difference between current date and the pattern
 				// add the Mod to the current date to get the next run
 				// we patterned off of outlook.  Outlook doesn't look at LAST_RUN. Outlook calculates based on pattern and start date
 				// DFCT0010742
 				if(daysApart.getDayPart() > 0 && (!last_run_date || last_run_date.compareTo(today_date_only) >= 0) ||
-					daysApart.getDayPart() == 0 && last_run_date.compareTo(today_date_only) == 0){
-					
-					dayDiff = parseInt(daysApart.getDayPart()) % parseInt(taskerSchedule.repeat_count);
-					days_to_add = parseInt(taskerSchedule.repeat_count) - dayDiff;
+				   daysApart.getDayPart() == 0 && last_run_date.compareTo(today_date_only) == 0){
+
+					dayDiff = parseInt(daysApart.getDayPart()) % parseInt(repeat_count);
+					days_to_add = parseInt(repeat_count) - dayDiff;
 					gDate.addDaysLocalTime(parseInt(days_to_add));
 					// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
 					// second part accounts for it running today and the patter changing or it running today, but the pattern was off
 					// DFCT0010422 
 					if(last_run_date){
 						if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
-							gDate.addDaysLocalTime(parseInt(taskerSchedule.repeat_count));
+							gDate.addDaysLocalTime(parseInt(repeat_count));
 						}
 					}
 				}
 				return gDate;
-				case 'weekly':
+			case 'weekly':
 				// NOTE: if start date is today, it might not get run until tomorrow
 				// TODO: we may want to add a "force run" flag to force it to run today.
 				// take start date, subract today's date divide by 7 times the number of weeks
 				// take the remainder and add it to today's date and that should be your next run date
 				// DFCT0010742
 				if(daysApart.getDayPart() < 7 && (!last_run_date || last_run_date.compareTo(today_date_only) > 0)){
-					return taskerSchedule_Start;
+					return start_date;
 				} else {					
-					dayDiff = parseInt(daysApart.getDayPart()) % (7*parseInt(taskerSchedule.repeat_count));
-					days_to_add = (7*parseInt(taskerSchedule.repeat_count)) - dayDiff;
+					dayDiff = parseInt(daysApart.getDayPart()) % (7*parseInt(repeat_count));
+					days_to_add = (7*parseInt(repeat_count)) - dayDiff;
 					gDate.addDaysLocalTime(parseInt(days_to_add));
 					// if already run today, AND THE PATTERN WAS SUPPOSED TO RUN TODAY (current next run being returned is today)
 					// second part accounts for it running today and the patter changing or it running today, but the pattern was off
 					if(last_run_date){
 						if((last_run_date.compareTo(today_date_only) >= 0) && (gDate.getDate() == today_date_only))  {
-							gDate.addDaysLocalTime((7*parseInt(taskerSchedule.repeat_count)));
+							gDate.addDaysLocalTime((7*parseInt(repeat_count)));
 						}
 					}
 				}
 				return gDate;
-				case 'monthly':
+			case 'monthly':
 				// get the day of the month from the start date
 				// determine the start month and start year from the last run date
 				// determine the current month and current year
@@ -272,38 +316,38 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// the Month difference has been calcualted, now compare the pattern to the Month difference to set next run date based on today's date
 				// find the Mod, if it exists and subract from the pattern
 				// if the last run was not on schedule, using the mod this will get it back on schedule
-				var mos_since_last_scheudled_run = parseInt(mo_diff) % (parseInt(taskerSchedule.repeat_count));
+				var mos_since_last_scheudled_run = parseInt(mo_diff) % (parseInt(repeat_count));
 
 				// if schedule is supposed to run this month
 				// check the DOM and DOW and determine if it already ran or still needs to run
 				// if still needs to run then, set the mo_until_run to 0 so it runs this month
 				// otherwise, add the pattern to the current month to push out
 				if ((mos_since_last_scheudled_run==0)
-					&& (taskerSchedule.monthly_type == 'dom')
+					&& (monthly_type == 'dom')
 					&& (cur_dom <= start_dom) 
-					){
+				   ){
 					mos_until_next_scheudled_run = 0;
 				} else if ( (mos_since_last_scheudled_run==0)
-						&& (taskerSchedule.monthly_type == 'nth') 
-						&& (cur_wom < start_wom)) {
+						   && (monthly_type == 'nth') 
+						   && (cur_wom < start_wom)) {
 					mos_until_next_scheudled_run = 0;
 				} else if( (mos_since_last_scheudled_run==0)
-						&& (taskerSchedule.monthly_type == 'nth') 
-						&& (cur_wom == start_wom) && (cur_dow <= start_dow)){
+						  && (monthly_type == 'nth') 
+						  && (cur_wom == start_wom) && (cur_dow <= start_dow)){
 					mos_until_next_scheudled_run = 0;	
 				}  else
-					mos_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count) - parseInt(mos_since_last_scheudled_run);
-				
+					mos_until_next_scheudled_run = parseInt(repeat_count) - parseInt(mos_since_last_scheudled_run);
+
 				// account for it having run already this month
 				if ((mos_since_last_scheudled_run==0)){
 					var start_of_last_run_mo = new GlideDateTime(this.padStart(parseInt(cur_mo),0, 2) + '-' + this.padStart(1,0, 2) + '-' + cur_yr);	
 					if(last_run_date){
 						if (last_run_date.compareTo(start_of_last_run_mo) >= 0) { 
-							mos_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count);	
+							mos_until_next_scheudled_run = parseInt(repeat_count);	
 						}
 					}
 				}
-					
+
 				// now we have the # of months since the last scheduled run.
 				// using this, we subtract that from the schedule and that is the number of months until the next run
 				// add this many months to the current month and we are golden!
@@ -318,16 +362,16 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 					mo_to_run = cur_mo + mos_until_next_scheudled_run;
 					yr_to_run = cur_yr;
 				}
-					
+
 				var last_day_of_Month = this.getLastDayOfMonth(parseInt(mo_to_run));
 				var day_to_run = 0;
-				if (taskerSchedule.monthly_type == 'dom'){
+				if (monthly_type == 'dom'){
 					// set day_to_run equal to start dom for montly type 'Day of the Month' as it will always run on the same day
 					if(start_dom > last_day_of_Month)
 						day_to_run = last_day_of_Month;
 					else
 						day_to_run = start_dom;
-				} else if (taskerSchedule.monthly_type == 'nth') {
+				} else if (monthly_type == 'nth') {
 					// when the "next run month is determined, find the right date based on dom or dow
 					if(start_dom > last_day_of_Month){
 						init_next_run_Date = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(last_day_of_Month,0, 2) + '-' + yr_to_run);
@@ -403,7 +447,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 							// last is a little differnt b/c months have different numbers of days
 							// for last, we will go to the first day of the following month, determine its day of week
 							// then subtract the right number to get to the day of the week we want.
-							
+
 							// go to first day of month after next run
 							// add one to month
 							if (mo_to_run == 12){
@@ -430,10 +474,10 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 							break;
 					}					
 				}
-					
+
 				gDate = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(day_to_run,0, 2) + '-' + yr_to_run);
 				return gDate.getDate();
-				case 'yearly':
+			case 'yearly':
 				// get the day of the month from the start date
 				// get the years between start date and current date
 				// compute the total years between start and today
@@ -441,7 +485,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				var yr_diff = cur_yr - start_yr;
 				// the year difference has been calcualted, now compare the pattern to the year difference to set next run date based on today's date
 				// find the Mod, if it exists and subract from the pattern
-				var yrs_since_last_scheudled_run = parseInt(yr_diff) % (parseInt(taskerSchedule.repeat_count));
+				var yrs_since_last_scheudled_run = parseInt(yr_diff) % (parseInt(repeat_count));
 				// now we have the # of years since the last scheduled run.
 				var yrs_until_next_scheudled_run = 0;	
 				// if schedule is supposed to run this year
@@ -450,26 +494,26 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				// otherwise, add the pattern to the current year to push out
 				if ((yrs_since_last_scheudled_run==0)
 					&& (cur_mo <= start_mo)
-					){
+				   ){
 					yrs_until_next_scheudled_run = 0;
 				} else if ((yrs_since_last_scheudled_run==0)
-					&& (taskerSchedule.yearly_type == 'doy')
-					&& (cur_mo == start_mo)
-					&& (cur_dom <= start_dom)
-					){
+						   && (yearly_type == 'doy')
+						   && (cur_mo == start_mo)
+						   && (cur_dom <= start_dom)
+						  ){
 					yrs_until_next_scheudled_run = 0;
 				} else if ((yrs_until_next_scheudled_run==0)
-						&& (taskerSchedule.yearly_type == 'float')  
-						&& (cur_mo == start_mo)						   
-						&& (cur_wom < start_wom)) {
+						   && (yearly_type == 'float')  
+						   && (cur_mo == start_mo)						   
+						   && (cur_wom < start_wom)) {
 					yrs_until_next_scheudled_run = 0;
 				} else if ((yrs_until_next_scheudled_run==0)
-						&& (taskerSchedule.yearly_type == 'float')  
-						&& (cur_mo == start_mo)						   
-						&& (cur_wom == start_wom) && (cur_dow <= start_dow)){
+						   && (yearly_type == 'float')  
+						   && (cur_mo == start_mo)						   
+						   && (cur_wom == start_wom) && (cur_dow <= start_dow)){
 					yrs_until_next_scheudled_run = 0;	
 				}  else
-					yrs_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count) - parseInt(yrs_since_last_scheudled_run);	
+					yrs_until_next_scheudled_run = parseInt(repeat_count) - parseInt(yrs_since_last_scheudled_run);	
 
 				// account for it having run already this year
 				if ((yrs_since_last_scheudled_run==0)){
@@ -478,7 +522,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 					if(last_run_date){
 						if (last_run_date.compareTo(start_of_last_run_yr) >= 0) { 
 							// DFCT0010422
-							yrs_until_next_scheudled_run = parseInt(taskerSchedule.repeat_count);
+							yrs_until_next_scheudled_run = parseInt(repeat_count);
 						}
 					}
 				}				
@@ -489,13 +533,13 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				last_day_of_Month = this.getLastDayOfMonth(parseInt(mo_to_run));
 				day_to_run = 0;
 
-				if (taskerSchedule.yearly_type == 'doy'){
+				if (yearly_type == 'doy'){
 					// set day_to_run equal to start dom for montly type 'Day of the Month' as it will always run on the same day
 					if(start_dom > last_day_of_Month)
 						day_to_run = last_day_of_Month;
 					else
 						day_to_run = start_dom;
-				} else if (taskerSchedule.yearly_type == 'float') {
+				} else if (yearly_type == 'float') {
 					// when the "next run month is determined, find the right date based on dom or dow
 					if(start_dom > last_day_of_Month)
 						init_next_run_Date = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(last_day_of_Month,0, 2) + '-' + yr_to_run);
@@ -566,7 +610,7 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 							// last is a little differnt b/c months have different numbers of days
 							// for last, we will go to the first day of the following month, determine its day of week
 							// then subtract the right number to get to the day of the week we want.
-							
+
 							// go to first day of month after next run
 							// add one to month
 							if (mo_to_run == 12){
@@ -595,33 +639,33 @@ TaskerSchedulerScript.prototype = Object.extendsObject(global.AbstractAjaxProces
 				}
 				gDate = new GlideDateTime(this.padStart(mo_to_run,0, 2) + '-' + this.padStart(day_to_run,0, 2) + '-' + yr_to_run);
 				return gDate.getDate();
-				default:
-					gs.addErrorMessage('Error: Unknown repeate type selected: ' + taskerSchedule.repeat_type );
-			}
-			
-		},
-	
-		padStart : function(input, character, len) {
-			var output = input + "";
-			while (output.length < len){
-				output = character + output;
-			}
-			return output;
-		},
-	
-		type: 'TaskerSchedulerScript'
-	});]]></script>
+			default:
+				gs.addErrorMessage('Error: Unknown repeate type selected: ' + strRepeat_type);
+		}
+
+	},
+
+	padStart : function(input, character, len) {
+		var output = input + "";
+		while (output.length < len){
+			output = character + output;
+		}
+		return output;
+	},
+
+	type: 'TaskerSchedulerScript'
+});]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-06-05 00:02:15</sys_created_on>
         <sys_id>0e841e30dbee57003a8d6be3ca9619f9</sys_id>
-        <sys_mod_count>255</sys_mod_count>
+        <sys_mod_count>262</sys_mod_count>
         <sys_name>TaskerSchedulerScript</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0e841e30dbee57003a8d6be3ca9619f9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-04 18:37:21</sys_updated_on>
+        <sys_updated_on>2022-01-08 14:31:10</sys_updated_on>
     </sys_script_include>
 </record_update>
