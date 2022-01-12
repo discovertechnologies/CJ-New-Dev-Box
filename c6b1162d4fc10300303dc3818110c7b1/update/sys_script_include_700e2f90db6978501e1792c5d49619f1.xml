@@ -7,6 +7,8 @@
         <client_callable>false</client_callable>
         <description>This Script was designed to load the  form preferences for any task&#13;
 &#13;
+2.7.2 | 2021-01-11 | raj | STRY0114645 - Base Task Form- Make the "Simple" Task Form the new "Standard" Task Form&#13;
+&#13;
 DFCT0010708 - Form Customization - Email Notification Links does not recognize the Form Preferences when it loads the form</description>
         <name>tasker_User_Form_Preferences</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
@@ -130,20 +132,27 @@ tasker_User_Form_Preferences.prototype = {
 		}		
 	},
 
-	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager){
+	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager, UserTopOUs){
+		// STRY0114645 
+		var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
 		var userID = gs.getUserID();
 		
 		// if user's OUs are not passed in, load them
 		// USE this for all loadMy - because it uses session variable to avoid loading
 		if(!OUsWhereIamAMember)
-			OUsWhereIamAMember = new x_153465_discovert.tasking_System_Settings_Scripts().getOUsWhereIamAMember();
+			OUsWhereIamAMember = tsss.getOUsWhereIamAMember();
 		
 		if (!OUsWhereIamATaskManager) {
-			OUsWhereIamATaskManager = new x_153465_discovert.tasking_System_Settings_Scripts().getMyOUTaskManagers();
+			OUsWhereIamATaskManager = tsss.getMyOUTaskManagers();
 		}
-	
-		// DFCT0010708
-		return this._userFormPreferences(userID, OUsWhereIamAMember, OUsWhereIamATaskManager);		
+
+		// STRY0114645 
+		if (!UserTopOUs) {
+			UserTopOUs = tsss.getTopOUsForUser(OUsWhereIamAMember);
+		}
+		
+		// DFCT0010708 - STRY0114645 
+		return this._userFormPreferences(userID, OUsWhereIamAMember, OUsWhereIamATaskManager, UserTopOUs);
 	},
 	
 	// DFCT0010708
@@ -151,24 +160,27 @@ tasker_User_Form_Preferences.prototype = {
 		var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
 		var OUsWhereUserIsAMember = tsss.getOUsWhereUserIsAMember(userID);
 		var OUsWhereUserIsTaskManager = tsss.getUserOUTaskManagers(userID);
-		
-		return this._userFormPreferences(userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager);
+		// STRY0114645 
+		var UserTopOUs = tsss.getTopOUsForUser(OUsWhereUserIsAMember);
+		// STRY0114645 
+		return this._userFormPreferences(userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager, UserTopOUs);
 	},
 	
 	// DFCT0010708
-	_userFormPreferences: function (userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager){
+	_userFormPreferences: function (userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager, UserTopOUs){
 		var userInfo = new x_153465_discovert.UserInfoScripts();
 		var isAdministrator = userInfo.UserHasRoleScoped('x_153465_discovert.tasker_global_Tasking_Authority_member_admin', userID);
 		var isTaskExecutive = userInfo.UserHasRoleScoped('x_153465_discovert.Task_Executive', userID);
 		var isTaskManager = (OUsWhereUserIsTaskManager.length > 0);
 		
-		// TODO - need to define function for get my top OUs in order to use this field - u_user_in_top_ou
+		// STRY0114645 
 		// TODO - ADD TASK CHECKS for Hierarchy
 		// load global preferences, things that apply to all users
 		var userPreferences = this.g_taskUserFormPreferences.Preferences.filter(function (pref){
 			var matchFailure = 
 				(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value != userID) || 
 				((pref.u_user_in_ou.displayValue != '' && pref.u_user_in_ou.displayValue != null)  && (OUsWhereUserIsAMember.indexOf(pref.u_user_in_ou.value)<0)) ||
+				((pref.u_user_in_top_ou.displayValue != '' && pref.u_user_in_top_ou.displayValue != null)  && (UserTopOUs.indexOf(pref.u_user_in_top_ou.value)<0)) ||
 				(pref.u_user_in_role.value == 'task_manager' && isTaskManager != true)  ||
 				(pref.u_user_in_role.value == 'task_administrator' && isAdministrator != true) ||
 				(pref.u_user_in_role.value == 'task_executive' && isTaskExecutive != true);
@@ -183,7 +195,8 @@ tasker_User_Form_Preferences.prototype = {
 	get_URL_Properties_for_Task_and_User_Based_on_Prefrences: function (userID, sys_id, current_view){
 		// set defaults
 		var url_Properties = {};
-		url_Properties.pageId = 'discovertasker_taskdetails';
+		// STRY0114645
+		url_Properties.pageId = 'simple_task';
 		url_Properties.pageTable = 'x_153465_discovert_route_task_instance';
 		url_Properties.view = current_view;
 		url_Properties.portal_url_ref = this.g_taskUserFormPreferences.defaultServicePortal;
@@ -268,13 +281,13 @@ tasker_User_Form_Preferences.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-07-21 01:42:57</sys_created_on>
         <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
-        <sys_mod_count>101</sys_mod_count>
+        <sys_mod_count>104</sys_mod_count>
         <sys_name>tasker_User_Form_Preferences</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-12-14 22:33:09</sys_updated_on>
+        <sys_updated_on>2022-01-11 22:03:07</sys_updated_on>
     </sys_script_include>
 </record_update>
