@@ -6,7 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This Script was designed to load the  form preferences for any task&#13;
-&#13;
+2.7.2 | 2021-01-13 | raj | DFCT0010755 - "Task Form Preferences" is NOT immediately loading the preferences unless the user logs out/resets their session&#13;
 2.7.2 | 2021-01-11 | raj | STRY0114645 - Base Task Form- Make the "Simple" Task Form the new "Standard" Task Form&#13;
 &#13;
 DFCT0010708 - Form Customization - Email Notification Links does not recognize the Form Preferences when it loads the form</description>
@@ -18,48 +18,39 @@ DFCT0010708 - Form Customization - Email Notification Links does not recognize t
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 // Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
+g_taskUserFormPreferences = {};
 var tasker_User_Form_Preferences = Class.create();
 tasker_User_Form_Preferences.prototype = {
     initialize: function() {
-		this.g_taskUserFormPreferences = {};
-		var sessionPreferences = gs.getSession().getClientData('DTech_FormPreferences');
-		if (sessionPreferences) {
-			this.g_taskUserFormPreferences = JSON.parse(sessionPreferences);
-			return this.g_taskUserFormPreferences;
-		} else {
-			if(typeof this.g_taskUserFormPreferences != undefined){
-				if (typeof this.g_taskUserFormPreferences.lastRefreshDateTime != undefined){
-					var lastRefreshDateTime = this.g_taskUserFormPreferences.lastRefreshDateTime;
-					var lastUpdatedDateTime = this._getLastUpdated();
-					if(lastUpdatedDateTime != undefined && lastRefreshDateTime >= lastUpdatedDateTime){
-						// if records exist and the last time preferences were loaded is later than the last update, then return.
-						// no need to reload the preferences as they haven't changed
-						return;
-					}
-				}
+		// DFCT0010755
+		this.g_taskUserFormPreferences = g_taskUserFormPreferences;
+		if (this.g_taskUserFormPreferences.lastRefreshDateTime != undefined){
+			var preferencesUpdated = this._getPreferencesUpdated();
+			if(!preferencesUpdated){
+				// if records exist and the last time preferences were loaded is later than the last update, then return.
+				// no need to reload the preferences as they haven't changed
+				return this.g_taskUserFormPreferences;						
 			}
-			// set the global object
-			this.g_taskUserFormPreferences = this._loadFormPreferences();
-			gs.getSession().putClientData('DTech_FormPreferences', JSON.stringify(this.g_taskUserFormPreferences));
-			return this.g_taskUserFormPreferences;
 		}
+		// set the global object
+		this.g_taskUserFormPreferences = this._loadFormPreferences();
+		gs.getSession().putClientData('DTech_FormPreferences', JSON.stringify(this.g_taskUserFormPreferences));
+		g_taskUserFormPreferences = this.g_taskUserFormPreferences;		
+		return this.g_taskUserFormPreferences;
     },
 	
 	// Get last updated time
-	_getLastUpdated: function(){
+	_getPreferencesUpdated: function(){
+		// DFCT0010755 
+		var lastUpdated = false;
 		var gr_user_preferences = new GlideRecord('x_153465_discovert_task_form_preferences');
-		gr_user_preferences.addQuery('u_active', true);
-		// put the highest order first as they take precedence
-		gr_user_preferences.orderByDesc('sys_updated_on');
+		var gdt = new GlideDateTime();
+		gdt.setValue(this.g_taskUserFormPreferences.lastRefreshDateTime);
+		gr_user_preferences.addQuery('sys_updated_on', '>', gdt);
 		gr_user_preferences.query();
-		// move to first record and return the time
-		if(gr_user_preferences.next()){
-			var lastUpdated = new GlideDateTime(gr_user_preferences.getValue('sys_updated_on')).getNumericValue();
-			return lastUpdated;
-		} else {
-			// no records to load return undefined
-			return undefined;
-		}
+		if(gr_user_preferences.next())
+			lastUpdated = true;
+		return lastUpdated;
 	},
 	
 	_loadFormPreferences: function (){
@@ -114,7 +105,9 @@ tasker_User_Form_Preferences.prototype = {
 			}
 			taskUserFormPreferences.Preferences.push(userPrefernce);
 		}	
-		taskUserFormPreferences.lastRefreshDateTime =  new GlideDateTime().getNumericValue();
+		var dteLastRefresh = new GlideDateTime();
+		// DFCT0010755
+		taskUserFormPreferences.lastRefreshDateTime = dteLastRefresh.getValue();
 		
 		// STRY0113838
 		taskUserFormPreferences.defaultServicePortal = this._getDefaultServicePortalSuffix();
@@ -280,16 +273,14 @@ tasker_User_Form_Preferences.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-07-21 01:42:57</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
-        <sys_mod_count>104</sys_mod_count>
+        <sys_mod_count>160</sys_mod_count>
         <sys_name>tasker_User_Form_Preferences</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-11 22:03:07</sys_updated_on>
+        <sys_updated_on>2022-01-13 20:54:32</sys_updated_on>
     </sys_script_include>
 </record_update>
