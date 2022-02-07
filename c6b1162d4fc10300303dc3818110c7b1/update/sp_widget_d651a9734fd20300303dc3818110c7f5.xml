@@ -93,7 +93,11 @@
                             var newNodeData = createModelNodeData(sys_id, name.data.record);
                             diagram.startTransaction("Add new Task");
                             diagram.model.addNodeData(newNodeData);
-                            diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
+														// STRY0117609
+														var parentKey = name.data.record.parent.value;
+                            diagram.model.setParentKeyForNodeData(newNodeData, parentKey);
+														var parentNodeData = diagram.model.findNodeDataForKey(parentKey);
+														diagram.model.setDataProperty(newNodeData, 'active', parentNodeData.active);
                             diagram.commitTransaction("Add new Task");
                         }
                         break;
@@ -185,14 +189,26 @@
     }
     // load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
     function updateModelNodeData(nodeData, record) {
-        for (var key in record) {
+				// STRY0117609
+				var activeChanged = false;
+				var activeValue;
+
+				for (var key in record) {
             var displayValue = '';
             var fieldLabel = '';
             var field = c.data.fieldsInModel[key];
             if (field) {
                 fieldLabel = field.fieldLabel;
-				
-				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+							
+								// STRY0117609
+								if (field.fieldName == 'active'){
+										activeValue = (record[key].value == "true" || record[key].value == true);
+										if(nodeData[key] != activeValue){
+											activeChanged = true;
+										}
+								}
+
+								// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
                 // displayValue = record[key].display_value;
                 if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
                     displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
@@ -271,6 +287,14 @@
         if (primaryOfficeEmpty != nodeData.warning.primaryOfficeEmpty) {
             diagram.model.setDataProperty(nodeData.warning, 'primaryOfficeEmpty', primaryOfficeEmpty);
         }
+			
+				// STRY0117609
+				if(activeChanged){
+					// update all subtasks 
+					updateActiveChildren(nodeData.sys_id, activeValue);
+				}
+
+			
         diagram.model.updateTargetBindings(nodeData);
     }
 
@@ -281,6 +305,41 @@
         return nodeTitle;
     }
 
+		// STRY0117609
+    function updateActiveChildren(parentKey, newActiveValue) {
+        var parentNode = diagram.findNodeForKey(parentKey);
+				var parentNodeData = diagram.model.findNodeDataForKey(parentKey);
+			
+				var inactiveDueToParent = false;
+				if(parentNodeData)
+					inactiveDueToParent = parentNodeData.inActiveDueToParent || !parentNodeData.active;
+			
+        var childrenNodes = parentNode.findTreeChildrenNodes();
+        while (childrenNodes.next()) {
+          var childNode = childrenNodes.value;
+					var setActive = newActiveValue;
+					if(inactiveDueToParent){
+						setActive = false;
+						if(!childNode.data.inActiveDueToParent && !childNode.data.active){
+							diagram.model.setDataProperty(childNode.data, 'inActiveDueToParent', false);
+						} else {
+							diagram.model.setDataProperty(childNode.data, 'inActiveDueToParent', true);
+						}
+					} else {
+						// if the child was inactive due to parent
+						if(childNode.data.inActiveDueToParent && parentNodeData.active){
+							setActive = true;
+						} else {
+							setActive = childNode.data.active; 
+						}
+						diagram.model.setDataProperty(childNode.data, 'inActiveDueToParent', false);
+					}
+					diagram.model.setDataProperty(childNode.data, 'active', setActive);
+					diagram.model.updateTargetBindings(childNode.data);
+					updateActiveChildren(childNode.data.sys_id, newActiveValue);
+        }
+    }
+	
     // STRY0091260
     function getToolTipText(objectName) {
         var $go = go.GraphObject.make; // for conciseness in defining templates
@@ -1325,8 +1384,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                         Changes made in Controller script 
 // 2.7.1 | 2021-12-21 | raj  | DFCT0010725 - "Days for Completion for Completion" on hover of "Template Task" duration icon
 //                                         Changes made in Server Script only
+// 2.7.2 | 2022-02-04 | raj  | STRY0117609 - Stretch- "Delete" button should be available on the Portal for "Template Tasks"
+//                                         - Changes in client script
 //
-
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1451,14 +1511,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>1878</sys_mod_count>
+        <sys_mod_count>1891</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-23 00:26:10</sys_updated_on>
+        <sys_updated_on>2022-02-07 14:37:12</sys_updated_on>
         <template><![CDATA[
 <div class="panel panel-default">
     <div class="panel-heading">

@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.uiConditionCheck</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.7.1 | 2021-12-08 | raj | DFCT0010696 - DEA  - Task  in "Wait" state does not have UI Action "Create Subtasks for each OU Member" in context menu&#13;
+        <description>2.7.2 - 2022-02-03 - raj -  STRY0117609 - Stretch- "Delete" button should be available on the Portal for "Template Tasks"&#13;
+&#13;
+2.7.1 | 2021-12-08 | raj | DFCT0010696 - DEA  - Task  in "Wait" state does not have UI Action "Create Subtasks for each OU Member" in context menu&#13;
 2.7.101 | 2021-12-30 | raj | DFCT0010732 - Modern Portal filter "Open Request"  for the "OU Request". OUMA is unable to see the Requests and "Response Comments" field is read-only&#13;
 &#13;
 v2.7&#13;
@@ -86,6 +88,37 @@ v2.2.23 | Mar-2020 | 2.2 Patch 9&#13;
 var uiConditionCheck = Class.create();
 uiConditionCheck.prototype = {
 	initialize: function() {
+	},
+
+	// STRY0117609
+	canDeleteTemplateTask: function(gr){
+		// !current.active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
+		var answer = false;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
+	},
+
+	canDeleteTemplate: function(gr){
+		// current.u_active && new UserInfoScripts().userHasProcessRights(current)
+		var answer = false;
+		var isNewRecord = gr.isNewRecord();
+		var canRead = gr.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		
+		if(canRead && !isNewRecord && currentUserHasTemplateRights){
+			answer = true;
+		}else{
+			answer = false;
+		}
+		return answer;
 	},
 
 	createTaskAction: function(rec){
@@ -346,16 +379,19 @@ uiConditionCheck.prototype = {
 		return answer;
 	},
 	
-	// v2.6
-	canActivateTemplateTask: function(gr){
+	// STRY0117609
+	canActivateTemplateTask: function(grTemplateTask){
 		// !current.active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
 		var answer = false;
-		var isActive = gr.active;
-		var isNewRecord = gr.isNewRecord();
-		var canRead = gr.canRead();
-		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		var isActive = grTemplateTask.active;
+		// STRY0117609
+		var isAncestorInactive = this.isAncestorInactive(grTemplateTask);
+
+		var isNewRecord = grTemplateTask.isNewRecord();
+		var canRead = grTemplateTask.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(grTemplateTask);
 		
-		if(canRead && !isActive && !isNewRecord && currentUserHasTemplateRights){
+		if(canRead && !isActive && !isAncestorInactive && !isNewRecord && currentUserHasTemplateRights){
 			answer = true;
 		}else{
 			answer = false;
@@ -478,16 +514,20 @@ uiConditionCheck.prototype = {
 		return answer;
 	},
 	
-	// v2.6
-	canDeactivateTemplateTask: function(gr){
+	// STRY0117609
+	canDeactivateTemplateTask: function(grTemplateTask){
 		// current.active && new UserInfoScripts().userHasProcessRights(current) && !current.isNewRecord();
 		var answer = false;
-		var isActive = gr.active;
-		var isNewRecord = gr.isNewRecord();
-		var canRead = gr.canRead();
-		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(gr);
+		// only show ui action if no ancestor is inactive
+		var isActive = grTemplateTask.active;
+		// STRY0117609
+		var isAncestorInactive = this.isAncestorInactive(grTemplateTask);
+
+		var isNewRecord = grTemplateTask.isNewRecord();
+		var canRead = grTemplateTask.canRead();
+		var currentUserHasTemplateRights = new UserInfoScripts().userHasProcessRights(grTemplateTask);
 		
-		if(canRead && isActive && !isNewRecord && currentUserHasTemplateRights){
+		if(canRead && isActive && !isAncestorInactive && !isNewRecord && currentUserHasTemplateRights){
 			answer = true;
 		}else{
 			answer = false;
@@ -495,6 +535,22 @@ uiConditionCheck.prototype = {
 		return answer;
 	},
 
+	// STRY0117609
+	isAncestorInactive: function (grTemplateTask){
+		if(grTemplateTask.parent){
+			var grTempTaskParent = new GlideRecordSecure('x_153465_discovert_route_tasks');
+			if(grTempTaskParent.get(grTemplateTask.parent)){
+				if(grTempTaskParent.active == false){
+					return true;
+				} else {
+					return this.isAncestorInactive(grTempTaskParent);
+				}
+			}
+		}
+		// you are at the top of the tree and there are no inactive template tasks above the current task
+		return false;
+	},
+	
 	// v2.6
 	canDeactivateTemplate: function(gr){
 		// current.u_active && new UserInfoScripts().userHasProcessRights(current)
@@ -1772,13 +1828,13 @@ uiConditionCheck.prototype = {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>513</sys_mod_count>
+        <sys_mod_count>522</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-12-30 22:53:22</sys_updated_on>
+        <sys_updated_on>2022-02-05 17:29:04</sys_updated_on>
     </sys_script_include>
 </record_update>
