@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>2.7.2 - 2022-02-03 - raj -  STRY0117609 - Stretch- "Delete" button should be available on the Portal for "Template Tasks"&#13;
+2.7.2 | 2022-01-17 | raj  | STRY0116812	TECH - Update Org Tree to handle record watcher the same way Task and Template do (no diagram redraw)&#13;
 2.7.1 | 2021-12-05 | raj  | DFCT0010684	Task Tree Nodes- "Add Subtask Icon" does not pick up Record Watcher&#13;
 &#13;
 2.7 combined Template Widget Data into here, added convertHtmlToSimpleString; Update .href to use dot notation for state and order &#13;
@@ -42,6 +43,104 @@ TaskWidgetData.prototype = {
 
         return someHtmlText.replace(/<\/?[^>]+(>|$)/g, '');
     },
+	
+    // STRY0116812
+    loadOfficeTreeFieldsAndFieldLabels: function(gr) {
+        // load all of the field names used in the template tree nodes 
+        return {
+            'active': {
+                fieldName: 'active',
+                fieldLabel: gr.active.getLabel(),
+                type: 'boolean',
+                hasValue: true,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: true,
+                maxChars: 0
+            },
+            'office_abbreviation': {
+                fieldName: 'office_abbreviation',
+                fieldLabel: gr.office_abbreviation.getLabel(),
+                type: 'string',
+                hasValue: false,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+            'office_level': {
+                fieldName: 'office_level',
+                fieldLabel: gr.office_level.getLabel(),
+                type: 'number',
+                hasValue: true,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+            'office_name': {
+                fieldName: 'office_name',
+                fieldLabel: gr.office_name.getLabel(),
+                type: 'string',
+                hasValue: false,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+            'u_outstanding_request_count': {
+                fieldName: 'u_outstanding_request_count',
+                fieldLabel: gr.u_outstanding_request_count.getLabel(),
+                type: 'number',
+                hasValue: true,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+            'parent': {
+                fieldName: 'parent',
+                fieldLabel: gr.parent.getLabel(),
+                type: 'reference',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+            'tasking_authorities': {
+                fieldName: 'tasking_authorities',
+                fieldLabel: gr.tasking_authorities.getLabel(),
+                type: 'list',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: true,
+                maxChars: 0
+            },
+            'u_ou_hierarchy_administrators': {
+                fieldName: 'u_ou_hierarchy_administrators',
+                fieldLabel: gr.u_ou_hierarchy_administrators.getLabel(),
+                type: 'list',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: true,
+                maxChars: 0
+            },
+            'u_ou_is_permissive': {
+                fieldName: 'u_ou_is_permissive',
+                fieldLabel: gr.u_ou_is_permissive.getLabel(),
+                type: 'boolean',
+                hasValue: true,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: true,
+                maxChars: 0
+            },
+            'u_ou_primary_contact': {
+                fieldName: 'u_ou_primary_contact',
+                fieldLabel: gr.u_ou_primary_contact.getLabel(),
+                type: 'photo',
+                hasValue: true,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: true,
+                maxChars: 0
+            }
+        };
+    },	
+	
     // 2.6 STRY0091307
     loadTaskListTreeFieldsInModelAndFieldLabels: function(gr) {
         // load all of the field names used in the task tree nodes
@@ -108,7 +207,7 @@ TaskWidgetData.prototype = {
                 keyUsesDisplayOnly: false,
                 hasDiplayValue: true,
                 maxChars: 0
-            },
+            }
         };
     },
 
@@ -335,6 +434,7 @@ TaskWidgetData.prototype = {
             }
         };
     },
+	
     // 2.6 STRY0091307
     loadTemplateTreeFieldsInModelAndFieldLabels: function(gr) {
         // load all of the field names used in the template tree nodes 
@@ -557,7 +657,46 @@ TaskWidgetData.prototype = {
             }			
         };
     },
-    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
+
+	// STRY0116812
+	buildOUMap: function(widgetId, map, grOU, fields) {
+		var isGHA = new UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
+		var currentUser = gs.getUserID();
+		var ouO = this.getTaskListTreeLevelO(grOU, fields, grOU.office_level, widgetId);
+		this.setAdminBooleans(grOU, ouO, isGHA, currentUser);
+        // the top node of the tree cannot have a parent
+        delete ouO.parent;
+		map.push(ouO);
+
+		// technically level not used for Office as it is a field in the org
+		this.getOUs(widgetId, fields, ouO.level, map, ouO, ouO.sys_id, isGHA, currentUser);
+	},
+	
+    // this is a recursive function used to load all tasks in the task tree into the Data for widgets
+    getOUs: function(widgetId, fields, level, map, ouO, sys_id, isGHA, currentUser) {
+        var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+        grOU.addQuery('parent', sys_id);
+        grOU.orderBy('level_order');
+        grOU.orderBy('office_name');
+        grOU.query();
+        while (grOU.next()) {
+			var office_level = parseInt(grOU.office_level);
+            var ouLevelO = this.getTaskListTreeLevelO(grOU, fields, office_level, widgetId);
+			this.setAdminBooleans(grOU, ouLevelO, isGHA, currentUser);
+            map.push(ouLevelO);
+            this.getOUs(widgetId, fields, office_level, map, ouLevelO, grOU.getUniqueValue(), isGHA, currentUser);
+        }
+    },
+	
+	setAdminBooleans: function(grOU, ouO, isGHA, currentUser){
+		var ouHAValue = grOU.getValue('u_ou_hierarchy_administrators');
+		ouO.isAdmin = (isGHA || (ouHAValue && ouHAValue.indexOf(currentUser)>=0));
+	},
+	
+
+	
+	
+	// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
     buildTaskMap: function(widgetId, map, gr, fields) {
         var taskO = this.getTaskListTreeLevelO(gr, fields, 1, widgetId);
 
@@ -620,14 +759,12 @@ TaskWidgetData.prototype = {
 
         while (grTempTask.next()) {
             var taskLevelO = this.getTaskListTreeLevelO(grTempTask, fields, level, widgetId);
-			
 			// STRY0117609 - if parent task is inactive, make task inactive
 			if(!TemplateTaskO.active){
 				taskLevelO.inActiveDueToParent = taskLevelO.active && !TemplateTaskO.active;
 				taskLevelO.active = TemplateTaskO.active;
 			}
-			map.push(taskLevelO);
-
+            map.push(taskLevelO);
             this.getTemplateTasks(widgetId, fields, map, level + 1, taskLevelO, grTempTask.getUniqueValue());
         }
         if (widgetId == 'discovertasker-processtemplatetreegraph') {
@@ -681,61 +818,103 @@ TaskWidgetData.prototype = {
             if (field.hasDiplayValue) {
                 newNodeData[key + '_DisplayValue'] = displayValue;
             }
-            if (field.type == 'date') {
-                var date_number = record[key].dateNumericValue();
-                newNodeData[key] = date_number;
+			// STRY0116812
+			switch (field.type){
+				case 'date':
+					var date_number = record[key].dateNumericValue();
+					newNodeData[key] = date_number;
+					break;
+				case 'time':
+					var time_number = 0;
+					if(record.getValue(key) && record[key].dateNumericValue()>0){
+						var gdTime = new GlideDateTime(record.getValue(key));  
+						var localTime = gdTime.getLocalTime();
+						time_number = (localTime.getHourOfDayLocalTime() * 60 + localTime.getMinutesLocalTime() * 60 + localTime.getSeconds()) * 1000;
+					}
+					newNodeData[key] = time_number;
+					break;
+				case 'boolean':
+					var boolean_value = record[key] == 1 || record[key] == true;
+					newNodeData[key] = boolean_value;
+					break;
+				case 'number':
+					newNodeData[key] = record.getValue(key)==null?0:parseInt(record.getValue(key));
+					break;
+				case 'photo':
+					newNodeData[key + '_photoName'] = displayValue;
+					var profile = new GlideRecord("live_profile");
+					profile.addQuery("document", newNodeData[key]);
+					profile.query();
+					while (profile.next()){
+						var photo = profile.getDisplayValue("photo");
+						if (photo.length > 0) {
+							newNodeData[key + '_photo'] = photo + '?t=small';
+						}
+					}				
+					break;
+				case 'list':
+					var list_value = record[key] == null || record[key] == undefined ? '': record[key];
+					newNodeData[key] = list_value;
+					
+					// load the list into the Map
+					newNodeData[key + '_list'] = [];
+					var listArray = displayValue.split(',');
+					for(var i=0; i<listArray.length; i++){
+						var arrayItem = {};
+						arrayItem.displayName = listArray[i];
+						if(arrayItem.displayName != null && arrayItem.displayName != undefined && arrayItem.displayName != ''){
+							newNodeData[key + '_list'].push(arrayItem);
+						}
+					}
+					break;
             }
-            if (field.type == 'time') {
-				var time_number = 0;
-				if(record.getValue(key) && record[key].dateNumericValue()>0){
-					var gdTime = new GlideDateTime(record.getValue(key));  
-					var localTime = gdTime.getLocalTime();
-					time_number = (localTime.getHourOfDayLocalTime() * 60 + localTime.getMinutesLocalTime() * 60 + localTime.getSeconds()) * 1000;
-				}
-				newNodeData[key] = time_number;
-            }			
-            if (field.type == 'boolean') {
-                var boolean_value = record[key] == 1;
-                newNodeData[key] = boolean_value;
-            }
+			
         }
 
         // These are the custom fields in this data set, compare with other data sets and determine best way to bring together.
-        if (widgetId == 'discovertasker-recursivetasktreelist') {
-            // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
-            // newNodeData.text = this.getTaskTreeListTitleNode(newNodeData, newNodeData.parent, newNodeData.task_name, newNodeData.primary_assignee, newNodeData.assigned_to, newNodeData.state, newNodeData.order);
-            newNodeData.text = this.getTaskTreeListTitleNode(newNodeData);
+		// STRY0113880 - DFCT0010761 - changed if to case
+		switch(widgetId){
+			case 'discovertasker-recursivetasktreelist':
+				// Load the text for the Task Tree List
+				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+				// newNodeData.text = this.getTaskTreeListTitleNode(newNodeData, newNodeData.parent, newNodeData.task_name, newNodeData.primary_assignee, newNodeData.assigned_to, newNodeData.state, newNodeData.order);
+				newNodeData.text = this.getTaskTreeListTitleNode(newNodeData);
 
-            // we will expand all on initial page load
-            newNodeData.expanded = true;
-            // NOTE you are here, there is an issue with leaf nodes having the down chevron when they should not	
-            // this should be removed
-            // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+				// we will expand all on initial page load
+				newNodeData.expanded = true;
+				// NOTE you are here, there is an issue with leaf nodes having the down chevron when they should not	
+				// this should be removed
+				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+				break;
+			case 'discovertasker-recursivetasktreegraph':
+				// Load the name value for the Task Tree Graph
+				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
+				newNodeData.name = this.getTaskTitleNode(record);
+				newNodeData.warning = {};
+				newNodeData.isInboundExternalOU = !record.parent && record.tasking_authority && (record.tasking_authority.u_external_flag == true);
+				newNodeData.warning.isTopSuspenseDateAfterExternalInboundDate = newNodeData.isInboundExternalOU && (record.suspense_date > record.u_external_due_date);
+				newNodeData.isOutboundExternalOU = (record.outbound == true);
+				newNodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate = newNodeData.isOutboundExternalOU && (record.u_external_due_date > record.suspense_date);
+				break;
+			case 'discovertasker-processtemplatetreegraph':
+				// Load the name value for the Template Task Tree Graph
+				newNodeData.name = this.getTemplateTitleNode(record);
+				newNodeData.warning = {};
+				// STRY0110317 calculate the due date to be set using days and Time
+				newNodeData.actualTime = 0;
+				if(newNodeData.u_duration_days >= 0){
+					newNodeData.actualTime = newNodeData.u_duration_days * 86400000;
+				}
+				if(newNodeData.u_duration_time_due >= 0){
+					newNodeData.actualTime+= newNodeData.u_duration_time_due;
+				}
+				break;
+			case 'discovertasker-officehierarchy':
+				// Load the name value for the Office Hierarchy
+				// STRY0113880 - DFCT0010761
+				newNodeData.name = newNodeData.office_name + '\n  (' + newNodeData.office_abbreviation + ')';
         }
-        // Load the name value for the Task Tree Graph
-        if (widgetId == 'discovertasker-recursivetasktreegraph') {
-            // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
-            newNodeData.name = this.getTaskTitleNode(record);
-            newNodeData.warning = {};
-            newNodeData.isInboundExternalOU = !record.parent && record.tasking_authority && (record.tasking_authority.u_external_flag == true);
-            newNodeData.warning.isTopSuspenseDateAfterExternalInboundDate = newNodeData.isInboundExternalOU && (record.suspense_date > record.u_external_due_date);
-            newNodeData.isOutboundExternalOU = (record.outbound == true);
-            newNodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate = newNodeData.isOutboundExternalOU && (record.u_external_due_date > record.suspense_date);
-        }
-        // Load the name value for the Template Task Tree Graph
-        if (widgetId == 'discovertasker-processtemplatetreegraph') {
-            newNodeData.name = this.getTemplateTitleNode(record);
-            newNodeData.warning = {};
-			// STRY0110317 calculate the due date to be set using days and Time
-			newNodeData.actualTime = 0;
-			if(newNodeData.u_duration_days >= 0){
-				newNodeData.actualTime = newNodeData.u_duration_days * 86400000;
-			}
-			if(newNodeData.u_duration_time_due >= 0){
-				newNodeData.actualTime+= newNodeData.u_duration_time_due;
-			}
-			
-        }
+		
         return newNodeData;
     },
     // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
@@ -818,13 +997,13 @@ TaskWidgetData.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>169</sys_mod_count>
+        <sys_mod_count>192</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-02-05 17:42:36</sys_updated_on>
+        <sys_updated_on>2022-02-08 17:15:25</sys_updated_on>
     </sys_script_include>
 </record_update>
