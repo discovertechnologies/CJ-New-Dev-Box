@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.Tasker_GenerateTaskFromTemplate</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.7&#13;
+        <description>2.7.2 | 2022-02-08 | raj | DFCT0010780 - "Set Due Time" field on "Template" causes the next task to SKIP a day if the parent(or previous order's) task's time is set to after "end of day" (17:00:00)&#13;
+&#13;
+2.7&#13;
 STRY0100724 - DEV Story- Performance Improvements -  Running Templates - This is a new script include that replaces the workflow.  It also udpates the template instance status to track completion&#13;
 STRY0105125 - DIA - Draft Scheduled Tasks - Banner Notification&#13;
 STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
@@ -277,31 +279,42 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 	// startTime               - GlideDateTime     - Start time, this is updated in this method
 	// longestEndTime          - GlideDateTime     - Current Latest end time for the Order, updated in this method
 	_setTaskDates: function(grTempTask, grTask, startTime, longestEndTime){
+		var gdt_start = new GlideDateTime();
+		gdt_start.setGlideDateTime(startTime);
+		// set the start time
+		grTask.setValue('expected_start', gdt_start.getValue());
+
 		var gdt = new GlideDateTime();
 		gdt.setGlideDateTime(startTime);
 
-		// STRY0110317 - get the start time based on schedule
-		gdt = this.tdc.checkStartTime(grTempTask, gdt);
-		// update the start time to what is returned
-		startTime.setGlideDateTime(gdt);
-		// set the start time
-		grTask.setValue('expected_start', gdt.getValue());
 		if(grTempTask.u_duration_days>0){
 			gdt = this.tdc.calculateDateOfAddedBusinessDays(grTempTask, grTempTask.u_duration_days, gdt);
+		} else {  // if duration = 0, we need to move to the next day in the order to prevent all tasks in multiple orders from being due on the same day
+			gdt = this.tdc.checkStartTime(grTempTask, gdt);
 		}
+		
 		// add the due time to the start time
 		if(grTempTask.u_duration_time_due){
-			gdt = new GlideDateTime(gdt.getLocalDate());
-			var gdTime = new GlideDateTime(); 
-			gdTime.setDisplayValue(grTempTask.getValue('u_duration_time_due'));
+			var gdTimeDue = new GlideDuration();
+			gdTimeDue.setValue(grTempTask.u_duration_time_due);
+			var durMS = this.tdc.getDurationlMS(gdTimeDue);
+		
+			var gDateEnd = new GlideDate();
+			gDateEnd.setDisplayValue(gdt.getDisplayValue());
+			var gTimeDue = new GlideTime();
+			var gdtDue = new GlideDateTime();
+			gTimeDue.setDisplayValue("00:00:00");
+			var dueTime = gTimeDue.getDisplayValue();
+			gdtDue.setDisplayValue(gDateEnd.getDisplayValue() + " " + dueTime);
 
 			// DFCT0010609 - Time field has no date so, the date is assumged to be 1/1/1970
 			//               if current date is in daylihgt savings time, then add an hour to make it up
-			var offset = gdTime.getDSTOffset();   
+			var offset = gdtDue.getDSTOffset();   
 			if (offset > 0) {
-				gdTime.addSeconds(-3600);
+				durMS = durMS - 3600;
 			}
-			gdt.add(gdTime.getNumericValue());
+			gdtDue.addSeconds(durMS/1000);
+			gdt = gdtDue;
 
 		} else {
 			// set to eand of day
@@ -311,8 +324,17 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 			longestEndTime.setGlideDateTime(gdt);
 		}
 		// STRY0098078
-		grTask.setValue('suspense_date', gdt.getValue());
-		grTask.setValue('due_date', gdt.getValue());
+		grTask.setValue("suspense_date", gdt.getValue());
+		grTask.setValue("due_date", gdt.getValue());
+	},
+	
+	// NOTE: this function should go in a utility class.  The same function exists in TaskerScheduleScript
+	padStart : function(input, character, len) {
+		var output = input + "";
+		while (output.length < len){
+			output = character + output;
+		}
+		return output;
 	},
 
     type: 'Tasker_GenerateTaskFromTemplate'
@@ -321,13 +343,13 @@ Tasker_GenerateTaskFromTemplate.prototype = {
         <sys_created_by>btoole</sys_created_by>
         <sys_created_on>2021-03-23 15:40:04</sys_created_on>
         <sys_id>feb6fc46db432010029db298f4961915</sys_id>
-        <sys_mod_count>61</sys_mod_count>
+        <sys_mod_count>103</sys_mod_count>
         <sys_name>Tasker_GenerateTaskFromTemplate</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_feb6fc46db432010029db298f4961915</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-03 21:07:26</sys_updated_on>
+        <sys_updated_on>2022-02-10 07:25:20</sys_updated_on>
     </sys_script_include>
 </record_update>
