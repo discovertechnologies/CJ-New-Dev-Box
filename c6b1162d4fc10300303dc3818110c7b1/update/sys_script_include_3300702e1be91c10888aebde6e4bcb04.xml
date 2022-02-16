@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.TaskerDurationCalculator</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.7&#13;
+        <description>2.8    | 2022-02-13 - raj -  STRY0117523 - Org Hierarchy- Office Schedule Override- Add System Settings to turn on/off feature&#13;
+2.7.2 | 2022-02-08 | raj | DFCT0010780 - "Set Due Time" field on "Template" causes the next task to SKIP a day if the parent(or previous order's) task's time is set to after "end of day" (17:00:00)&#13;
+&#13;
+2.7&#13;
 STRY0099280 - DIA: Time in Task suspense date defaults to the time when creating the task.  Adjust the default time to the end of the day for all new tasks.&#13;
 STRY0110317 - DIA: Time in Task suspense date defaults to the time when creating the Templates.  Adjust the default time to the end of the day for all new Templates.&#13;
 &#13;
@@ -27,6 +30,9 @@ Finally, if we want to allow users to select a schedule when creating a schedule
 var TaskerDurationCalculator = Class.create();
 TaskerDurationCalculator.prototype = {
     initialize: function() {
+		// STRY0117523
+		this.officeScheduleOverrideEnabled = new tasking_System_Settings_Scripts().getEnableOfficeScheduleOverideValue();
+
 		this.dc = new Tasker_Copy_DurationCalculator();
 		this.hoursInBusinessDay = 9;
 		// default is "8-5 weekdays excluding holidays";
@@ -37,6 +43,49 @@ TaskerDurationCalculator.prototype = {
 		this.scheduleId = this.taskerDefaultScheduleId + '';
     },
 	
+	// Accepts a GlideDuration object, passes back total milliseconds of the duration.
+    getDurationlMS: function(dur) {
+        var durVal = dur.getDurationValue();
+ 
+        // Parse the duration value into days and time
+        var durValArr = durVal.split(' ');
+        var days = 0;
+        if (durValArr.length == 2) {
+			days = parseInt(durValArr.shift(), 10);
+        }
+        var time = durValArr.shift();
+ 
+        // Parse the time into hours, minutes, and seconds
+        var timeArr = time.split(':');
+        var hours = parseInt(timeArr[0], 10);
+        var minutes = parseInt(timeArr[1], 10);
+        var seconds = parseInt(timeArr[2], 10);
+ 
+        // Calculate and return total milliseconds
+        return days * 86400000 + hours * 3600000 + minutes * 60000 + seconds * 1000;
+    },
+
+	getDurationParts: function(dur) {
+		var durVal = dur.getDurationValue();
+
+		var oDur = {days:0, HH:0, min:0, sec:0};
+		// Parse the duration value into days and time
+		var durValArr = durVal.split(' ');
+		if (durValArr.length == 2) {
+			oDur.days =parseInt(durValArr.shift(), 10);
+		}
+		var time = durValArr.shift();
+
+		// Parse the time into hours, minutes, and seconds
+		var timeArr = time.split(':');
+		oDur.HH = parseInt(timeArr[0], 10);
+		oDur.min = parseInt(timeArr[1], 10);
+		oDur.sec = parseInt(timeArr[2], 10);
+
+		// Calculate and return total milliseconds
+		return oDur;
+	},
+
 	// STRY0110317
 	// gr                      - GlideRecord       - used for OU schedule override
 	// startTime               - GlideDateTime     - start Day and Time to check and update
@@ -154,8 +203,6 @@ TaskerDurationCalculator.prototype = {
 					daysAdded++;
 				}
 			}
-if(daysAdded>10)
-	return lEndDate;
 			return lEndDate;
 		} else {
 			// no schedule given, just add the days
@@ -203,16 +250,21 @@ if(daysAdded>10)
 	getOUsWithScheduleOverride: function(aOUsToCheck){
 		var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
 		var aOverrideOUs = [];
-		for (i=0; i<aOUsToCheck.length; i++) {
-			if(grOU.get(aOUsToCheck[i])){
-				if(grOU.getDisplayValue('u_schedule_override') + '' != ''){
-					var oOUSchedule = {};
-					oOUSchedule.ouId = aOUsToCheck[i];
-					oOUSchedule.scheduleId = grOU.getValue('u_schedule_override');
-					aOverrideOUs.push(oOUSchedule);
+		
+		// STRY0117523 - if not enabled, then return empty array
+		if(this.officeScheduleOverrideEnabled){
+			for (i=0; i<aOUsToCheck.length; i++) {
+				if(grOU.get(aOUsToCheck[i])){
+					if(grOU.getDisplayValue('u_schedule_override') + '' != ''){
+						var oOUSchedule = {};
+						oOUSchedule.ouId = aOUsToCheck[i];
+						oOUSchedule.scheduleId = grOU.getValue('u_schedule_override');
+						aOverrideOUs.push(oOUSchedule);
+					}
 				}
-			}
+			}			
 		}
+
 		return aOverrideOUs;
 	},
 	
@@ -236,41 +288,45 @@ if(daysAdded>10)
 	//     for that object in the future.
 	// dc: Duration Calculator - this is the duration calculator object from ServiceNow
 	setDurationCaluclationSchedule: function(gr, dc){
+
 		var scheduleId = '';
-		// OU should always hit here...
-		if(gr && gr!=null && gr.u_schedule_override  && gr.getDisplayValue('u_schedule_override') + '' != ''){
-			scheduleId = gr.getValue('u_schedule_override');
-			this.scheduleName = gr.getDisplayValue('u_schedule_override');
-		} else if(gr && gr!=null){
-			switch (gr.getRecordClassName()){
-				case 'x_153465_discovert_route_task_instance':
-				case 'x_153465_discovert_route_tasks':
-				case 'x_153465_discovert_discover_routing_template':
-					var primary_office = '';
-					// look up Primary Office and see if there is an override on the Primary Office
-					// NOTE: if we decide on other / prefered overrides like top or tree is primary office and per task is Primary assignee
-					if(gr.primary_office){
-						primary_office = gr.getValue('primary_office');
-					} else if(gr.u_primary_office){
-						primary_office = gr.getValue('primary_office');
-					}
-					if(primary_office != ''){
-						var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-						if(grOU.get(primary_office)){
-							if(grOU.u_schedule_override){
-								this.scheduleName = grOU.getDisplayValue('u_schedule_override');
-								scheduleId = grOU.getValue('u_schedule_override');
+		
+		// STRY0117523 - OU should always hit here...
+		if(this.officeScheduleOverrideEnabled){			
+			if(gr && gr!=null && gr.u_schedule_override  && gr.getDisplayValue('u_schedule_override') + '' != ''){
+				scheduleId = gr.getValue('u_schedule_override');
+				this.scheduleName = gr.getDisplayValue('u_schedule_override');
+			} else if(gr && gr!=null){
+				switch (gr.getRecordClassName()){
+					case 'x_153465_discovert_route_task_instance':
+					case 'x_153465_discovert_route_tasks':
+					case 'x_153465_discovert_discover_routing_template':
+						var primary_office = '';
+						// look up Primary Office and see if there is an override on the Primary Office
+						// NOTE: if we decide on other / prefered overrides like top or tree is primary office and per task is Primary assignee
+						if(gr.primary_office){
+							primary_office = gr.getValue('primary_office');
+						} else if(gr.u_primary_office){
+							primary_office = gr.getValue('primary_office');
+						}
+						if(primary_office != ''){
+							var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+							if(grOU.get(primary_office)){
+								if(grOU.u_schedule_override){
+									this.scheduleName = grOU.getDisplayValue('u_schedule_override');
+									scheduleId = grOU.getValue('u_schedule_override');
+								}
 							}
 						}
-					}
-					break;
-				case 'x_153465_discovert_discover_office_hierarchy':
-					if(gr.u_schedule_override){
-						this.scheduleName = gr.getDisplayValue('u_schedule_override');
-						scheduleId = gr.getValue('u_schedule_override');
-					}					
+						break;
+					case 'x_153465_discovert_discover_office_hierarchy':
+						if(gr.u_schedule_override){
+							this.scheduleName = gr.getDisplayValue('u_schedule_override');
+							scheduleId = gr.getValue('u_schedule_override');
+						}					
+				}
 			}
-		} 
+		}
 		// if here, no overrrides were found.  Set using default
 		if (scheduleId == '') {
 			// Load the schedule set in the system property.  See note above for future options.
@@ -325,13 +381,13 @@ if(daysAdded>10)
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-06-24 18:38:34</sys_created_on>
         <sys_id>3300702e1be91c10888aebde6e4bcb04</sys_id>
-        <sys_mod_count>91</sys_mod_count>
+        <sys_mod_count>97</sys_mod_count>
         <sys_name>TaskerDurationCalculator</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3300702e1be91c10888aebde6e4bcb04</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-12-07 18:43:59</sys_updated_on>
+        <sys_updated_on>2022-02-13 20:50:46</sys_updated_on>
     </sys_script_include>
 </record_update>
