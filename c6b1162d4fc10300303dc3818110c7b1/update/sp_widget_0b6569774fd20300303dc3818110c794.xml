@@ -117,7 +117,7 @@
 	});
 
 	
-	c.data.topIconOpacity = c.data.isFullScreen? icon_opacity_normal:0.0;
+	c.data.topIconOpacity = c.data.settings.isFullScreen? icon_opacity_normal:0.0;
 	c.data.showIcons = false;
 	
 	// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
@@ -132,8 +132,8 @@
 	var myOverview;
 	// RJ -ET - Story 4
 	// if no ID on URL, use the current id
-	if (!c.data.selectedId && c.data.id){
-		c.data.selectedId = c.data.id;
+	if (!c.data.selectedId && c.data.currentTopOU){
+		c.data.selectedId = c.data.currentTopOU;
 	}
 	// STRY0069986 - move to top
 	var url_id = $location.search().sys_id;
@@ -146,11 +146,11 @@
 	// add selected ou to favorites
 	$scope.addToFavorites = function() {
 		var selectedNode = diagram.findNodeForKey(c.data.selectedId);
-		diagram.commandHandler.resetZoom($scope.data.selectPercent/100);
+		diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
 		diagram.centerRect(selectedNode.actualBounds);			
 		
-		$scope.data.favorityChanged = true; 
-		$scope.data.favorite = {
+		$scope.data.favoriteChanged = true; 
+		$scope.data.settings.favorite = {
 			value: c.data.selectedId,
 			topId: c.data.currentTopOU};
 		spUtil.update($scope).then(function() {
@@ -162,9 +162,9 @@
 	// Zoom to Favorite
 	$scope.zoomToFavorite = function() {
 // TODO - post back change if top ou of favorite is not current top ou
-		if(c.data.favorite.value && c.data.favorite.value != c.data.selectedId){
-			c.data.selectedId = c.data.favorite.value;
-			var favoriteOUNode = diagram.findNodeForKey(c.data.favorite.value);
+		if(c.data.settings.favorite.value && c.data.settings.favorite.value != c.data.selectedId){
+			c.data.selectedId = c.data.settings.favorite.value;
+			var favoriteOUNode = diagram.findNodeForKey(c.data.settings.favorite.value);
 			if(favoriteOUNode){
 				diagram.select(favoriteOUNode);
 			} else {
@@ -179,9 +179,9 @@ alert('Temporary Message - favorite OU not in current diagram');
 	
 	// Zoom to Default OU
 	$scope.zoomToDefaultOU = function() {
-		if(c.data.defaultOU.value && c.data.defaultOU.value != c.data.selectedId){
-			c.data.selectedId = c.data.defaultOU.value;
-			var defaultOUNode = diagram.findNodeForKey(c.data.defaultOU.value);
+		if(c.data.settings.defaultOU.value && c.data.settings.defaultOU.value != c.data.selectedId){
+			c.data.selectedId = c.data.settings.defaultOU.value;
+			var defaultOUNode = diagram.findNodeForKey(c.data.settings.defaultOU.value);
 			if(defaultOUNode){
 				diagram.select(defaultOUNode);
 			} else {
@@ -208,23 +208,23 @@ alert('Temporary Message - default OU not in current diagram');
 	$scope.zoomToSelected = function() {
 		var selectedNode = diagram.findNodeForKey(c.data.selectedId);
 		diagram.commandHandler.resetZoom(1.0);
-		$scope.data.selectPercent='100';
+		$scope.data.settings.selectPercent='100';
 		diagram.centerRect(selectedNode.actualBounds);
 	};
 
 	// Zoom to full tree
 	$scope.zoomToFullTree = function() {
-		$scope.data.selectPercent="tree";
+		$scope.data.settings.selectPercent="tree";
 		diagram.zoomToRect(diagram.documentBounds);
 	};
 	
 		// Zoom to Selected
 	$scope.zoomToPercent = function() {
-		if($scope.data.selectPercent=="tree"){
+		if($scope.data.settings.selectPercent=="tree"){
 			this.zoomToFullTree();
 		} else {
 			var selectedNode = diagram.findNodeForKey(c.data.selectedId)
-			diagram.commandHandler.resetZoom($scope.data.selectPercent/100);
+			diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
 			diagram.centerRect(selectedNode.actualBounds);			
 		}
 		
@@ -238,7 +238,7 @@ alert('Temporary Message - default OU not in current diagram');
 	
 	// STRY0116812
 	var watcher;
-	initRecordWatcher("x_153465_discovert_discover_office_hierarchy", "u_top_ou=" + c.data.id);
+	initRecordWatcher("x_153465_discovert_discover_office_hierarchy", "u_top_ou=" + c.data.currentTopOU);
 
 	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	function initRecordWatcher(table, filter) {
@@ -524,8 +524,8 @@ alert('Temporary Message - default OU not in current diagram');
 		}
 		
 		$scope.topOU={
-			displayValue: c.data.office_abbreviation + c.data.office_name,
-			value: c.data.sys_id,
+			displayValue: c.data.office_name,
+			value: c.data.currentTopOU,
 			name: 'topOU'
 		};
 		$scope.$on("field.change",function(evt,params){
@@ -568,7 +568,6 @@ alert('Temporary Message - default OU not in current diagram');
 		// RJ -ET - Story 4
 		// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
 		$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-			c.data.sys_id = parms.sys_id;
 			// STRY0074663 Only rebroadcast if the node changed
 			if(c.data.selectedId != parms.sys_id){
 				c.data.selectedId = parms.sys_id;
@@ -596,15 +595,12 @@ alert('Temporary Message - default OU not in current diagram');
 				$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
 				$rootScope.$broadcast('$sp.list.click', evt);
 			
-				// STRY0072032
-//				if(c.data.isSystemTreeOrientationVertical){
-					diagram.centerRect(node.actualBounds);
-//				}
+				diagram.centerRect(node.actualBounds);
 			}
 			
 			$scope.page = {
 				displayValue: $scope.data.title,
-				value: $scope.data.id,
+				value: $scope.data.selectedId,
 				name: 'page'
 			};
 			
@@ -712,16 +708,14 @@ alert('Temporary Message - default OU not in current diagram');
 					new go.Binding("source", '', function(data){
 							var lSource;
 							switch (img.src){
-								case c.data.ouProcessRequestImage.src:
+								case c.data.icons.ProcessRequestBadge24.src:
 									lSource = data.isAdmin && data.u_outstanding_request_count > 0?img.src:'';
 									break;
-								case c.data.ouRequestChangeImage.src:
+								case c.data.icons.Request16.src:
 									lSource = !data.isAdmin?img.src:'';
 									break;
-								case c.data.createSubOUImage.src:
-									lSource = data.isAdmin?img.src:'';
-									break;
-								case c.data.dividerImage:
+								case c.data.icons.GenericAddSub16.src:
+								case c.data.icons.Divider:
 									lSource = data.isAdmin?img.src:'';
 									break;
 								default:
@@ -748,63 +742,61 @@ alert('Temporary Message - default OU not in current diagram');
 				 click: function(e, obj) {
 					 var objWidget = null;
 					 switch (obj.source){
-						 case c.data.ouInformationImage.src:
+						 case c.data.icons.Information16.src:
 							 objWidget = JSON.parse(JSON.stringify(informationFormwidgetObject));
-							 objWidget.title = c.data.informationModal;
+							 objWidget.title = c.data.messages["Tasker - Organizational Unit Information"];
 							 objWidget.sys_id = obj.part.data.key;
 							 // STRY0115843
 							 objWidget.omitHeader = 'false';
 							 openFormModal(objWidget); 
 							 break;
-						 case c.data.ouSubOUImage.src:
+						 case c.data.icons.SubOU16.src:
 							 objWidget = JSON.parse(JSON.stringify(subOUListwidgetObject));
-							 objWidget.title = c.data.subOUModal + ': ' + obj.part.data.name;
+							 objWidget.title = c.data.messages["Tasker - List of Sub OUs"] + ': ' + obj.part.data.name;
 							 objWidget.filter = objWidget.filter + obj.part.data.key;
 							 openListModal(objWidget);
 							 break;
-						 case c.data.ouMembersImage.src:							 
+						 case c.data.icons.OUMembers16.src:
 							 objWidget = JSON.parse(JSON.stringify(membersOUListwidgetObject));
-							 objWidget.title = c.data.memberOUModal + ': ' + obj.part.data.name;
+							 objWidget.title = c.data.messages["Tasker - List of Members"] + ': ' + obj.part.data.name;
 							 objWidget.filter = objWidget.filter + obj.part.data.key; 
 							 openListModal(objWidget);
 							 break;
-						 case c.data.ouContactsImage.src:
+						 case c.data.icons.Contacts16.src:
 							 objWidget = JSON.parse(JSON.stringify(contactsOUListwidgetObject));
-							 objWidget.title = c.data.contactsOUModal + ': ' + obj.part.data.name;
+							 objWidget.title = c.data.messages["Tasker - List of Contacts"] + ': ' + obj.part.data.name;
 							 objWidget.filter = objWidget.filter + obj.part.data.key;
 							 openListModal(objWidget);
 							 break;
-						 case c.data.ouReportImage.src:
+						 case c.data.icons.Reports16.src:
 							 objWidget = JSON.parse(JSON.stringify(OUReportwidgetObject));
-							 objWidget.title = c.data.reportOUModal + ' - ' + obj.part.data.name;
+							 objWidget.title = c.data.messages["Tasker - OU Reports for "] + ' - ' + obj.part.data.name;
 							 objWidget.filter = objWidget.filter + obj.part.data.key; 
 							 openReportModal(objWidget);
 							 break;
 						 // STRY0101474
-						 case c.data.ouProcessRequestImage.src:
+						 case c.data.icons.ProcessRequestBadge24.src:
 							 var url = '?id=discover_simple_processing_form&dcu_sys_id=&dcu_table=x_153465_discovert_tasker_requests&dcu_ref=u_ou_parent&dcu_view=&query=u_ou_parent=' + obj.part.data.key + '^u_status=In progress&o=u_requested&d=desc';
 							 window.open(url, '_blank');
 							 break;
-						 case c.data.ouRelatedTasksImage.src:
+						 case c.data.icons.RelatedTasks16.src:
 							 objWidget = JSON.parse(JSON.stringify(relatedTaskOUListwidgetObject));
-							 objWidget.title = c.data.relatedTasksOUModal + ': ' + obj.part.data.name;
+							 objWidget.title = c.data.messages["Tasker - Related Tasks"] + ': ' + obj.part.data.name;
 							 objWidget.filter = objWidget.filter + obj.part.data.key;
 							 openListModal(objWidget);
 							 break;
-
-						 case c.data.ouRequestChangeImage.src:
+						 case c.data.icons.Request16.src:
 							 objWidget = JSON.parse(JSON.stringify(requestChangeFormwidgetObject));
-							 objWidget.title = c.data.newOURequestChangeModal;
+							 objWidget.title = c.data.messages["Tasker - Title - Request Hierarchy Update"];
 							 objWidget.sys_id = -1; 
 							 // STRY0115843
 							 objWidget.omitHeader = 'true';
 							 objWidget.u_ou_parent = obj.part.data.key; 
 							 openFormModal(objWidget); 
 							 break;
-
-						 case c.data.createSubOUImage.src:
+						 case c.data.icons.GenericAddSub16.src:
 							 objWidget = JSON.parse(JSON.stringify(createNewFormwidgetObject));
-							 objWidget.title = c.data.newSubOUModal;
+							 objWidget.title = c.data.messages["Tasker - Create New Sub OU"];
 							 objWidget.sys_id = -1; 
 							 // STRY0115843
 							 objWidget.omitHeader = 'true';
@@ -896,11 +888,11 @@ alert('Temporary Message - default OU not in current diagram');
 	openReportModal = function(widgetObject) {
 /*		
 		
-//alert('RJ - testing - openReportModal: ' + c.data.baseURL + '?id=organizational_report_page');
+//alert('RJ - testing - openReportModal: ' + c.data.settings.baseURL + '?id=organizational_report_page');
 		c.modalReportInstance = $uibModal.open({
-//			templateUrl:  c.data.baseURL + 'tcp?id=organizational_report_page',
+//			templateUrl:  c.data.settings.baseURL + 'tcp?id=organizational_report_page',
 			// STRY0105791
-			templateUrl:  c.data.baseURL + c.data.service_portal_url_suffix + '?id=discovertasker_dashboard',
+			templateUrl:  c.data.settings.baseURL + c.data.settings.service_portal_url_suffix + '?id=discovertasker_dashboard',
 			scope: $scope,
 			size: 'lg'
 		}).closed.then(function(){
@@ -932,12 +924,10 @@ alert('Temporary Message - default OU not in current diagram');
 
 	// RJ -ET - Story 4
 	// Move this into a fucntion to redraw tree when a new node is selected
-	if ($scope.data.id) {
+	if ($scope.data.selectedId) {
 		// STRY0116823
 		resetDiagram();
 	}
-		
-		
 		
 	// DFCT0010275
 	if($scope.data.map.length > 0){	
@@ -992,7 +982,7 @@ alert('Temporary Message - default OU not in current diagram');
 		}
 
 		// STRY0072032
-		if(!c.data.isSystemTreeOrientationVertical){
+		if(!c.data.settings.isSystemTreeOrientationVertical){
 			// Horizontal Settings
 			diagram =
 				$go(go.Diagram, node_id, {
@@ -1020,7 +1010,7 @@ alert('Temporary Message - default OU not in current diagram');
 		// Define a simple node template consisting of text followed by an expand/collapse button
 		// STRY0072032
 		var treeOrientation;
-		if(!c.data.isSystemTreeOrientationVertical){
+		if(!c.data.settings.isSystemTreeOrientationVertical){
 			treeOrientation = "Horizontal";
 		} else {
 			treeOrientation = "Vertical";
@@ -1035,8 +1025,8 @@ alert('Temporary Message - default OU not in current diagram');
 					
 					// on hover over node, show the icons
 					{mouseEnter: function(e, obj) {
-						obj.findObject('gradientRectangle').opacity =  c.data.isFullScreen ? icon_opacity_normal : 0.0;
-						obj.findObject('Icons').visible=c.data.isFullScreen;
+						obj.findObject('gradientRectangle').opacity =  c.data.settings.isFullScreen ? icon_opacity_normal : 0.0;
+						obj.findObject('Icons').visible=c.data.settings.isFullScreen;
 					},
 					 mouseLeave: function(e, obj) {
 						 obj.findObject('gradientRectangle').opacity = 0.0;
@@ -1070,8 +1060,8 @@ alert('Temporary Message - default OU not in current diagram');
 													{alignment: go.Spot.Left, height:60},
 													$go(go.Panel, "Horizontal", {alignment: go.Spot.Left,
 																											 margin: new go.Margin(18, 0, 0, 0)},  // Horizontal panel for Task Manager and Administrator
-															addImage(c.data.taskManagerImage, 1.0, c.data.titleTaskManagers, "tasking_authorities_list"),
-															addImage(c.data.Admin16Image, 1.0, c.data.titleOUHierarchyAdministrators, "u_ou_hierarchy_administrators_list")
+															addImage(c.data.icons.taskManager, 1.0, c.data.messages["Tasker - Title - TASK MANAGERS"], "tasking_authorities_list"),
+															addImage(c.data.icons.Admin16, 1.0, c.data.messages["Tasker - Title - OU HIERARCHY ADMINISTRATORS"], "u_ou_hierarchy_administrators_list")
 														 ),	// end horizonal panel for icons
 													// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
 													$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: fontStyle, stroke: "white", margin: 5, minSize: new go.Size(250, 35), maxSize: new go.Size(250, 55) },
@@ -1102,20 +1092,20 @@ alert('Temporary Message - default OU not in current diagram');
 											 visible: false,
 											 alignment: go.Spot.Right},
 											$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
-													{visible: c.data.isFullScreen,
+													{visible: c.data.settings.isFullScreen,
 													 alignment: go.Spot.Right, width: 250, isOpposite: true},
-													addImage(c.data.createSubOUImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouRequestChangeImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.GenericAddSub16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.Request16, c.data.topIconOpacity, '', ''),
 													// STRY0101474
 
-													addImage(c.data.dividerImage, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.Divider, c.data.topIconOpacity, '', ''),
 													// DFCT0010634 - removed for initial release until we know what report to load in the modal
-													//addImage(c.data.ouReportImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouRelatedTasksImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouContactsImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouMembersImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouSubOUImage, c.data.topIconOpacity, '', ''),
-													addImage(c.data.ouInformationImage, c.data.topIconOpacity, '', '')
+													//addImage(c.data.icons.Reports16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.RelatedTasks16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.Contacts16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.OUMembers16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.SubOU16, c.data.topIconOpacity, '', ''),
+													addImage(c.data.icons.Information16, c.data.topIconOpacity, '', '')
 												 ) // end horizontal panel holding the icons	
 										 ) // end horizontal Panel holding Images and icons
 								 ), // close vertical panel for Task Manager, Administrator and Text
@@ -1127,7 +1117,7 @@ alert('Temporary Message - default OU not in current diagram');
 									 alignment: new go.Spot(0, 0, leftPicCornerOffset, topPicCornerOffset) },
 									new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
 										if(u_ou_primary_contact)
-											return c.data.isFullScreen && c.data.include_poc_avatar;
+											return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
 										else
 											return false;}),
 									new go.Binding("fill", "active", function (t){
@@ -1158,7 +1148,7 @@ alert('Temporary Message - default OU not in current diagram');
 									}, 
 									new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
 										if(u_ou_primary_contact)
-											return c.data.isFullScreen && c.data.include_poc_avatar;
+											return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
 										else
 											return false;}),
 									// STRY0113936
@@ -1189,7 +1179,7 @@ alert('Temporary Message - default OU not in current diagram');
 																			 alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset) },
 									new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
 										if(u_ou_is_permissive)
-											return c.data.isFullScreen && c.data.permissiveOn;
+											return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
 										else
 											return false;}),
 									new go.Binding("fill", "active", function (t){
@@ -1211,10 +1201,10 @@ alert('Temporary Message - default OU not in current diagram');
 									{alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset)}, 
 									new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
 										if(u_ou_is_permissive)
-											return c.data.isFullScreen && c.data.permissiveOn;
+											return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
 										else
 											return false;}),
-									addImage(c.data.LockOpenBadge24, icon_opacity_normal, '', '')
+									addImage(c.data.icons.LockOpenBadge24, icon_opacity_normal, '', '')
 								 ), // end panel holding circle and unlock icon
 							$go(go.Shape, "Circle", 
 									{visible: false,
@@ -1223,7 +1213,7 @@ alert('Temporary Message - default OU not in current diagram');
 									 // STRY0113936
 									 alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)},
 									new go.Binding("visible", "", function (data){
-										if(data.u_outstanding_request_count && c.data.isFullScreen)
+										if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
 											return data.isAdmin && data.u_outstanding_request_count > 0;
 										else
 											return false;}),
@@ -1245,11 +1235,11 @@ alert('Temporary Message - default OU not in current diagram');
 									// STRY0113936
 									{alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)}, 
 									new go.Binding("visible", "", function (data){
-										if(data.u_outstanding_request_count && c.data.isFullScreen)
+										if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
 											return data.isAdmin && data.u_outstanding_request_count > 0;
 										else
 											return false;}),
-									addImage(c.data.ouProcessRequestImage, c.data.topIconOpacity, '', '')
+									addImage(c.data.icons.ProcessRequestBadge24, c.data.topIconOpacity, '', '')
 								 ) // end panel holding circle and unlock icon
 						 ),
 					$go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
@@ -1259,10 +1249,10 @@ alert('Temporary Message - default OU not in current diagram');
 		// Define a trivial link template with no arrowhead
 		diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
 
-		if(c.data.selectPercent=="tree"){
+		if(c.data.settings.selectPercent=="tree"){
 			diagram.initialAutoScale = go.Diagram.Uniform;
 		} else {
-			diagram.scale = parseInt(c.data.selectPercent)/100;
+			diagram.scale = parseInt(c.data.settings.selectPercent)/100;
 		}
 
 		diagram.commandHandler.scrollToPart(diagram.findNodeForKey(c.data.selectedId));
@@ -1460,349 +1450,132 @@ function hideTooltipUserInfo(diagram, tool) {
 //                                      Changes made in Server Client controller and HTML
 // 2.8 | 2022-01-25 | raj  | STRY0116823 - Org Hierarchy Tree- Bifold Widget and Fullscreen view- Add Picture-in-picture feature
 //                                      Changes made in Server Client controller and HTML and CSS
+// 2.8 | 2022-02-19 | raj  | DFCT0010796 - Tooltip is incorrect on the Org Hier. "Maximize" and  "Minimize " iconsDFCT0010796
+//                                      Changes made in Server
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
 	// MWMTest add as an empty object
 	data.userProfile = {};
 	
-	data.placeholderMsg = gs.getMessage("Select Task...");
-	// STRY0108231
-	data.page_id = $sp.getParameter("id");
-	
-	// TODO - GET THIS SETTING FROM THE OPTIONS INSTEAD OF LOOKING AT A PAGE ID
-	// ONCE COMING FROM OPTIOIN, UPDATE THIS SETTING TO NOT USE PAGE ID, UPDATE
-	// ALL PAGES WHERE FULL SCREEN DESIRED TO TRUE AND THE REST SHOULD BE FINE
-	data.isFullScreen = data.page_id == 'discovertasker_ouhierarchy_full_screeen';
-	// STRY0111888
-	data.permissiveOn = gs.getProperty('x_153465_discovert.PermissiveOUTaskingOptions') != 'Off';
-	// STRY0105791
-	data.baseURL = gs.getProperty('glide.servlet.uri');
-	// DFCT0010565
-	if($sp.getPortalRecord()){
-		data.service_portal_url_suffix = $sp.getPortalRecord().getValue('url_suffix');
-	} else {
-		// TODO: May want to pull default from the form load here
-		data.service_portal_url_suffix = '';
-	}
-	
-	// TODO - GET FROM MESSAGE
-	data.informationModal = gs.getMessage('Organizational Unit Information');
-	data.subOUModal = gs.getMessage('List of Sub OUs');
-	data.memberOUModal = gs.getMessage('List of Members');
-	data.contactsOUModal = gs.getMessage('List of Contacts');
-	data.reportOUModal = gs.getMessage('OU Reports for ');
-	data.relatedTasksOUModal = gs.getMessage('Related Tasks');	
-	data.newOURequestChangeModal = gs.getMessage('Tasker - Title - Request Hierarchy Update');
-	data.newSubOUModal = gs.getMessage('Create New Sub OU');
-	
-	// STRY0113679
-	data.OrgFullscreen16 = {"src":'Fullscreen16.svg', "title": gs.getMessage("Open Organizational Hierarchy in full screen in current tab"), "alt": gs.getMessage('Full Screen View')};
-	data.MinimizeFullScreen16 = {"src":'MinimizeFullScreen16.svg', "title": gs.getMessage("Open Organizational Hierarchy in bifold screen in current tab"), "alt": gs.getMessage('Bifold View')};
-
-	// TODO - ADD TO WIDGET OPTIONS - LEFT OFF FOR NOW
-	data.include_poc_avatar = true;
+	// if messages not loaded, load messages
+	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-officehierarchy');
+	data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 	
 	data.table = 'x_153465_discovert_discover_office_hierarchy';
-	data.titleTaskManagers = gs.getMessage('Tasker - Title - TASK MANAGERS');
-	data.titleOUHierarchyAdministrators = gs.getMessage('Tasker - Title - OU HIERARCHY ADMINISTRATORS');
 	var map = data.map = [];
 	
-	data.topParentNeeded = false;
-	// STRY0074597 default to true, will change later if input
-	data.topOnly = true;
-	var count = new GlideAggregate('x_153465_discovert_discover_office_hierarchy');
-	// DFCT0010275 - use addNullQuery for a null query instead of a string value
-	count.addNullQuery('parent');
-	count.addAggregate('COUNT');
-	count.query();
-	var topHierarchy = 0;
-	if(count.next())
-		topHierarchy = count.getAggregate('COUNT');
-	
-	if (topHierarchy < 1 ) {
-		data.topParentNeeded = true;
+	// if there is no top OU, then stop
+	if (data.settings.topParentNeeded) {
 		return;
 	}
-	// STRY0072032
-	data.isSystemTreeOrientationVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
 
-	// STRY0116812
-	var defaultIdTopOfficeHierarchy = null;
 	var prefPercent = 'DTechApps.Tasker.selectPercent';
 	var prefFavorite = 'DTechApps.Tasker.FavoriteOU';
 	data.currentUser = gs.getUserID();
-	var orgScripts = new OrganizationalScripts();
-	// set the default selected id
-	data.selectedId = $sp.getParameter("sys_id");
-	// getDefaultId for user
-	var defaultOUId = orgScripts.GetUserDefaultOU(data.currentUser) + '';
-	// get top ou for the user based on default id
-	var defaultOUTopId =orgScripts.getTopOUId(defaultOUId);
-	data.defaultOU = {value: defaultOUId,
-										topId: defaultOUTopId};
 	
 	// RJ -ET - Story 4
 	// if the user selected a TOP OU, then rebuild the tree with the selected topOU
 	if(input){
 		// save percent change and return
 		if(input.percentChanged){
-			data.selectPercent = input.selectPercent;
-			gs.getUser().savePreference(prefPercent, input.selectPercent);
+			data.settings.selectPercent = input.settings.selectPercent;
+			gs.getUser().savePreference(prefPercent, input.settings.selectPercent);
 			return;
 		}
-		if(input.favorityChanged){
+		if(input.favoriteChanged){
 			data.favorite = input.favorite;
 			gs.getUser().savePreference(prefFavorite, JSON.stringify(input.favorite));
 			return;
 		}
-		if(input.topOU){
-			// only set if passed in to the input
-			defaultIdTopOfficeHierarchy = input.topOU;
-			// if the user changed the top OU, then set the id to the new top
-			data.selectedId = input.topOU;
-		}
 		// STRY0074597 
 		data.topOnly = input.topOnly;
-		if(!input.buildIcons)
-			buildIcons();
-	} else {
-		buildIcons();
-		var selectPercent = gs.getUser().getPreference(prefPercent);
-		if(selectPercent){
-			data.selectPercent = selectPercent;
-		} else {
-			data.selectPercent = 100;
-		}
-		var favoriteOU = gs.getUser().getPreference(prefFavorite);
-		if(favoriteOU){
-			data.favorite = JSON.parse(favoriteOU);
-			// do not override the URL on load
-			if(!data.selectedId && data.selectedId != ''){
-				data.selectedId = data.favorite.value;
-			}
-		} else {
-			data.favorite = {value: "",	topId: ""};
-		}
-		
+		// no need to reload messages
+		data.messages=input.messages;
+		// no need to reload icons
+		data.icons = input.icons;
 	}
+	
+	if(!data.messages)
+		data.messages = taskWidgetIconsAndMessage.loadMessages();
+	if(!data.icons)
+		data.icons = taskWidgetIconsAndMessage.loadIcons();
 
-	// do not override the URL or the favorite on load
-	if(!data.selectedId && data.selectedId != ''){
-		data.selectedId = data.defaultOU.value;
-	}
+	data.selectedId = setSelected();
+	
+	var gr_ou = getTopOUgr(data.selectedId);
+	data.currentTopOU = gr_ou.getUniqueValue();
 
-	// STRY0116812 - changed to not grab any top ou
-	// if the top ou was set, then the user passed a new top in input above
-	// if not, then we get the top id for the current selected id
-	if (defaultIdTopOfficeHierarchy == null) {
-		// set top based on selected id b/c it was on the URL
-		defaultIdTopOfficeHierarchy = orgScripts.getTopOUId(data.selectedId);
-	}
-	
-	// RJ -ET - Story 4
-	var gr_ou = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-	
-	if (!gr_ou.get(defaultIdTopOfficeHierarchy)) {
-		// if the glide record isn't found, rather than returning no tree
-		// find the first top OU and load the tree for it
-		gr_ou.addNullQuery('parent');
-		gr_ou.query();
-		gr_ou.next();	
-	}
-	
-	//--------------------------------------------------------------------------------------
-	// if the default OU is in the tree, then set the default ID to the user's default
-	// if the default OU is not in the tree, then, default to top ou
-	// OR a favorite ... to be implemented later
-	if(defaultIdTopOfficeHierarchy == data.defaultOU.topId){
-		data.id = data.defaultOU.value;
-	} else {
-		data.id = gr_ou.getValue('sys_id');
-	}
-// TODO - CLEAN UP THIS IS A MESS, WHY DO WE HAVE SO MANY VARIABLES
-// THIS IS OLD PREVIOUS DEVELOPER MESS
-	var id = data.id;
-	data.title = gr_ou.getValue('office_abbreviation');
-	
-	if (!id) {
-		data.id = null;
+	if (!data.currentTopOU  || data.currentTopOU == '') {
+		data.currentTopOU = null;
 		return;
 	}
 	
-	// STRY0108231
-	data.sys_id=data.id;
+	data.title = gr_ou.getValue('office_abbreviation');
+	data.office_name = gr_ou.getValue('office_name');
+
 	// STRY0101474  - DFCT0010275
 	data.isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
-	
-	// STRY0116812
-	data.currentTopOU = defaultIdTopOfficeHierarchy;
-
 	
 	var taskWidgetData = new TaskWidgetData();
 	data.fieldsInModel = taskWidgetData.loadOfficeTreeFieldsAndFieldLabels(gr_ou);
 	
 	taskWidgetData.buildOUMap('discovertasker-officehierarchy', map, gr_ou, data.fieldsInModel);
-	
-	function buildIcons(){
-		// STRY0108231
-		// RAJ - NOTE performance, load these 1 time, added if logic.  also moved into fucntion to clean up code
-		// --- Get Task Manager Image
-		// STRY0111072 - STRY0111072
-		data.taskManagerImage = buildIcon({imageName: 'Tie16.svg',
-																			title: '',
-																			alt:''
-																		 });		
-		// --- Get Admin Image
-		// STRY0111072 - STRY0111072
-		data.Admin16Image = buildIcon({imageName: 'Admin16.svg',
-																			title: '',
-																			alt:''
-																		 });
-		// STRY0101474 
-		// --- Get Related Tasks Image
-		// STRY0111072 - STRY0111072
-		data.ouRequestChangeImage = buildIcon({imageName: 'Request16.svg',
-																			title: 'Open Request Organizational Update',
-																			alt:'Open Request'
-																		 });		
-		// --- Get OU Process Request Image
-		// STRY0111072 - STRY0111072
-		data.ouProcessRequestImage = buildIcon({imageName: 'ProcessRequestBadge24.svg',
-																			title: 'Click to respond to the Organizational Request',
-																			alt:'Open Request List'
-																		 });
-		// --- Get OU Information Image
-		// STRY0111072 - STRY0111072
-		data.ouInformationImage = buildIcon({imageName: 'Information16.svg',
-																			title: 'Open Organizational Unit Information',
-																			alt:'Open Information'
-																		 });
-		// STRY0111072 - STRY0111072
-		data.ouSubOUImage = buildIcon({imageName: 'SubOU16.svg',
-																			title: 'Open List of Sub Organization Units',
-																			alt:'Open Sub Organization Unit List'
-																		 });
-		// --- Get OU Members Image
-		// STRY0111072 - STRY0111072
-		data.ouMembersImage = buildIcon({imageName: 'OUMembers16.svg',
-																			title: 'Open List of Members',
-																			alt:'Open Member List'
-																		 });
-		// --- Get OU Contacts Image
-		// STRY0111072 - STRY0111072
-		data.ouContactsImage = buildIcon({imageName: 'Contacts16.svg',
-																			title: 'Open List of Contacts',
-																			alt:'Open Contact List'
-																		 });
-		// --- Get OU Reports Image
-		// STRY0111072 - STRY0111072
-		data.ouReportImage = buildIcon({imageName: 'Reports16.svg',
-																			title: 'Go to Reports',
-																			alt:'Go to Reports'
-																		 });		
-		// STRY0101474
-		// --- Get Related Tasks Image
-		// STRY0111072 - STRY0111072
-		data.ouRelatedTasksImage = buildIcon({imageName: 'RelatedTasks16.svg',
-																			title: 'Open Related Tasks',
-																			alt:'Open Task List'
-																		 });
-		// --- Get Divider Image
-		// STRY0111072 - STRY0111072
-		data.dividerImage = buildIcon({imageName: 'Divider.svg',
-																			title: '',
-																			alt:''
-																		 });
-		// --- Get Create Sub OU Image
-		// STRY0111072 - STRY0111072
-		data.createSubOUImage = buildIcon({imageName: 'GenericAddSub16.svg',
-																			title: 'Create Sub OU',
-																			alt:'Add Sub OU'
-																		 });	
+
+	function setSelected(){
+		var selectedId;
+
+		// if the user changed the top OU, then set the id to the new top
+		if(input && input.topOU){
+			selectedId = input.topOU;
+		} else if($sp.getParameter("sys_id")){
+			// set the default selected id from the url
+			selectedId = $sp.getParameter("sys_id");						
+		} else if(data.settings.favorite.value != ''){
+			selectedId = data.settings.favorite.value;
+		} else if (data.settings.defaultOU.value != ''){
+			// do not override the URL or the favorite on load
+			selectedId = data.settings.defaultOU.value;
+		}
+		return selectedId;
 		
-		// STRY0111888 - STRY0111072 - STRY0111072
-		data.LockOpenBadge24 = buildIcon({imageName: 'LockOpenBadge24.svg',
-																			title: 'Permissive Organizational Unit',
-																			alt:'OU is Permissive'
-																		 });
-		
-		// STRY0113668
-		data.Divider = buildIcon({imageName: 'Divider_Black.svg',
-																			title: '',
-																			alt:''
-																		 });
-		
-		data.ZoomEntire24 = buildIcon({imageName: 'ZoomEntire24.svg',
-																			title: 'View the Entire Organization',
-																			alt:'Entire Organization'
-																		 });
-		data.ZoomSelected24 = buildIcon({imageName: 'ZoomSelected24.svg',
-																			title: 'Zoom into Selected OU',
-																			alt:'Selected OU'
-																		 });
-		data.Favorite24 = buildIcon({imageName: 'Favorite24.svg',
-																			title: 'Navigate to Favorited OU',
-																			alt:'Favorite OU'
-																		 });
-		data.DefaultOU24 = buildIcon({imageName: 'DefaultOU24.svg',
-																			title: 'Navigate to my default OU',
-																			alt:'Default OU'
-																		 });
-		data.TopOU24 = buildIcon({imageName: 'TopOU24.svg',
-																			title: 'Navigate to Top OU',
-																			alt:'Top OU'
-																		 });
-		data.AddToFavorite24 = buildIcon({imageName: 'AddToFavorite24.svg',
-																			title: 'Set selected as Favorite OU',
-																			alt:'Add Favorite'
-																		 });
-		data.FavoriteFilled24 = buildIcon({imageName: 'FavoriteFilled24.svg',
-																			title: 'This is your selected Favorite OU',
-																			alt:'Selected Favorite'
-																		 });
-				
-		// DFCT0010275
-		data.buildIcons = true;
 	}
 	
-	// STRY0101474
-	//------------------------------------------------------------------------------------------------------------------------
-	// buildIcon({imageName: [image name in db_image table],
-	//												title: [message key or text for the tooltip for icon],
-	//												alt:' [message key or text for the alt value]
-	//           })
-	function buildIcon(params){
-		var grImage = new GlideRecord("db_image");
-		var image;
-		grImage.addQuery('name',params.imageName);
-		grImage.query();
-		if(grImage.next()){
-			image=grImage.getDisplayValue();
+	function getTopOUgr (selectedId){
+		var currentTopOU;
+		if(input && input.topOU){
+			// only set if passed in to the input
+			currentTopOU = input.topOU;
+		} else {
+			var orgScripts = new OrganizationalScripts();
+			currentTopOU = orgScripts.getTopOUId(selectedId);
 		}
-		var icon = {
-			src:image, 
-			title: gs.getMessage(params.title), 
-			alt:gs.getMessage(params.alt)
-		};		
-		return icon;
+		// RJ -ET - Story 4
+		var gr_TopOU = new GlideRecordSecure(data.table);
+		
+		if (!gr_TopOU.get(currentTopOU)) {
+			// if the glide record isn't found, rather than returning no tree
+			// find the first top OU and load the tree for it
+			gr_TopOU.addNullQuery('parent');
+			gr_TopOU.query();
+			gr_TopOU.next();	
+		}
+		return gr_TopOU;
 	}
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2028</sys_mod_count>
+        <sys_mod_count>2089</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-02-18 23:09:46</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-02-22 04:02:19</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -1816,11 +1589,11 @@ function hideTooltipUserInfo(diagram, tool) {
   }
 </style>
 <!--
-<div ng-if="!data.topParentNeeded" class="alert alert-primary alert-info" ng-class="m.type == 'error' ? 'alert-danger' : 'alert-success'" style="text-align: right;">
+<div ng-if="!data.settings.topParentNeeded" class="alert alert-primary alert-info" ng-class="m.type == 'error' ? 'alert-danger' : 'alert-success'" style="text-align: right;">
 To create a new office, click on a node, then click on "Sub OUs" tab and click New.
 </div>
 -->
-<div ng-show="data.topParentNeeded" style="text-align: right;">
+<div ng-show="data.settings.topParentNeeded" style="text-align: right;">
   <div class="alert alert-primary alert-info" ng-class="m.type == 'error' ? 'alert-danger' : 'alert-success'" style="">
     ${A top OU needs to be created, click here to create one} &nbsp; &nbsp;
     <!--    <a class="btn btn-primary" href="?id=discovertasker_officehierarchy&table=x_153465_discovert_discover_office_hierarchy&sys_id=-1">${New Top OU}</a>
@@ -1831,20 +1604,20 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
 </div>
 
 <!-- DFCT0010275 -->
-<div id="main_body" ng-show="data.topParentNeeded==false" class="panel panel-default">
+<div id="main_body" ng-show="data.settings.topParentNeeded==false" class="panel panel-default">
   <div id="panel_heading" class="panel-heading">
-    <div ng-switch="data.page_id" class="pull-right">
+    <div ng-switch="data.settings.page_id" class="pull-right">
       <div ng-switch-when="discovertasker_officehierarchy" class="pull-right">
         <span class="pull-right" >
           <a target="_self" ng-href="?id=discovertasker_ouhierarchy_full_screeen&table={{data.table}}&sys_id={{data.selectedId}}" role="link">
-            <img src="{{data.OrgFullscreen16.src}}" title="{{data.OrgFullscreen16.title}}" alt="{{data.OrgFullscreen16.alt}}" style="padding: 10px;" />
+            <img src="{{data.icons.Fullscreen16.src}}" title="{{data.icons.Fullscreen16.title}}" alt="{{data.icons.Fullscreen16.alt}}" style="padding: 10px;" />
           </a>
         </span>
       </div>
       <!-- STRY0113679 -->
       <div ng-switch-when="discovertasker_ouhierarchy_full_screeen" class="pull-right">
         <a target="_self" ng-href="?id=discovertasker_officehierarchy&table={{data.table}}&sys_id={{data.selectedId}}&view=sp" role="link">
-            <img src="{{data.MinimizeFullScreen16.src}}" title="{{data.MinimizeFullScreen16.title}}" alt="{{data.MinimizeFullScreen16.alt}}" style="padding: 10px;" />
+            <img src="{{data.icons.MinimizeFullScreen16.src}}" title="{{data.icons.MinimizeFullScreen16.title}}" alt="{{data.icons.MinimizeFullScreen16.alt}}" style="padding: 10px;" />
         </a>
       </div>
     </div>
@@ -1873,7 +1646,7 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   <div class="page_map_wrapper">
 
     <div > <!--class="m-t-sm"> -->
-      <div onload="createDiagram();" id="page_map" class="page-map" ng-show="data.id"></div>
+      <div onload="createDiagram();" id="page_map" class="page-map" ng-show="data.currentTopOU"></div>
       <!-- STRY0116823 -->
       <div id="myOverview" ></div>   
     </div>
@@ -1889,69 +1662,69 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   <div id="panel_footer" class="panel-footer">
     <div class="dtech-push-right-flexbox">
       <div class="pull-left">
-        <div ng-show="data.selectedId != data.favorite.value">
+        <div ng-show="data.selectedId != data.settings.favorite.value">
           <img 
-               src="{{data.AddToFavorite24.src}}" title="{{data.AddToFavorite24.title}}"
-               alt="{{data.AddToFavorite24.alt}}" class="dtech-pad-all-10" 
+               src="{{data.icons.AddToFavorite24.src}}" title="{{data.icons.AddToFavorite24.title}}"
+               alt="{{data.icons.AddToFavorite24.alt}}" class="dtech-pad-all-10" 
                ng-click="addToFavorites();"
                /> ${Set selected as Favorite OU}
         </div>
 
-        <div ng-show="data.selectedId == data.favorite.value">
+        <div ng-show="data.selectedId == data.settings.favorite.value">
           <img 
-               src="{{data.FavoriteFilled24.src}}" title="{{data.FavoriteFilled24.title}}"
-               alt="{{data.FavoriteFilled24.alt}}" class="dtech-pad-all-10" 
+               src="{{data.icons.FavoriteFilled24.src}}" title="{{data.icons.FavoriteFilled24.title}}"
+               alt="{{data.icons.FavoriteFilled24.alt}}" class="dtech-pad-all-10" 
                /> ${This is your selected Favorite OU}
         </div>
       </div>
       <div class="pull-right">
-        <img src="{{data.TopOU24.src}}" title="{{data.TopOU24.title}}"
-             alt="{{data.TopOU24.alt}}" class="dtech-pad-all-10" 
+        <img src="{{data.icons.Top24.src}}" title="{{data.icons.Top24.title}}"
+             alt="{{data.icons.Top24.alt}}" class="dtech-pad-all-10" 
              ng-class="{'dtech-disabled': data.selectedId == data.currentTopOU, 'dtech-enabled': data.selectedId != data.currentTopOU}"
              ng-click="zoomToTopOU();"/>
 
-        <img src="{{data.DefaultOU24.src}}" title="{{data.DefaultOU24.title}}"
-             alt="{{data.DefaultOU24.alt}}" class="dtech-pad-all-10" 
-             ng-class="{'dtech-disabled': data.selectedId == data.defaultOU.value, 'dtech-enabled': data.selectedId != data.defaultOU.value}"
+        <img src="{{data.icons.DefaultOU24.src}}" title="{{data.icons.DefaultOU24.title}}"
+             alt="{{data.icons.DefaultOU24.alt}}" class="dtech-pad-all-10" 
+             ng-class="{'dtech-disabled': data.selectedId == data.settings.defaultOU.value, 'dtech-enabled': data.selectedId != data.settings.defaultOU.value}"
              ng-click="zoomToDefaultOU();"/>
 
-        <img src="{{data.Favorite24.src}}" title="{{data.Favorite24.title}}"
-             alt="{{data.Favorite24.alt}}" class="dtech-pad-all-10"
-             ng-class="{'dtech-disabled': data.selectedId == data.favorite.value, 'dtech-enabled': data.selectedId != data.favorite.value}"           
+        <img src="{{data.icons.Favorite24.src}}" title="{{data.icons.Favorite24.title}}"
+             alt="{{data.icons.Favorite24.alt}}" class="dtech-pad-all-10"
+             ng-class="{'dtech-disabled': data.selectedId == data.settings.favorite.value, 'dtech-enabled': data.selectedId != data.settings.favorite.value}"           
              ng-click="zoomToFavorite();"/>
 
-        <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
-             alt="{{data.Divider.alt}}" class="dtech-pad-all-10"/>
+        <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+             alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
 
-        <img src="{{data.ZoomSelected24.src}}" title="{{data.ZoomSelected24.title}}"
-             alt="{{data.ZoomSelected24.alt}}" 
+        <img src="{{data.icons.ZoomSelected24.src}}" title="{{data.icons.ZoomSelected24.title}}"
+             alt="{{data.icons.ZoomSelected24.alt}}" 
              class="dtech-pad-all-10" 
              ng-click="zoomToSelected();"/>
 
-        <img src="{{data.ZoomEntire24.src}}" title="{{data.ZoomEntire24.title}}"
-             alt="{{data.ZoomEntire24.alt}}" 
+        <img src="{{data.icons.ZoomEntire24.src}}" title="{{data.icons.ZoomEntire24.title}}"
+             alt="{{data.icons.ZoomEntire24.alt}}" 
              class="dtech-pad-all-10" 
              ng-click="zoomToFullTree();"/>
 
-        <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
-             alt="{{data.Divider.alt}}" class="dtech-pad-all-10"/>
+        <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+             alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
 
-        <select type="text" id= "selectPercent" class="dropdown" ng-model="data.selectPercent"
+        <select type="text" id= "selectPercent" class="dropdown" ng-model="data.settings.selectPercent"
                 ng-change="zoomToPercent();" >
           <option value="100" 
-                  [selected]="data.selectPercent==100" 
+                  [selected]="data.settings.selectPercent==100" 
                   >100%</option>
           <option value="75"
-                  [selected]="data.selectPercent==75" 
+                  [selected]="data.settings.selectPercent==75" 
                   >75%</option>
           <option value="50"
-                  [selected]="data.selectPercent==50" 
+                  [selected]="data.settings.selectPercent==50" 
                   >50%</option>
           <option value="25"
-                  [selected]="data.selectPercent==25" 
+                  [selected]="data.settings.selectPercent==25" 
                   >25%</option>
           <option value="tree"
-                  [selected]="data.selectPercent==tree" 
+                  [selected]="data.settings.selectPercent==tree" 
                   >Entire Tree</option>
         </select>      
       </div>
