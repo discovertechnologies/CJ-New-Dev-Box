@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function ($scope, $location, $rootScope,spModal,$uibModal, spUtil, amb) {
+        <client_script><![CDATA[api.controller = function ($scope, $location, $rootScope,spModal,$uibModal, spUtil, amb, $timeout) {
 	//------------------------------------------------------------------------------------------------------------------------
 	// COMPANY: DISCOVER TECHNOLOGIES
 	// CUSTOMIZED BY: KARINA TORRES
@@ -105,6 +105,10 @@
 
 	// RJ -ET - Story 4
 	var c = this;
+	
+	//MWMTest avatar popover
+	c.data.isTooltipOpened = false;
+	
 	// STRY0116812
 	var $go = go.GraphObject.make;  // for conciseness in defining templates
 	var node_id = "page_map";
@@ -1259,45 +1263,99 @@ alert('Temporary Message - default OU not in current diagram');
 	}
 	
 	
-// MWMTest POC Tooltip Start	
-function showTooltipUserInfo(obj, diagram, tool) {
-	//debugger; // MWMTest
-	
-	
-	c.data.userProfile = obj.part.data.u_ou_primary_contact_profile;
-	var photo = obj.part.data.u_ou_primary_contact_photo;
-	if (photo != undefined) {
-		c.data.userProfile.photo = "background-image: url('" + photo + "'); color: transparent;";
-	} else {
-		c.data.userProfile.photo = 'no photo';
+	// MWMTest POC Tooltip Start	
+	function showTooltipUserInfo(obj, diagram, tool) {
+		//debugger; // MWMTest
+console.log('called showTooltipUserInfo');
+		c.data.isTooltipOpened = true;
+
+		c.data.userProfile = obj.part.data.u_ou_primary_contact_profile;
+		var photo = obj.part.data.u_ou_primary_contact_photo;
+		if (photo != undefined) {
+			c.data.userProfile.photo = "background-image: url('" + photo + "'); color: transparent;";
+		} else {
+			c.data.userProfile.photo = 'no photo';
+		}
+
+		c.data.userProfile.icons.Mail16 = c.data.icons.Mail16;
+		c.data.userProfile.icons.Phone16 = c.data.icons.Phone16;
+		
+		// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+		// we use below to have the bindings updated
+		$scope.$apply();
+
+		//console.log('avatarPicture: ', c.data.userProfile.photo);
+
+		var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
+
+		var pt = diagram.lastInput.viewPoint;
+		toolTipDIV.style.left = Math.ceil(pt.x) + "px";
+		toolTipDIV.style.top = Math.ceil(pt.y + 120) + "px";
+
+		toolTipDIV.style.display = "block";
+		$timeout(function() {
+				console.log('called $timeout');
+			c.data.isTooltipOpened = false;
+			}, diagram.toolManager.toolTipDuration - 100);
+	}
+
+	function hideTooltipUserInfo(diagram, tool) {
+		//c.data.isTooltipOpened = false;
+		console.log('called hideTooltipUserInfo');
+
+		if (c.data.isTooltipOpened == false) {
+			var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
+			toolTipDIV.style.display = "none";
+ 			_resetPopoverObject();
+			// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+			// we use below to have the bindings updated
+			$scope.$apply();
+			console.log('closed Tooltip');
+		} 
+		//else {
+		//	$timeout(function() {
+		//		console.log('called $timeout');
+		//		var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
+		//		toolTipDIV.style.display = "none";
+		//	}, diagram.toolManager.toolTipDuration);
+		//}
 	}
 	
-	// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
-	// we use below to have the bindings updated
-	$scope.$apply();
+	c.avatarMouseEnter =  function() {
+		console.log('called avatarMouseEnter');
+		c.data.isTooltipOpened = true;
+	};
 	
-	//console.log('avatarPicture: ', c.data.userProfile.photo);
+	c.avatarMouseLeave =  function() {
+		console.log('called avatarMouseLeave');
+ 		c.data.isTooltipOpened = false;
+		var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
+			toolTipDIV.style.display = "none";
+		_resetPopoverObject();
+	};
 	
-  var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
+	function _resetPopoverObject() {
+		c.data.userProfile = {
+			sys_id: '',
+			name: '',
+			first_name: '',
+			last_name: '',
+			middle_name: '',
+			email: '',
+			phone: '',
+			location: '',
+			time_zone: '',
+			contactPageHref: '',
+			photo: '',
+			icons: {}
+		};
+	}
 	
-  var pt = diagram.lastInput.viewPoint;
-	toolTipDIV.style.left = Math.ceil(pt.x) + "px";
-	toolTipDIV.style.top = Math.ceil(pt.y + 120) + "px";
+	
+	// MWMTest POC Tooltip end
 
-  toolTipDIV.style.display = "block";
-}
 
-function hideTooltipUserInfo(diagram, tool) {
-	//c.data.userProfile = {};
-	
-	var toolTipDIV = angular.element(document.getElementById('toolTipDIV'))[0];
-	toolTipDIV.style.display = "none";
-	
-}
-// MWMTest POC Tooltip end
 
-	
-	
 };]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------&#13;
@@ -1308,22 +1366,6 @@ function hideTooltipUserInfo(diagram, tool) {
 // 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)&#13;
 //------------------------------------------------------------------------------------------------------------------------&#13;
 // No updates needed on Tasker theme, updates done on the client script.&#13;
-/* MWMTest for profile photo start */&#13;
-.dtech-avatar-round-64rem {&#13;
-  cursor: default;&#13;
-  height: 6.4rem;&#13;
-  width: 6.4rem;&#13;
-}&#13;
-&#13;
-.mia i {&#13;
-  font-size: 6rem;&#13;
-}&#13;
-&#13;
-.mia {&#13;
-  color: #808080;&#13;
-}&#13;
-&#13;
-/* MWMTest for profile photo end */&#13;
 &#13;
 .dtech-disabled{&#13;
   pointer-events: none;&#13;
@@ -1567,15 +1609,17 @@ function hideTooltipUserInfo(diagram, tool) {
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2089</sys_mod_count>
+        <sys_mod_count>2112</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-02-22 04:02:19</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2022-02-26 00:54:19</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -1653,8 +1697,8 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   </div>
   
   <!-- MWMTest Element Directive start -->
-      <div id="toolTipDIV">
-        <dtech-graph-object-tooltip dtech-main-text="data.userProfile" ></dtech-graph-object-tooltip>
+      <div id="toolTipDIV" ng-mouseenter="c.avatarMouseEnter()" >
+        <dtech-graph-object-tooltip dtech-main-text="data.userProfile" ng-mouseleave="c.avatarMouseLeave()"></dtech-graph-object-tooltip>
       </div>
  <!-- MWMTest Element Directive end -->
   
