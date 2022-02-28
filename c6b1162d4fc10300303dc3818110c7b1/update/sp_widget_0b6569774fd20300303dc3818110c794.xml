@@ -343,19 +343,10 @@ alert('Temporary Message - default OU not in current diagram');
 				if (field.type=='boolean') {
 					newNodeData[key] = (record[key].value == "true" || record[key].value == true);
 				}
-				if (field.type == 'photo') {
-					newNodeData[key + '_photoName'] = displayValue;
-					// NOTE - TODO  need to post back to get picture - figure that out later
-					//var profile = new GlideRecord("live_profile");
-					//profile.addQuery("document", newNodeData[key]);
-					//profile.query();
-					//while (profile.next()){
-					//	var photo = profile.getDisplayValue("photo");
-					//	if (photo.length > 0) {
-					//		newNodeData[key + '_photo'] = photo + '?t=small';
-					//	}
-					//}
-					newNodeData[key + '_photo'] = '';
+				//  STRY0113883
+				if (field.type == 'photo' || field.type == 'profile') {
+						// these are handled in a function b/c they need to post back to the server
+						loadUserInfo(field.type, newNodeData.key, key, record[key].value, displayValue );
 				}
 				if (field.type == 'list') {
 					var list_value = record[key] == null || record[key] == undefined ? '': record[key];
@@ -413,60 +404,49 @@ alert('Temporary Message - default OU not in current diagram');
 					// 'state_DisplayValue', 'assigned_to_individual_DisplayValue'
 					diagram.model.setDataProperty(nodeData, key + '_DisplayValue', displayValue);
 				}
-				if (field.type == 'date') {
-					var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
-					// STRY0091251 - STRETCH-TUP(Estimated Duration Calculation)  - calculate Estimated Duration for Task Template Tree to show where Parent duration is shorter than sum of children
-					// server is loading duration values in UTC
-					var gdt = new Date();
-					// returns the offset in minutes
-					// updates offset to miliseconds
-					date_number = date_number - (gdt.getTimezoneOffset() * 60 * 1000);
-					diagram.model.setDataProperty(nodeData, key, date_number);
-				}
-				if (field.type=='time') {
-					var gdTime = new Date(record[key].value);
-					var time_number = (gdTime.getHours() * 60 + gdTime.getMinutes() * 60 + gdTime.getSeconds()) * 1000;
-					diagram.model.setDataProperty(nodeData, key, time_number);
-				}
-				if (field.type=='boolean') {
-					var bValue = (record[key].value == "true" || record[key].value == true);
-					diagram.model.setDataProperty(nodeData, key, bValue);
-					nodeData[key] = (record[key].value == "true" || record[key].value == true);
-				}
-				
-				if (field.type == 'photo') {
-					nodeData[key + '_photoName'] = displayValue;
-					// NOTE - TODO  need to post back to get picture - figure that out later
-					//var profile = new GlideRecord("live_profile");
-					//profile.addQuery("document", nenodeDatawNodeData[key]);
-					//profile.query();
-					//while (profile.next()){
-					//	var photo = profile.getDisplayValue("photo");
-					//	if (photo.length > 0) {
-					//		nodeData[key + '_photo'] = photo + '?t=small';
-					//	}
-					//}
-					nodeData[key + '_photo'] = '';
-					diagram.model.setDataProperty(nodeData, key + '_photoName', displayValue);
+				switch (field.type){
+					case 'date':
+						var date_number = getDateFromFormat(record[key].value, g_user_date_time_format);
+						// STRY0091251 - STRETCH-TUP(Estimated Duration Calculation)  - calculate Estimated Duration for Task Template Tree to show where Parent duration is shorter than sum of children
+						// server is loading duration values in UTC
+						var gdt = new Date();
+						// returns the offset in minutes
+						// updates offset to miliseconds
+						date_number = date_number - (gdt.getTimezoneOffset() * 60 * 1000);
+						diagram.model.setDataProperty(nodeData, key, date_number);
+						break;
+					case 'time':
+						var gdTime = new Date(record[key].value);
+						var time_number = (gdTime.getHours() * 60 + gdTime.getMinutes() * 60 + gdTime.getSeconds()) * 1000;
+						diagram.model.setDataProperty(nodeData, key, time_number);
+						break;
+					case 'boolean':
+						var bValue = (record[key].value == "true" || record[key].value == true);
+						diagram.model.setDataProperty(nodeData, key, bValue);
+						nodeData[key] = (record[key].value == "true" || record[key].value == true);
+						break;
+					case 'list':
+						var list_value = record[key] == null || record[key] == undefined ? '': record[key];
+						nodeData[key] = list_value;
 
-				}
-				if (field.type == 'list') {
-					var list_value = record[key] == null || record[key] == undefined ? '': record[key];
-					nodeData[key] = list_value;
-					
-					// load the list into the Map
-					nodeData[key + '_list'] = [];
-					var listArray = displayValue.split(',');
-					for(var i=0; i<listArray.length; i++){
-						var arrayItem = {};
-						arrayItem.displayName = listArray[i];
-						if(arrayItem.displayName != null && arrayItem.displayName != undefined && arrayItem.displayName != ''){
-							nodeData[key + '_list'].push(arrayItem);
+						// load the list into the Map
+						nodeData[key + '_list'] = [];
+						var listArray = displayValue.split(',');
+						for(var i=0; i<listArray.length; i++){
+							var arrayItem = {};
+							arrayItem.displayName = listArray[i];
+							if(arrayItem.displayName != null && arrayItem.displayName != undefined && arrayItem.displayName != ''){
+								nodeData[key + '_list'].push(arrayItem);
+							}
 						}
-					}
-					diagram.model.setDataProperty(nodeData, key, list_value);
+						diagram.model.setDataProperty(nodeData, key, list_value);
+						break;
+					//  STRY0113883
+					case 'photo':
+					case 'profile':
+						// these are handled in a function b/c they need to post back to the server
+						loadUserInfo(field.type, nodeData.key, key, record[key].value, displayValue );
 				}
-				
 			} //if field wasn't found do nothing
 		}
 		
@@ -478,6 +458,36 @@ alert('Temporary Message - default OU not in current diagram');
 		diagram.model.setDataProperty(nodeData, 'isAdmin', isAdmin);
 
 		diagram.model.updateTargetBindings(nodeData);
+	}
+	
+	// STRY0113883 load user profile and/or  Photo information
+	function loadUserInfo(fieldType, nodeKey, fieldName, value, displayValue){
+		if (fieldType == 'photo') {
+			c.data.getPhoto = true;
+		} else if (fieldType == 'profile') {
+			c.data.getProfile = true;
+		}
+		c.data.getUserGUID = value;
+		c.data.getUserDisplayValue = displayValue;
+		c.server.update().then(function(){
+			// find the node to update again
+			var nodeData = diagram.model.findNodeDataForKey(nodeKey);
+			if (nodeData) {
+				nodeData[fieldName + '_photoName'] = c.data.updatedPhoto.photoName;
+				diagram.model.setDataProperty(nodeData, fieldName + '_photoName', c.data.updatedPhoto.photoName);
+
+				if(c.data.updatedPhoto.photo){
+					nodeData[fieldName + '_photo'] = c.data.updatedPhoto.photo;
+					diagram.model.setDataProperty(nodeData, fieldName + '_photo', c.data.updatedPhoto.photo);
+				}
+
+				if(c.data.updatedProfile){
+					newNodeData[fieldName + '_profile'] = c.data.updatedProfile;
+					diagram.model.setDataProperty(nodeData, fieldName + '_profile', c.data.updatedProfile);
+				}
+				diagram.model.updateTargetBindings(nodeData);
+			}
+		});
 	}
 	
 	// DFCT0010275
@@ -1494,83 +1504,105 @@ console.log('called showTooltipUserInfo');
 //                                      Changes made in Server Client controller and HTML and CSS
 // 2.8 | 2022-02-19 | raj  | DFCT0010796 - Tooltip is incorrect on the Org Hier. "Maximize" and  "Minimize " iconsDFCT0010796
 //                                      Changes made in Server
+// 2.8 | 2022-02-19 | raj  | DFCT0010796 - Tooltip is incorrect on the Org Hier. "Maximize" and  "Minimize " iconsDFCT0010796
+//                                      Changes made in Server
+// 2.8 | 2022-02-28 | raj  | STRY0113883 - Org Hierarchy Full Screen- Tree Node- Avatar Control Indicator 
+//                                      Changes made in Server and Client Script
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
 	// MWMTest add as an empty object
 	data.userProfile = {};
 	
-	// if messages not loaded, load messages
-	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-officehierarchy');
-	data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+	//  STRY0113883 - reworked code flow
+	main();
 	
-	data.table = 'x_153465_discovert_discover_office_hierarchy';
-	var map = data.map = [];
-	
-	// if there is no top OU, then stop
-	if (data.settings.topParentNeeded) {
-		return;
-	}
+	function main() {
+		// if messages not loaded, load messages
+		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-officehierarchy');
 
-	var prefPercent = 'DTechApps.Tasker.selectPercent';
-	var prefFavorite = 'DTechApps.Tasker.FavoriteOU';
-	data.currentUser = gs.getUserID();
+		if(input){
+			// save percent change and return
+			if(input.percentChanged){
+				taskWidgetIconsAndMessage.savePreferencePercent(input.settings.selectPercent);
+				return;
+			}
+			if(input.favoriteChanged){
+				taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);
+				return;
+			}
+			if(input.topOU){
+				loadOUmap(input.topOU,input.topOU);
+				return;
+			}
+			//  STRY0113883
+			if(input.getPhoto){
+				data.updatedPhoto = loadPhoto(input.getUserDisplayValue, input.getUserGUID);
+			}
+			//  STRY0113883
+			if(input.getProfile){
+				data.updatedPhoto = loadPhoto(input.getUserDisplayValue, input.getUserGUID);
+				data.updatedProfile = loadProfile(input.getUserGUID);
+			}
+		} else {
+			data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+			// if there is no top OU, then stop
+			if (data.settings.topParentNeeded) {
+				return;
+			}
+
+			data.currentUser = gs.getUserID();
+			data.messages = taskWidgetIconsAndMessage.loadMessages();
+			data.icons = taskWidgetIconsAndMessage.loadIcons();
+
+			// STRY0101474  - DFCT0010275
+			data.isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
+			var selectedId = setSelected();
+
+			loadOUmap(selectedId, undefined);			
+		}
+	}
 	
-	// RJ -ET - Story 4
-	// if the user selected a TOP OU, then rebuild the tree with the selected topOU
-	if(input){
-		// save percent change and return
-		if(input.percentChanged){
-			data.settings.selectPercent = input.settings.selectPercent;
-			gs.getUser().savePreference(prefPercent, input.settings.selectPercent);
+	//  STRY0113883
+	function loadProfile(userGUID){
+		var taskWidgetData = new TaskWidgetData();
+		return taskWidgetData.loadProfileInfo(userGUID);		
+	}
+	//  STRY0113883
+	function loadPhoto(displayValue, userGUID){
+		var taskWidgetData = new TaskWidgetData();
+		return taskWidgetData.loadPhotoInfo(displayValue, userGUID);
+	}
+	
+	function loadOUmap(selectedId, topOU){
+
+		data.selectedId = selectedId;
+		data.table = 'x_153465_discovert_discover_office_hierarchy';
+		var map = data.map = [];
+
+
+		var gr_ou = getTopOUgr(data.selectedId, topOU);
+		data.currentTopOU = gr_ou.getUniqueValue();
+
+		if (!data.currentTopOU  || data.currentTopOU == '') {
+			data.currentTopOU = null;
 			return;
 		}
-		if(input.favoriteChanged){
-			data.favorite = input.favorite;
-			gs.getUser().savePreference(prefFavorite, JSON.stringify(input.favorite));
-			return;
-		}
-		// STRY0074597 
-		data.topOnly = input.topOnly;
-		// no need to reload messages
-		data.messages=input.messages;
-		// no need to reload icons
-		data.icons = input.icons;
+
+		data.title = gr_ou.getValue('office_abbreviation');
+		data.office_name = gr_ou.getValue('office_name');
+
+		var taskWidgetData = new TaskWidgetData();
+		data.fieldsInModel = taskWidgetData.loadOfficeTreeFieldsAndFieldLabels(gr_ou);
+
+		taskWidgetData.buildOUMap('discovertasker-officehierarchy', map, gr_ou, data.fieldsInModel);
+
 	}
-	
-	if(!data.messages)
-		data.messages = taskWidgetIconsAndMessage.loadMessages();
-	if(!data.icons)
-		data.icons = taskWidgetIconsAndMessage.loadIcons();
-
-	data.selectedId = setSelected();
-	
-	var gr_ou = getTopOUgr(data.selectedId);
-	data.currentTopOU = gr_ou.getUniqueValue();
-
-	if (!data.currentTopOU  || data.currentTopOU == '') {
-		data.currentTopOU = null;
-		return;
-	}
-	
-	data.title = gr_ou.getValue('office_abbreviation');
-	data.office_name = gr_ou.getValue('office_name');
-
-	// STRY0101474  - DFCT0010275
-	data.isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
-	
-	var taskWidgetData = new TaskWidgetData();
-	data.fieldsInModel = taskWidgetData.loadOfficeTreeFieldsAndFieldLabels(gr_ou);
-	
-	taskWidgetData.buildOUMap('discovertasker-officehierarchy', map, gr_ou, data.fieldsInModel);
 
 	function setSelected(){
 		var selectedId;
 
-		// if the user changed the top OU, then set the id to the new top
-		if(input && input.topOU){
-			selectedId = input.topOU;
-		} else if($sp.getParameter("sys_id")){
+		if($sp.getParameter("sys_id")){
 			// set the default selected id from the url
 			selectedId = $sp.getParameter("sys_id");						
 		} else if(data.settings.favorite.value != ''){
@@ -1583,11 +1615,10 @@ console.log('called showTooltipUserInfo');
 		
 	}
 	
-	function getTopOUgr (selectedId){
+	function getTopOUgr (selectedId, topOU){
 		var currentTopOU;
-		if(input && input.topOU){
-			// only set if passed in to the input
-			currentTopOU = input.topOU;
+		if(topOU){
+			currentTopOU = topOU;
 		} else {
 			var orgScripts = new OrganizationalScripts();
 			currentTopOU = orgScripts.getTopOUId(selectedId);
@@ -1609,17 +1640,15 @@ console.log('called showTooltipUserInfo');
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2112</sys_mod_count>
+        <sys_mod_count>2121</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-02-26 00:54:19</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-02-28 15:17:52</sys_updated_on>
         <template><![CDATA[<style >
 
 
