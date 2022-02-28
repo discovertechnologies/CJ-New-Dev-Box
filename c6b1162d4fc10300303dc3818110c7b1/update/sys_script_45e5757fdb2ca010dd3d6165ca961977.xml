@@ -32,14 +32,18 @@ STRY0085029 - TUP - Mapping fields - "Save as Template" UI action from Task - To
 /* Special License Rights
 *  The Government's rights to use, display, or disclose this software are restricted.
 *  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. */
+*  or portions thereof marked with this legend must also reproduce the markings.
+//  2.8   | 2022-02-22 | raj | STRY0118875- Need to rewrite/rework workflow
+*/
 // Script Continued Below
 (function executeRule(current, previous /*null when async*/) {
-	
 	// RJ - PSD - STRY0063760 - The Process needs to set the Shared settings based on the values from the Task
 	// changed the when to run to before insert
 	// set value of shared folder so documents are correctly copied
 	// RJ - PSD - STRY0063760 - now copy attachments from the top task to process
+	// Create Top Tasker Definition Record
+	var recTaskDef = new GlideRecord('x_153465_discovert_route_tasks');
+	var objDuration;
 	if (!current.original_tasker_saved_to_process.nil()){
 		var grTopTask = new GlideRecord('x_153465_discovert_route_task_instance');
 		if(grTopTask.get(current.getValue("original_tasker_saved_to_process"))){
@@ -73,7 +77,7 @@ STRY0085029 - TUP - Mapping fields - "Save as Template" UI action from Task - To
 			current.u_warning_days = grTopTask.warning_hours;
 			current.u_duration = grTopTask.calendar_duration;
 			
-			var objDuration = new TaskTemplateHelpers().getDurationDaysAndTimeDue(current, current.getValue('u_duration'));
+			objDuration = new TaskTemplateHelpers().getDurationDaysAndTimeDue(current, current.getValue('u_duration'));
 			if(objDuration.u_duration_days > 0){
 				current.u_duration_days = objDuration.u_duration_days;
 			}
@@ -83,10 +87,82 @@ STRY0085029 - TUP - Mapping fields - "Save as Template" UI action from Task - To
 
 			current.u_wait_for_subtasks_to_finish = grTopTask.u_wait_for_subtasks_to_finish;
 			
+			// STRY0118875
+			recTaskDef.initialize();
+			// set the process definition for the Tasker Def
+			recTaskDef.tasker_process_definition = current.sys_id;
+			recTaskDef.original_tasker_inst = current.original_tasker_saved_to_process;
+			recTaskDef.insert();
+
+			// Set the Top Task on the Template
+			current.parent_task_def = recTaskDef.sys_id;
 			// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
 			current = new CustomTaskerFieldHelper().mapFieldDataOnAction('templateCreateFromTaskSaveCopyFromTopTask', grTopTask, current);
-
 		}
+	} else {
+		recTaskDef.initialize();
+		// STRY0084986
+		recTaskDef.tasker_type = current.u_tasker_type;
+		recTaskDef.u_signature_instructions = current.u_signature_instructions;
+		recTaskDef.u_reviewer = current.u_reviewer;
+		recTaskDef.provide_response = current.provide_response;
+		recTaskDef.u_on_behalf_of = current.u_on_behalf_of;
+		// set the process definition for the Tasker Def
+		recTaskDef.tasker_process_definition = current.sys_id;
+		recTaskDef.short_description = current.short_description;
+		recTaskDef.instructions = current.description;
+		recTaskDef.route_order = 1;
+
+		// STRY0065506 - added these fields when brinign task Parity to template
+		recTaskDef.u_objective = current.u_objective;
+		recTaskDef.classification = current.classification;
+		recTaskDef.primary_assignee = current.u_primary_assignee;
+		recTaskDef.primary_office = current.u_primary_office;
+		recTaskDef.assigned_to_group = current.u_restricted_group;
+		recTaskDef.tasking_authority = current.u_tasking_authority;
+		recTaskDef.assigned_to_individual = current.u_assigned_member;
+		// STRY0063652 - pass all of the multi create fields from the Template to the Top Template Task
+		recTaskDef.u_create_multiple_subtasks = current.u_create_multiple_subtasks;
+		recTaskDef.u_create_subtasks_in_serial = current.u_create_subtasks_in_serial;
+		recTaskDef.u_subtask_assigned_member_s = current.u_subtask_assigned_member_s;
+		recTaskDef.u_subtask_primary_assignee_s = current.u_subtask_primary_assignee_s;
+
+		// STRY0075898
+		recTaskDef.u_external_ou = current.u_external_ou;
+		recTaskDef.poc_name = current.poc_name;
+		recTaskDef.outbound = current.outbound;
+		recTaskDef.u_internal_contact = current.u_internal_contact;
+		recTaskDef.u_internal_contact_performing_task = current.u_internal_contact_performing_task;
+
+		// STRY0076904, STRY0091703 corrected as these were flipped.  There is no transation.  We need to correct this eventually.
+		recTaskDef.warning_hours = current.u_warning_days;
+		recTaskDef.duration = current.u_duration;
+		
+		objDuration = new TaskTemplateHelpers().getDurationDaysAndTimeDue(current, current.getValue('u_duration'));
+		if(current.u_duration_days){
+			recTaskDef.u_duration_days = current.u_duration_days;
+		} else {
+			recTaskDef.u_duration_days = objDuration.u_duration_days;
+		}
+		if(current.u_duration_time_due){
+			recTaskDef.u_duration_time_due = current.u_duration_time_due;
+		} else {
+			recTaskDef.u_duration_time_due.setDateNumericValue(objDuration.u_duration_time_due);
+		}
+			
+			
+		recTaskDef.u_wait_for_subtasks_to_finish = current.u_wait_for_subtasks_to_finish;
+		
+		// STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
+		recTaskDef = new CustomTaskerFieldHelper().mapFieldDataOnAction('templateCreateAddTopTaskTemplate', current, recTaskDef);
+		
+		recTaskDef.insert();
+		// RJ - PSD - STRY0063760 - The Top Task My Copy to the Top Task Def My will be done on the insert of the my.  All Document Copies are moved into separate scripts
+		//GlideSysAttachment.copy('x_153465_discovert_route_task_instance', current.getValue("original_tasker_saved_to_process"), 'x_153465_discovert_route_tasks', recTaskDef.sys_id);
+		
+		// Set the Top Task on the Template, must be done after creating the Template Task
+		// move this to after insert
+		current.parent_task_def = recTaskDef.sys_id;
 	}
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
@@ -95,7 +171,7 @@ STRY0085029 - TUP - Mapping fields - "Save as Template" UI action from Task - To
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>45e5757fdb2ca010dd3d6165ca961977</sys_id>
-        <sys_mod_count>17</sys_mod_count>
+        <sys_mod_count>22</sys_mod_count>
         <sys_name>Template - b4Insert - newTopTask Save</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -103,7 +179,7 @@ STRY0085029 - TUP - Mapping fields - "Save as Template" UI action from Task - To
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_45e5757fdb2ca010dd3d6165ca961977</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-10-30 23:17:34</sys_updated_on>
+        <sys_updated_on>2022-02-27 22:09:39</sys_updated_on>
         <template/>
         <when>before</when>
     </sys_script>
