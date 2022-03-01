@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Tasker_SaveTaskAsTemplate</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.8   | 2022-02-22 | raj | STRY0118875- Need to rewrite/rework workflow&#13;
+&#13;
+This script include takes a Task and saves it as a Template</description>
+        <name>Tasker_SaveTaskAsTemplate</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// 2.7.101 | 2022-01-03 | raj  | STRY0116242 - Certification Fixes - Dot Walking to sys_id
+// Script Continued Below
+var Tasker_SaveTaskAsTemplate = Class.create();
+Tasker_SaveTaskAsTemplate.prototype = {
+    initialize: function() {
+		gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - initialize');
+		// STRY0110317 
+		this.tdc = new TaskerDurationCalculator();
+    },
+
+	startSaveTemplate: function(recTemplate){
+		try {
+			// Create Top Tasker Definition Record
+			var recTaskDef = new GlideRecord('x_153465_discovert_route_tasks');
+			if(recTaskDef.get(recTemplate.parent_task_def)){
+				this.buildTaskTemplate(recTaskDef, recTemplate);				
+			}
+		} catch(e) {
+			gs.error(e);
+		}
+			
+	},
+	
+	buildTaskTemplate: function(recTaskDef, recTemplate) {
+		try{
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - buildTaskTemplate start');
+
+			var oTaskTemp = {};
+			oTaskTemp.recTaskDef = recTaskDef;
+			oTaskTemp.u_total_template_routes = 0;
+			oTaskTemp.u_routes_loaded_count = 0;
+			oTaskTemp.u_routes_order_count = 0;
+
+			this.loadTaskTemplate(oTaskTemp);
+			while (oTaskTemp.u_routes_loaded_count < oTaskTemp.u_total_template_routes) {
+				// createTemplateTasksForOrderOnTask creates all of the template tasks for a single order on the task being saved
+				this.createTemplateTasksForOrderOnTask(oTaskTemp, recTemplate);
+
+			}
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - buildTaskTemplate end');
+		} catch(e) {
+			gs.error(e);
+		}
+			
+	},
+
+	loadTaskTemplate: function(oTaskTemp){		
+		try{
+			var taskInstanceQuery = new GlideAggregate('x_153465_discovert_route_task_instance');
+			taskInstanceQuery.addQuery('parent',oTaskTemp.recTaskDef.original_tasker_inst);
+			taskInstanceQuery.addAggregate('COUNT');
+			taskInstanceQuery.query();
+			if(taskInstanceQuery.next()){
+				oTaskTemp.u_total_template_routes = taskInstanceQuery.getAggregate('COUNT');
+			}
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - loadTaskTemplate - oTaskTemp.u_total_template_routes: ' + oTaskTemp.u_total_template_routes);
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - loadTaskTemplate end');
+		} catch(e) {
+			gs.error(e);
+		}
+	},	
+	
+	createTemplateTasksForOrderOnTask: function(oTaskTemp, recTemplate){
+		try{
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - createTemplateTasksForOrderOnTask start');
+
+			oTaskTemp.u_routes_order_count +=1;
+			
+			// we query to get the list of all Task instances in this "route order"
+			// the loop below will process each Task instance in this route order
+			// it will increment the total Task instances processed for each order
+			var taskInstanceQuery = new GlideRecord('x_153465_discovert_route_task_instance');
+			taskInstanceQuery.addQuery('parent',oTaskTemp.recTaskDef.original_tasker_inst).addCondition('order',oTaskTemp.u_routes_order_count);
+			taskInstanceQuery.query();
+			
+			while (taskInstanceQuery.next()){
+				var recTaskDef = new GlideRecord('x_153465_discovert_route_tasks');
+				recTaskDef.initialize();
+				recTaskDef.parent = oTaskTemp.recTaskDef.sys_id;
+				recTaskDef.tasker_process_definition = recTemplate.sys_id;
+				recTaskDef.original_tasker_inst = taskInstanceQuery.sys_id;
+				recTaskDef.insert();
+
+				
+				// buildTaskTemplate is called again to initiate the next level down the Template Tree
+				var nextLevel =  new Tasker_SaveTaskAsTemplate();
+				nextLevel.buildTaskTemplate(recTaskDef, recTemplate);
+
+				// increment the total routes processed for each route in this order
+				oTaskTemp.u_routes_loaded_count +=1;
+			}
+			gs.debug('x_153465_discovert.Tasker_SaveTaskAsTemplate - createTemplateTasksForOrderOnTask end');
+		} catch(e) {
+			gs.error(e);
+		}
+			
+	},
+    type: 'Tasker_SaveTaskAsTemplate'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-02-23 01:46:01</sys_created_on>
+        <sys_id>d188991edb314510991a6154ca96199b</sys_id>
+        <sys_mod_count>20</sys_mod_count>
+        <sys_name>Tasker_SaveTaskAsTemplate</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_d188991edb314510991a6154ca96199b</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-02-27 02:14:01</sys_updated_on>
+    </sys_script_include>
+</record_update>
