@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.Tasker_GenerateTaskFromTemplate</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.7.2 | 2022-02-08 | raj | DFCT0010780 - "Set Due Time" field on "Template" causes the next task to SKIP a day if the parent(or previous order's) task's time is set to after "end of day" (17:00:00)&#13;
+        <description>2.8   | 2022-02-22 | raj | STRY0118875- Need to rewrite/rework workflow&#13;
+2.7.2 | 2022-02-08 | raj | DFCT0010780 - "Set Due Time" field on "Template" causes the next task to SKIP a day if the parent(or previous order's) task's time is set to after "end of day" (17:00:00)&#13;
 &#13;
 2.7&#13;
 STRY0100724 - DEV Story- Performance Improvements -  Running Templates - This is a new script include that replaces the workflow.  It also udpates the template instance status to track completion&#13;
@@ -29,11 +30,37 @@ Tasker_GenerateTaskFromTemplate.prototype = {
 		// STRY0110317 
 		this.tdc = new TaskerDurationCalculator();
     },
-
+	
+	initializeTemplate: function(grTemplateInstance){
+		// Check the Maximum Running Templates and queue if exceeded.
+		var maximumRunningTemplates = parseInt( gs.getProperty('x_153465_discovert.Maximum_Running_Templates'));
+		var runningTemplates;
+		if(maximumRunningTemplates > 0){
+			// get the total count for the banner
+			var ga = new GlideAggregate('x_153465_discovert_discover_routing_runtime');
+			ga.addEncodedQuery('u_status=initialized^ORu_status=in_progress');
+			ga.addAggregate("COUNT");
+			ga.query();
+			if(ga.next()){
+				runningTemplates = ga.getAggregate("COUNT");
+			}
+		}
+		// if the current template is run from a daily schedule, or the template was requested to be run asynchronously
+		// or the maximum concurrent templates has been exceeded, then use event to queue run
+		if(grTemplateInstance.u_status == 'queued' || (maximumRunningTemplates > 0 && runningTemplates > maximumRunningTemplates)){
+			// Queue Template
+			grTemplateInstance.u_status = 'queued';
+			grTemplateInstance.update();
+			gs.eventQueue('x_153465_discovert.Start_Template', grTemplateInstance, grTemplateInstance.originator);
+		} else {
+			// Start Immediately
+			this.startTemplate(grTemplateInstance);
+		}
+		
+	}, 
+	
 	startTemplate: function(recTempInstance){
 		try {
-			// STRY0100724
-			recTempInstance.setWorkflow(false);
 			recTempInstance.u_status = 'initialized';
 			recTempInstance.update();
 			// STRY0110317
@@ -343,13 +370,13 @@ Tasker_GenerateTaskFromTemplate.prototype = {
         <sys_created_by>btoole</sys_created_by>
         <sys_created_on>2021-03-23 15:40:04</sys_created_on>
         <sys_id>feb6fc46db432010029db298f4961915</sys_id>
-        <sys_mod_count>103</sys_mod_count>
+        <sys_mod_count>104</sys_mod_count>
         <sys_name>Tasker_GenerateTaskFromTemplate</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_feb6fc46db432010029db298f4961915</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-02-10 07:25:20</sys_updated_on>
+        <sys_updated_on>2022-03-05 17:50:45</sys_updated_on>
     </sys_script_include>
 </record_update>
