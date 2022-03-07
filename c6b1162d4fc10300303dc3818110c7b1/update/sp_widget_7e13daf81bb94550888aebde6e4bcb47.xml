@@ -1,216 +1,225 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>standard</category>
-        <client_script><![CDATA[function ($scope, $element, $window, $location, $rootScope, $timeout, snAttachmentHandler, $http, spUtil, userPreferences, $filter, i18n, $uibModal, spAriaUtil) {
-
-	// Many of these fields are more configuration-type fields than profile fields. We still want to display
-	// these to a user who is configuring their 'settings', but we shouldn't show them on a user profile page.
-	// We need to handle this better.
-	var fieldExcludes = {
-		sys_user: ['name', 'introduction', 'title', 'department', 'location', 'photo',
-							 'manager', 'company'],
-		live_profile: ['short_description', 'photo']
-	}
-
-	$scope.openConnectConversation = function() {
-		$window.open('/$c.do#?user=' + $scope.data.liveProfileID, '_blank');
-	}
-
-	$scope.$watch('data.dateTimeFormat', function() {
-		if ($scope.data.dateTimeFormat != g_user_date_time_format)
-			$scope.data.dateTimeFormatChanged = true;
-	});
-
-	$scope.uploadNewProfilePicture = function($event) {
-		$event.stopPropagation();
-		if($event.keyCode === 9) {
-			return;
-		}
-		var $el = $element.find('input[type=file]');
-		$el.click();
-	}
-
-	$scope.attachFiles = function(files) {
-		var file = files.files[0];
-
-		var validImage = false;
-
-		switch(file.type) {
-			case 'image/jpeg':
-			case 'image/png':
-			case 'image/bmp':
-			case 'image/x-windows-bmp':
-			case 'image/gif':
-			case 'image/x-icon':
-			case 'image/svg+xml':
-				validImage = true;
-				break;
-			default:
-				break;
-		}
-
-		if(!validImage) {
-			alert(file.name + " " + i18n.getMessage("isn't a recognized image file format"));
-			return;
-		}
-
-		snAttachmentHandler.create("live_profile", $scope.data.liveProfileID).uploadAttachment(file, {
-			sysparm_fieldname: "photo"
-		}).then(function(response) {
-			var obj = {};
-			obj.newAvatarId = response.sys_id;
-			$scope.avatarPicture = {
-				'background-image': "url('" + response.sys_id + ".iix')",
-				'color': 'transparent'
-			};
-			$rootScope.$broadcast("sp.avatar_changed", obj);
-			// timeout is required for screen reader to pick up the message once file upload prompt is dismissed
-			$timeout(function() {
-			   spAriaUtil.sendLiveMessage(i18n.getMessage('Profile picture updated successfully'));
-			}, 500);
-		});
-	}
-
-	$scope.avatarPicture = "";
-
-	$http.get('/api/now/live/profiles/sys_user.' + $scope.data.sysUserID).then(function (response) {
-		if (response.data.result && response.data.result.avatar){
-			var avatarPicture = response.data.result.avatar.replace("?t=small", "");
-			$scope.avatarPicture = {
-				'background-image': "url('" + avatarPicture + "')",
-				'color': 'transparent'
-			};
-		}
-	});
-
-	spUtil.recordWatch($scope, "sys_user", "sys_id=" + $scope.data.sysUserID);
-	spUtil.recordWatch($scope, "live_profile", "sys_id=" + $scope.data.liveProfileID);
-
-	$scope.connectEnabled = function() {
-		return $scope.data.connectEnabled && !$scope.data.isLoggedInUsersProfile;
-	}
-
-	$scope.openUserProfile = function($event, userID) {
-		$event.stopPropagation();
-		$event.preventDefault();
-		$location.search("id=user_profile&sys_id=" + userID);
-	}
-
-	$scope.getSysUserModelFields = function() {
-		if ($scope.data.userExists) {
-			return $scope.data.sysUserModelList
-							.filter(function(field) {
-								return $scope.displayField("sys_user", field.name);
-							});
-		}
-		return [];
-	}
+        <client_script><![CDATA[api.controller = function($scope, $element, $window, $location, $rootScope, $timeout, snAttachmentHandler, $http, spUtil, userPreferences, $filter, i18n, $uibModal, spAriaUtil) {
+// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; lines from new controller example
+/* widget controller */
+	var c = this;
 	
-	$scope.data.showAnalytics = $scope.data.analytics_enabled && $scope.data.sp_analytics_plugin_active && !$scope.data.consent_popup_disabled && !$scope.data.ucm_encountered_exception && !NOW.user_impersonating && NOW.sp_analytics_portal_override != true;
-	$scope.data.userPreferencesChanged = false;
-	$scope.data.dateTimeFormatChanged = false;
+    // Many of these fields are more configuration-type fields than profile fields. We still want to display
+    // these to a user who is configuring their 'settings', but we shouldn't show them on a user profile page.
+    // We need to handle this better.
+    var fieldExcludes = {
+        sys_user: ['name', 'introduction', 'title', 'department', 'location', 'photo',
+            'manager', 'company'
+        ],
+        live_profile: ['short_description', 'photo']
+    };
 
-	// get the list of values for a property using the concourse picker api (timezone, language)
-	var getListValuesForProperty = function(endpoint, listProperty) {
-		$http.get('/api/now/ui/concoursepicker/' + endpoint).then(function(response) {
-			if (response && response.data && response.data.result && response.data.result.list) {
-				if (!listProperty.list)
-					listProperty.list = [];
+    $scope.openConnectConversation = function() {
+        $window.open('/$c.do#?user=' + $scope.data.liveProfileID, '_blank');
+    };
 
-				listProperty.list = response.data.result.list;
-				if (response.data.result.current) {
-					if (!listProperty.current)
-						listProperty.current = {};
-					listProperty.current = $filter('filter')(listProperty.list, {value: response.data.result.current}, true)[0];
-				}
-			}
-		});
-	};
+    $scope.$watch('data.dateTimeFormat', function() {
+        if ($scope.data.dateTimeFormat != g_user_date_time_format)
+            $scope.data.dateTimeFormatChanged = true;
+    });
 
-	// list of user properties that are not user preferences
-	$scope.data.listProperties = {
-		timezone: {},
-		encryption: {},
-		language: {}
-	}
+    $scope.uploadNewProfilePicture = function($event) {
+        $event.stopPropagation();
+        if ($event.keyCode === 9) {
+            return;
+        }
+        var $el = $element.find('input[type=file]');
+        $el.click();
+    };
 
-	// initialize dropbox data
-	getListValuesForProperty('timezone', $scope.data.listProperties.timezone);
-	getListValuesForProperty('language', $scope.data.listProperties.language);
-	getListValuesForProperty('encryption', $scope.data.listProperties.encryption);
+    $scope.attachFiles = function(files) {
+        var file = files.files[0];
 
-	//set the user property
-	$scope.setPreferenceValue = function(endpoint, value) {
-		$http.put('/api/now/ui/concoursepicker/' + endpoint, {current : value, id: value}).then(function(response) {
-			if (response && response.data && response.data.result) {
-				$scope.data.userPreferencesChanged = true;
-			}
-		});
-	}
-	
-	//set the user preference value
-	$scope.setUserPreferenceValue = function(userProperty) {
-		userPreferences.setPreference(userProperty.key, userProperty.value).then(function() {
-				 $scope.data.userPreferencesChanged = true;
-	 });
-	};
-	
-	$scope.updateUserTracking = function(userProperty) {
-		$scope.setUserPreferenceValue(userProperty);
-		$scope.server.get({
-			action: "update_session_tracking_info",
-			user_tracking : userProperty.value
-		}).then(function() {
-			NOW.usage_tracking.usage_tracking_allowed_for_session = userProperty.value;
-		});
-	};
-	
-	$scope.toggle = function(e, userProperty) {
-		if (e.type === 'keypress' && e.keyCode === 32) {
-			userProperty.value = !userProperty.value;
-			$scope.setUserPreferenceValue(userProperty);
-		}
-	}
+        var validImage = false;
 
-	$scope.reloadPage = function() {
-			$window.location.reload(true);
-	};
+        switch (file.type) {
+            case 'image/jpeg':
+            case 'image/png':
+            case 'image/bmp':
+            case 'image/x-windows-bmp':
+            case 'image/gif':
+            case 'image/x-icon':
+            case 'image/svg+xml':
+                validImage = true;
+                break;
+            default:
+                break;
+        }
 
-	$scope.teamExists = function() {
-		return $scope.data.teamData.direct_reports.length > 0 ||
-			$scope.data.teamData.members.length > 0 ||
-			$scope.data.teamData.manager;
-	}
+        if (!validImage) {
+            alert(file.name + " " + i18n.getMessage("isn't a recognized image file format"));
+            return;
+        }
 
-	var models = {
-		sys_user: $scope.data.sysUserModel,
-		live_profile: $scope.data.liveProfileModel
-	}
+        snAttachmentHandler.create("live_profile", $scope.data.liveProfileID).uploadAttachment(file, {
+            sysparm_fieldname: "photo"
+        }).then(function(response) {
+            var obj = {};
+            obj.newAvatarId = response.sys_id;
+            $scope.avatarPicture = {
+                'background-image': "url('" + response.sys_id + ".iix')",
+                'color': 'transparent'
+            };
+            $rootScope.$broadcast("sp.avatar_changed", obj);
+            // timeout is required for screen reader to pick up the message once file upload prompt is dismissed
+            $timeout(function() {
+                spAriaUtil.sendLiveMessage(i18n.getMessage('Profile picture updated successfully'));
+            }, 500);
+        });
+    };
 
-	$scope.displayField = function(tableName, field, isHeader) {
-		if (!isHeader && fieldExcludes[tableName].indexOf(field) > -1) return false;
+    $scope.avatarPicture = "";
 
-		if (models[tableName][field] && models[tableName][field].type === "boolean") return false;
+    $http.get('/api/now/live/profiles/sys_user.' + $scope.data.sysUserID).then(function(response) {
+        if (response.data.result && response.data.result.avatar) {
+            var avatarPicture = response.data.result.avatar.replace("?t=small", "");
+            $scope.avatarPicture = {
+                'background-image': "url('" + avatarPicture + "')",
+                'color': 'transparent'
+            };
+        }
+    });
 
-		if ($scope.data.isLoggedInUsersProfile) {
-			if (models[tableName][field] && models[tableName][field].readonly)
-				return models[tableName][field].displayValue;
-			else
-				return models[tableName][field];
-		} else {
-			return models[tableName][field] && models[tableName][field].displayValue;
-		}
-	}
+    spUtil.recordWatch($scope, "sys_user", "sys_id=" + $scope.data.sysUserID);
+    spUtil.recordWatch($scope, "live_profile", "sys_id=" + $scope.data.liveProfileID);
 
-	$scope.triggerMFAConfigurationModal = function() {
-		$window.location = "?id=multi_factor_authentication";
-	}
+    $scope.connectEnabled = function() {
+        return $scope.data.connectEnabled && !$scope.data.isLoggedInUsersProfile;
+    };
 
-	$scope.triggerManageCertificatesModal = function() {
-		$window.location = '?id=client_certificate_list&table=sys_user_certificate&filter=user=' + $scope.data.sysUserID;
-	}
-	
-	$scope.triggerCertificateConfigurationModal = function() {
+    $scope.openUserProfile = function($event, userID) {
+        $event.stopPropagation();
+        $event.preventDefault();
+        $location.search("id=user_profile&sys_id=" + userID);
+    };
+
+    $scope.getSysUserModelFields = function() {
+        if ($scope.data.userExists) {
+            return $scope.data.sysUserModelList
+                .filter(function(field) {
+                    return $scope.displayField("sys_user", field.name);
+                });
+        }
+        return [];
+    };
+
+    $scope.data.showAnalytics = $scope.data.analytics_enabled && $scope.data.sp_analytics_plugin_active && !$scope.data.consent_popup_disabled && !$scope.data.ucm_encountered_exception && !NOW.user_impersonating && NOW.sp_analytics_portal_override != true;
+    $scope.data.userPreferencesChanged = false;
+    $scope.data.dateTimeFormatChanged = false;
+
+    // get the list of values for a property using the concourse picker api (timezone, language)
+    var getListValuesForProperty = function(endpoint, listProperty) {
+        $http.get('/api/now/ui/concoursepicker/' + endpoint).then(function(response) {
+            if (response && response.data && response.data.result && response.data.result.list) {
+                if (!listProperty.list)
+                    listProperty.list = [];
+
+                listProperty.list = response.data.result.list;
+                if (response.data.result.current) {
+                    if (!listProperty.current)
+                        listProperty.current = {};
+                    listProperty.current = $filter('filter')(listProperty.list, {
+                        value: response.data.result.current
+                    }, true)[0];
+                }
+            }
+        });
+    };
+
+    // list of user properties that are not user preferences
+    $scope.data.listProperties = {
+        timezone: {},
+        encryption: {},
+        language: {}
+    };
+
+    // initialize dropbox data
+    getListValuesForProperty('timezone', $scope.data.listProperties.timezone);
+    getListValuesForProperty('language', $scope.data.listProperties.language);
+    getListValuesForProperty('encryption', $scope.data.listProperties.encryption);
+
+    //set the user property
+    $scope.setPreferenceValue = function(endpoint, value) {
+        $http.put('/api/now/ui/concoursepicker/' + endpoint, {
+            current: value,
+            id: value
+        }).then(function(response) {
+            if (response && response.data && response.data.result) {
+                $scope.data.userPreferencesChanged = true;
+            }
+        });
+    };
+
+    //set the user preference value
+    $scope.setUserPreferenceValue = function(userProperty) {
+        userPreferences.setPreference(userProperty.key, userProperty.value).then(function() {
+            $scope.data.userPreferencesChanged = true;
+        });
+    };
+
+    $scope.updateUserTracking = function(userProperty) {
+        $scope.setUserPreferenceValue(userProperty);
+        $scope.server.get({
+            action: "update_session_tracking_info",
+            user_tracking: userProperty.value
+        }).then(function() {
+            NOW.usage_tracking.usage_tracking_allowed_for_session = userProperty.value;
+        });
+    };
+
+    $scope.toggle = function(e, userProperty) {
+        if (e.type === 'keypress' && e.keyCode === 32) {
+            userProperty.value = !userProperty.value;
+            $scope.setUserPreferenceValue(userProperty);
+        }
+    };
+
+    $scope.reloadPage = function() {
+        $window.location.reload(true);
+    };
+
+    $scope.teamExists = function() {
+        return $scope.data.teamData.direct_reports.length > 0 ||
+            $scope.data.teamData.members.length > 0 ||
+            $scope.data.teamData.manager;
+    };
+
+    var models = {
+        sys_user: $scope.data.sysUserModel,
+        live_profile: $scope.data.liveProfileModel
+    };
+
+    $scope.displayField = function(tableName, field, isHeader) {
+        if (!isHeader && fieldExcludes[tableName].indexOf(field) > -1) return false;
+
+        if (models[tableName][field] && models[tableName][field].type === "boolean") return false;
+
+        if ($scope.data.isLoggedInUsersProfile) {
+            if (models[tableName][field] && models[tableName][field].readonly)
+                return models[tableName][field].displayValue;
+            else
+                return models[tableName][field];
+        } else {
+            return models[tableName][field] && models[tableName][field].displayValue;
+        }
+    };
+
+    $scope.triggerMFAConfigurationModal = function() {
+        $window.location = "?id=multi_factor_authentication";
+    };
+
+    $scope.triggerManageCertificatesModal = function() {
+        $window.location = '?id=client_certificate_list&table=sys_user_certificate&filter=user=' + $scope.data.sysUserID;
+    };
+
+    $scope.triggerCertificateConfigurationModal = function() {
         $scope.data.action = 'certRegister';
         $scope.server.update().then(function(response) {
             if (response.certHeader == 'false')
@@ -234,19 +243,21 @@
             }
         });
         createCloseCertAuthModalHandler();
-       }
-	
-	$scope.dismissCertAuthConfigurationModal = function() {
+    };
+
+    $scope.dismissCertAuthConfigurationModal = function() {
         $scope.certAuthModalModalInstance.close();
-    }
+    };
 
-	$timeout(function(){
-		$rootScope.$broadcast('finishedChanged', {profile: $scope.data.teamData});
-	});
+    $timeout(function() {
+        $rootScope.$broadcast('finishedChanged', {
+            profile: $scope.data.teamData
+        });
+    });
 
-	$scope.sysUserModelFields = $scope.getSysUserModelFields();
+    $scope.sysUserModelFields = $scope.getSysUserModelFields();
 
-	function createCloseCertAuthModalHandler() {
+    function createCloseCertAuthModalHandler() {
         // This is a hack. Wait for the inner iframe to load, then mock
         // the GlideDialogWindow close function to do the right thing. If it's not ready
         // after a second, try again 9 more times. 
@@ -271,12 +282,28 @@
                         destroy: function() {
                             $scope.dismissCertAuthConfigurationModal();
                         }
-                    }
+                    };
                 };
             }, 1000);
         }
     }
-}]]></client_script>
+	
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+	//Added cancel and submit buttons to cloned widget
+	c.onCancel = function() {
+        $scope.$parent.$parent.$dismiss();
+    };
+	
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+	// Submit is not currently active in the HTML so comment out here
+//     c.onSubmit = function() {
+//         c.data.submit = true;
+//         $scope.server.update().then(function() {
+//             $scope.$parent.$parent.$dismiss();
+//         });
+
+//     };
+};]]></client_script>
         <controller_as>c</controller_as>
         <css>.list-group-item {
   border: none;
@@ -351,183 +378,229 @@
         <option_schema/>
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
-        <script><![CDATA[(function($sp, input, data, options, gs) {
-	/* populate the 'data' object */
-	/* e.g., data.table = $sp.getValue('table'); */
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// Cloned from Global User Profile
+//
+//
+//           HACKED JUST ENOUGH TO OPEN IN A MODAL, see comments // MWMTest
+//                  STILL IN PROOF OF CONCEPT STATE
+//                        DESIGN IS NOT APPROVED
+//           DO NOT USE
+//
+//
+//------------------------------------------------------------------------------------------------------------------------
+//
+// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+//                                      In HTML, added a footer div for Cancel button
+//                                      In Server script, added code to build Messages for the widget; 
+//                                        made changes to run in a Scoped App
+//                                      In Client controller, Added cancel and submit functions for their buttons
+//                                      Changes made in HTML, Server script and Client controller
+//
+//------------------------------------------------------------------------------------------------------------------------
+
+(function($sp, input, data, options, gs) {
+    /* populate the 'data' object */
+    /* e.g., data.table = $sp.getValue('table'); */
 
 
-	if (input && input.action === "update_session_tracking_info") {
-		gs.getSession().putProperty("usage_tracking_allowed_for_session", input.user_tracking);
-		return;
+    if (input && input.action === "update_session_tracking_info") {
+        gs.getSession().putProperty("usage_tracking_allowed_for_session", input.user_tracking);
+        return;
 
-	}
-	//MWMTest not allowed
-// 	data.analytics_enabled = GlideProperties.getBoolean("glide.analytics.enabled");
-// 	data.sp_analytics_plugin_active = GlidePluginManager.isActive('com.glide.service-portal.analytics');
-// 	data.consent_popup_disabled = GlideProperties.getBoolean("glide.analytics.user.consent.popup.disabled");
-// 	data.ucm_encountered_exception = gs.getSession().getProperty("ucm_encountered_exception") == true;
+    }
+	
+    // MWMTest not allowed in Scoped App
+    data.analytics_enabled = false; // MWMTest GlideProperties.getBoolean("glide.analytics.enabled");
+    data.sp_analytics_plugin_active = GlidePluginManager.isActive('com.glide.service-portal.analytics');
+    data.consent_popup_disabled = false; // MWMTest GlideProperties.getBoolean("glide.analytics.user.consent.popup.disabled");
+    data.ucm_encountered_exception = false; // MWMTest gs.getSession().getProperty("ucm_encountered_exception") == true;
 
-	// populate the 'data' object
-	// e.g., data.table = $sp.getValue('table');
+    //MWMTest Get ID from widgetInput params if opening a modal
+	data.isModal = false;
+    // data.sysUserID = $sp.getParameter("sys_id");
+    if (input && input.sys_id) {
+        data.sysUserID = input.sys_id;
+		data.isModal = input.isModal;
+    } else {
+        data.sysUserID = $sp.getParameter("sys_id");
+    }
 
-	//MWMTest 
-	// data.sysUserID = $sp.getParameter("sys_id");
-	if(input && input.sys_id) {
-		data.sysUserID = input.sys_id;
-	} else {
-		data.sysUserID = $sp.getParameter("sys_id");
-	}
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; build Messages for the widget
+		_buildMessages();
+	
+    if (!data.sysUserID) {
+        data.sysUserID = gs.getUser().getID();
+    }
 
-	if (!data.sysUserID)
-		data.sysUserID = gs.getUser().getID();
-	var sysUserGR = new GlideRecord("sys_user");
-	data.userExists = sysUserGR.get(data.sysUserID) && sysUserGR.canRead();
+    var sysUserGR = new GlideRecord("sys_user");
+    data.userExists = sysUserGR.get(data.sysUserID) && sysUserGR.canRead();
 
-	if (data.userExists) {
-		sysUserGR = GlideScriptRecordUtil.get(sysUserGR).getRealRecord();
-		data.table = sysUserGR.getRecordClassName();
-		data.name = sysUserGR.getValue("name");
-		var loggedInSysUserID = gs.getUser().getID();
-		//MWMTest
-		//data.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
-		data.liveProfileID = "";
-		data.dateTimeFormat = gs.getDateTimeFormat();
+    if (data.userExists) {
+        // MWMTest Global app only
+        // sysUserGR = GlideScriptRecordUtil.get(sysUserGR).getRealRecord();
+        data.table = sysUserGR.getRecordClassName();
+        data.name = sysUserGR.getValue("name");
+        var loggedInSysUserID = gs.getUser().getID();
 
-		//MWMTest
-		//get live profile id for sending connect messages
-// 		if (GlidePluginManager().isActive('com.glideapp.live_common')) {
-// 			var liveProfileGR = new GlideRecord("live_profile");
-// 			liveProfileGR.addQuery("document", data.sysUserID);
-// 			liveProfileGR.query();
-// 			if (liveProfileGR.next()) {
-// 				data.liveProfileID = liveProfileGR.getValue("sys_id");
-// 				data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
-// 				// live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
-// 				if (data.liveProfileModel.short_description) {
-// 					data.liveProfileModel.short_description.label = gs.getMessage("Bio");
-// 					data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
-// 				}
-// 			} else
-// 				data.connectEnabled = false; //can't find a live profile for this user, so lets not integrate Connect
-// 		}
+        data.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
+        data.liveProfileID = "";
+        data.dateTimeFormat = gs.getDateTimeFormat();
 
-		data.isLoggedInUsersProfile = loggedInSysUserID.equals(data.sysUserID);
-		var sysUserForm = $sp.getForm(data.table, data.sysUserID);
-		data.sysUserView = sysUserForm._view;
-		data.sysUserModel = sysUserForm._fields;
-		data.sysUserModelList = [];
+        //get live profile id for sending connect messages
+        if (GlidePluginManager().isActive('com.glideapp.live_common')) {
+            var liveProfileGR = new GlideRecord("live_profile");
+            liveProfileGR.addQuery("document", data.sysUserID);
+            liveProfileGR.query();
+            if (liveProfileGR.next()) {
+                data.liveProfileID = liveProfileGR.getValue("sys_id");
+                data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
+                // live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
+                if (data.liveProfileModel.short_description) {
+                    data.liveProfileModel.short_description.label = gs.getMessage("Bio");
+                    data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
+                }
+            } else
+                data.connectEnabled = false; //can't find a live profile for this user, so lets not integrate Connect
+        }
 
-		for (var i = 0; i < data.sysUserView.length; i++) {
-			data.sysUserModelList.push(data.sysUserModel[data.sysUserView[i].name]);
-		}
+        data.isLoggedInUsersProfile = loggedInSysUserID.equals(data.sysUserID);
+        var sysUserForm = $sp.getForm(data.table, data.sysUserID);
+        data.sysUserView = sysUserForm._view;
+        data.sysUserModel = sysUserForm._fields;
+        data.sysUserModelList = [];
 
-		data.directReports = [];
-		data.teamData = {};
-		data.teamData.direct_reports = [];
-		data.teamData.members = [];
+        for (var i = 0; i < data.sysUserView.length; i++) {
+            data.sysUserModelList.push(data.sysUserModel[data.sysUserView[i].name]);
+        }
 
-		if (!data.isLoggedInUsersProfile) {
-			data.teamData.user = {
-				sys_id: data.sysUserID
-			}
-		}
+        data.directReports = [];
+        data.teamData = {};
+        data.teamData.direct_reports = [];
+        data.teamData.members = [];
 
-		//Calculate manager
-		var managerGR = new GlideRecord("sys_user");
-		if (managerGR.get(sysUserGR.getValue("manager"))) {
-			data.teamData.manager = buildUser(managerGR);
-		}
+        if (!data.isLoggedInUsersProfile) {
+            data.teamData.user = {
+                sys_id: data.sysUserID
+            };
+        }
 
-		//Calculate team
-		if (data.teamData.manager) {
-			var teamGR = new GlideRecord("sys_user");
-			teamGR.addActiveQuery();
-			teamGR.orderBy("name");
-			teamGR.addQuery("manager", data.teamData.manager.sys_id);
-			teamGR.addQuery("sys_id", "!=", data.sysUserID);
-			teamGR.query();
-			while(teamGR.next())
-				data.teamData.members.push(buildUser(teamGR));
-		}
+        //Calculate manager
+        var managerGR = new GlideRecord("sys_user");
+        if (managerGR.get(sysUserGR.getValue("manager"))) {
+            data.teamData.manager = buildUser(managerGR);
+        }
 
-		//Calculate direct reports
-		var directReportGR = new GlideRecord("sys_user");
-		directReportGR.addActiveQuery();
-		directReportGR.orderBy("name");
-		directReportGR.addQuery("manager", data.sysUserID);
-		directReportGR.query();
+        //Calculate team
+        if (data.teamData.manager) {
+            var teamGR = new GlideRecord("sys_user");
+            teamGR.addActiveQuery();
+            teamGR.orderBy("name");
+            teamGR.addQuery("manager", data.teamData.manager.sys_id);
+            teamGR.addQuery("sys_id", "!=", data.sysUserID);
+            teamGR.query();
+            while (teamGR.next())
+                data.teamData.members.push(buildUser(teamGR));
+        }
 
-		while(directReportGR.next())
-			data.teamData.direct_reports.push(buildUser(directReportGR));
+        //Calculate direct reports
+        var directReportGR = new GlideRecord("sys_user");
+        directReportGR.addActiveQuery();
+        directReportGR.orderBy("name");
+        directReportGR.addQuery("manager", data.sysUserID);
+        directReportGR.query();
 
-		data.teamWidget = $sp.getWidget('sp-my-team', {glyph: 'user', color: 'primary'});
+        while (directReportGR.next())
+            data.teamData.direct_reports.push(buildUser(directReportGR));
 
-		//get state preferences
-		data.preferencesEnabled = getPreferencesEnabled();
+        data.teamWidget = $sp.getWidget('sp-my-team', {
+            glyph: 'user',
+            color: 'primary'
+        });
 
-		//get the user Preferences of the user
-		data.userPreferences = getUserPreferences(data.sysUserID);
-	}
+        //get state preferences
+        data.preferencesEnabled = getPreferencesEnabled();
 
-	//get the certificate header
-	if (input.action == "certRegister") {
-		var request = GlideTransaction.get().getRequest();
-		var certHeader = request.getHeader("X-Client-Cert");
-		if (!certHeader) {
-			data.certHeader = "false";
-			data.certErrorMsg = gs.getMessage("Failed to register PIV/CAC certificate to the user account. Please close your browser, ensure your card is inserted and try again");
-		}	
-	}
+        //get the user Preferences of the user
+        data.userPreferences = getUserPreferences(data.sysUserID);
+    }
 
-	function buildUser(userGR) {
-		return {
-			email: userGR.getValue("email") || "",
-			first_name: userGR.getValue("first_name"),
-			last_name: userGR.getValue("last_name"),
-			name: userGR.getValue("name"),
-			phone: userGR.getValue("phone") || "",
-			sys_id: userGR.getValue("sys_id")
-		}
-	}
+    //get the certificate header
+    if (input.action == "certRegister") {
+        var request = GlideTransaction.get().getRequest();
+        var certHeader = request.getHeader("X-Client-Cert");
+        if (!certHeader) {
+            data.certHeader = "false";
+            data.certErrorMsg = gs.getMessage("Failed to register PIV/CAC certificate to the user account. Please close your browser, ensure your card is inserted and try again");
+        }
+    }
 
-	// returns the user preferences from the platform
-	function getUserPreferences(userID){
-		var user = GlideUser.getUserByID(userID);
-		return {
-			accessibility: {
-				key: 'glide.ui.accessibility',
-				value: user.getPreference('glide.ui.accessibility') == 'true'
-			},
-			analytics: {
-				key: 'enable_analytics',
-				value: user.getPreference('enable_analytics') == 'true'
-			}
-		}
-	}
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+	// Use this function to get Messages that will be used in this widget
+    function _buildMessages() {
+        data.cancelButtonText = gs.getMessage('cancel');
+        // data.submitButtonText = gs.getMessage('Tasker - Button - Confirm');
+        // data.submitButtonTitle = gs.getMessage('Tasker - Button - Confirm');
+    }
+	
+    function buildUser(userGR) {
+        return {
+            email: userGR.getValue("email") || "",
+            first_name: userGR.getValue("first_name"),
+            last_name: userGR.getValue("last_name"),
+            name: userGR.getValue("name"),
+            phone: userGR.getValue("phone") || "",
+            sys_id: userGR.getValue("sys_id")
+        };
+    }
 
-	// read the proper state so we can show/hide preferences in the preferences table
-	function getPreferencesEnabled() {
-		var showEncryption = pm.isActive('com.glide.encryption') && 
-			gs.getProperty('glide_encryption.cle_replatforming_with_kmf') !== 'opt_in' && 
-			new SNC.ConcoursePickerGenerator().hasMultipleEncryptionChoices();
+    // returns the user preferences from the platform
+    function getUserPreferences(userID) {
+        var user = GlideUser.getUserByID(userID);
+        return {
+            accessibility: {
+                key: 'glide.ui.accessibility',
+                value: user.getPreference('glide.ui.accessibility') == 'true'
+            },
+            analytics: {
+                key: 'enable_analytics',
+                value: user.getPreference('enable_analytics') == 'true'
+            }
+        };
+    }
 
-		//Enabling certificate based authentication per portal
-		var portalRecord = $sp.getPortalRecord();
-		if (portalRecord && (portalRecord.getValue('enable_certificate_based_authentication') == 1))
-			var cert_based_auth = gs.getProperty('glide.authenticate.mutual.enabled', 'false') == 'true';
+    // read the proper state so we can show/hide preferences in the preferences table
+    function getPreferencesEnabled() {
+		// MWMTest pm is not found in Scoped app
+//         var showEncryption = pm.isActive('com.glide.encryption') &&
+//             gs.getProperty('glide_encryption.cle_replatforming_with_kmf') !== 'opt_in' &&
+//             new SNC.ConcoursePickerGenerator().hasMultipleEncryptionChoices();
+		var showEncryption = 
+            gs.getProperty('glide_encryption.cle_replatforming_with_kmf') !== 'opt_in' &&
+            new SNC.ConcoursePickerGenerator().hasMultipleEncryptionChoices();
 
-		return {
-			// show preferences only if the sys_id of the url is the same user that is logged on
-			preferencesPanelEnabled : GlideStringUtil.nil($sp.getParameter('sys_id')) || $sp.getParameter('sys_id') == gs.getUserID(),
+        //Enabling certificate based authentication per portal
+        var portalRecord = $sp.getPortalRecord();
+        if (portalRecord && (portalRecord.getValue('enable_certificate_based_authentication') == 1))
+            var cert_based_auth = gs.getProperty('glide.authenticate.mutual.enabled', 'false') == 'true';
 
-			//certain properties are visible in some cases
-			languageEnabled : pm.isActive('com.glide.i18n') && gs.getProperty('glide.ui.language_picker.enabled', 'true') == 'true',
-			timezoneEnabled: gs.hasRole(gs.getProperty('glide.timezone_changer.roles')),
-			encryptionEnabled: showEncryption,
-			mfaEnabled: gs.getProperty('glide.authenticate.multifactor', "false") == "true",
-			certAuthEnabled: cert_based_auth
-		}
-	}
+        return {
+            // show preferences only if the sys_id of the url is the same user that is logged on
+            preferencesPanelEnabled: GlideStringUtil.nil($sp.getParameter('sys_id')) || $sp.getParameter('sys_id') == gs.getUserID(),
+
+			// MWMTest pm is not found in Scoped app
+            //certain properties are visible in some cases
+//             languageEnabled: pm.isActive('com.glide.i18n') && gs.getProperty('glide.ui.language_picker.enabled', 'true') == 'true',
+			languageEnabled: gs.getProperty('glide.ui.language_picker.enabled', 'true') == 'true',
+            timezoneEnabled: gs.hasRole(gs.getProperty('glide.timezone_changer.roles')),
+            encryptionEnabled: showEncryption,
+            mfaEnabled: gs.getProperty('glide.authenticate.multifactor', "false") == "true",
+            certAuthEnabled: cert_based_auth
+        };
+    }
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
@@ -535,7 +608,7 @@
         <sys_created_on>2022-02-18 14:11:07</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>7e13daf81bb94550888aebde6e4bcb47</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>21</sys_mod_count>
         <sys_name>Tasker User Profile</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
@@ -543,12 +616,12 @@
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_7e13daf81bb94550888aebde6e4bcb47</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-02-25 21:35:08</sys_updated_on>
+        <sys_updated_on>2022-03-05 16:41:28</sys_updated_on>
         <template><![CDATA[<div class="default-focus-outline user-profile-container">
   <div ng-if="!data.userExists" class="panel panel-default">
-      <div class="panel-body wrapper-lg text-center">
-        <p>${Requested user not found}</p>
-      </div>
+    <div class="panel-body wrapper-lg text-center">
+      <p>${Requested user not found}</p>
+    </div>
   </div>
   <div ng-if="data.userExists">
     <div class="panel panel-default">
@@ -692,14 +765,27 @@
           <div class="modal-header">
             <h1 class="h4 modal-title" id="certAuthModal" style="display: inline-block">${PIV/CAC Certificate Found}</h1>
             <i class="fa fa-close pull-right text-base" tabindex="0" ng-click="dismissCertAuthConfigurationModal()" aria-label="${Close dialog}" role="button"></i>
-          </div>
+        </div>
           <div class="modal-body">
           	<iframe id="cert-auth-config-window" src="/cert_confirm_page" width="100%" height="240px" frameBorder="0"></iframe>
-          </div>
-          
+        </div>
+
         </div>
       </script>
     </div>
+  </div>
+  <!-- 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; added footer div -->
+  <div id="footer" class="dtech-modal-widget-footer dtech-box">
+    <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
+            type="button" title="{{data.cancelButtonText}}"
+            ng-click="c.onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
+    </button>
+<!--
+    <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
+            type="submit" title="{{data.submitButtonTitle}}"
+            ng-click="c.onSubmit();">{{data.submitButtonText}}
+    </button>
+-->
   </div>
 </div>]]></template>
     </sp_widget>
