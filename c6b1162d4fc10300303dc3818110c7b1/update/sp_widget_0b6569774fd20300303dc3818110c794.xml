@@ -105,17 +105,42 @@
 
 	// RJ -ET - Story 4
 	var c = this;
-	
-	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; avatar popover
-	c.data.isPopoverOpened = false;
-	$scope.$on("$destroy", function (event) {
-		$timeout.cancel(c.popoverTimeout);
-	});
-	
+	var fontStyle = "14px Segoe UI";
+	//var font = "13px Helvetica, Arial, sans-serif";
+	// Define a simple node template consisting of text followed by an expand/collapse button
 	// STRY0116812
 	var $go = go.GraphObject.make;  // for conciseness in defining templates
 	var node_id = "page_map";
 	var minHeight = 35;
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; avatar popover
+	c.data.isPopoverOpened = false;
+	c.data.topIconOpacity = c.data.settings.isFullScreen? icon_opacity_normal:0.0;
+	c.data.showIcons = false;
+	
+	// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
+	var  diagramMinHeight = 150;
+	c.data.topOU="";
+	// RJ -ET - Story 4
+	var diagram;
+	// STRY0116823
+	var myOverview;
+
+	// STRY0072032
+	var treeOrientation;
+	var treeNodeAngle;
+	// set default tree orientation based on system setting (this will change when user perference is enabled)
+	if(!c.data.settings.isSystemTreeOrientationVertical){
+		treeOrientation = "Horizontal";
+		treeNodeAngle = 0;
+	} else {
+		treeOrientation = "Vertical";
+		treeNodeAngle = 90;
+	}
+
+	
+	$scope.$on("$destroy", function (event) {
+		$timeout.cancel(c.popoverTimeout);
+	});
 
 	$(window).on("resize", function() {
 		// not sure why, but increasing the minHeight seems to work, but not sure why
@@ -124,19 +149,9 @@
 	});
 
 	
-	c.data.topIconOpacity = c.data.settings.isFullScreen? icon_opacity_normal:0.0;
-	c.data.showIcons = false;
-	
-	// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
-	var  diagramMinHeight = 150;
-	c.data.topOU="";
 	// STRY0074597
 	setOUPicker();
 	
-	// RJ -ET - Story 4
-	var diagram;
-	// STRY0116823
-	var myOverview;
 	// RJ -ET - Story 4
 	// if no ID on URL, use the current id
 	if (!c.data.selectedId && c.data.currentTopOU){
@@ -148,6 +163,9 @@
 		broadcastTopNodeChange(c.data.selectedId);
 	}
 
+	// STRY0116812
+	var watcher;
+	initRecordWatcher("x_153465_discovert_discover_office_hierarchy", "u_top_ou=" + c.data.currentTopOU);
 	
 	
 	// add selected ou to favorites
@@ -243,9 +261,6 @@ alert('Temporary Message - default OU not in current diagram');
 
 	};
 	
-	// STRY0116812
-	var watcher;
-	initRecordWatcher("x_153465_discovert_discover_office_hierarchy", "u_top_ou=" + c.data.currentTopOU);
 
 	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	function initRecordWatcher(table, filter) {
@@ -523,37 +538,37 @@ alert('Temporary Message - default OU not in current diagram');
 			evt.parent = '';
 			$rootScope.$broadcast('$sp.list.click', evt);
 		}
-		// STRY0074597
-		$scope.topOnlyCheck = function() {
-			setOUPicker();
-		};
-		// STRY0074597
-		function setOUPicker(){
-			if(c.data.topOnly){
-				c.data.OUPicker_displayFields='office_abbreviation,office_name';
-				c.data.OUPicker_searchFields = 'office_abbreviation,office_name';
-				c.data.OUPicker_query='active=true^parentISEMPTY';
-			}else{
-				c.data.OUPicker_displayFields='office_level,office_abbreviation,office_name';
-				c.data.OUPicker_searchFields = 'office_level,office_abbreviation,office_name';
-				c.data.OUPicker_query='active=true';
-			}
+	// STRY0074597
+	$scope.topOnlyCheck = function() {
+		setOUPicker();
+	};
+	// STRY0074597
+	function setOUPicker(){
+		if(c.data.topOnly){
+			c.data.OUPicker_displayFields='office_abbreviation,office_name';
+			c.data.OUPicker_searchFields = 'office_abbreviation,office_name';
+			c.data.OUPicker_query='active=true^parentISEMPTY';
+		}else{
+			c.data.OUPicker_displayFields='office_level,office_abbreviation,office_name';
+			c.data.OUPicker_searchFields = 'office_level,office_abbreviation,office_name';
+			c.data.OUPicker_query='active=true';
 		}
+	}
 		
-		$scope.topOU={
-			displayValue: c.data.office_name,
-			value: c.data.currentTopOU,
-			name: 'topOU'
-		};
-		$scope.$on("field.change",function(evt,params){
-			c.data.topOU = $scope.topOU.value;
-			c.data.selectedId = c.data.topOU;
-			c.server.update().then(function(){
-				// STRY0116823
-				resetDiagram();				
-			});
-			broadcastTopNodeChange(c.data.selectedId);
+	$scope.topOU={
+		displayValue: c.data.office_name,
+		value: c.data.currentTopOU,
+		name: 'topOU'
+	};
+	$scope.$on("field.change",function(evt,params){
+		c.data.topOU = $scope.topOU.value;
+		c.data.selectedId = c.data.topOU;
+		c.server.update().then(function(){
+			// STRY0116823
+			resetDiagram();				
 		});
+		broadcastTopNodeChange(c.data.selectedId);
+	});
 		
 	$scope.expandGraph = function(){
 		spModal.open({
@@ -572,65 +587,56 @@ alert('Temporary Message - default OU not in current diagram');
 			}
 		});
 	};
-		// STRY0074663
-// TODO - cleanup - no onger need to do this b/c record watcher handles diagram update
-//		$scope.$on('sp.form.record.updated', function(evt, item) {
-//			/* update model after return from modal */
-//			c.server.update().then(function(){
-//				// STRY0116823
-//				resetDiagram();
-//			});
-//		});
 		
-		// RJ -ET - Story 4
-		// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
-		$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-			// STRY0074663 Only rebroadcast if the node changed
-			if(c.data.selectedId != parms.sys_id){
-				c.data.selectedId = parms.sys_id;
-				// Select the node using the sys_id parameter supplied.
-				var node_select = diagram.findNodeForKey(c.data.selectedId);
-				diagram.select(node_select);
-				diagram.centerRect(node_select.actualBounds);
-			}
-			
-		});
-	
-		function nodeSelectionChanged(node) {
-			var evt = {};
-				var d = node.data;
-				evt.sys_id = d.sys_id;
-				if (evt.sys_id == c.data.selectedId)  // get called twice by gojs
-					return;
+	// RJ -ET - Story 4
+	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		// STRY0074663 Only rebroadcast if the node changed
+		if(c.data.selectedId != parms.sys_id){
+			c.data.selectedId = parms.sys_id;
+			// Select the node using the sys_id parameter supplied.
+			var node_select = diagram.findNodeForKey(c.data.selectedId);
+			diagram.select(node_select);
+			diagram.centerRect(node_select.actualBounds);
+		}
 
-				// STRY0116812
-				evt.table = c.data.table; //d.sys_class_name || d.table;
-				c.data.selectedId = evt.sys_id;
-				// RJ -ET - Story 4
-				evt.parent = d.parent;
-				c.data.selectedId = evt.sys_id;
-				$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
-				$rootScope.$broadcast('$sp.list.click', evt);
+	});
+
+	function nodeSelectionChanged(node) {
+		var evt = {};
+		var d = node.data;
+		evt.sys_id = d.sys_id;
+		if (evt.sys_id == c.data.selectedId)  // get called twice by gojs
+			return;
+
+		// STRY0116812
+		evt.table = c.data.table; //d.sys_class_name || d.table;
+		c.data.selectedId = evt.sys_id;
+		// RJ -ET - Story 4
+		evt.parent = d.parent;
+		c.data.selectedId = evt.sys_id;
+		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+		$rootScope.$broadcast('$sp.list.click', evt);
+
+		diagram.centerRect(node.actualBounds);
+	}
 			
-				diagram.centerRect(node.actualBounds);
-			}
-			
-			$scope.page = {
-				displayValue: $scope.data.title,
-				value: $scope.data.selectedId,
-				name: 'page'
-			};
-			
-			$scope.$on("field.change", function(evt, parms) {
-				if (parms.field.name == 'page')
-					changePage(parms.newValue);
-			});
-			
-			function changePage(p){
-				var path = $location.path();
-				var searchParms = $location.search();
-				$location.search({id: searchParms.id, p: p});
-				}
+	$scope.page = {
+		displayValue: $scope.data.title,
+		value: $scope.data.selectedId,
+		name: 'page'
+	};
+
+	$scope.$on("field.change", function(evt, parms) {
+		if (parms.field.name == 'page')
+			changePage(parms.newValue);
+	});
+
+	function changePage(p){
+		var path = $location.path();
+		var searchParms = $location.search();
+		$location.search({id: searchParms.id, p: p});
+	}
 				
 
 	// STRY0108231
@@ -638,7 +644,6 @@ alert('Temporary Message - default OU not in current diagram');
 		var toolTip;
 		var underline = '_';
 		
-		var $go = go.GraphObject.make; // for conciseness in defining templates
 		var toolDataListJSON = 
 				$go(go.Adornment, "Spot", "Auto",
 						$go(go.Shape, "RoundedRectangle", {fill: toolTipBackgroundColor}),
@@ -681,7 +686,6 @@ alert('Temporary Message - default OU not in current diagram');
 		var toolTip;
 		var underline = '_';
 		
-		var $go = go.GraphObject.make; // for conciseness in defining templates
 		var toolDataListJSON = 
 				$go(go.Adornment, "Spot", "Auto",
 						$go(go.Shape, "RoundedRectangle", {fill: toolTipBackgroundColor}),
@@ -698,8 +702,8 @@ alert('Temporary Message - default OU not in current diagram');
 					 );
 		return toolDataListJSON;
 	}
+	
 	function addImage(img, opacity, toolTiptextHeader, toolTipBindingList) {
-		var $go = go.GraphObject.make; // for conciseness in defining templates
 // NOTE: put go.picture in a function and pass what you need to clean this up
 
 		// STRY0101474 - if the image wasn't laoded, don't add the image NOTE: we may wat to put placeholder here IF it is defined to keep the space
@@ -991,24 +995,12 @@ alert('Temporary Message - default OU not in current diagram');
 			diagram.div = null;
 			diagram = null;
 		}
-
-		// STRY0072032
-		if(!c.data.settings.isSystemTreeOrientationVertical){
-			// Horizontal Settings
-			diagram =
-				$go(go.Diagram, node_id, {
-				allowZoom: true,
-				// define the layout for the diagram
-				layout: $go(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 60 })
-			});
-		} else{
-			diagram =
-				$go(go.Diagram, node_id, {
-				allowZoom: true,
-				// define the layout for the diagram
-				layout: $go(go.TreeLayout, { angle:90, nodeSpacing: 5, layerSpacing: 60 })
-			});
-		}
+		diagram =
+			$go(go.Diagram, node_id, {
+			allowZoom: true,
+			// define the layout for the diagram
+			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: 5, layerSpacing: 60 })
+		});
 
 		diagram.model = new go.TreeModel($scope.data.map);
 		
@@ -1016,240 +1008,8 @@ alert('Temporary Message - default OU not in current diagram');
 		diagram.toolManager.hoverDelay = 700; // default is 850
 		//diagram.toolManager.toolTipDuration = ; // default is 5000
 		
-		var fontStyle = "14px Segoe UI";
-		//var font = "13px Helvetica, Arial, sans-serif";
-		// Define a simple node template consisting of text followed by an expand/collapse button
-		// STRY0072032
-		var treeOrientation;
-		if(!c.data.settings.isSystemTreeOrientationVertical){
-			treeOrientation = "Horizontal";
-		} else {
-			treeOrientation = "Vertical";
-		}
-		diagram.nodeTemplate = 
-			$go(go.Node, treeOrientation,
-					{ selectionAdorned: false,
-					 selectionChanged: nodeSelectionChanged,
-					 isTreeExpanded: true,
-					 isTreeLeaf: true
-					},  // this event handler is defined below
-					
-					// on hover over node, show the icons
-					{mouseEnter: function(e, obj) {
-						obj.findObject('gradientRectangle').opacity =  c.data.settings.isFullScreen ? icon_opacity_normal : 0.0;
-						obj.findObject('Icons').visible=c.data.settings.isFullScreen;
-					},
-					 mouseLeave: function(e, obj) {
-						 obj.findObject('gradientRectangle').opacity = 0.0;
-						 obj.findObject('Icons').visible=false;
-					 }
-					},
-					
-					// STRY0111888 - changed to spot panel
-					$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
-							// STRY0113936, STRY0111888 - set width and height
-							$go(go.Shape, "RoundedRectangle", { strokeWidth: outlineWidth, width:310, height:70},
-									// if selected, outline the rectangle
-									new go.Binding("stroke", "isSelected", function(s){
-										if (s)
-											return node_selected_border; 
-										else
-											return null;}).ofObject(""),
-									new go.Binding("fill", "active", function (t){
-										if(t)
-											return node_active_bg;
-										else
-											return node_inactive_bg;})
-								 ),
-							// moved up b/c corner pictures were behind hover panel
-							$go(go.Panel, "Auto", 
-									// STRY0108231
-									$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
-											{alignment: go.Spot.Left},
-											$go(go.Panel,  "Horizontal", // Horizontal panel for Task Manager, Administrator and Text
-													// DFCT0010761 =- added of 60
-													{alignment: go.Spot.Left, height:60},
-													$go(go.Panel, "Horizontal", {alignment: go.Spot.Left,
-																											 margin: new go.Margin(18, 0, 0, 0)},  // Horizontal panel for Task Manager and Administrator
-															addImage(c.data.icons.taskManager, 1.0, c.data.messages["Tasker - Title - TASK MANAGERS"], "tasking_authorities_list"),
-															addImage(c.data.icons.Admin16, 1.0, c.data.messages["Tasker - Title - OU HIERARCHY ADMINISTRATORS"], "u_ou_hierarchy_administrators_list")
-														 ),	// end horizonal panel for icons
-													// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
-													$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: fontStyle, stroke: "white", margin: 5, minSize: new go.Size(250, 35), maxSize: new go.Size(250, 55) },
-															new go.Binding("text", "name"))
-												 )  // close horizontal panel for Task Manager, Administrator and Text
-										 ),
-									// ************************************************************************
-									// NOTE: the block is FULL SCREEN ONLY
-									// ************************************************************************
-									$go(go.Shape, "Rectangle",  // Horizontal panel for Image and Icons
-											{opacity: 0.0,
-											 name: "gradientRectangle",
-											 strokeWidth: 0, 
-											 alignment: go.Spot.Right,
-											 angle:90,
-											 // DFCT0010761 =- changed width (which is hieght at 90 degress from 40 to 60
-											 width:60, height:250, // this is ODD, but it is turned at a 90 degree angle for the linear gradient.  So, Height and widht are swapped
-											 fill: $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"})},
-											// STRY0114110
-											new go.Binding("fill", "active", function (t){
-												if(t)
-													return $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"});
-												else
-													return $go(go.Brush, "Linear", { 0.0: "rgba(120, 120, 120, 1.0)", 0.7: "rgba(120, 120, 120, 1.0)", 1.0: "rgba(120, 120, 120, 0.0)"});})
-										 ),
-									$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
-											{name: "Icons",
-											 visible: false,
-											 alignment: go.Spot.Right},
-											$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
-													{visible: c.data.settings.isFullScreen,
-													 alignment: go.Spot.Right, width: 250, isOpposite: true},
-													addImage(c.data.icons.GenericAddSub16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.Request16, c.data.topIconOpacity, '', ''),
-													// STRY0101474
+		diagram.nodeTemplate = createNodeTemplate();
 
-													addImage(c.data.icons.Divider, c.data.topIconOpacity, '', ''),
-													// DFCT0010634 - removed for initial release until we know what report to load in the modal
-													//addImage(c.data.icons.Reports16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.RelatedTasks16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.Contacts16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.OUMembers16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.SubOU16, c.data.topIconOpacity, '', ''),
-													addImage(c.data.icons.Information16, c.data.topIconOpacity, '', '')
-												 ) // end horizontal panel holding the icons	
-										 ) // end horizontal Panel holding Images and icons
-								 ), // close vertical panel for Task Manager, Administrator and Text
-							// STRY0111888 - added outer circle for border
-							$go(go.Shape, "Circle", 
-									{visible: false,
-									 // STRY0113936 
-									 width: profilePicCircleSize, height: profilePicCircleSize, strokeWidth: outlineWidth, fill: node_active_bg,
-									 alignment: new go.Spot(0, 0, leftPicCornerOffset, topPicCornerOffset) },
-									new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
-										if(u_ou_primary_contact)
-											return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
-										else
-											return false;}),
-									new go.Binding("fill", "active", function (t){
-										if(t)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}),
-									
-									// if selected, outline the circle
-									new go.Binding("stroke", "", function(node){
-										if (node.isSelected)
-											return node_selected_border; 
-										else if(node.data.active)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}).ofObject("")
-
-								 ),
-							//STRY0111888 - changed alignment and works with Spot panel above
-							$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
-									{ isClipping: true,	alignment: new go.Spot(0, 0, leftPicCornerOffset, topPicCornerOffset)
-// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; start Profile photo
-									, toolTip: $go(go.HTMLInfo,
-									{ 
-										show: showPopoverUserInfo,
-										hide: hidePopoverUserInfo
-									})
-// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; end Profile photo
-									}, 
-									new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
-										if(u_ou_primary_contact)
-											return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
-										else
-											return false;}),
-									// STRY0113936
-									$go(go.Shape, "Circle", { width: profilePicSize, strokeWidth: outlineWidth }),
-									new go.Binding("fill", "active", function (t){
-										if(t)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}),
-									// this is a special picture just for the user
-									$go(go.Picture, 
-											{desiredSize: new go.Size(profilePicSize, profilePicSize),
-												imageStretch: go.GraphObject.UniformToFill
-										}, 
-											new go.Binding("source", "u_ou_primary_contact_photo"), 
-											new go.Binding("name","u_ou_primary_contact_photoName")
-										 ) // end image picture object
-								), // end panel holding circle and picture
-							// STRY0114088, STRY0111888 - if permissive show open lock (this graphic has an outter band.  so, don't need the border circle)
-							$go(go.Shape, "Circle", { width: iconCircleSize, strokeWidth: outlineWidth,
-																			 // STRY0113884
-																			 alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset) },
-									new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
-										if(u_ou_is_permissive)
-											return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
-										else
-											return false;}),
-									new go.Binding("fill", "active", function (t){
-										if(t)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}),
-									// if selected, outline the circle
-									new go.Binding("stroke", "", function(node){
-										if (node.isSelected)
-											return node_selected_border; 
-										else if(node.data.active)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}).ofObject("")
-								 ),
-							$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
-									// STRY0113884
-									{alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset)}, 
-									new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
-										if(u_ou_is_permissive)
-											return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
-										else
-											return false;}),
-									addImage(c.data.icons.LockOpenBadge24, icon_opacity_normal, '', '')
-								 ), // end panel holding circle and unlock icon
-							$go(go.Shape, "Circle", 
-									{visible: false,
-									 // STRY0114088, STRY0113936
-									 width: iconCircleSize, strokeWidth: outlineWidth, 
-									 // STRY0113936
-									 alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)},
-									new go.Binding("visible", "", function (data){
-										if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
-											return data.isAdmin && data.u_outstanding_request_count > 0;
-										else
-											return false;}),
-									new go.Binding("fill", "active", function (t){
-										if(t)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}),
-									// if selected, outline the circle
-									new go.Binding("stroke", "", function(node){
-										if (node.isSelected)
-											return node_selected_border; 
-										else if(node.data.active)
-											return node_active_bg;
-										else
-											return node_inactive_bg;}).ofObject("")
-								 ),
-							$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
-									// STRY0113936
-									{alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)}, 
-									new go.Binding("visible", "", function (data){
-										if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
-											return data.isAdmin && data.u_outstanding_request_count > 0;
-										else
-											return false;}),
-									addImage(c.data.icons.ProcessRequestBadge24, c.data.topIconOpacity, '', '')
-								 ) // end panel holding circle and unlock icon
-						 ),
-					$go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
-				 );
 		diagram.select(diagram.findNodeForKey(c.data.selectedId));
 		diagram.allowVerticalScroll=true;
 		// Define a trivial link template with no arrowhead
@@ -1264,7 +1024,298 @@ alert('Temporary Message - default OU not in current diagram');
 		diagram.commandHandler.scrollToPart(diagram.findNodeForKey(c.data.selectedId));
 	}
 	
+	function createNodeTemplate(){
+
+		var nodeTemplate = $go(go.Node, treeOrientation,
+													 { selectionAdorned: false,
+														selectionChanged: nodeSelectionChanged,
+														isTreeExpanded: true,
+														isTreeLeaf: true
+													 },  // this event handler is defined below
+
+													 // on hover over node, show the icons
+													 {mouseEnter: function(e, obj) {
+														 obj.findObject('gradientRectangle').opacity =  c.data.settings.isFullScreen ? icon_opacity_normal : 0.0;
+														 obj.findObject('Icons').visible=c.data.settings.isFullScreen;
+													 },
+														mouseLeave: function(e, obj) {
+															obj.findObject('gradientRectangle').opacity = 0.0;
+															obj.findObject('Icons').visible=false;
+														}
+													 },
+													 createTreeNode(),
+													 $go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
+													);
+		return nodeTemplate;		
+	}
 	
+	function createTreeNode(){
+		// STRY0111888 - changed to spot panel
+		var treeNode =
+				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+						createOurterRoundedRectangle(),
+						// moved up b/c corner pictures were behind hover panel
+						$go(go.Panel, "Auto", 
+								taskManagerAndAdministrator(),
+								hoverGradientPanel(),
+								hoverIconPanel()
+							 ), // close vertical panel for Task Manager, Administrator and Text
+						createProfilePicCircle(),
+						createProfilePicPhoto(),
+						createPermissiveCircle(),
+						createPermissiveIcon(),
+						createOutstandingRequestCircle(),
+						createOutstandingRequestIcon()
+					 );
+		return treeNode;
+	}
+	
+	function createOurterRoundedRectangle(){
+		// STRY0113936, STRY0111888 - set width and height
+		var roundedRectangle = 
+				$go(go.Shape, "RoundedRectangle", { strokeWidth: outlineWidth, width:310, height:70},
+						// if selected, outline the rectangle
+						new go.Binding("stroke", "isSelected", function(s){
+					if (s)
+						return node_selected_border; 
+					else
+						return null;}).ofObject(""),
+						new go.Binding("fill", "active", function (t){
+					if(t)
+						return node_active_bg;
+					else
+						return node_inactive_bg;})
+					 );
+		return roundedRectangle;		
+	}
+	
+	function createProfilePicCircle(){
+		// STRY0111888 - added outer circle for border
+		var profilePicCricle =
+				$go(go.Shape, "Circle", 
+						{visible: false,
+						 // STRY0113936 
+						 width: profilePicCircleSize, height: profilePicCircleSize, strokeWidth: outlineWidth, fill: node_active_bg,
+						 alignment: new go.Spot(0, 0, leftPicCornerOffset, topPicCornerOffset) },
+						new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
+							if(u_ou_primary_contact)
+								return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
+							else
+								return false;}),
+						new go.Binding("fill", "active", function (t){
+							if(t)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}),
+						// if selected, outline the circle
+						new go.Binding("stroke", "", function(node){
+							if (node.isSelected)
+								return node_selected_border; 
+							else if(node.data.active)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}).ofObject("")
+					 );
+		return profilePicCricle;
+	}
+	
+	function createProfilePicPhoto(){
+		//STRY0111888 - changed alignment and works with Spot panel above
+		var profilePicPhoto = 
+				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+						{ isClipping: true,	alignment: new go.Spot(0, 0, leftPicCornerOffset, topPicCornerOffset),
+						 // 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; start Profile photo
+						 toolTip: $go(go.HTMLInfo,
+													{ 
+							 show: showPopoverUserInfo,
+							 hide: hidePopoverUserInfo
+						 })
+						 // 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; end Profile photo
+						}, 
+						new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
+					if(u_ou_primary_contact)
+						return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
+					else
+						return false;}),
+						// STRY0113936
+						$go(go.Shape, "Circle", { width: profilePicSize, strokeWidth: outlineWidth }),
+						new go.Binding("fill", "active", function (t){
+					if(t)
+						return node_active_bg;
+					else
+						return node_inactive_bg;}),
+						// this is a special picture just for the user
+						$go(go.Picture, 
+								{desiredSize: new go.Size(profilePicSize, profilePicSize),
+								 imageStretch: go.GraphObject.UniformToFill
+								}, 
+								new go.Binding("source", "u_ou_primary_contact_photo"), 
+								new go.Binding("name","u_ou_primary_contact_photoName")
+							 ) // end image picture object
+					 ); // end panel holding circle and picture
+		return profilePicPhoto;
+	}
+	
+	function taskManagerAndAdministrator(){
+		// STRY0108231
+		var taskManagerAndAdministratorIcons = 
+				$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
+						{alignment: go.Spot.Left},
+						$go(go.Panel,  "Horizontal", // Horizontal panel for Task Manager, Administrator and Text
+								// DFCT0010761 =- added of 60
+								{alignment: go.Spot.Left, height:60},
+								$go(go.Panel, "Horizontal", {alignment: go.Spot.Left,
+																						 margin: new go.Margin(18, 0, 0, 0)},  // Horizontal panel for Task Manager and Administrator
+										addImage(c.data.icons.taskManager, 1.0, c.data.messages["Tasker - Title - TASK MANAGERS"], "tasking_authorities_list"),
+										addImage(c.data.icons.Admin16, 1.0, c.data.messages["Tasker - Title - OU HIERARCHY ADMINISTRATORS"], "u_ou_hierarchy_administrators_list")
+									 ),	// end horizonal panel for icons
+								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
+								$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: fontStyle, stroke: "white", margin: 5, minSize: new go.Size(250, 35), maxSize: new go.Size(250, 55) },
+										new go.Binding("text", "name"))
+							 )  // close horizontal panel for Task Manager, Administrator and Text
+					 );
+		return taskManagerAndAdministratorIcons;
+	}
+	
+	function hoverGradientPanel() {
+		// ************************************************************************
+		// NOTE: the block is FULL SCREEN ONLY
+		// ************************************************************************
+		var gradientPanel =		
+				$go(go.Shape, "Rectangle",  // Horizontal panel for Image and Icons
+						{opacity: 0.0,
+						 name: "gradientRectangle",
+						 strokeWidth: 0, 
+						 alignment: go.Spot.Right,
+						 angle:90,
+						 // DFCT0010761 =- changed width (which is hieght at 90 degress from 40 to 60
+						 width:60, height:250, // this is ODD, but it is turned at a 90 degree angle for the linear gradient.  So, Height and widht are swapped
+						 fill: $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"})},
+						// STRY0114110
+						new go.Binding("fill", "active", function (t){
+					if(t)
+						return $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"});
+					else
+						return $go(go.Brush, "Linear", { 0.0: "rgba(120, 120, 120, 1.0)", 0.7: "rgba(120, 120, 120, 1.0)", 1.0: "rgba(120, 120, 120, 0.0)"});})
+					 );
+		return gradientPanel;
+	}
+	
+	function hoverIconPanel(){
+		var hoverIcons = 
+				$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
+						{name: "Icons",
+						 visible: false,
+						 alignment: go.Spot.Right},
+						$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
+								{visible: c.data.settings.isFullScreen,
+								 alignment: go.Spot.Right, width: 250, isOpposite: true},
+								addImage(c.data.icons.GenericAddSub16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.Request16, c.data.topIconOpacity, '', ''),
+								// STRY0101474
+
+								addImage(c.data.icons.Divider, c.data.topIconOpacity, '', ''),
+								// DFCT0010634 - removed for initial release until we know what report to load in the modal
+								//addImage(c.data.icons.Reports16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.RelatedTasks16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.Contacts16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.OUMembers16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.SubOU16, c.data.topIconOpacity, '', ''),
+								addImage(c.data.icons.Information16, c.data.topIconOpacity, '', '')
+							 ) // end horizontal panel holding the icons	
+					 ); // end horizontal Panel holding Images and icons
+		return hoverIcons;
+	}
+	
+	function createPermissiveCircle() {
+		// STRY0114088, STRY0111888 - if permissive show open lock (this graphic has an outter band.  so, don't need the border circle)
+		var permissiveCircle =
+				$go(go.Shape, "Circle", 
+						{ width: iconCircleSize, strokeWidth: outlineWidth,
+						 // STRY0113884
+						 alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset) },
+						new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
+							if(u_ou_is_permissive)
+								return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
+							else
+								return false;}),
+						new go.Binding("fill", "active", function (t){
+							if(t)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}),
+						// if selected, outline the circle
+						new go.Binding("stroke", "", function(node){
+							if (node.isSelected)
+								return node_selected_border; 
+							else if(node.data.active)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}).ofObject("")
+					 );
+		return permissiveCircle;				
+	}
+
+	function createPermissiveIcon(){
+		var permissiveIcon = 
+				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+						// STRY0113884
+						{alignment: new go.Spot(0, 1, leftIconCornerOffset, bottomIconCornerOffset)}, 
+						new go.Binding("visible", "u_ou_is_permissive", function (u_ou_is_permissive){
+							if(u_ou_is_permissive)
+								return c.data.settings.isFullScreen && c.data.settings.permissiveOn;
+							else
+								return false;}),
+						addImage(c.data.icons.LockOpenBadge24, icon_opacity_normal, '', '')
+					 ); // end panel holding circle and unlock icon
+		return permissiveIcon;
+	}
+	
+	function createOutstandingRequestCircle(){
+		var outstandingRequestCircle = 
+				$go(go.Shape, "Circle", 
+						{visible: false,
+						 // STRY0114088, STRY0113936
+						 width: iconCircleSize, strokeWidth: outlineWidth, 
+						 // STRY0113936
+						 alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)},
+						new go.Binding("visible", "", function (data){
+							if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
+								return data.isAdmin && data.u_outstanding_request_count > 0;
+							else
+								return false;}),
+						new go.Binding("fill", "active", function (t){
+							if(t)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}),
+						// if selected, outline the circle
+						new go.Binding("stroke", "", function(node){
+							if (node.isSelected)
+								return node_selected_border; 
+							else if(node.data.active)
+								return node_active_bg;
+							else
+								return node_inactive_bg;}).ofObject("")
+					 );
+		return outstandingRequestCircle;
+	}
+	
+	function createOutstandingRequestIcon(){
+		var outstandingRequestIcon =
+				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+						// STRY0113936
+						{alignment: new go.Spot(1, 1, rightIconCornerOffset, bottomIconCornerOffset)}, 
+						new go.Binding("visible", "", function (data){
+							if(data.u_outstanding_request_count && c.data.settings.isFullScreen)
+								return data.isAdmin && data.u_outstanding_request_count > 0;
+							else
+								return false;}),
+						addImage(c.data.icons.ProcessRequestBadge24, c.data.topIconOpacity, '', '')
+					 ); // end panel holding circle and unlock icon		
+		return outstandingRequestIcon;
+	}
+
 	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; Start	
 	function showPopoverUserInfo(obj, diagram, tool) {
 		c.data.isPopoverOpened = true;
@@ -1494,7 +1545,8 @@ alert('Temporary Message - default OU not in current diagram');
 //                                      In Server script, initialize popoverRecord variable 
 //                                      In Client controller, set .hoverDelay = 700; add several functions
 //                                      Changes made in HTML, Server script and Client controller
-//
+// 2.8 | 2022-31-06 | raj  | TECH - Update reorganize client code that builds the tree to improve readability
+//                                      Changes made in Client controller
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -1629,17 +1681,15 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2155</sys_mod_count>
+        <sys_mod_count>2169</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-06 00:58:15</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-03-07 04:01:42</sys_updated_on>
         <template><![CDATA[<style >
 
 
