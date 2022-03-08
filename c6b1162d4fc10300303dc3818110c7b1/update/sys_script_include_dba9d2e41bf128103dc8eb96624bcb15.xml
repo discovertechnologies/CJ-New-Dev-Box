@@ -34,7 +34,7 @@ STRY0113084 - Templates- Duration Fields- Update Label and Info Text&#13;
 // 2.7.0 | 2021-11-16 | raj  | STRY0113839 - Technical Story: Pages/Portal/Page should be picked up from the "Form preferences"
 //											NOTE: href was no longer used.  So, removed completely to avoid future confusion
 // 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-//											Updated loadPhotoInfo() to use sys_user; 
+//											Updated loadPhotoInfo() to use sys_user; Added getConnectEnabled();
 //											in loadProfileInfo() added mobilePhone, contactPageHref, photo, emailSubject, buttonText and icons;
 //											Changed phone to businessPhone
 //
@@ -930,6 +930,41 @@ TaskWidgetData.prototype = {
         return newNodeData;
     },
 
+	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
+	// Get info about the plugin being active and if live_profile has a record get the live profile ID for the useer
+	getConnectEnabled: function(userId) {
+		var chat = {
+			connectEnabled: false,
+			liveProfileId: ''
+		};
+
+		// is chat active?
+		chat.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
+		
+		// Check if logged in user has a live profile for sending connect messages
+		if (GlidePluginManager().isActive('com.glideapp.live_common')) {
+			var liveProfileGR = new GlideRecord("live_profile");
+			// MWMTest
+			//liveProfileGR.addQuery("document", data.sysUserID);
+			//liveProfileGR.addQuery("document", data.currentUser);
+			liveProfileGR.addQuery("document", userId);
+			liveProfileGR.query();
+			if (liveProfileGR.next()) {
+				chat.liveProfileId = liveProfileGR.getValue("sys_id");
+// 				data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
+// 				// live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
+// 				if (data.liveProfileModel.short_description) {
+// 					data.liveProfileModel.short_description.label = gs.getMessage("Bio");
+// 					data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
+// 				}
+			} else {
+				chat.connectEnabled = false; // can't find a live profile for this user, so lets not integrate Connect
+			}
+		}
+		
+		return chat;
+	},
+	
 	loadPhotoInfo: function(displayValue, userGUID) {
 		var photoInfo = {
 			photoName: displayValue,
@@ -956,7 +991,7 @@ TaskWidgetData.prototype = {
 	// STRY0114453 
 	loadProfileInfo: function(userGUID) {
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-		// added mobilePhone, contactPageHref, photo, emailSubject, buttonText and icons; Changed phone to businessPhone
+		// added mobilePhone, contactPageHref, photo, emailSubject, buttonText, connectEnabled, liveProfileId and icons; Changed phone to businessPhone
 		var userProfile = {
 			sys_id: userGUID,
 			name: '',
@@ -972,13 +1007,15 @@ TaskWidgetData.prototype = {
 			photo: '',
 			emailSubject: '',
 			buttonText: '',
+			connectEnabled: '',
+			liveProfileId: '',
 			icons: {}
 		};
 		
 		var grUser = new GlideRecord('sys_user');
 		if(grUser.get(userGUID)){
 			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-			//  added getDisplayValue to many, .contactPageHref, mobile phone; Changed phone to businessPhone
+			//  added getDisplayValue to many, .contactPageHref, mobile phone; Changed phone to businessPhone, add call to get Connect Chat fields
 			userProfile.name = grUser.getDisplayValue('name');
 			userProfile.first_name = grUser.getDisplayValue('first_name');
 			userProfile.last_name = grUser.getDisplayValue('last_name');
@@ -988,12 +1025,17 @@ TaskWidgetData.prototype = {
 			userProfile.mobilePhone = grUser.getDisplayValue('mobile_phone');
 			userProfile.location = grUser.getDisplayValue('location');
 			userProfile.contactPageHref = '?id=user_profile&sys_id=' + userGUID;
+			
 			// if no user time zone, but location is loaded
 			if(grUser.time_zone){
 				userProfile.time_zone = grUser.getDisplayValue('time_zone'); // + '';
 			} else if(grUser.location && grUser.location.time_zone){
 				userProfile.time_zone = gs.getMessage("Tasker - (location) - ") + userProfile.location.time_zone;
 			}
+			// Connect Chat 
+			var chat = this.getConnectEnabled(userGUID);
+			userProfile.connectEnabled = chat.connectEnabled;
+			userProfile.liveProfileId = chat.liveProfileId;
 		}
 		return userProfile;
 	},
@@ -1079,7 +1121,7 @@ TaskWidgetData.prototype = {
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>219</sys_mod_count>
+        <sys_mod_count>224</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1087,6 +1129,6 @@ TaskWidgetData.prototype = {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-05 23:46:52</sys_updated_on>
+        <sys_updated_on>2022-03-08 18:30:38</sys_updated_on>
     </sys_script_include>
 </record_update>
