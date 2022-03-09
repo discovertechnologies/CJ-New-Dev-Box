@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
+        <description>2.8 | 2022-03-09 | raj  | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel&#13;
+2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
 2.8    | 2022-02-11 - raj -  STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
 2.7.2 | 2022-02-03 - raj -  STRY0117609 - Stretch- "Delete" button should be available on the Portal for "Template Tasks"&#13;
 2.7.2 | 2022-01-17 | raj  | STRY0116812	TECH - Update Org Tree to handle record watcher the same way Task and Template do (no diagram redraw)&#13;
@@ -701,9 +702,71 @@ TaskWidgetData.prototype = {
 		ouO.isAdmin = (isGHA || (ouHAValue && ouHAValue.indexOf(currentUser)>=0));
 	},
 	
+	// STRY0114672 
+	getHoverMembersArray: function(OUid){
+		var members = [];
+		var numberToLoad = 5;  // Load the first 5 Members alphabetically
+		var membersLoaded = 0;
+		var grHoverMembers = new GlideRecord('x_153465_discovert_discover_office_members');
+		grHoverMembers.addQuery('discover_office_hierarchy', OUid);
+		grHoverMembers.orderBy('office_member');
+		grHoverMembers.query();
+	
+		while(grHoverMembers.next() && membersLoaded<=numberToLoad){
+			membersLoaded++;
+			var memberInfo = this._loadHoverMember(grHoverMembers);
+			members.push(memberInfo);
+		}
+		return members;
+	},
+	
+	_loadHoverMember: function(grMember){
+		var memberDisplayValue = grMember.getDisplayValue('office_member');
+		var memberUserId = grMember.getValue('office_member');
+		// NOTE if we use SN avatar provider, then, we can drop the photo properties and just return profileInfo object
+		var hoverMemberPhoto = this.loadPhotoInfo(memberDisplayValue, memberUserId);
+		var hoverMemberProfile = this.loadProfileInfo(memberUserId);
+		var memberInfo = hoverMemberProfile;
+		// NOTE: these values could be removed if we use sn-avatar and possibly even the profile object
+		memberInfo.displayName = memberDisplayValue;
+		memberInfo.photo = hoverMemberPhoto.photo;
+		memberInfo.sys_id = grMember.getUniqueValue();
+		memberInfo.userId = memberUserId;		
+		return memberInfo;
+	},
 
+	getHoverContactsArray: function(OUid){
+		var contacts = [];
+		var numberToLoad = 5;  // Load the first 5 Members alphabetically
+		var contactsLoaded = 0;
+		var grHoverContacts = new GlideRecord('x_153465_discovert_organizational_contacts');
+		grHoverContacts.addQuery('u_contact_ou', OUid);
+		grHoverContacts.orderBy('u_user_information');
+		grHoverContacts.query();
 	
+		while(grHoverContacts.next() && membersLoaded<=numberToLoad){
+			contactsLoaded++;
+			var contactInfo = this._loadHoverContact(grHoverContacts);
+			contacts.push(contactInfo);
+		}
+		return contacts;
+	},
 	
+	_loadHoverContact: function(grContact){
+		var contactDisplayValue = grContact.getDisplayValue('u_user_information');
+		var contactUserId = grContact.getValue('u_user_information');
+		// NOTE if we use SN avatar provider, then, we can drop the photo properties and just return profileInfo object
+		var hoverContactPhoto = this.loadPhotoInfo(contactDisplayValue, contactUserId);
+		var hoverContactProfile = this.loadProfileInfo(contactUserId);
+		var contactInfo = hoverContactProfile;
+		// NOTE: these values could be removed if we use sn-avatar and possibly even the profile object
+		contactInfo.displayName = contactDisplayValue;
+		contactInfo.photo = hoverContactPhoto.photo;
+		contactInfo.sys_id = grContact.getUniqueValue();
+		contactInfo.userId = contactUserId;		
+		return contactInfo;
+	},
+
 	// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
     buildTaskMap: function(widgetId, map, gr, fields) {
         var taskO = this.getTaskListTreeLevelO(gr, fields, 1, widgetId);
@@ -968,6 +1031,7 @@ TaskWidgetData.prototype = {
 	loadPhotoInfo: function(displayValue, userGUID) {
 		var photoInfo = {
 			photoName: displayValue,
+			photo: undefined
 		};
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was GlideRecord("live_profile");
 		var profile = new GlideRecord("sys_user");
@@ -992,6 +1056,8 @@ TaskWidgetData.prototype = {
 	loadProfileInfo: function(userGUID) {
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
 		// added mobilePhone, contactPageHref, photo, emailSubject, buttonText, connectEnabled, liveProfileId and icons; Changed phone to businessPhone
+		// 2.8 | 2022-03-09 | raj  | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+		// added userID
 		var userProfile = {
 			sys_id: userGUID,
 			name: '',
@@ -1009,6 +1075,7 @@ TaskWidgetData.prototype = {
 			buttonText: '',
 			connectEnabled: '',
 			liveProfileId: '',
+			userID: '',
 			icons: {}
 		};
 		
@@ -1119,16 +1186,14 @@ TaskWidgetData.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>224</sys_mod_count>
+        <sys_mod_count>226</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-08 18:30:38</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-03-09 22:47:36</sys_updated_on>
     </sys_script_include>
 </record_update>
