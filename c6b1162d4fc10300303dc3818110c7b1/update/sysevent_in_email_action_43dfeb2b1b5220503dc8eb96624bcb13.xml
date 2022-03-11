@@ -4,7 +4,9 @@
         <active>true</active>
         <assignment_operator/>
         <condition_script>email.subject.toLowerCase().indexOf("my task:") == 0</condition_script>
-        <description/>
+        <description>This Inboud Action creates a task when a task is recieved by the system with "My Task" at the start of the subject line&#13;
+&#13;
+2.8 - 2022-03-09 - raj - STRY0114577 - Remove API Calls from Run Template</description>
         <event_name>email.read</event_name>
         <filter_condition/>
         <from/>
@@ -14,52 +16,57 @@
         <required_roles>x_153465_discovert.tasker_user</required_roles>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2020 Discover Technologies LLC
 // Script Continued Below
-
-var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-grTask.initialize();
-var a_count = new GlideAggregate('sys_attachment');
-a_count.addQuery('table_sys_id', current.sys_id);
-a_count.addAggregate('COUNT');
-a_count.query();
-
-var numAttachments = 0;
-if (a_count.next())
-    numAttachments = a_count.getAggregate('COUNT');
-grTask.short_description = email.subject;
-grTask.instructions = email.body_html;
-grTask.u_objective = email.body_html;
-
-var defaultOU = '';
-var grOM = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-grOM.addQuery('office_member', email.from_sys_id);
-grOM.addQuery('u_isdefaultou', true);
-grOM.query();
-while (grOM.next()) {
-    defaultOU = grOM.getValue("u_default_ou");
-}
-if (defaultOU) {
-    grTask.primary_assignee = defaultOU;
-    grTask.primary_office = defaultOU;
-    grTask.tasking_authority = defaultOU;
-}
-
-grTask.assigned_to = email.from_sys_id;
-grTask.work_notes = "This task was automatically created from an inbound email - \n Subject Line: " + email.subject;
-grTask = new CustomTaskerFieldHelper().mapFieldDataOnAction('EmailToTask', grTask, grTask);
-grTask.update();
-
+// 2.8 - 2022-03-09 - raj - STRY0114577 - Remove API Calls from Create My Task and Suggested Tasks
 // DFCT0010647
 var emailSysId = sys_email.getUniqueValue(); 
 var grSys_Email = new GlideRecord('sys_email');
+var a_count = new GlideAggregate('sys_attachment');
+var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+var grSuggestedTask = new GlideRecordSecure('x_153465_discovert_suggested_taskers');
+var defaultOU = '';
+var grOM = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+
+var numAttachments = 0;
+
 if(grSys_Email.get(emailSysId)){
-	var fromConfigId = "";
-	var toConfigId = gs.getProperty("x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks");
-	var tDS = new taskerDocumentScripts();
-	tDS.copyDocuments (grSys_Email, grTask, 'EmailToShared', fromConfigId, toConfigId);
-	var grTaskTree = new GlideRecordSecure('x_153465_discovert_task_tree');
-	if(grTaskTree.get(grTask.getValue("u_task_tree"))){
-		tDS.copyAttachments(grSys_Email, grTaskTree, 'My');
+	grTask.initialize();
+	a_count.addQuery('table_sys_id', current.sys_id);
+	a_count.addAggregate('COUNT');
+	a_count.query();
+
+	if (a_count.next()){
+		numAttachments = a_count.getAggregate('COUNT');
 	}
+
+	grTask.short_description = email.subject;
+	grTask.instructions = email.body_html;
+	grTask.u_objective = email.body_html;
+
+	grOM.addQuery('office_member', email.from_sys_id);
+	grOM.addQuery('u_isdefaultou', true);
+	grOM.query();
+	while (grOM.next()) {
+		defaultOU = grOM.getValue("u_default_ou");
+	}
+	if (defaultOU) {
+		grTask.primary_assignee = defaultOU;
+		grTask.primary_office = defaultOU;
+		grTask.tasking_authority = defaultOU;
+	}
+
+	grTask.assigned_to = email.from_sys_id;
+	grTask.work_notes = "This task was automatically created from an inbound email - \n Subject Line: " + email.subject;
+	grTask = new CustomTaskerFieldHelper().mapFieldDataOnAction('EmailToTask', grTask, grTask);
+	grTask.update();
+
+	// STRY0114577
+	grSuggestedTask.initialize();
+	grSuggestedTask.u_created_task = grTask.sys_id;
+	grSuggestedTask.tasker_created = true;
+	grSuggestedTask.active = false;
+	grSuggestedTask.u_original_email = emailSysId;
+	grSuggestedTask.u_my_task_created = true;
+	grSuggestedTask.insert();
 }
 
 ]]></script>
@@ -70,7 +77,7 @@ if(grSys_Email.get(emailSysId)){
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>43dfeb2b1b5220503dc8eb96624bcb13</sys_id>
-        <sys_mod_count>42</sys_mod_count>
+        <sys_mod_count>48</sys_mod_count>
         <sys_name>My Task - Create Personal Suggested Task</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -78,7 +85,7 @@ if(grSys_Email.get(emailSysId)){
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sysevent_in_email_action_43dfeb2b1b5220503dc8eb96624bcb13</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-02-24 16:27:32</sys_updated_on>
+        <sys_updated_on>2022-03-09 07:43:28</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <template/>
         <type>new</type>
