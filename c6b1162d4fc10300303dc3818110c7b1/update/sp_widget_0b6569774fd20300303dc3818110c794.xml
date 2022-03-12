@@ -115,6 +115,10 @@
 	var minHeight = 35;
 	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; avatar popover
 	c.data.isPopoverOpened = false;
+	
+	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+	c.data.isPopoverListOpened = false;
+	
 	c.data.topIconOpacity = c.data.settings.isFullScreen? icon_opacity_normal:0.0;
 	c.data.showIcons = false;
 	
@@ -773,12 +777,13 @@ alert('Temporary Message - default OU not in current diagram');
 							 objWidget.filter = objWidget.filter + obj.part.data.key;
 							 openListModal(objWidget);
 							 break;
-						 case c.data.icons.OUMembers16.src:
-							 objWidget = JSON.parse(JSON.stringify(membersOUListwidgetObject));
-							 objWidget.title = c.data.messages["Tasker - List of Members"] + ': ' + obj.part.data.name;
-							 objWidget.filter = objWidget.filter + obj.part.data.key; 
-							 openListModal(objWidget);
-							 break;
+// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; block the click
+// 						 case c.data.icons.OUMembers16.src:
+// 							 objWidget = JSON.parse(JSON.stringify(membersOUListwidgetObject));
+// 							 objWidget.title = c.data.messages["Tasker - List of Members"] + ': ' + obj.part.data.name;
+// 							 objWidget.filter = objWidget.filter + obj.part.data.key; 
+// 							 openListModal(objWidget);
+// 							 break;
 						 case c.data.icons.Contacts16.src:
 							 objWidget = JSON.parse(JSON.stringify(contactsOUListwidgetObject));
 							 objWidget.title = c.data.messages["Tasker - List of Contacts"] + ': ' + obj.part.data.name;
@@ -831,11 +836,25 @@ alert('Temporary Message - default OU not in current diagram');
 				},					
 				new go.Binding("toolTip", "", function(e, obj){
 				var toolTip = ''; 
-				if(toolTiptextHeader!='') {
+// 				if(toolTiptextHeader!='') {
+// 					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
+// 				} else if(img.title != '') {
+// 					toolTip = toolTipSimple(img);
+// 				}
+				// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; block the click; Popover List start	
+				if (obj.source == c.data.icons.OUMembers16.src) {
+					// MWMTest console.log('Add GoJS tooltip obj.source: ' + obj.source);
+					toolTip = $go(go.HTMLInfo, {
+						show: showPopoverList,
+						hide: hidePopoverList
+					});
+					// MWMTest Popover List ends after } else 
+				} else if(toolTiptextHeader!='') {
 					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
 				} else if(img.title != '') {
 					toolTip = toolTipSimple(img);
 				}
+				// 2.8 | 2022-03-10 | mmcc | STRY0114672; List Popover end
 				return toolTip;
 			})
 		);
@@ -1324,12 +1343,14 @@ alert('Temporary Message - default OU not in current diagram');
 		c.data.isPopoverOpened = true;
 
 		c.data.popoverRecord = obj.part.data.u_ou_primary_contact_profile;
-		var photo = obj.part.data.u_ou_primary_contact_photo;
-		if (photo != undefined) {
-			c.data.popoverRecord.photo = "background-image: url('" + photo + "');";
-		} else {
-			c.data.popoverRecord.photo = "background-image: url('Profile16.svg');";
-		}
+		// MWMTest
+// 		var photo = obj.part.data.u_ou_primary_contact_photo;
+// 		if (photo != undefined) {
+// 			c.data.popoverRecord.photo = "background-image: url('" + photo + "');";
+// 		} else {
+// 			c.data.popoverRecord.photo = "background-image: url('Profile16.svg');";
+// 		}
+		c.data.popoverRecord.photo = _setStyleBackgroundImage(obj.part.data.u_ou_primary_contact_photo);
 		
 		// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
 		c.data.popoverRecord.messages = _loadProfileMessages(obj.part.data.office_abbreviation);
@@ -1390,6 +1411,7 @@ alert('Temporary Message - default OU not in current diagram');
 			photo: '',
 			connectEnabled: '',
 			liveProfileId: '',
+			userId: '',
 			messages: {},
 			icons: {}
 		};
@@ -1416,6 +1438,92 @@ alert('Temporary Message - default OU not in current diagram');
 		};
 
 		return tempIcons;
+	}
+
+	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+	function showPopoverList(obj, diagram, tool) {
+		//debugger;
+		//console.log('showPopoverList obj.source: ' + obj.source);
+		
+		_resetPopoverListObject();
+		c.data.isPopoverListOpened = true;
+		
+		c.data.popoverListRecord.title = c.data.icons.OUMembers16.title;
+		
+		// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+		// we use below to have the bindings updated
+		$scope.$apply();
+		
+		var popoverDiv = angular.element(document.getElementById('popoverWrapperList'))[0];
+
+		var pt = diagram.lastInput.viewPoint;
+		popoverDiv.style.left = Math.ceil(pt.x) + "px";
+		popoverDiv.style.top = Math.ceil(pt.y + 120) + "px";
+		popoverDiv.style.display = "block";
+
+		c.popoverListTimeout = $timeout(function() {
+			c.data.isPopoverListOpened = false;
+		}, diagram.toolManager.toolTipDuration - 100);
+		
+		// MWMTest
+		//debugger;
+		c.data.ouId = obj.part.data.sys_id;
+		c.data.isPersonListNeeded = true;
+		
+		c.server.update().then(function() {
+			c.data.popoverListRecord.persons = c.data.updatedOUList;
+		});
+	}
+
+	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+	function hidePopoverList(diagram, tool) {
+		if (c.data.isPopoverListOpened == false) {
+			var popoverDiv = angular.element(document.getElementById('popoverWrapperList'))[0];
+			popoverDiv.style.display = "none";
+
+			_resetPopoverListObject();
+
+			// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+			// we use below to have the bindings updated
+			$scope.$apply();
+		}	
+	}
+
+	c.listMouseEnter =  function() {
+		c.data.isPopoverListOpened = true;
+		$timeout.cancel(c.popoverListTimeout);
+	};
+	
+	c.listMouseLeave =  function() {
+		c.data.isPopoverListOpened = false;
+		var popoverDiv = angular.element(document.getElementById('popoverWrapperList'))[0];
+			popoverDiv.style.display = "none";
+		_resetPopoverListObject();
+	};
+	
+	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+	function _resetPopoverListObject() {
+		c.data.popoverListRecord = {
+			sys_id: '',
+			name: '',
+			contactPageHref: '',
+			photo: '',
+			title: ''
+		};
+	}
+	
+	// Returns a string to set a style tag over in the HTML to  display a persons' photo
+	// Parameter photo is sys_user avatar field with .iix?t=small appended
+	function  _setStyleBackgroundImage(photo) {
+		var imageUrl = '';
+		
+		if (photo != undefined) {
+			imageUrl = "background-image: url('" + photo + "');";
+		} else {
+			imageUrl = "background-image: url('Profile16.svg');";
+		}
+		
+		return imageUrl;
 	}
 };]]></client_script>
         <controller_as>c</controller_as>
@@ -1571,6 +1679,11 @@ alert('Temporary Message - default OU not in current diagram');
 //                                      In Client controller, use message key 'Tasker - Open Contact Page'; use messages object
 //                                      Added _loadProfileMessages() and _loadProfileIcons();
 //                                      Changes made in Client controller
+// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+//                                      In HTML, added <div id="popoverWrapperList"
+//                                      In Server script, added initialize for popoverListRecord
+//                                      In Client controller, added showPopoverList()
+//                                      Changes made in HTML, Server and Client
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1606,9 +1719,21 @@ alert('Temporary Message - default OU not in current diagram');
 				data.updatedPhoto = loadPhoto(input.getUserDisplayValue, input.getUserGUID);
 				data.updatedProfile = loadProfile(input.getUserGUID);
 			}
+			
+			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+			if(input.isPersonListNeeded) {
+				data.updatedOUList = [];
+				//can this be global, at top of main()
+				var taskWidgetData = new TaskWidgetData();
+				data.updatedOUList = taskWidgetData.getHoverMembersArray(input.ouId);
+			}
 		} else {
 			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; init as an empty object
 			data.popoverRecord = {};
+			
+			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+			data.popoverListRecord = {};
+
 			
 			data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 			// if there is no top OU, then stop
@@ -1708,7 +1833,7 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2240</sys_mod_count>
+        <sys_mod_count>2261</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1716,7 +1841,7 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-10 18:52:05</sys_updated_on>
+        <sys_updated_on>2022-03-12 01:05:18</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -1798,6 +1923,12 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
     <dtech-popover-profile dtech-param-object="data.popoverRecord" ng-mouseleave="c.avatarMouseLeave()"></dtech-popover-profile>
   </div>
   <!-- 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel end -->
+  
+  <!-- MWMTest; Popover List start -->
+  <div id="popoverWrapperList" ng-mouseenter="c.listMouseEnter()" >
+    <dtech-popover-list dtech-param-object="data.popoverListRecord" ng-mouseleave="c.listMouseLeave()"></dtech-popover-list>
+  </div>
+  <!-- MWMTest; Popover List end -->
   
   <!-- STRY0113668 -->
   <div id="panel_footer" class="panel-footer">
