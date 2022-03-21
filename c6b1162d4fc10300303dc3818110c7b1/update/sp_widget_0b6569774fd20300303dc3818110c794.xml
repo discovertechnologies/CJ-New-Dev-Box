@@ -41,10 +41,10 @@
 		// set default tree orientation based on system setting (this will change when user perference is enabled)
 		if(c.data.settings.treeOrientation == 'Horizontal'){
 			treeOrientation = "Horizontal";
-			treeNodeAngle = 0;
+			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
 		} else {
 			treeOrientation = "Vertical";
-			treeNodeAngle = 90;
+			treeNodeAngle = TREE_CONST.verticalTreeAngle;
 		}
 
 		// STRY0074597
@@ -91,11 +91,23 @@
 	function loadTreeConstants(){	
 		var oTREE_CONST = {
 			//var font = "13px Helvetica, Arial, sans-serif";
-			fontStyle: "14px Segoe UI",
+			// STRY0113880
+			fontStyle: "16px Regular", // "14px Segoe UI",
+			fontStyleSmall: "14px Regular", // "14px Segoe UI",
+			textStrokeColor: "white",
+
+			abbrOppacity: 0.50,
 			node_id: "page_map",
 			minHeight: 12,
 			// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
 			diagramMinHeight: 150,
+			horizontalTreeAngle: 0,
+			verticalTreeAngle: 90,
+			
+			imageMarginTop: 5,
+			imageMarginRight: 3,
+			imageMarginBottom: 5,
+			imageMarginLeft:3,
 			
 			outlineWidth: 2,
 			topPicCornerOffset: 12,
@@ -111,16 +123,39 @@
 			// TREE SPECIFIC CONSTANTS
 			// these can change per tree (Org, Task, Template)
 			node_active_bg: '#33738e',
-			node_inactive_bg: '#787878',
+			// STRY0113880
+			node_inactive_bg: '#949597',
 			node_selected_border: '#FFD247',
+			
+			nodeOuterRectangelWidth: 310,
+			nodeOuterRectangelHeight: 70,		
+			tmAndAdminIconHeight: 60,
+			tmAndAdminTopMargin:18,
+			nodeTextPanelMargin:5,
+			textPanelMinWidth:250,
+			textPanelMinHeight:35,
+			textPanelMaxWidth:250,
+			textPanelMaxHeight:55,
 
+			spacingNode:5,
+			spacingLayer: 60,
+			gradientAngle: 90,
+			gradientHoverActive: { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"},
+			gradientHoverInactive: { 0.0: "rgba(148, 149, 151, 1.0)", 0.7: "rgba(148, 149, 151, 1.0)", 1.0: "rgba(148, 149, 151, 0.0)"},
+			 // this is ODD, but it is turned at a 90 degree angle for the linear gradient.  So, Height and widht are swapped
+			gradientHoverWidth: 60, 
+			gradientHoverHeight:250,
+			gradientHoverIconPanelWidth: 250,
+			
 			// STRY0108231 - NOTE these are NOT used in Organizational Hiearchy with SVG icons
 			icon_normal_stroke: "white",
 			icon_hover_stroke: "#F00",
 			icon_warning_stroke: "#FF0",
 			toolTipBackgroundColor: '#FFFFFF', // "#C5C5C5"
+			toolTipHeaderTextColor: '#999999',
 			tooltipTextColor: '#3A3F51',
-
+			toolTipHoverDelay: 700,
+			
 			// settings for the list widgets use these objects
 			icon_opacity_normal: 1.00,
 			icon_opacity_hover: 0.75,
@@ -560,13 +595,12 @@ alert('Temporary Message - default OU not in current diagram');
 			c.data.getProfile = true;
 		}
 		c.data.getUserGUID = value;
-		c.data.getUserDisplayValue = displayValue;
 		c.server.update().then(function(){
 			// find the node to update again
 			var nodeData = diagram.model.findNodeDataForKey(nodeKey);
 			if (nodeData) {
-				nodeData[fieldName + '_photoName'] = c.data.updatedPhoto.photoName;
-				diagram.model.setDataProperty(nodeData, fieldName + '_photoName', c.data.updatedPhoto.photoName);
+				nodeData[fieldName + '_photoName'] = c.data.updatedPhoto.name;
+				diagram.model.setDataProperty(nodeData, fieldName + '_photoName', c.data.updatedPhoto.name);
 
 				if(c.data.updatedPhoto.photo){
 					nodeData[fieldName + '_photo'] = c.data.updatedPhoto.photo;
@@ -720,7 +754,7 @@ alert('Temporary Message - default OU not in current diagram');
 													 ),
 												$go(go.TextBlock, 
 														underline.repeat(100), 
-														{opacity: 0.5, stroke: "#999999", textAlign:"left", margin: 4, background: TREE_CONST.toolTipBackgroundColor}
+														{opacity: 0.5, stroke: TREE_CONST.toolTipHeaderTextColor, textAlign:"left", margin: 4, background: TREE_CONST.toolTipBackgroundColor}
 													 )
 											 ),
 										$go(go.Panel, {defaultAlignment: go.Spot.Left},
@@ -774,9 +808,10 @@ alert('Temporary Message - default OU not in current diagram');
 		if(img.src == undefined){
 			img.src = '';
 		}
+		
 		var imageJSON =
 			$go(go.Picture, 
-				{margin: new go.Margin(5, 3, 5, 3),
+				{margin: new go.Margin(TREE_CONST.imageMarginTop, TREE_CONST.imageMarginRight, TREE_CONST.imageMarginBottom, TREE_CONST.imageMarginLeft),
 				 alignment: go.Spot.TopRight,
 				 source: img.src,
 				 opacity: opacity}, 
@@ -1058,15 +1093,14 @@ alert('Temporary Message - default OU not in current diagram');
 		}
 		diagram =
 			$go(go.Diagram, TREE_CONST.node_id, {
-			allowZoom: true,
+			allowZoom: true,		
 			// define the layout for the diagram
-			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: 5, layerSpacing: 60 })
+			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
 		});
 
 		diagram.model = new go.TreeModel($scope.data.map);
-		
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-		diagram.toolManager.hoverDelay = 700; // default is 850
+		diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850
 		//diagram.toolManager.toolTipDuration = ; // default is 5000
 		
 		diagram.nodeTemplate = createNodeTemplate();
@@ -1117,7 +1151,7 @@ alert('Temporary Message - default OU not in current diagram');
 						createOurterRoundedRectangle(),
 						// moved up b/c corner pictures were behind hover panel
 						$go(go.Panel, "Auto", 
-								taskManagerAndAdministrator(),
+								createTMsAdminsNameAbbr(),
 								hoverGradientPanel(),
 								hoverIconPanel()
 							 ), // close vertical panel for Task Manager, Administrator and Text
@@ -1134,7 +1168,7 @@ alert('Temporary Message - default OU not in current diagram');
 	function createOurterRoundedRectangle(){
 		// STRY0113936, STRY0111888 - set width and height
 		var roundedRectangle = 
-				$go(go.Shape, "RoundedRectangle", { strokeWidth: TREE_CONST.outlineWidth, width:310, height:70},
+				$go(go.Shape, "RoundedRectangle", { strokeWidth: TREE_CONST.outlineWidth, width: TREE_CONST.nodeOuterRectangelWidth, height:TREE_CONST.nodeOuterRectangelHeight},
 						// if selected, outline the rectangle
 						new go.Binding("stroke", "isSelected", function(s){
 					if (s)
@@ -1156,8 +1190,9 @@ alert('Temporary Message - default OU not in current diagram');
 				$go(go.Shape, "Circle", 
 						{visible: false,
 						 // STRY0113936 
-						 width: TREE_CONST.profilePicCircleSize, height: TREE_CONST.profilePicCircleSize, strokeWidth: TREE_CONST.outlineWidth, fill: TREE_CONST.node_active_bg,
-						 alignment: new go.Spot(0, 0, TREE_CONST.leftPicCornerOffset, TREE_CONST.topPicCornerOffset) },
+						 width: TREE_CONST.profilePicCircleSize, height: TREE_CONST.profilePicCircleSize, strokeWidth: TREE_CONST.outlineWidth, //fill: TREE_CONST.node_active_bg,
+						 alignment: new go.Spot(0, 0, TREE_CONST.leftPicCornerOffset, TREE_CONST.topPicCornerOffset) 
+						},
 						new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
 							if(u_ou_primary_contact)
 								return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
@@ -1194,48 +1229,83 @@ alert('Temporary Message - default OU not in current diagram');
 							// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; end Profile photo
 						}, 
 						new go.Binding("visible", "u_ou_primary_contact", function (u_ou_primary_contact){
-					if(u_ou_primary_contact)
-						return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
-					else
-						return false;}),
+							if(u_ou_primary_contact)
+								return c.data.settings.isFullScreen && c.data.settings.include_poc_avatar;
+							else
+								return false;}),
 						// STRY0113936
 						$go(go.Shape, "Circle", { width: TREE_CONST.profilePicSize, strokeWidth: TREE_CONST.outlineWidth }),
-						new go.Binding("fill", "active", function (t){
-					if(t)
-						return TREE_CONST.node_active_bg;
-					else
-						return TREE_CONST.node_inactive_bg;}),
+							new go.Binding("fill", "active", function (t){
+								if(t)
+									return TREE_CONST.node_active_bg;
+								else
+									return TREE_CONST.node_inactive_bg;}),
 						// this is a special picture just for the user
 						$go(go.Picture, 
 								{desiredSize: new go.Size(TREE_CONST.profilePicSize, TREE_CONST.profilePicSize),
 								 imageStretch: go.GraphObject.UniformToFill
 								}, 
 								new go.Binding("source", "u_ou_primary_contact_photo"), 
-								new go.Binding("name","u_ou_primary_contact_photoName")
-							 ) // end image picture object
+								new go.Binding("name","u_ou_primary_contact_photoName"),
+								new go.Binding("visible", "u_ou_primary_contact_photo", function (u_ou_primary_contact_photo){
+									if(u_ou_primary_contact_photo)
+										return true;
+									else 
+										return false;
+								})
+							 ), // end image picture object
+						// added initials when photo doesn't exist.
+						$go(go.TextBlock, {font: TREE_CONST.fontStyle, stroke: TREE_CONST.textStrokeColor },
+								new go.Binding("text", "u_ou_primary_contact_profile", function(u_ou_primary_contact_profile){
+											if(u_ou_primary_contact_profile){
+												var strFirstName = u_ou_primary_contact_profile.first_name;
+												var strLastName = u_ou_primary_contact_profile.last_name;
+												var initials = strFirstName.substring(0, 1) + strLastName.substring(0, 1);
+												return initials;
+											} else
+												return '';
+										}),
+								// only show initials if photo not found
+								new go.Binding("visible", "u_ou_primary_contact_photo", function (u_ou_primary_contact_photo){
+									if(u_ou_primary_contact_photo)
+										return false;
+									else 
+										return true;
+								})
+
+							 )
 					 ); // end panel holding circle and picture
 		return profilePicPhoto;
 	}
 	
-	function taskManagerAndAdministrator(){
+	// STRY0113880
+	function createTMsAdminsNameAbbr(){
 		// STRY0108231
-		var taskManagerAndAdministratorIcons = 
+		var tms_admins_name_abbr_panel = 
 				$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
 						{alignment: go.Spot.Left},
 						$go(go.Panel,  "Horizontal", // Horizontal panel for Task Manager, Administrator and Text
 								// DFCT0010761 =- added of 60
-								{alignment: go.Spot.Left, height:60},
+								{alignment: go.Spot.Left, height: TREE_CONST.tmAndAdminIconHeight},
 								$go(go.Panel, "Horizontal", {alignment: go.Spot.Left,
-																						 margin: new go.Margin(18, 0, 0, 0)},  // Horizontal panel for Task Manager and Administrator
+																						 margin: new go.Margin(TREE_CONST.tmAndAdminTopMargin, 0, 0, 0)},  // Horizontal panel for Task Manager and Administrator
 										addImage(c.data.icons.taskManager, 1.0, c.data.messages["Tasker - Title - TASK MANAGERS"], "tasking_authorities_list"),
 										addImage(c.data.icons.Admin16, 1.0, c.data.messages["Tasker - Title - OU HIERARCHY ADMINISTRATORS"], "u_ou_hierarchy_administrators_list")
 									 ),	// end horizonal panel for icons
-								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
-								$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: TREE_CONST.fontStyle, stroke: "white", margin: 5, minSize: new go.Size(250, 35), maxSize: new go.Size(250, 55) },
-										new go.Binding("text", "name"))
+								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),									
+								$go(go.Panel,  "Vertical", {alignment: go.Spot.Left, margin: TREE_CONST.nodeTextPanelMargin, 
+																						minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight), 
+																						maxSize: new go.Size(TREE_CONST.textPanelMaxWidth, TREE_CONST.textPanelMaxHeight) }, // Horizontal panel for Task Manager, Administrator and Text
+										$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: TREE_CONST.fontStyle, stroke: TREE_CONST.textStrokeColor },
+												new go.Binding("text", "office_name")),
+										$go(go.TextBlock, {alignment: go.Spot.Left, textAlign:"left", font: TREE_CONST.fontStyleSmall, stroke: TREE_CONST.textStrokeColor, opacity: TREE_CONST.abbrOppacity},
+												new go.Binding("text", "office_abbreviation",	 function (office_abbreviation){
+																	return "(" + office_abbreviation + ")"})
+											 )
+									 )
 							 )  // close horizontal panel for Task Manager, Administrator and Text
 					 );
-		return taskManagerAndAdministratorIcons;
+		return tms_admins_name_abbr_panel;
 	}
 	
 	function hoverGradientPanel() {
@@ -1248,16 +1318,17 @@ alert('Temporary Message - default OU not in current diagram');
 						 name: "gradientRectangle",
 						 strokeWidth: 0, 
 						 alignment: go.Spot.Right,
-						 angle:90,
+						 angle: TREE_CONST.gradientAngle,
 						 // DFCT0010761 =- changed width (which is hieght at 90 degress from 40 to 60
-						 width:60, height:250, // this is ODD, but it is turned at a 90 degree angle for the linear gradient.  So, Height and widht are swapped
-						 fill: $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"})},
+						 width: TREE_CONST.gradientHoverWidth, 
+						 height: TREE_CONST.gradientHoverHeight, 
+						 fill: $go(go.Brush, "Linear", TREE_CONST.gradientHoverActive)},
 						// STRY0114110
 						new go.Binding("fill", "active", function (t){
-					if(t)
-						return $go(go.Brush, "Linear", { 0.0: "rgba(51, 115, 142, 1.0)", 0.7: "rgba(51, 115, 142, 1.0)", 1.0: "rgba(51, 115, 142, 0.0)"});
-					else
-						return $go(go.Brush, "Linear", { 0.0: "rgba(120, 120, 120, 1.0)", 0.7: "rgba(120, 120, 120, 1.0)", 1.0: "rgba(120, 120, 120, 0.0)"});})
+							if(t)
+								return $go(go.Brush, "Linear", TREE_CONST.gradientHoverActive);
+							else
+								return $go(go.Brush, "Linear", TREE_CONST.gradientHoverInactive);})
 					 );
 		return gradientPanel;
 	}
@@ -1270,7 +1341,7 @@ alert('Temporary Message - default OU not in current diagram');
 						 alignment: go.Spot.Right},
 						$go(go.Panel, "Horizontal", // Horizontal panel that contains the icons, set to top right
 								{visible: c.data.settings.isFullScreen,
-								alignment: go.Spot.Right, width: 250, isOpposite: true},
+								alignment: go.Spot.Right, width: TREE_CONST.gradientHoverIconPanelWidth, isOpposite: true},
 								addImage(c.data.icons.GenericAddSub16, c.data.topIconOpacity, '', ''),
 								addImage(c.data.icons.Request16, c.data.topIconOpacity, '', ''),
 								// STRY0101474
@@ -1835,6 +1906,12 @@ alert('Temporary Message - default OU not in current diagram');
 //                                      Changes made in Server Script
 // 2.8 | 2022-03-15 | raj  | STRY0117951 - Org Hierarchy- Preset view buttons- New "Vertical and Horizontal" button
 //                                      Changes made in Server Script, Client Controller and HTML
+// 2.8 | 2022-03-18 | raj  | STRY0115436 -Organizational Hierarchy Fullscreen- Popover lists will in alphabetical order
+//                                      Changes made in Server Script, and Client Controller
+// 2.8 | 2022-03-18 | raj  | STRY0108687 -DIA - Organizational Hierarchy Visual Indicators- Define Popover Styling- Additional Styling Changes
+//                                      Changes made in Server Script, and Client Controller
+// 2.8 | 2022-03-18 | raj  | STRY0113880 - Org Hierarchy Full Screen- Tree Node Styling
+//                                       Changes in Client Script
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -1868,11 +1945,11 @@ alert('Temporary Message - default OU not in current diagram');
 			}
 			//  STRY0113883
 			if(input.getPhoto){
-				data.updatedPhoto = loadPhoto(input.getUserDisplayValue, input.getUserGUID);
+				data.updatedPhoto = loadPhoto(input.getUserGUID, false);
 			}
 			//  STRY0113883
 			if(input.getProfile){
-				data.updatedPhoto = loadPhoto(input.getUserDisplayValue, input.getUserGUID);
+				data.updatedPhoto = loadPhoto(input.getUserGUID, false);
 				data.updatedProfile = loadProfile(input.getUserGUID);
 			}
 			
@@ -1887,6 +1964,18 @@ alert('Temporary Message - default OU not in current diagram');
 				data.updatedOUList = [];
 				data.updatedOUList = taskWidgetData.getHoverContactsArray(input.ouId);
 			}
+			
+			// STRY0115436 - STRY0108687
+			if(input.isOuTaskManagerListNeeded) {
+				data.updatedOUList = [];
+				data.updatedOUList = taskWidgetData.getOUTaskMManagersHoverArray(input.ouId);
+			}
+			// STRY0115436 - STRY0108687
+			if(input.isOuHierarchyAdminListNeeded) {
+				data.updatedOUList = [];
+				data.updatedOUList = taskWidgetData.getOUHierarchyAdministratorsHoverArray(input.ouId);
+			}
+			
 		} else {
 			// DFCT0010813
 			data.table = 'x_153465_discovert_discover_office_hierarchy';
@@ -1919,7 +2008,6 @@ alert('Temporary Message - default OU not in current diagram');
 			}
 			
 			var selectedId = setSelected();
-
 			loadOUmap(selectedId, undefined);			
 		}
 	}
@@ -1998,17 +2086,15 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2439</sys_mod_count>
+        <sys_mod_count>2494</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-18 04:36:36</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-03-21 03:23:01</sys_updated_on>
         <template><![CDATA[<style >
 
 
