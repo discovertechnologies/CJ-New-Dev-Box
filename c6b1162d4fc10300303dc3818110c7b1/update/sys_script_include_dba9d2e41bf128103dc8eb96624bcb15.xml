@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
+        <description>2.8 | 2022-03-18 | raj  | STRY0115436 -Organizational Hierarchy Fullscreen- Popover lists will in alphabetical order&#13;
+2.8 | 2022-03-18 | raj  | STRY0108687 -DIA - Organizational Hierarchy Visual Indicators- Define Popover Styling- Additional Styling Changes&#13;
+&#13;
+2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
 2.8 | 2022-03-09 | raj  | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel&#13;
 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
 2.8    | 2022-02-11 - raj -  STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
@@ -706,77 +709,6 @@ TaskWidgetData.prototype = {
 		ouO.isAdmin = (isGHA || (ouHAValue && ouHAValue.indexOf(currentUser)>=0));
 	},
 	
-	// STRY0114672 
-	getHoverMembersArray: function(OUid){
-		var members = [];
-		var numberToLoad = 5;  // Load the first 5 Members alphabetically
-		var membersLoaded = 0;
-		var grHoverMembers = new GlideRecord('x_153465_discovert_discover_office_members');
-		grHoverMembers.addQuery('discover_office_hierarchy', OUid);
-		grHoverMembers.orderBy('office_member');
-		grHoverMembers.query();
-	
-		while(grHoverMembers.next() && membersLoaded<=numberToLoad){
-			membersLoaded++;
-			var memberInfo = this._loadHoverMember(grHoverMembers);
-			members.push(memberInfo);
-		}
-		return members;
-	},
-	
-	_loadHoverMember: function(grMember){
-		// MWMTest seems to be same as hoverMemberProfile.name
-		var memberDisplayValue = grMember.getDisplayValue('office_member');
-		var memberUserId = grMember.getValue('office_member');
-		// NOTE if we use SN avatar provider, then, we can drop the photo properties and just return profileInfo object
-		var hoverMemberPhoto = this.loadPhotoInfo(memberDisplayValue, memberUserId);
-		var hoverMemberProfile = this.loadProfileInfo(memberUserId);
-		var memberInfo = hoverMemberProfile;
-		// NOTE: these values could be removed if we use sn-avatar and possibly even the profile object
-		// MWMTest seems to be same as hoverMemberProfile.name
-		memberInfo.displayName = memberDisplayValue;
-		// MWMTest
-		//memberInfo.photo = hoverMemberPhoto.photo;
-		memberInfo.photo = this._setStyleBackgroundImage(hoverMemberPhoto.photo);
-		// MWMTest sys_id was set by hoverMemberProfile
-		// memberInfo.sys_id = grMember.getUniqueValue();
-		// MWMTest seems to be same as hoverMemberProfile.sys_id, should it be user_name?
-		memberInfo.userId = memberUserId;		
-		return memberInfo;
-	},
-
-	getHoverContactsArray: function(OUid){
-		var contacts = [];
-		var numberToLoad = 5;  // Load the first 5 Members alphabetically
-		var contactsLoaded = 0;
-		var grHoverContacts = new GlideRecord('x_153465_discovert_organizational_contacts');
-		grHoverContacts.addQuery('u_contact_ou', OUid);
-		grHoverContacts.orderBy('u_user_information');
-		grHoverContacts.query();
-	
-		while(grHoverContacts.next() && membersLoaded<=numberToLoad){
-			contactsLoaded++;
-			var contactInfo = this._loadHoverContact(grHoverContacts);
-			contacts.push(contactInfo);
-		}
-		return contacts;
-	},
-	
-	_loadHoverContact: function(grContact){
-		var contactDisplayValue = grContact.getDisplayValue('u_user_information');
-		var contactUserId = grContact.getValue('u_user_information');
-		// NOTE if we use SN avatar provider, then, we can drop the photo properties and just return profileInfo object
-		var hoverContactPhoto = this.loadPhotoInfo(contactDisplayValue, contactUserId);
-		var hoverContactProfile = this.loadProfileInfo(contactUserId);
-		var contactInfo = hoverContactProfile;
-		// NOTE: these values could be removed if we use sn-avatar and possibly even the profile object
-		contactInfo.displayName = contactDisplayValue;
-		contactInfo.photo = hoverContactPhoto.photo;
-		contactInfo.sys_id = grContact.getUniqueValue();
-		contactInfo.userId = contactUserId;		
-		return contactInfo;
-	},
-
 	// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
     buildTaskMap: function(widgetId, map, gr, fields) {
         var taskO = this.getTaskListTreeLevelO(gr, fields, 1, widgetId);
@@ -799,7 +731,104 @@ TaskWidgetData.prototype = {
         }
     },
 
-    // this is a recursive function used to load all tasks in the task tree into the Data for widgets
+
+	// STRY0115436 - STRY0108687
+	getOUTaskMManagersHoverArray: function(OUid){
+		var OUTMs = [];
+		OUTMs = this._getOUFieldListHoverArray(OUid, "tasking_authorities");
+		return OUTMs;
+
+	},
+	
+	// STRY0115436 - STRY0108687
+	getOUHierarchyAdministratorsHoverArray: function(OUid){
+		var OUHAs = [];
+		OUHAs = this._getOUFieldListHoverArray(OUid, "u_ou_hierarchy_administrators");
+		return OUHAs;
+	},
+
+	// STRY0115436 - STRY0108687
+	_getOUFieldListHoverArray: function(OUid, fieldName){
+		var id = '';
+		var oInfo = {};
+		var aInfo = [];
+		var aIds = [];
+		var sIds = '';
+		var grOU = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		if(grOU.get(OUid)){
+			sIds = grOU.getValue(fieldName);
+			if(sIds){
+				aIds = sIds.split(',');
+			}
+			// Loop through the array of ids
+			for (var i = 0; i < aIds.length; i++){
+				id = aIds[i];
+				oInfo = this._loadUserHover(id);
+				aInfo.push(oInfo);
+			}
+			if(aInfo.length > 0){
+				aInfo = aInfo.sort(function(ha1, ha2) {
+					if(ha1.name > ha2.name) return 1;
+					if(ha1.name < ha2.name) return -1;
+				});
+			}
+			return aInfo;
+		}
+	},
+
+	/* STRY0114672 */
+	getHoverMembersArray: function(OUid){
+		var member_user_sys_id = "";
+		var memberInfo = {};
+		var members = [];
+		var numberToLoad = 5;  // Load the first 5 Members alphabetically
+		var membersLoaded = 0;
+		var grHoverMembers = new GlideRecord('x_153465_discovert_discover_office_members');
+		grHoverMembers.addQuery('discover_office_hierarchy', OUid);
+		grHoverMembers.orderBy('office_member');
+		grHoverMembers.query();
+	
+		while(grHoverMembers.next() && membersLoaded <= numberToLoad){
+			membersLoaded++;
+			member_user_sys_id = grHoverMembers.getValue('office_member');
+			memberInfo = this._loadUserHover(member_user_sys_id);
+			members.push(memberInfo);
+		}
+		return members;
+	},
+	
+	getHoverContactsArray: function(OUid){
+		var contactUserId = "";
+		var contactInfo = {};
+		var contacts = [];
+		var numberToLoad = 5;  // Load the first 5 Members alphabetically
+		var contactsLoaded = 0;
+		var grHoverContacts = new GlideRecord('x_153465_discovert_organizational_contacts');
+		grHoverContacts.addQuery('u_contact_ou', OUid);
+		grHoverContacts.orderBy('u_user_information');
+		grHoverContacts.query();
+	
+		while(grHoverContacts.next() && contactsLoaded <= numberToLoad){
+			contactsLoaded ++;
+			contactUserId = grHoverContacts.getValue('u_user_information');
+			contactInfo = this._loadUserHover(contactUserId);
+			// NOTE - If the OU-Contact relationship is needed highlight this OU-Contact relationship in a list of OUs the user is a contact.  
+			//        Or, for some other reason, just add the id below back in.
+			//contactInfo.contact_sys_id = grHoverContacts.getUniqueValue();
+			contacts.push(contactInfo);
+		}
+		return contacts;
+	},
+	
+	_loadUserHover: function(userId){
+		var hoverInfo = {};
+		var userInfo = {};
+		
+		hoverInfo = this.loadPhotoInfo(userId, true);
+		return hoverInfo;
+	},
+
+	// this is a recursive function used to load all tasks in the task tree into the Data for widgets
     getTasks: function(widgetId, fields, level, map, taskO, sys_id) {
         var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
         grTask.addQuery('parent', sys_id);
@@ -924,8 +953,8 @@ TaskWidgetData.prototype = {
 				// STRY0114453 
 				case 'profile':
 				case 'photo':
-					var photoInfo = this.loadPhotoInfo(displayValue, newNodeData[key]);
-					newNodeData[key + '_photoName'] = photoInfo.photoName;
+					var photoInfo = this.loadPhotoInfo(newNodeData[key], false);
+					newNodeData[key + '_photoName'] = photoInfo.name;
 					if(photoInfo.photo){
 						newNodeData[key + '_photo'] = photoInfo.photo;
 					}
@@ -1040,36 +1069,40 @@ TaskWidgetData.prototype = {
 	// Parameter photo is sys_user avatar field with .iix?t=small appended
 	_setStyleBackgroundImage: function(photo) {
 		var imageUrl = '';
-		
-		if (photo != undefined) {
-			imageUrl = "background-image: url('" + photo + "');";
-		} else {
-			imageUrl = "background-image: url('Profile16.svg');";
-		}
-		
+		imageUrl = "background-image: url('" + photo + "');";
 		return imageUrl;
 	},
 	
-	loadPhotoInfo: function(displayValue, userGUID) {
+	loadPhotoInfo: function(userGUID, asBackgroundImage) {
+		var strFirstName = '';
+		var strLastName = '';
+		var photo;
+		var displayName = '';
 		var photoInfo = {
-			photoName: displayValue,
+			name: '',
 			photo: undefined
 		};
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was GlideRecord("live_profile");
-		var profile = new GlideRecord("sys_user");
-		
-		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was .addQuery("document", userGUID);
-		profile.addQuery("sys_id", userGUID);
-		
-		profile.query();
-		
-		if (profile.next()){
+		var grProfile = new GlideRecord("sys_user");
+		if (grProfile.get(userGUID)) {
 			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was .getDisplayValue("photo");
-			var photo = profile.getValue("avatar");
+			photo = grProfile.getValue("avatar");
 			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was if (photo.length > 0) {
-			if (photo && photo != '') {
-				photoInfo.photo = photo + '.iix?t=small';
+			if (photo != undefined) {
+				photo = photo + '.iix?t=small';
 			}
+			displayName = grProfile.getValue('name');
+			if(asBackgroundImage){
+				// if it is a background image set to background image
+				if (photo == undefined) {
+					photo = "Profile16.svg";
+				}
+
+				photo = this._setStyleBackgroundImage(photo, asBackgroundImage);
+			}
+			photoInfo.photo = photo;
+			photoInfo.name = displayName;
+			photoInfo.sys_id = userGUID;
 		}
 		return photoInfo;
 	},
@@ -1097,7 +1130,7 @@ TaskWidgetData.prototype = {
 			photo: '',
 			connectEnabled: '',
 			liveProfileId: '',
-			// MWMTest
+			// MWMTest seems userID was typo
 			// userID: '',
 			userId: '',
 			messages: {},
@@ -1211,16 +1244,14 @@ TaskWidgetData.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>234</sys_mod_count>
+        <sys_mod_count>259</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-12 00:07:17</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-03-21 02:46:19</sys_updated_on>
     </sys_script_include>
 </record_update>
