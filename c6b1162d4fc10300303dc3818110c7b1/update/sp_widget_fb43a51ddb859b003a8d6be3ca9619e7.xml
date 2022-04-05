@@ -100,9 +100,10 @@
 	afterLoadFormReturns();
 
 	// STRY0069986- RJ - Cert Push - Template DocInt Fix
+	// STRY0119587
 	function loadDocIntWidgets() {
 		// STRY0086644 - added check for DocId not provided
-		if (c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
+		if (!c.data.hideDocuments && (c.data.sys_id && c.data.sys_id !=-1 && c.data.sys_id !='') &&
 			(c.data.table == 'x_153465_discovert_route_task_instance' ||
 			 c.data.table == 'x_153465_discovert_discover_routing_template' ||
 			 c.data.table == 'x_153465_discovert_route_tasks')) {
@@ -160,18 +161,21 @@
 	//extension
 	//This runs at first load.
 	$scope.$on("docint.update_count", function (event, e) {
-		if (e && e.source) {
-			for (var i in $scope.data._docint_widget._docint_tabs) {
-				//
-				var _section = $scope.data._docint_widget._docint_tabs[i];
-				if (e.source == _section.id + _section.caption) {
-					if (e.count) {
-						_section.count = e.count;
+		// STRY0119587
+		if (!c.data.hideDocuments ){
+			if (e && e.source) {
+				for (var i in $scope.data._docint_widget._docint_tabs) {
+					//
+					var _section = $scope.data._docint_widget._docint_tabs[i];
+					if (e.source == _section.id + _section.caption) {
+						if (e.count) {
+							_section.count = e.count;
+						}
+						if (e.errorMessages) {
+							_section.error = e.errorMessages;
+						}
+						break;
 					}
-					if (e.errorMessages) {
-						_section.error = e.errorMessages;
-					}
-					break;
 				}
 			}
 		}
@@ -766,7 +770,8 @@
 					* The following removes the relevant sections from 'Form Configuration' table
 					* DFCT0010583
 					*/
-			if (c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
+			// STRY0119587
+			if (!c.data.hideDocuments && c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
 				(c.data.table == 'x_153465_discovert_route_task_instance' ||
 				 c.data.table == 'x_153465_discovert_discover_routing_template' ||
 				 c.data.table == 'x_153465_discovert_route_tasks')) {
@@ -1382,6 +1387,11 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 // 
 // 2.8 | 2022-03-13 | raj | STRY0117949 - Org Hierarchy Bifold- Revamp- Tree Widget Header Update
 //                                        chanages in HTML only - fixed buttons on bifold
+// 2.8 | 2022-04-03 | raj  |  STRY0119582 - Existing Task Form- Page/ Layout Selector (Dropdown)
+//                                      In HTML, client controller, Server Script
+// 2.8 | 2022-03-29 | raj  |  STRY0119587 - Task Form Page Layout- Layout: Requests - Initial Tasker Tabs widget
+//                                      In HTML, client controller, Server Script
+// 
 //------------------------------------------------------------------------------------------------------------------------
 
 // form functionality - URL parameter driven
@@ -1741,188 +1751,31 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	//------------------------------------------------------------------------------------------------------------------------
 	// 2. CUSTOM: TABS
 	//------------------------------------------------------------------------------------------------------------------------
-	for (var i in data.f._related_lists) {
-		var rl = data.f._related_lists[i];
-
-		// STRY0059424 | Include Attachments since we dropped attachment properties
-		if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments")) {
-			if ((data.AttachmentSharedFolderON == false) || (data.SNAttachmentsON == false)) {
-				// shared attachments or SNOW attachments are off, skip adding
-				continue;
-			}
-		}
-		if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
-			if (data.SNAttachmentsON == false) {
-				// shared attachments or SNOW attachments are off, skip adding
-				continue;
-			} else if (data.table == "x_153465_discovert_discover_routing_template" && data.AttachmentSharedFolderON == false) {
-				// STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the process Tree
-				// NOTE: TODO - if we are able to change the label on the native pages, then we would not need this statement here.
-				// The backend will be show "Attachments" until we can figure it out 
-				continue;
-			}
-		}
-
-
-		//------------------------------------------------------------------------------------------------------------------------
-		// 2.1. CUSTOM: RELATED LIST DETAIL OPEN MODE: MODAL OR REDIRECT?
-		//------------------------------------------------------------------------------------------------------------------------
-
-		var open_row_details_in_modal = false;
-
-		if (data.page_id == "discovertasker_taskdetails" && data.table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_tasker_requests") open_row_details_in_modal = true;
-		if (rl.table == "x_153465_discovert_tasker_email") open_row_details_in_modal = true;
-		if (data.page_id == "discovertasker_processtemplatedetails" && data.table == "x_153465_discovert_route_tasks") open_row_details_in_modal = true;
-		if (data.page_id == "discovertasker_detailsdrilldown" && data.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
-		if (data.page_id == "discovertasker_officehierarchy" && data.table == "x_153465_discovert_discover_office_hierarchy" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
-		if (data.page_id == undefined && data.table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
-		if (data.table == "x_153465_discovert_discover_routing_template") open_row_details_in_modal = true;
-		if (rl.table == "x_153465_discovert_discover_office_members") open_row_details_in_modal = true;
-		// STRY0108170
-		if (rl.table == "x_153465_discovert_tasker_requests") open_row_details_in_modal = true;
-
-		if (data.page_id == "discovertasker_customtasker_details" && data.table == "x_153465_discovert_war_sar_reporting") open_row_details_in_modal = true;
-		// STRY0074663
-		if (rl.table == "x_153465_discovert_organizational_contacts") open_row_details_in_modal = true;
-
-		//------------------------------------------------------------------------------------------------------------------------
-		// 2.2. CUSTOM: RELATED LIST SORT AND DIRECTION
-		//------------------------------------------------------------------------------------------------------------------------
-
-		var o = "";
-		var d = "";
-
-		//2.5.13 | KT | REQ | STRY0073625
-		if (rl.table == "x_153465_discovert_tasker_requests") {
-			o = "number";
-			d = "desc";
-		}
-
-		if (rl.table == "x_153465_discovert_tasker_schedule") {
-			o = "next_run_date";
-			d = "asc";
-		}
-
-		if (rl.table == "x_153465_discovert_discover_office_members") {
-			o = "office_member";
-			d = "asc";
-		}
-
-		// STRY0074663
-		if (rl.table == "x_153465_discovert_organizational_contacts") {
-			o = "u_user_information";
-			d = "asc";
-		}
-
-		if (rl.table == "x_153465_discovert_route_task_instance") {
-			o = "task_order";
-			d = "asc";
-		}
-
-		// STRY0092475
-		var rlView = data.view;
-		// DFCT0010477
-		rl.title = getTabTitle(rl.table, rl.label);
-		// STRY0092475 - this is a special case as we want to order the list to put the newest ask at the top instead of listing them by task order
-		if (rl.table == "x_153465_discovert_route_task_instance" && data.table == "x_153465_discovert_discover_routing_template") {
-			// STRY0097809
-			rlView = "sp";
-			rl.title = rl.label;
-			o = "number";
-			d = "desc";
-			// STRY0092475 - related list uses a relationshiop and for some reason the rl.field value is undefined for relationships
-			rl.field = 'u_parent_template';
-		}
-
-		//------------------------------------------------------------------------------------------------------------------------
-		// 2.4. CUSTOM: RELATED LIST FILTER
-		//------------------------------------------------------------------------------------------------------------------------
-		var filter = rl.field + "=" + data.sys_id;
-		// STRY0059424 | Include Attachments since we dropped attachment properties
-		if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments") && (data.AttachmentSharedFolderON == true)) {
-			// STRY0063505 |	Modified to set this above based on table
-			filter = 'table_sys_id' + "=" + data.sharedAttachSys_ID;
-		} else {
-			if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
-				// STRY0063505 |	Modified to set this above based on table
-				filter = 'table_sys_id' + "=" + myAttachSys_ID;
-			}
-		}
-		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
-		rl.filter = filter;
-
-		// STRY0059145 | The previous implementation was using just rl.table for the target inthe HTML for loading data and counts.
-		// Any time the same table is added 2 times in the HTML, the target will be the same for both tables.  
-		// a new field was created, rl.targetId, by concatenating rl.table with rl.label(without spaces).
-		// this new field will be used instead of rl.table in the target fields of the HTML
-		rl.targetId = rl.table + rl.label.replace(/ /g, "_");
-
-		// STRY0046028 - determine if user can create for the related list
-		var userInfoScript = new UserInfoScripts();
-		switch (rl.table) {
-			case "x_153465_discovert_discover_office_members":
-				rl.canCreate = userInfoScript.userCanCreateMem(data.sys_id);
-				break;
-			case "x_153465_discovert_discover_office_hierarchy":
-				rl.canCreate = userInfoScript.userCanCreateOU(data.sys_id);
-				break;
-			case "x_153465_discovert_route_tasks":
-				rl.canCreate = userInfoScript.userHasProcessRights(rec);
-				break;
-			case "x_153465_discovert_discover_routing_template":
-				rl.canCreate = userInfoScript.userHasProcessRights(rec);
-				break;
-			case "x_153465_discovert_tasker_schedule":
-				// STRY0082332 - FIX: Template Designers can create Template Schedules
-				rl.canCreate = new uiConditionCheck().runTemplateUIAction(rec);
-				break;
-			case "x_153465_discovert_organizational_contacts":
-				rl.canCreate = true;
-				break;
-			case "x_153465_discovert_route_task_instance":
-				// STRY0076291
-				//rl.canCreate = (((rec.u_task_requester == data.current_user) || (rec.assigned_to == data.current_user)) && rec.active == true);
-				// DFCT0010482 
-				data.canCreateSubTask = new uiConditionCheck().canCreateSubTask(rec);
-				rl.canCreate = data.canCreateSubTask;
-
-				break;
-				// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
-				// This will control showing a New button on the menu row for Tasker Emails tab
-			case 'x_153465_discovert_tasker_email':
-				rl.canCreate = data.emailEnabled;
-				break;
-			default:
-				rl.canCreate = false;
-
-		}
-		//------------------------------------------------------------------------------------------------------------------------
-		// 2.5. CUSTOM: WIDGET PARAMETERS
-		//------------------------------------------------------------------------------------------------------------------------
-		// NOTE: moved below the setting of canCreate so that can be used in the show_new
-		var params = {
-			o: o,
-			d: d,
-			table: rl.table,
-			filter: filter,
-			// STRY0107408
-			show_new: rl.canCreate,
-			open_new_in_modal: true,
-			//STRY0092475: 04/01/2020
-			view: rlView,
-			title: rl.title,
-			// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added 
-			isModal: data.isModal,
-			open_row_details_in_modal: open_row_details_in_modal
-			//show_breadcrumbs: true
-		};
-
-		//------------------------------------------------------------------------------------------------------------------------
-		// 2.5. CUSTOM: RELATED LIST CALL WIDGET 
-		//------------------------------------------------------------------------------------------------------------------------
-		rl.widget = $sp.getWidget('discovertasker-widget-data-table', params);
-
+		// DFCT0010482 
+	if(data.table == 'x_153465_discovert_route_task_instance'){
+		data.canCreateSubTask = new uiConditionCheck().canCreateSubTask(rec);	
+	} else {
+		data.canCreateSubTask = undefined;
 	}
+	// STRY0119587 - load lists to show from options
+	var arrRelatedLists= options.relatedLists_to_include;
+	data.hideActivity = options.hideActivity;
+	data.hideDocuments = options.hideDocuments;
+	data.f._related_lists = new TaskWidgetData().loadRelatedLists(
+		arrRelatedLists, 
+		data.f._related_lists, 
+		rec, 
+		data.table, 
+		data.canCreateSubTask, 
+		data.emailEnabled,
+		data.hideDocuments,
+		data.page_id, 
+		data.view, 
+		data.isModal,
+		data.sharedAttachSys_ID, 
+		data.AttachmentSharedFolderON, 
+		myAttachSys_ID,
+		data.SNAttachmentsON);
 
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
@@ -1953,14 +1806,42 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		sys_id: data.sys_id
 	});
 
-	data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
-		table: data.table,
-		sys_id: data.sys_id,
-		includeExtended: true,
-		title: "${Activity}",
-		use_dynamic_placeholder: true,
-		btnLabel: "${Post}"
-	});
+	// Activity formatter is hardcoded to set specific options
+	if(!data.hideActivity){
+		data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
+			table: data.table,
+			sys_id: data.sys_id,
+			includeExtended: true,
+			title: "${Activity}",
+			use_dynamic_placeholder: true,
+			btnLabel: "${Post}"
+		});
+		
+		for (var f in data.f._formatters) {
+			var fm = data.f._formatters[f];
+			if (fm.formatter == "activity.xml") {
+				fm.hardcoded = true;
+				fm.widgetInstance = $sp.getWidget('widget-ticket-conversation', {
+					table: data.table,
+					sys_id: data.sys_id,
+					includeExtended: true,
+					title: 'Audit/Notes', //"${Activity}",
+					use_dynamic_placeholder: true,
+					btnLabel: "${Post}"
+				});
+			} else if (fm.formatter == "com_glideapp_servicecatalog_veditor" || fm.formatter == "com_glideapp_questionset_default_question_editor") {
+				var qsConfig = $sp.getValue('quick_start_config');
+				if (qsConfig)
+					qsConfig = JSON.parse(qsConfig)[0];
+				fm.widgetInstance = $sp.getWidget(fm.widget, {
+					table: data.table,
+					sys_id: data.sys_id,
+					readonly_variable_editor: qsConfig ? qsConfig.readonly_variable_editor : 'false'
+				});
+			} else
+				fm.widgetInstance = $sp.getWidget(fm.widget, data);
+		}
+	}
 
 	//------------------------------------------------------------------------------------------------------------------------
 	// 4. DOC. INT INTEGRATION
@@ -1968,7 +1849,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	//STRY0042042: DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments
 	//STRY0046049: DI Integration: Enable/Disable upload document feature to SharePoint
 	// STRY0086644 - added check for DocId not provided	
-	if (data.DocIntON && (data.sys_id != -1 && data.sys_id != '') &&
+	if (!data.hideDocuments && 
+			data.DocIntON && (data.sys_id && data.sys_id != -1 && data.sys_id != '') &&
 		(data.table == 'x_153465_discovert_route_task_instance' ||
 		 data.table == 'x_153465_discovert_discover_routing_template' ||
 		 data.table == 'x_153465_discovert_route_tasks')) {
@@ -1978,44 +1860,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		else data.isActive = false;
 		// STRY0111049
 		data._docint_widget = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(data.table, data.view, data.sys_id);
-	}
-
-
-	//------------------------------------------------------------------------------------------------------------------------
-	// 5. CUSTOM: GET TABTITLE
-	//------------------------------------------------------------------------------------------------------------------------
-	function getTabTitle(table_name, related_table_name) {
-		var tabTitle = '';
-		// TODO - Multi language
-		switch (table_name) {
-			case "x_153465_discovert_route_task_instance":
-				tabTitle = 'Subtasks';
-				break;
-			case "x_153465_discovert_route_tasks":
-				tabTitle = 'Subtasks';
-				break;
-			case "x_153465_discovert_discover_office_hierarchy":
-				tabTitle = 'Sub OUs';
-				break;
-			case "x_153465_discovert_discover_office_members":
-				tabTitle = 'OU Members';
-				break;
-			case "x_153465_discovert_discover_routing_template":
-				tabTitle = 'Template Instances';
-				break;
-				// STRY0074663
-			case "x_153465_discovert_organizational_contacts":
-				tabTitle = 'Contacts';
-				break;
-				// DFCT0010477
-			case "x_153465_discovert_tasker_email":
-				tabTitle = 'Tasker Emails';
-				break;
-			default:
-				tabTitle = related_table_name;
-
-		}
-		return tabTitle;
 	}
 
 	//------------------------------------------------------------------------------------------------------------------------
@@ -2059,37 +1903,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			data.test = new RunProcessTemplate().runProcessTemplate(data.sys_id, data.processInstanceName);
 		}
 	}
-
-
 	//------------------------------------------------------------------------------------------------------------------------
 	// END CUSTON
 	//------------------------------------------------------------------------------------------------------------------------
-
-	// Activity formatter is hardcoded to set specific options
-	for (var f in data.f._formatters) {
-		var fm = data.f._formatters[f];
-		if (fm.formatter == "activity.xml") {
-			fm.hardcoded = true;
-			fm.widgetInstance = $sp.getWidget('widget-ticket-conversation', {
-				table: data.table,
-				sys_id: data.sys_id,
-				includeExtended: true,
-				title: 'Audit/Notes', //"${Activity}",
-				use_dynamic_placeholder: true,
-				btnLabel: "${Post}"
-			});
-		} else if (fm.formatter == "com_glideapp_servicecatalog_veditor" || fm.formatter == "com_glideapp_questionset_default_question_editor") {
-			var qsConfig = $sp.getValue('quick_start_config');
-			if (qsConfig)
-				qsConfig = JSON.parse(qsConfig)[0];
-			fm.widgetInstance = $sp.getWidget(fm.widget, {
-				table: data.table,
-				sys_id: data.sys_id,
-				readonly_variable_editor: qsConfig ? qsConfig.readonly_variable_editor : 'false'
-			});
-		} else
-			fm.widgetInstance = $sp.getWidget(fm.widget, data);
-	}
 
 	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
 	function convertToBool(names) {
@@ -2104,14 +1920,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4109</sys_mod_count>
+        <sys_mod_count>4126</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-03-13 21:57:37</sys_updated_on>
+        <sys_updated_on>2022-04-05 00:41:06</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2412,7 +2228,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           </li>
           <!-- ******************************************************************************** -->
 
-          <li ng-if="data.table == 'x_153465_discovert_route_task_instance'">
+          <!-- STRY0119587 --> 
+          <li ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'">
             <a data-target="#TicketAudit" aria-controls="TicketAudit" data-toggle="tab">Activity</a> <!-- href="#TicketAudit"  -->
           </li>
 
@@ -2422,7 +2239,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       </div>
     </div>
     <div class="tab-content">
-
       <div class="tab-pane ng-scope active in" id="Information"> <!--instead: tab-pane fade in active -->
         <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to div ng-class -->
         <div ng-class="getScrollHeight(mandatory.length)">
@@ -2432,7 +2248,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
 
       <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
+<!-- RAJ - Test 
       <div class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
+-->      
+      <div ng-if="!data.hideRelatedLists" class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
         <div>
           <div class="alert alert-danger" ng-if="data.invalid_table">
             Table not defined '{{data.table_label}}'
@@ -2501,7 +2320,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       </div>
 
       <!-- Activity -->
-      <div ng-if="data.table == 'x_153465_discovert_route_task_instance'" class="tab-pane" id="TicketAudit">
+      <!-- STRY0119587 --> 
+      <div ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
+          class="tab-pane" id="TicketAudit">
         <div>
           <sp-widget widget="data.widgetInstanceAuditNotes"></sp-widget>
         </div>
@@ -2515,7 +2336,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added ng-class -->
       <div id="{{rs.id}}" class="tab-pane"
            ng-repeat="rs in data._docint_widget._docint_tabs"
-           ng-if="data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
+           ng-if="!data.hideDocuments && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
            ng-class="{'dtech-modal-scroll-height-standard': data.isModal==true}">
         <sp-widget widget="rs.widget"></sp-widget>
       </div>

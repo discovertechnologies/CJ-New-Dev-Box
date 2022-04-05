@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling&#13;
+        <description>2.8 | 2022-03-29 | raj  |  STRY0119587 - Task Form Page Layout- Layout: Requests - Initial Tasker Tabs widget&#13;
+2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling&#13;
 2.8 | 2022-03-18 | raj  | STRY0115436 -Organizational Hierarchy Fullscreen- Popover lists will in alphabetical order&#13;
 2.8 | 2022-03-18 | raj  | STRY0108687 -DIA - Organizational Hierarchy Visual Indicators- Define Popover Styling- Additional Styling Changes&#13;
 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel&#13;
@@ -1231,22 +1232,260 @@ TaskWidgetData.prototype = {
 
         return nodeTitle;
     },
+	
+	// STRY0119587 - Task Form Page Layout- Layout: Requests
+	loadRelatedLists: function(arrRelatedLists, f_related_lists, rec, table, canCreateSubTask, emailEnabled, hideDocuments, page_id, view, isModal, sharedAttachSys_ID, attachmentSharedFolderON, myAttachSys_ID, attachmentsON){
+		var tab_widget_related_lists = [];
+		
+		for (var i in f_related_lists) {
+			
 
+			var rl = f_related_lists[i];
+			// default show all related lists
+			var showRL = true;
+			// if documents not included, don't show attachments
+			if(rl.table == "sys_attachment" ){
+				showRL = !hideDocuments;
+			} else if(arrRelatedLists && arrRelatedLists.length > 0){
+				// if an array of related lists was set in the widget options, then this list is not shown unless in the list
+				showRL = false;
+				for(var j = 0; j < arrRelatedLists.length; j++) {
+					if (arrRelatedLists[j].label == rl.label) {
+						showRL = true;
+						break;
+					}
+				}
+			}
+			if(!showRL){
+				continue;
+			}
+			
+			// STRY0059424 | Include Attachments since we dropped attachment properties
+			if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments")) {
+				if ((attachmentSharedFolderON == false) || (attachmentsON == false)) {
+					// shared attachments or SNOW attachments are off, skip adding
+					continue;
+				}
+			}
+			if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
+				if (attachmentsON == false) {
+					// shared attachments or SNOW attachments are off, skip adding
+					continue;
+				} else if (table == "x_153465_discovert_discover_routing_template" && attachmentSharedFolderON == false) {
+					// STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the process Tree
+					// NOTE: TODO - if we are able to change the label on the native pages, then we would not need this statement here.
+					// The backend will be show "Attachments" until we can figure it out 
+					continue;
+				}
+			}
+
+
+			//------------------------------------------------------------------------------------------------------------------------
+			// 2.1. CUSTOM: RELATED LIST DETAIL OPEN MODE: MODAL OR REDIRECT?
+			//------------------------------------------------------------------------------------------------------------------------
+
+			var open_row_details_in_modal = false;
+
+			if (table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_tasker_requests") open_row_details_in_modal = true;
+			if (rl.table == "x_153465_discovert_tasker_email") open_row_details_in_modal = true;
+			if (page_id == "discovertasker_processtemplatedetails" && table == "x_153465_discovert_route_tasks") open_row_details_in_modal = true;
+			if (page_id == "discovertasker_detailsdrilldown" && table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+			if (table == "x_153465_discovert_discover_office_hierarchy" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+			if (page_id == undefined && table == "x_153465_discovert_route_task_instance" && rl.table == "x_153465_discovert_route_task_instance") open_row_details_in_modal = true;
+			if (table == "x_153465_discovert_discover_routing_template") open_row_details_in_modal = true;
+			if (rl.table == "x_153465_discovert_discover_office_members") open_row_details_in_modal = true;
+			// STRY0108170
+			if (rl.table == "x_153465_discovert_tasker_requests") open_row_details_in_modal = true;
+
+			if (table == "x_153465_discovert_war_sar_reporting") open_row_details_in_modal = true;
+			// STRY0074663
+			if (rl.table == "x_153465_discovert_organizational_contacts") open_row_details_in_modal = true;
+
+			//------------------------------------------------------------------------------------------------------------------------
+			// 2.2. CUSTOM: RELATED LIST SORT AND DIRECTION
+			//------------------------------------------------------------------------------------------------------------------------
+
+			var o = "";
+			var d = "";
+
+			//2.5.13 | KT | REQ | STRY0073625
+			if (rl.table == "x_153465_discovert_tasker_requests") {
+				o = "number";
+				d = "desc";
+			}
+
+			if (rl.table == "x_153465_discovert_tasker_schedule") {
+				o = "next_run_date";
+				d = "asc";
+			}
+
+			if (rl.table == "x_153465_discovert_discover_office_members") {
+				o = "office_member";
+				d = "asc";
+			}
+
+			// STRY0074663
+			if (rl.table == "x_153465_discovert_organizational_contacts") {
+				o = "u_user_information";
+				d = "asc";
+			}
+
+			if (rl.table == "x_153465_discovert_route_task_instance") {
+				o = "task_order";
+				d = "asc";
+			}
+
+			// STRY0092475
+			var rlView = view;
+			// DFCT0010477
+			rl.title = this._getTabTitle(rl.table, rl.label);
+			// STRY0092475 - this is a special case as we want to order the list to put the newest ask at the top instead of listing them by task order
+			if (rl.table == "x_153465_discovert_route_task_instance" && table == "x_153465_discovert_discover_routing_template") {
+				// STRY0097809
+				rlView = "sp";
+				rl.title = rl.label;
+				o = "number";
+				d = "desc";
+				// STRY0092475 - related list uses a relationshiop and for some reason the rl.field value is undefined for relationships
+				rl.field = 'u_parent_template';
+			}
+
+			//------------------------------------------------------------------------------------------------------------------------
+			// 2.4. CUSTOM: RELATED LIST FILTER
+			//------------------------------------------------------------------------------------------------------------------------
+			var filter = rl.field + "=" + rec.sys_id;
+			// STRY0059424 | Include Attachments since we dropped attachment properties
+			if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments") && (attachmentSharedFolderON == true)) {
+				// STRY0063505 |	Modified to set this above based on table
+				filter = 'table_sys_id' + "=" + sharedAttachSys_ID;
+			} else {
+				if ((rl.table == "sys_attachment") && (rl.label == "Attachments")) {
+					// STRY0063505 |	Modified to set this above based on table
+					filter = 'table_sys_id' + "=" + myAttachSys_ID;
+				}
+			}
+			// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
+			rl.filter = filter;
+
+			// STRY0059145 | The previous implementation was using just rl.table for the target inthe HTML for loading data and counts.
+			// Any time the same table is added 2 times in the HTML, the target will be the same for both tables.  
+			// a new field was created, rl.targetId, by concatenating rl.table with rl.label(without spaces).
+			// this new field will be used instead of rl.table in the target fields of the HTML
+			rl.targetId = rl.table + rl.label.replace(/ /g, "_");
+
+			// STRY0046028 - determine if user can create for the related list
+			var userInfoScript = new UserInfoScripts();
+			switch (rl.table) {
+				case "x_153465_discovert_discover_office_members":
+					rl.canCreate = userInfoScript.userCanCreateMem(rec.sys_id);
+					break;
+				case "x_153465_discovert_discover_office_hierarchy":
+					rl.canCreate = userInfoScript.userCanCreateOU(rec.sys_id);
+					break;
+				case "x_153465_discovert_route_tasks":
+					rl.canCreate = userInfoScript.userHasProcessRights(rec);
+					break;
+				case "x_153465_discovert_discover_routing_template":
+					rl.canCreate = userInfoScript.userHasProcessRights(rec);
+					break;
+				case "x_153465_discovert_tasker_schedule":
+					// STRY0082332 - FIX: Template Designers can create Template Schedules
+					rl.canCreate = new uiConditionCheck().runTemplateUIAction(rec);
+					break;
+				case "x_153465_discovert_organizational_contacts":
+					rl.canCreate = true;
+					break;
+				case "x_153465_discovert_route_task_instance":
+					rl.canCreate = canCreateSubTask;
+
+					break;
+					// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+					// This will control showing a New button on the menu row for Tasker Emails tab
+				case 'x_153465_discovert_tasker_email':
+					rl.canCreate = emailEnabled;
+					break;
+				default:
+					rl.canCreate = false;
+
+			}
+			//------------------------------------------------------------------------------------------------------------------------
+			// 2.5. CUSTOM: WIDGET PARAMETERS
+			//------------------------------------------------------------------------------------------------------------------------
+			// NOTE: moved below the setting of canCreate so that can be used in the show_new
+			var params = {
+				o: o,
+				d: d,
+				table: rl.table,
+				filter: filter,
+				// STRY0107408
+				show_new: rl.canCreate,
+				open_new_in_modal: true,
+				//STRY0092475: 04/01/2020
+				view: rlView,
+				title: rl.title,
+				// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added 
+				isModal: isModal,
+				open_row_details_in_modal: open_row_details_in_modal
+				//show_breadcrumbs: true
+			};
+
+			//------------------------------------------------------------------------------------------------------------------------
+			// 2.5. CUSTOM: RELATED LIST CALL WIDGET 
+			//------------------------------------------------------------------------------------------------------------------------
+			rl.widget = $sp.getWidget('discovertasker-widget-data-table', params);
+
+			tab_widget_related_lists.push(rl);
+		}
+		return tab_widget_related_lists;
+	},
+	
+	_getTabTitle: function(table_name, related_table_name) {
+		var tabTitle = '';
+		// TODO - Multi language
+		switch (table_name) {
+			case "x_153465_discovert_route_task_instance":
+				tabTitle = 'Subtasks';
+				break;
+			case "x_153465_discovert_route_tasks":
+				tabTitle = 'Subtasks';
+				break;
+			case "x_153465_discovert_discover_office_hierarchy":
+				tabTitle = 'Sub OUs';
+				break;
+			case "x_153465_discovert_discover_office_members":
+				tabTitle = 'OU Members';
+				break;
+			case "x_153465_discovert_discover_routing_template":
+				tabTitle = 'Template Instances';
+				break;
+				// STRY0074663
+			case "x_153465_discovert_organizational_contacts":
+				tabTitle = 'Contacts';
+				break;
+				// DFCT0010477
+			case "x_153465_discovert_tasker_email":
+				tabTitle = 'Tasker Emails';
+				break;
+			default:
+				tabTitle = related_table_name;
+
+		}
+		return tabTitle;
+	},
+	
     type: 'TaskWidgetData'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>269</sys_mod_count>
+        <sys_mod_count>271</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-26 01:22:24</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-04-04 14:29:39</sys_updated_on>
     </sys_script_include>
 </record_update>

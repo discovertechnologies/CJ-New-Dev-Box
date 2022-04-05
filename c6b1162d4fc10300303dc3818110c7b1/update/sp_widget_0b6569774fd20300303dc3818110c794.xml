@@ -865,9 +865,7 @@ alert('Temporary Message - default OU not in current diagram');
 							 openFormModal(objWidget); 
 							 break;
 						 case c.data.icons.SubOU16.src:
-							 objWidget = JSON.parse(JSON.stringify(modalObjects.subOUList));
-							 objWidget.title = c.data.messages["Tasker - List of Sub OUs"] + ': ' + obj.part.data.name;
-							 objWidget.filter = objWidget.filter + obj.part.data.key;
+							 objWidget = _buildListWidgetObject(modalObjects.subOUList, 'Tasker - List of Sub OUs', obj.part.data);
 							 openListModal(objWidget);
 							 break;
 						 case c.data.icons.OUMembers16.src:
@@ -894,26 +892,18 @@ alert('Temporary Message - default OU not in current diagram');
 							 window.open(url, '_blank');
 							 break;
 						 case c.data.icons.RelatedTasks16.src:
-							 objWidget = JSON.parse(JSON.stringify(modalObjects.relatedTaskOUList));
-							 objWidget.title = c.data.messages["Tasker - Related Tasks"] + ': ' + obj.part.data.name;
-							 objWidget.filter = objWidget.filter + obj.part.data.key;
+							 objWidget = _buildListWidgetObject(modalObjects.relatedTaskOUList, 'Tasker - Related Tasks', obj.part.data);
 							 openListModal(objWidget);
 							 break;
 						 case c.data.icons.Request16.src:
-							 objWidget = JSON.parse(JSON.stringify(modalObjects.requestChangeForm));
-							 objWidget.title = c.data.messages["Tasker - Title - Request Hierarchy Update"];
-							 objWidget.sys_id = -1; 
-							 // STRY0115843
-							 objWidget.omitHeader = 'true';
+							 objWidget = _buildFormWidgetObject(modalObjects.requestChangeForm, 'Tasker - Title - Request Hierarchy Update', obj.part.data, true);
+							 objWidget.sys_id = -1;
 							 objWidget.u_ou_parent = obj.part.data.key; 
 							 openFormModal(objWidget); 
 							 break;
 						 case c.data.icons.GenericAddSub16.src:
-							 objWidget = JSON.parse(JSON.stringify(modalObjects.createNewForm));
-							 objWidget.title = c.data.messages["Tasker - Create New Sub OU"];
+							 objWidget = _buildFormWidgetObject(modalObjects.createNewForm, 'Tasker - Create New Sub OU', obj.part.data, true);
 							 objWidget.sys_id = -1; 
-							 // STRY0115843
-							 objWidget.omitHeader = 'true';
 							 objWidget.parent = obj.part.data.key; 
 							 objWidget.query = 'parent=' + obj.part.data.key;
 							 openFormModal(objWidget); 
@@ -941,8 +931,18 @@ alert('Temporary Message - default OU not in current diagram');
 					obj.source == c.data.icons.Admin16.src ||
 					obj.source == c.data.icons.ProcessRequestBadge24.src) {
 					toolTip = $go(go.HTMLInfo, {
-						show: showPopoverList,
-						hide: hidePopoverList
+						show: _showPopoverList,
+						hide: _hidePopoverList
+					});
+				} else if (obj.source == c.data.icons.LockOpenBadge24.src ||
+					obj.source == c.data.icons.Information16.src ||
+					obj.source == c.data.icons.SubOU16.src ||
+					obj.source == c.data.icons.RelatedTasks16.src ||
+					obj.source == c.data.icons.Request16.src ||
+					obj.source == c.data.icons.GenericAddSub16.src) {
+					toolTip = $go(go.HTMLInfo, {
+						show: _showPopoverSimple,
+						hide: _hidePopoverSimple
 					});
 				} else if(toolTiptextHeader!='') {
 					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
@@ -1227,7 +1227,7 @@ alert('Temporary Message - default OU not in current diagram');
 				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
 						{ isClipping: true,	alignment: new go.Spot(0, 0, TREE_CONST.leftPicCornerOffset, TREE_CONST.topPicCornerOffset),
 							// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; start Profile photo
-							toolTip: $go(go.HTMLInfo,
+							toolTip: $go(go.HTMLInfo, 
 							{
 								show: showPopoverUserInfo,
 								hide: hidePopoverUserInfo
@@ -1529,12 +1529,12 @@ alert('Temporary Message - default OU not in current diagram');
 	}
 
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
-	function showPopoverList(obj, diagram, tool) {
+	function _showPopoverList(obj, diagram, tool) {
 		_runPopoverList(obj, diagram.lastInput);
 	}
 
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
-	function hidePopoverList(diagram, tool) {
+	function _hidePopoverList(diagram, tool) {
 		if (c.data.isPopoverListOpened == false) {
 			_setPopoverDisplayNone('popoverWrapperList');
 			_resetPopoverListObject();
@@ -1545,6 +1545,21 @@ alert('Temporary Message - default OU not in current diagram');
 		}	
 	}
 
+	// 2.8 | 2022-03-28 | mmcc | STRY0108687 - DIA - Organizational Hierarchy Visual Indicators- Popover OUHA List- Additional Styling Changes
+	function _showPopoverSimple(obj, diagram, tool) {
+		_runPopoverSimple(obj, diagram.lastInput);
+	}
+	
+	// 2.8 | 2022-03-28 | mmcc | STRY0108687 - DIA - Organizational Hierarchy Visual Indicators- Popover OUHA List- Additional Styling Changes
+	function _hidePopoverSimple(diagram, tool) {
+		_setPopoverDisplayNone('popoverWrapperList');
+		_resetPopoverListObject();
+
+		// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+		// we use below to have the bindings updated
+		$scope.$apply();
+	}
+	
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 	c.listMouseEnter =  function() {
 		c.data.isPopoverListOpened = true;
@@ -1606,27 +1621,14 @@ alert('Temporary Message - default OU not in current diagram');
 
 		var objWidget = {};
 		switch (obj.source) {
-// 			case c.data.icons.Information16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.informationForm));
-// 				objWidget.title = c.data.messages["Tasker - Organizational Unit Information"];
-// 				objWidget.sys_id = obj.part.data.key;
-// 				// STRY0115843
-// 				objWidget.omitHeader = 'false';
-// 				openFormModal(objWidget); 
-// 				break;
-// 			case c.data.icons.SubOU16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.subOUList));
-// 				objWidget.title = c.data.messages["Tasker - List of Sub OUs"] + ': ' + obj.part.data.name;
-// 				objWidget.filter = objWidget.filter + obj.part.data.key;
-// // 				openListModal(objWidget);
-// 				break;
 			case c.data.icons.OUMembers16.src:
 				c.data.isOuMemberListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - OU Members'];
 				c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
-				c.data.popoverListRecord.modalType = 'listModal';
+				c.data.popoverListOptions.modalType = 'listModal';
+				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = 5;
-				popoverAdjustLeft = -105;
+				popoverAdjustLeft = -115;
 				popoverAdjustTop = 90;
 
 				objWidget = _buildListWidgetObject(modalObjects.membersOUList, 'Tasker - List of Members', obj.part.data);
@@ -1635,9 +1637,10 @@ alert('Temporary Message - default OU not in current diagram');
 				c.data.isContactListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Contacts'];
 				c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
-				c.data.popoverListRecord.modalType = 'listModal';
+				c.data.popoverListOptions.modalType = 'listModal';
+				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = 5;
-				popoverAdjustLeft = -105;
+				popoverAdjustLeft = -115;
 				popoverAdjustTop = 90;
 
 				objWidget = _buildListWidgetObject(modalObjects.contactsOUList, 'Tasker - List of Contacts', obj.part.data);
@@ -1646,7 +1649,8 @@ alert('Temporary Message - default OU not in current diagram');
 				c.data.isOuTaskManagerListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Title - TASK MANAGERS'];
 				// c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
-				c.data.popoverListRecord.modalType = 'formModal';
+				c.data.popoverListOptions.modalType = 'formModal';
+				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = undefined; // show all rows
 				popoverAdjustLeft = -115;
 				popoverAdjustTop = 90;
@@ -1657,60 +1661,29 @@ alert('Temporary Message - default OU not in current diagram');
 				c.data.isOuHierarchyAdminListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Title - OU HIERARCHY ADMINISTRATORS'];
 				// c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
-				c.data.popoverListRecord.modalType = 'formModal';
+				c.data.popoverListOptions.modalType = 'formModal';
+				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = undefined; // show all rows
 				popoverAdjustLeft = -115;
 				popoverAdjustTop = 90;
 
 				objWidget = _buildFormWidgetObject(modalObjects.informationForm, 'Tasker - Organizational Unit Information', obj.part.data, false); 
 				break;
-// 			case c.data.icons.Reports16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.OUReport));
-// 				objWidget.title = c.data.messages["Tasker - OU Reports for "] + ' - ' + obj.part.data.name;
-// 				objWidget.filter = objWidget.filter + obj.part.data.key; 
-// 				openReportModal(objWidget);
-// 				break;
-// 				// STRY0101474
+			// STRY0101474
 			case c.data.icons.ProcessRequestBadge24.src:
 				// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
 				var url = '?id=discover_simple_processing_form&dcu_sys_id=&dcu_table=x_153465_discovert_tasker_requests' +
 				'&dcu_ref=u_ou_parent&dcu_view=&query=u_ou_parent=' +
 				obj.part.data.key +
 				'^u_status=In progress&o=u_requested&d=desc';
+				c.data.popoverListOptions.isSimplePopover = true;
 				c.data.popoverListOptions.isSpinnerShown = false;
-				c.data.popoverListRecord.persons.push({photo: '', name: 'Pending Request', sys_id: ''});
-				c.data.popoverListRecord.title = '';
+				c.data.popoverListRecord.title = c.data.messages['Tasker - Pending Request'];
 				c.data.popoverListRecord.footerLink = c.data.icons.ProcessRequestBadge24.alt;
 				c.data.popoverListRecord.contactPageHref = url;
-				popoverAdjustLeft = -90;
+				popoverAdjustLeft = -80;
 				popoverAdjustTop = 94;
 				break;
-// 			case c.data.icons.RelatedTasks16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.relatedTaskOUList));
-// 				objWidget.title = c.data.messages["Tasker - Related Tasks"] + ': ' + obj.part.data.name;
-// 				objWidget.filter = objWidget.filter + obj.part.data.key;
-// // 				openListModal(objWidget);
-// 				break;
-// 			case c.data.icons.Request16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.requestChangeForm));
-// 				objWidget.title = c.data.messages["Tasker - Title - Request Hierarchy Update"];
-// 				objWidget.sys_id = -1; 
-// 				// STRY0115843
-// 				objWidget.omitHeader = 'true';
-// 				objWidget.u_ou_parent = obj.part.data.key; 
-// 				openFormModal(objWidget); 
-// 				break;
-// 			case c.data.icons.GenericAddSub16.src:
-// 				objWidget = JSON.parse(JSON.stringify(modalObjects.createNewForm));
-// 				objWidget.title = c.data.messages["Tasker - Create New Sub OU"];
-// 				objWidget.sys_id = -1; 
-// 				// STRY0115843
-// 				objWidget.omitHeader = 'true';
-// 				objWidget.parent = obj.part.data.key; 
-// 				objWidget.query = 'parent=' + obj.part.data.key;
-// 				openFormModal(objWidget); 
-// 				break;
-
 			// STRY0101474 - used for divider
 			default:
 				break;
@@ -1753,6 +1726,82 @@ alert('Temporary Message - default OU not in current diagram');
 
 	}
 	
+	/* 2.8 | 2022-03-28 | mmcc | STRY0108687 - DIA - Organizational Hierarchy Visual Indicators- Popover OUHA List- Additional Styling Changes */
+	// Use this private function for a Popover that is not clickable
+	function _runPopoverSimple(obj, diagramLastInput) {
+		var popoverAdjustLeft = 0;
+		var popoverAdjustTop = 0;
+		
+		_resetPopoverListObject();
+		c.data.isPopoverListOpened = true;
+		c.data.popoverListOptions.isSimplePopover = true;
+		c.data.popoverListOptions.isSpinnerShown = true;
+		_setPopoverDisplayNone('popoverWrapper');
+		_resetPopoverObject();
+		
+// 		since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+// 		we use below to have the bindings updated
+		$scope.$apply();
+
+		switch (obj.source) {
+			case c.data.icons.Information16.src:
+				c.data.popoverListRecord.title = c.data.icons.Information16.title;
+				popoverAdjustLeft = -140;
+				popoverAdjustTop = 94;
+				break;
+			case c.data.icons.SubOU16.src:
+				c.data.popoverListRecord.title = c.data.icons.SubOU16.title;
+				popoverAdjustLeft = -140;
+				popoverAdjustTop = 94;
+				break;
+// 			case c.data.icons.Reports16.src:
+// 				objWidget = JSON.parse(JSON.stringify(modalObjects.OUReport));
+// 				objWidget.title = c.data.messages["Tasker - OU Reports for "] + ' - ' + obj.part.data.name;
+// 				objWidget.filter = objWidget.filter + obj.part.data.key; 
+// 				openReportModal(objWidget);
+// 				break;
+			case c.data.icons.RelatedTasks16.src:
+				c.data.popoverListRecord.title = c.data.icons.RelatedTasks16.title;
+				popoverAdjustLeft = -80;
+				popoverAdjustTop = 94;
+				break;
+			case c.data.icons.Request16.src:
+				c.data.popoverListRecord.title = c.data.icons.Request16.title;
+				popoverAdjustLeft = -135; // 130
+				popoverAdjustTop = 94; 
+				break;
+			case c.data.icons.GenericAddSub16.src:
+				c.data.popoverListRecord.title = c.data.icons.GenericAddSub16.title;
+				popoverAdjustLeft = -70; // 110, 90
+				popoverAdjustTop = 94; 
+				break;
+			case c.data.icons.LockOpenBadge24.src:
+				c.data.popoverListRecord.title = c.data.icons.LockOpenBadge24.title;
+				popoverAdjustLeft = -115; // 110
+				popoverAdjustTop = 94;
+				break;
+			default:
+				break;
+		}
+
+		// position the arrow
+		var pt = diagramLastInput.viewPoint;
+		
+		// Do not go left of the viewport edge
+		if (pt.x + popoverAdjustLeft <= 0) {
+			popoverAdjustLeft = 0;
+		}
+
+		// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
+		var popoverDiv = angular.element(document.getElementById('popoverWrapperList'))[0];
+		popoverDiv.style.display = "block";
+		popoverDiv.style.left = Math.ceil(pt.x + popoverAdjustLeft) + 'px';
+		popoverDiv.style.top = Math.ceil(pt.y + popoverAdjustTop) + 'px';
+		
+		c.data.popoverListOptions.isSpinnerShown = false;
+		$scope.$apply();
+	}
+	
 	function _runPopoverUserInfo(objPartData, diagramLastInput) {
 		_resetPopoverObject();
 		c.data.isPopoverOpened = true;
@@ -1771,7 +1820,7 @@ alert('Temporary Message - default OU not in current diagram');
 		$scope.$apply();
 
 		// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
-		var popoverAdjustLeft = -180;
+		var popoverAdjustLeft = -190;
 		var pt = diagramLastInput.viewPoint;
 		var popoverDiv = angular.element(document.getElementById('popoverWrapper'))[0];
 		popoverDiv.style.display = "block";
@@ -2004,6 +2053,10 @@ alert('Temporary Message - default OU not in current diagram');
 //                                       In Client controller, icons.ProcessRequestBadge24 will use showPopoverList();
 //                                       _runPopoverList() and _runPopoverUserInfo() updated to position arrow better
 //                                       Changes in controller Script
+// 2.8 | 2022-03-28 | mmcc | STRY0108687 - DIA - Organizational Hierarchy Visual Indicators- Popover OUHA List- Additional Styling Changes
+//                                       In Client controller, icons.ProcessRequestBadge24 will use showPopoverList();
+//                                       _runPopoverList() and _runPopoverUserInfo() updated to position arrow better
+//                                       Changes in controller Script
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2086,8 +2139,10 @@ alert('Temporary Message - default OU not in current diagram');
 			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 			data.popoverListRecord = {};
 			data.popoverListOptions = {
+				isSimplePopover: false,
 				isSpinnerShown: false,
 				maxRowsToDisplay: 5,
+				modalType: 'listModal',
 				objWidget: {}
 			};
 			
@@ -2185,17 +2240,15 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2599</sys_mod_count>
+        <sys_mod_count>2651</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-03-26 01:15:16</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-04-01 17:33:52</sys_updated_on>
         <template><![CDATA[<style >
 
 
