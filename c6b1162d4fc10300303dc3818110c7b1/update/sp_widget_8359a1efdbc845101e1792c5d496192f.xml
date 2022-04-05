@@ -6,34 +6,13 @@
 		$rootScope.$emit('sp-navbar-collapse');
 	}
 	$scope.loadingIndicator = $rootScope.loadingIndicator;
-	$scope.cartItemCount = 0;
-	$scope.wishlistItemCount = 0;
 	$scope.itemAddedTooltipOpen = false;
 	$scope.accessibilityEnabled = spAriaUtil.g_accessibility === "true";
-	$scope.$on("$sp.service_catalog.cart.count", function($evt, count) {
-		$scope.cartItemCount = count;
-	});
-	$scope.$on("$sp.service_catalog.wishlist.count", function($evt, count) {
-		$scope.wishlistItemCount = count;
-	});
+
 	var cancelTooltipPromise;
-	$scope.$on("$sp.service_catalog.cart.add_item", function() {
-		$timeout.cancel(cancelTooltipPromise);
-		$scope.itemAddedTooltipOpen = true;
-		cancelTooltipPromise = $timeout(function() {
-			$scope.itemAddedTooltipOpen = false;
-		}, 3000);
-	});
 	$scope.$on('sp_loading_indicator', function(e, value) {
 		$scope.loadingIndicator = value;
 	});
-	$scope.toggleCart = function() {
-		$timeout.cancel(cancelTooltipPromise);
-		$scope.itemAddedTooltipOpen = false;
-		$timeout(function() {
-			$("#cart-dropdown").dropdown("toggle");
-		});
-	};
 	// PRB1108244: visibleItems array is used to improve keyboard nav
 	// in menu, refresh it as needed
 	$scope.$watch('data.menu.items', function() {
@@ -41,34 +20,14 @@
 		if ($scope.data.menu.items) {
 			for (var i in $scope.data.menu.items) {
 				var item = $scope.data.menu.items[i];
-				if (item.items || (item.scriptedItems && item.scriptedItems.count != 0))
+				if (item.items || (item.scriptedItems && item.scriptedItems.count != 0)){
 					$scope.visibleItems.push(item);
+				}
+					
 			}
 		}
 	}, true);
-  $scope.$on('sp-menu-update-tours', function(event, tours) {
-    $scope.data.showTours = $scope.data.showTours && !spUtil.isMobile();
-    if ($scope.data.showTours === false) {
-			$scope.data.guidedTours = null;
-			return;
-	}
-    var guidedToursLabel = 'Guided Tours';
-    $scope.data.guidedTours = {
-		label: guidedToursLabel,
-		collection: []
-	};
-    if (tours.length > 0) {
-      $scope.data.guidedTours.collection = tours.map(function(t) {
-        return {
-          title:  t.name,
-          id: t.id,
-          clicked: function() {
-            spGtd.launch(t.id);
-          }
-        };
-      });
-    }
-  });
+
 	// Get list of record watchers
 	var record_watchers = [];
 	if ($scope.data.menu.items) {
@@ -91,7 +50,20 @@
   $rootScope.$broadcast('sp-header-loaded');
 }]]></client_script>
         <controller_as>c</controller_as>
-        <css>.dtech-menu-color {&#13;
+        <css>// RAJ - TEMP - this should move up &#13;
+.dtech-disabled{&#13;
+  pointer-events: none;&#13;
+  cursor:default;&#13;
+  opacity:50%;&#13;
+}&#13;
+&#13;
+.dtech-enabled{&#13;
+  pointer-events: auto;&#13;
+  cursor:pointer;&#13;
+  opacity:100%;&#13;
+}&#13;
+&#13;
+.dtech-menu-color {&#13;
   color:$tasker-color-blue-dark-35363a&#13;
 }&#13;
 .header-loader {&#13;
@@ -265,6 +237,10 @@
 (function(){
 	// build menus
 	var menu_id = $sp.getValue('sys_id'); // instance sys_id
+	
+	// STRY0114307 - need sys_id for links
+	data.sys_id = $sp.getParameter("sys_id");
+	
 	var gr = new GlideRecord('sp_instance_menu');
 	gr.get(menu_id);
 	data.menu = {};
@@ -273,30 +249,15 @@
 	setItemSrcOnAllDescendants(data.menu.items);
 
 	data.isLoggedIn = GlideSession.get().isLoggedIn();
-	data.guidedTours = {};
-	// Show tours only if gtd's sp sys property is set
-	data.showTours = (gs.getProperty('com.snc.guided_tours.sp.enable') === 'true') && data.isLoggedIn;
-	if (!data.showTours) {
-	data.guidedTours = null;
-	}
-	var catalogArr = ($sp.getCatalogs().value + "").split(",");
-  
-	catalogArr.forEach(function(catalog) {
-		data.showWishlist = data.showWishlist || new sn_sc.Catalog(catalog).isWishlistEnabled();
-	});
-	if (data.isLoggedIn) {
-		if (data.showWishlist)
-			data.wishlistWidget = $sp.getWidget("sc_wishlist_cart", {wishlistTemplate: "small_wishlist.html", auto_update_wishlist:options.auto_update_wishlist});
-		if (gs.getProperty("glide.sc.portal.use_cart_v2_header", "false") === "true")
-			data.cartWidget = $sp.getWidget("sc-shopping-cart-v2", {cartTemplate: "small_shopping_cart_v2.html", auto_update_cart:options.auto_update_cart});
-		else
-			data.cartWidget = $sp.getWidget("sc-shopping-cart", {cartTemplate: "small_shopping_cart.html", auto_update_cart:options.auto_update_cart});
-	}
 	
 	function setItemSrcOnAllDescendants(items){
 		// STRY0114307
 		for (var i in items){
 			var item = items[i];
+					// if item has href and doesn't have sys_id in href, add the id
+					if(item.href && item.href.indexOf("sys_id") == -1){
+						item.href = item.href + "&sys_id=" + data.sys_id;
+					}			
 			switch(item.label){
 				case "New Task":
 					item.src = "NewTask16.svg";
@@ -342,8 +303,12 @@
 					break;
 			}
 			// if item has items recurse
-			if(item.items.length > 0){
+			if(item.items && item.items.length > 0){
 				setItemSrcOnAllDescendants(item.items);
+			}
+			// process the scripted items also
+			if(item.scriptedItems && item.scriptedItems.items && item.scriptedItems.items.length > 0){
+				setItemSrcOnAllDescendants(item.scriptedItems.items);
 			}
 		}
 
@@ -354,14 +319,14 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-12-02 00:22:08</sys_created_on>
         <sys_id>8359a1efdbc845101e1792c5d496192f</sys_id>
-        <sys_mod_count>32</sys_mod_count>
+        <sys_mod_count>53</sys_mod_count>
         <sys_name>Tasker - Header Menu</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_8359a1efdbc845101e1792c5d496192f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-03-14 20:16:07</sys_updated_on>
+        <sys_updated_on>2022-04-04 19:09:45</sys_updated_on>
         <template><![CDATA[<ul class="nav navbar-nav" aria-label="${Header menu}" role="menubar">
   <div class="header-loader" ng-class="{'invisible': !loadingIndicator}">
     <div class="hidden-xs sp-loading-indicator la-sm">
@@ -370,99 +335,7 @@
       <div></div>
     </div>
   </div>
-  <li ng-repeat="item in visibleItems" ng-class="{dropdown: item.items.length > 0, 'header-menu-item': true}" ng-include="'tasker_menuTemplate'" role="presentation"></li>
-<!-- Wishlist menu -->
-  <li ng-if="options.enable_wishlist && data.isLoggedIn && data.showWishlist" ng-show="!accessibilityEnabled" class="dropdown hidden-xs" role="presentation">
-  	<a role="menuitem" href="javascript:void(0)"
-       data-toggle="dropdown"
-       id="wishlist-menu"
-       title="${Your Wish List currently has} {{wishlistItemCount}} ${items}"
-       aria-label="${Wish List}">
-      <span ng-bind-html="'${Wish List}'" aria-hidden="true"></span>
-      <span ng-if="wishlistItemCount > 0" aria-hidden="true" class="label label-as-badge label-primary sp-navbar-badge-count">{{wishlistItemCount}}</span>
-		</a>
-    <div class="dropdown-menu wishlist-menu">
-      <sp-widget widget="data.wishlistWidget"></sp-widget>
-    </div>
-  </li>
-  <li ng-if="options.enable_wishlist && data.isLoggedIn && data.showWishlist" class="dropdown" ng-class="{'visible-xs': !accessibilityEnabled}" role="presentation">
-  	<a href="?id=sc_wishlist"
-       title="${Wish List}"
-       class="toggle-dropdown"
-       role="menuitem"
-       aria-label="${Your Wish List currently has} {{wishlistItemCount}} ${items}">
-      <span ng-bind-html="'${Wish List}'" aria-hidden="true"></span>
-      <span ng-if="wishlistItemCount > 0" aria-hidden="true" class="label label-as-badge label-primary sp-navbar-badge-count">{{wishlistItemCount}}</span>
-		</a>
-  </li>
-  <!-- Shopping cart stuff -->
- <li ng-if="::options.enable_cart && data.isLoggedIn" ng-show="::!accessibilityEnabled" class="dropdown hidden-xs header-menu-item" role="presentation">
-  	<a href
-       data-toggle="dropdown"
-       id="cart-dropdown"
-       uib-tooltip-template="'tasker-item-added-tooltip.html'"
-       tooltip-placement="bottom"
-       tooltip-trigger="'none'"
-       tooltip-is-open="$parent.itemAddedTooltipOpen"
-       title="${Your shopping cart currently has} {{cartItemCount}} ${items}"
-       aria-label="${Shopping cart}"
-       role="menuitem">
-    	<i class="fa fa-shopping-cart" aria-hidden="true"></i>
-      <span ng-bind-html="'${Cart}'" aria-hidden="true"></span>
-      <span ng-if="cartItemCount > 0" aria-hidden="true" class="label label-as-badge label-primary sp-navbar-badge-count">{{cartItemCount}}</span>
-		</a>
-    <div class="dropdown-menu cart-dropdown">
-      <sp-widget widget="data.cartWidget"></sp-widget>
-    </div>
-  </li>
-  <li ng-if="::options.enable_cart && data.isLoggedIn" class="dropdown header-menu-item" ng-class="::{'visible-xs': !accessibilityEnabled}"  role="presentation">
-  	<a ng-href="?id=sc_cart"
-       ng-click="collapse()"
-       title="${Cart}"
-       class="toggle-dropdown"
-       role="menuitem"
-       aria-label="${Your shopping cart currently has} {{cartItemCount}} ${items}">
-    	<i class="fa fa-shopping-cart" aria-hidden="true"></i>
-      <span ng-bind-html="'${Cart}'" aria-hidden="true"></span>
-      <span ng-if="cartItemCount > 0" aria-hidden="true" class="label label-as-badge label-primary sp-navbar-badge-count">{{cartItemCount}}</span>
-	</a>
-  </li>
-  <li ng-if="data.isLoggedIn && data.guidedTours" class="dropdown hidden-xs header-menu-item gtd-dropdown-container" role="presentation">
-    <a href
-       data-toggle="dropdown"
-       id="tour-dropdown"
-       tooltip-placement="bottom"
-       tooltip-trigger="'none'"
-       title="${This page currently has {{data.guidedTours.collection.length}} tours}"
-       aria-label="{{data.guidedTours.label}}"
-       role="menuitem">
-      <span ng-bind-html="'${Tours}'" aria-hidden="true"></span>
-      <span class='badge-container' ng-if="data.guidedTours.collection.length > 0">
-        <span aria-hidden="true" class="label label-as-badge label-primary sp-navbar-badge-count">
-          &nbsp;
-       </span>
-      </span>
-    </a>
-    <div ng-if="data.guidedTours.collection.length < 1" class="dropdown-menu empty-dropdown">
-      <div class="panel ng-scope">
-       <div class="panel-body" aria-hidden="false">
-        <div class="empty-tour-content">
-         <div class="h4">${You have no tours on this page}</div>
-         <p>${Tours appear when your administrator creates them on specific pages}</p>
-        </div>
-       </div>
-      </div>
-    </div>
-    <ul ng-if="data.guidedTours.collection.length > 0" class="dropdown-menu"
-        role="menu" aria-label="${Tours}">
-      <li role="presentation" ng-repeat="mi in data.guidedTours.collection"
-          class="ng-scope dropdown-menu-line">
-        <a role="menuitem" href title="{{::mi.title}}" target="{{::mi.target}}" ng-click="mi.clicked()">
-          {{::mi.title | characters:60}}
-        </a>
-      </li>
-    </ul>
-  </li>
+  <li ng-repeat="item in visibleItems" ng-class="{dropdown: item.items.length > 0, 'header-menu-item': true}" ng-include="'tasker_menuTemplate'" role="presentation"> - testing html</li>
 </ul>]]></template>
     </sp_widget>
 </record_update>
