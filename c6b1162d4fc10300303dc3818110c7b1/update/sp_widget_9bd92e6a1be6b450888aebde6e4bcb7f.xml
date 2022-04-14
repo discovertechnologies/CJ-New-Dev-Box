@@ -81,29 +81,38 @@
 //											In Service script, var taskId changed to taskSysId
 // 2.7.0 | 2021-11-18 | raj  | STRY0114416 - 5- The list below should be fixed to re-submit for certification.
 //											In Service script, var taskId changed to taskSysId
+// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX
+//											In HTML, for 3rd row, removed  data.closedAt, _buildMessages() will include the closed at date.
+//											In Service script, reorder calling of functions in main(); added _getDescendantsCount()
+//                                          Changes in HTML and Server script
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options) {
     main();
 
     function main() {
-        _buildMessages();
-        _setDataDefaults();
+		// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX
+        // _buildMessages();
+        // _setDataDefaults();
 
-        if (input) {
-            if (input.submit == true) {
-                // STRY0114416 - 5 (glide record secur) run reopen tasks step
-                var grSelectedTask = new GlideRecord('x_153465_discovert_route_task_instance');
-                if (grSelectedTask.get(input.taskSysId)) {
-                    new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, input.reopenType);
-                }
+		if (input) {
+			if (input.submit == true) {
+				// STRY0114416 - 5 (glide record secur) run reopen tasks step
+				var grSelectedTask = new GlideRecord('x_153465_discovert_route_task_instance');
+				if (grSelectedTask.get(input.taskSysId)) {
+					new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, input.reopenType);
+				}
 
-            } else {
-                // copy to data[name] from input[name] || option[name]
-                _optCopy(['taskSysId']);
-                _getTaskData();
-            }
-        }
+			} else {
+				// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX; reorder and added _getDescendantsCount()
+				_setDataDefaults();
+				_optCopy(['taskSysId']);
+				_getTaskData();
+				_getDescendantsCount();
+				_buildMessages();
+			}
+		}
     }
 
     // Use this function to get Messages that will be used in this widget
@@ -115,9 +124,26 @@
         data.msgBody1 = gs.getMessage('Tasker - Please choose to reopen only the top task or all of its subtasks as well');
         data.msgBody2TaskOnly = gs.getMessage('Tasker - This Task Only');
         data.msgBody2AllSubtasks = gs.getMessage('Tasker - This Task and all Subtasks');
-        data.msgBody2TasksByDate = gs.getMessage('Tasker - This Task and all Subtasks closed on or after');
+		// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX
+        // data.msgBody2TasksByDate = gs.getMessage('Tasker - This Task and all Subtasks closed on or after');
+		data.msgBody2TasksByDate = gs.getMessage('Tasker - This Task and {0} Subtasks closed with this task on {1}', [data.descendantsCount, data.closedAt]);
     }
 
+	/* 2.8 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX; reorder and add taskClosedDate */
+	// Use this function to get a count of descendant tasks to reopen
+	function _getDescendantsCount() {
+		data.descendantsCount = 0;
+		
+		var details = {
+			countType: 'ALL',
+			taskClosedDate: data.closedAt,
+			taskSysId: data.taskSysId
+		};
+		
+		var taskerHelpers = new TaskerHelpers();
+		data.descendantsCount = taskerHelpers.getDescendantsCount(details);
+    }
+	
     // Use this function to get needed data from the task
     function _getTaskData() {
         var grSelTask = new GlideRecord('x_153465_discovert_route_task_instance');
@@ -144,15 +170,17 @@
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-09-15 13:31:28</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>9bd92e6a1be6b450888aebde6e4bcb7f</sys_id>
-        <sys_mod_count>48</sys_mod_count>
+        <sys_mod_count>56</sys_mod_count>
         <sys_name>Tasker Modal - Reopen Tasks</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_9bd92e6a1be6b450888aebde6e4bcb7f</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-18 16:59:23</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2022-04-13 21:00:07</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
 
   <div class="dtech-text-center dtech-standard-text-color">
@@ -165,23 +193,23 @@
   <div class="container-fluid">
     <div class="row">
       <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="taskOnly" aria-label="{{data.msgTaskOnly}}" ng-model="data.reopenType" value="taskOnly">
+        <input type="radio" name="reopenType" id="taskOnly" aria-label="{{data.msgBody2TaskOnly}}" ng-model="data.reopenType" value="taskOnly">
         <label for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">{{data.msgBody2TaskOnly}}</label>
       </div>
     </div>
 
     <div class="row">
       <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="allSubtasks" aria-label="{{data.msgAllSubtasks}}" ng-model="data.reopenType" value="allSubtasks">
+        <input type="radio" name="reopenType" id="allSubtasks" aria-label="{{data.msgBody2AllSubtasks}}" ng-model="data.reopenType" value="allSubtasks">
         <label for="allSubtasks" class="dtech-standard-text-color dtech-radio-inline">{{data.msgBody2AllSubtasks}}</label>
       </div>
     </div>
 
     <div class="row">
       <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="tasksByDate" aria-label="{{data.msgTasksByDate}} {{data.closedAt}}" ng-model="data.reopenType" value="tasksByDate"
+        <input type="radio" name="reopenType" id="tasksByDate" aria-label="{{data.msgBody2TasksByDate}}" ng-model="data.reopenType" value="tasksByDate"
                ng-disabled="data.closedAt == ''">
-        <label for="tasksByDate" class="dtech-standard-text-color dtech-radio-inline">{{data.msgBody2TasksByDate}} {{data.closedAt}}</label>									
+        <label for="tasksByDate" class="dtech-standard-text-color dtech-radio-inline">{{data.msgBody2TasksByDate}}</label>									
       </div>
     </div>
   </div>
