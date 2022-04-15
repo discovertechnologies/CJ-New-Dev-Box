@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>2.8    | 2022-02-13 - raj -  STRY0117523 - Org Hierarchy- Office Schedule Override- Add System Settings to turn on/off feature&#13;
+2.7.3 | 2022-04-15 | raj | DFCT0010833 - Creating an "Unassigned" task immediately adds the task to the "Awaiting Assignment Overdue" banner&#13;
 2.7.2 | 2022-02-08 | raj | DFCT0010780 - "Set Due Time" field on "Template" causes the next task to SKIP a day if the parent(or previous order's) task's time is set to after "end of day" (17:00:00)&#13;
 &#13;
 2.7&#13;
@@ -182,8 +183,16 @@ TaskerDurationCalculator.prototype = {
 	calculateDateOfAddedBusinessDaysWitScheduleId: function(scheduleId, daysToAdd, startDate){
 		var lEndDate = new GlideDateTime(startDate);
 		var lDaysToAdd = isNaN(daysToAdd)?undefined:parseInt(daysToAdd);
-		if(lDaysToAdd == undefined  || lDaysToAdd <= 0){
+		if(lDaysToAdd == undefined){
 			return null;
+		} else if(lDaysToAdd == 0){
+			return lEndDate;
+		} else if(lDaysToAdd < 0){
+			// adding a negative number will subtract the days, convert to positive number and call subtract days
+			// subtract a negative number form zero should provide a positive number
+			var daysToSubtract = 0 - lDaysToAdd;
+			lEndDate = this.calculateDateOfSubtractedBusinessDaysWithScheduleId(scheduleId, daysToSubtract, startDate);
+			return lEndDate;
 		}
 		var daysAdded = 0;
 		var sch;
@@ -207,6 +216,79 @@ TaskerDurationCalculator.prototype = {
 		} else {
 			// no schedule given, just add the days
 			lEndDate.addDaysLocalTime(lDaysToAdd);
+		}
+		return lEndDate;
+	},
+	
+	// 2.7.3 | 2022-04-15 | raj | DFCT0010833 - Creating an "Unassigned" task immediately adds the task to the "Awaiting Assignment Overdue" banner
+	// NOTE: this will not callculate 
+	calculateDateOfSubtractedBusinessDaysWithScheduleId: function(scheduleId, daysToSubtract, startDate){
+		var milliseconds;
+		var returnDate;
+		var lStartDate = new GlideDateTime(startDate);
+		var lEndDate = new GlideDateTime(startDate);
+		var lDaysToSubtract = isNaN(daysToSubtract)?undefined:parseInt(daysToSubtract);
+		if(lDaysToSubtract == undefined){
+			returnDate = null;
+		} else if(lDaysToSubtract == 0){
+			returnDate = lEndDate;
+		} else if(lDaysToSubtract < 0){
+			// subtracting a negative number will add the days, convert to positive number and call add days
+			var daysToAdd = 0 - lDaysToSubtract;
+			returnDate = this.calculateDateOfAddedBusinessDaysWitScheduleId(scheduleId, daysToAdd, startDate);
+		} else {
+			var daysSubtracted = 0;
+			var sch;
+			// no schedule given, just add the days
+			lEndDate.addDaysLocalTime(-lDaysToSubtract);
+
+			if(scheduleId != ''){
+				sch = new GlideSchedule(scheduleId); //use your scheudle sysid here
+				
+				// check current time to see if in schedule and move to next in schedule time before starting subtraction
+				if(!sch.isInSchedule(lStartDate)){
+					milliseconds = sch.whenNext(lStartDate);
+					lStartDate.addSeconds(milliseconds/1000);
+				}
+
+				// above the number of calendar days was subtracted from the date
+				// keep subtracting days and counting only the days subtracted 
+				var maxNonCalendarDaysToLoop = 100;
+				while(daysSubtracted < maxNonCalendarDaysToLoop){
+
+					// add the days to the new end date
+					var businessDateFromCurrentEndDate = this.calculateDateOfAddedBusinessDaysWitScheduleId(scheduleId, daysToSubtract, lEndDate);
+					// if the date returned is at or before the start date, then this is the date to return
+					// if not, loop again
+					if (businessDateFromCurrentEndDate.getNumericValue() <= lStartDate.getNumericValue()){
+						break;
+					}
+					lEndDate.addDaysLocalTime(-1);
+					daysSubtracted++;
+				}
+				if(daysSubtracted == maxNonCalendarDaysToLoop){
+					gs.error("DTECH - application tried to subtract days in a scheudle and exceeded the maximum looping for non-calendar days in the comparison - the Max Non-Calendar days in the system for date comparisons is: " + maxNonCalendarDaysToLoop);
+				}
+				lEndDate = this._getNextPreviousDayInSchedule(sch, lEndDate);
+			}
+			
+			returnDate = lEndDate;
+		}
+		return returnDate;
+	},
+	
+	_getNextPreviousDayInSchedule: function(sch, lEndDate){
+		if(!sch.isInSchedule(lEndDate)){
+			var setLast = lEndDate;
+			while(!sch.isInSchedule(lEndDate)){
+				lEndDate.addDaysLocalTime(-1);
+				var setCurrent = lEndDate;
+				milliseconds = sch.whenNext(setCurrent);
+				setCurrent.addSeconds(milliseconds/1000);
+				if(setCurrent.getNumericValue() < setLast.getNumericValue()){
+					break;
+				}
+			}
 		}
 		return lEndDate;
 	},
@@ -381,13 +463,13 @@ TaskerDurationCalculator.prototype = {
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-06-24 18:38:34</sys_created_on>
         <sys_id>3300702e1be91c10888aebde6e4bcb04</sys_id>
-        <sys_mod_count>97</sys_mod_count>
+        <sys_mod_count>122</sys_mod_count>
         <sys_name>TaskerDurationCalculator</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3300702e1be91c10888aebde6e4bcb04</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-02-13 20:50:46</sys_updated_on>
+        <sys_updated_on>2022-04-15 23:10:13</sys_updated_on>
     </sys_script_include>
 </record_update>
