@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
+	var c = this;
+	var TOOL_BAR_CONST;
+
+	// call main function
+	main();
+	function main(){
+		TOOL_BAR_CONST = _loadTollBarConstants();
+		_initOnLoadComplete();
+	}
+	
+	// STRY0117600
+	function _loadTollBarConstants() {
+		var oTOOL_BAR_CONST = {
+		};
+		return oTOOL_BAR_CONST;
+	}		
+	
+	// NOTE: this is not needed when control is loaded from the server
+	//       It was left in for cases where developers would want to load from client
+	//       this emits to the parent when the control completes building
+	function _initOnLoadComplete(){
+		angular.element(document).ready(function () {
+			$scope.$emit('tasker-tree-footer-toolbar.initComplete');
+		});
+	}
+	
+	// Switch to Horizontal
+	$scope.switchToHorizontal = function() {
+		$scope.$emit('$tasker-tree-toolbar-icons.switchToHorizontal');
+		$scope.data.settings.treeOrientation="Horizontal";
+		$scope.data.orientationChanged = true; 
+		spUtil.update($scope);
+	};
+	
+	// Switch to Vertical
+	$scope.switchToVertical = function() {
+		$scope.$emit('$tasker-tree-toolbar-icons.switchToVertical');
+		$scope.data.settings.treeOrientation="Vertical";
+		$scope.data.orientationChanged = true; 
+		spUtil.update($scope);
+	};
+	
+	// add the selected node to the favorites for the user
+	$scope.addToFavorites = function() {
+		var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
+		c.widget.diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
+		c.widget.diagram.centerRect(selectedNode.actualBounds);			
+		
+		$scope.data.favoriteChanged = true; 
+		$scope.data.settings.favorite = {
+			value: c.widget.parentSelectedId,
+			topId: c.widget.currentTop};
+		spUtil.update($scope).then(function() {
+			// submit favorite change back to server
+			return;
+		});
+	};
+	
+		// Zoom to Favorite
+	$scope.zoomToFavorite = function() {
+// TODO - post back change if top ou of favorite is not current top ou
+		if(c.data.settings.favorite.value && c.data.settings.favorite.value != c.widget.parentSelectedId){
+			c.widget.parentSelectedId = c.data.settings.favorite.value;
+			var favoriteOUNode = c.widget.diagram.findNodeForKey(c.data.settings.favorite.value);
+			if(favoriteOUNode){
+				c.widget.diagram.select(favoriteOUNode);
+			} else {
+// TODO - determine if we want a message here 
+// 				Or if we want me to load a different tree, 
+// 				or, if we wnat to prompt to load a differnt tree
+alert('Temporary Message - favorite OU not in current diagram');				
+			}
+		}
+
+	};
+
+		// Zoom to Default OU
+	$scope.zoomToDefaultOU = function() {
+		if(c.data.settings.defaultOU.value && c.data.settings.defaultOU.value != c.widget.parentSelectedId){
+			c.widget.parentSelectedId = c.data.settings.defaultOU.value;
+			var defaultOUNode = c.widget.diagram.findNodeForKey(c.data.settings.defaultOU.value);
+			if(defaultOUNode){
+				c.widget.diagram.select(defaultOUNode);
+			} else {
+// TODO - determine if we want a message here 
+// 				Or if we want me to load a different tree, 
+// 				or, if we wnat to prompt to load a differnt tree
+alert('Temporary Message - default OU not in current diagram');				
+			}
+		}
+	};
+
+	// Zoom to Top OU
+	$scope.zoomToTop = function() {
+		// STRY0074663 Only rebroadcast if the node changed
+		if(c.widget.currentTop && c.widget.currentTop != c.widget.parentSelectedId){
+			c.widget.parentSelectedId = c.widget.currentTop;
+			// need to emit selection change to current top
+			// Select the node using the sys_id parameter supplied.
+			var node_select = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
+			c.widget.diagram.select(node_select);
+		}			
+	}
+	
+	// Zoom to Selected
+	$scope.zoomToSelected = function() {
+		_zoomToSelected();
+		if(parseInt($scope.data.settings.selectPercent)!=100){
+			$scope.data.settings.selectPercent='100';
+			$scope.data.percentChanged = true; 
+			spUtil.update($scope).then(function() {
+				// submit percent change back to server
+				return;
+			});			
+		}
+	};
+	
+	// Zoom to full tree
+	$scope.zoomToFullTree = function() {
+		c.widget.diagram.zoomToRect(c.widget.diagram.documentBounds);
+		if($scope.data.settings.selectPercent!="tree"){
+			$scope.data.settings.selectPercent="tree";
+
+			$scope.data.percentChanged = true; 
+			spUtil.update($scope).then(function() {
+				// submit percent change back to server
+				return;
+			});
+		}		
+	};
+	
+	// Zoom to Percentage
+	$scope.zoomToPercent = function() {
+		if($scope.data.settings.selectPercent=="tree"){
+			this.zoomToFullTree();
+		} else {
+			var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
+			c.widget.diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
+			c.widget.diagram.centerRect(selectedNode.actualBounds);			
+		}
+		
+		$scope.data.percentChanged = true; 
+		spUtil.update($scope).then(function() {
+			// submit percent change back to server
+			return;
+		});
+
+	};
+	function _zoomToSelected(){
+		var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
+		c.widget.diagram.commandHandler.resetZoom(1.0);
+		c.widget.diagram.centerRect(selectedNode.actualBounds);
+	}
+	
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>// RAJ - TEMP - this should move up 
+.dtech-disabled{
+  pointer-events: none;
+  cursor:default;
+  opacity:50%;
+}
+
+.dtech-enabled{
+  pointer-events: auto;
+  cursor:pointer;
+  opacity:100%;
+}
+</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tasker-tree-toolbar-icons</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Tasker - Tree Toolbar Icons</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+// 2.8   - 2022-04-05 - raj -  STRY0117600 - Update Templates to match the UI of Org Hierarchy 
+//                                         - Changes in Server Script, client controller, HTML, UI Script and Template
+//
+//------------------------------------------------------------------------------------------------------------------------
+
+(function($sp, input, data, options, gs) {
+	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; declare once as global
+	var taskWidgetData = new TaskWidgetData();
+	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
+	data.iconGroup = (input || {}).iconGroup || (options || {}).iconGroup || undefined;
+	
+	// todo, figure out how to adjust to know if Org or not
+
+	// if messages not loaded, load messages
+	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages(data.baseWidget);
+	
+	main();
+	function main() {
+		
+		if(input){
+			_processInput();
+		}// else {
+			_initialLoad();
+//		}			
+		
+		
+		// INPUT GOES HERE
+
+		
+	}
+
+	function _initialLoad(){
+		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+		data.messages = taskWidgetIconsAndMessage.loadMessages();
+		data.icons = taskWidgetIconsAndMessage.loadIcons();
+	}
+
+	function _processInput(){
+		if(input.orientationChanged){
+			data.orientationChanged = false;
+			taskWidgetIconsAndMessage.savePreferenceOrientation(input.settings.treeOrientation);
+		} else if(input.percentChanged){
+			data.percentChanged = false;
+			taskWidgetIconsAndMessage.savePreferencePercent(input.settings.selectPercent);
+		} else if(input.favoriteChanged){
+			data.favoriteChanged = false;
+			taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);		
+		}	
+
+	}
+	
+})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-04-11 16:09:41</sys_created_on>
+        <sys_id>76e0ee2ddb7ec910991a6154ca9619a1</sys_id>
+        <sys_mod_count>68</sys_mod_count>
+        <sys_name>Tasker - Tree Toolbar Icons</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_76e0ee2ddb7ec910991a6154ca9619a1</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-04-13 22:28:25</sys_updated_on>
+        <template><![CDATA[<!-- This section is used for the HEADER icont group -->
+<div ng-if="data.iconGroup=='header'" class="dtech-push-right-flexbox">
+  <div class="pull-right">
+    <img src="{{data.icons.OrgHierarchy24.src}}" title="{{data.icons.OrgHierarchy24.title}}"
+         alt="{{data.icons.OrgHierarchy24.alt}}" class="dtech-pad-all-10" 
+         ng-class="{'dtech-disabled': data.settings.treeOrientation=='Horizontal', 'dtech-enabled': data.settings.treeOrientation!='Horizontal'}"
+         ng-click="switchToHorizontal();"/>
+
+    <img src="{{data.icons['OrgHierarchy-Vertical24'].src}}" title="{{data.icons['OrgHierarchy-Vertical24'].title}}"
+         alt="{{data.icons['OrgHierarchy-Vertical24'].alt}}" class="dtech-pad-all-10" 
+         ng-class="{'dtech-disabled': data.settings.treeOrientation=='Vertical', 'dtech-enabled': data.settings.treeOrientation!='Vertical'}"
+         ng-click="switchToVertical();"/>
+
+    <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+         alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
+
+  </div>
+</div>
+<!-- This section is used for the FOOTER icont group -->
+<div ng-if="data.iconGroup=='footer'" class="dtech-push-right-flexbox">
+  <div class="pull-left">
+    <div ng-show="widget.parentSelectedId != data.settings.favorite.value">
+      <img 
+           src="{{data.icons.AddToFavorite24.src}}" title="{{data.icons.AddToFavorite24.title}}"
+           alt="{{data.icons.AddToFavorite24.alt}}" class="dtech-pad-all-10" 
+           ng-click="addToFavorites();"
+           /> {{data.messages["Tasker - Set selected as Favorite OU"]}}
+    </div>
+
+    <div ng-show="widget.parentSelectedId == data.settings.favorite.value">
+      <img 
+           src="{{data.icons.FavoriteFilled24.src}}" title="{{data.icons.FavoriteFilled24.title}}"
+           alt="{{data.icons.FavoriteFilled24.alt}}" class="dtech-pad-all-10" 
+           /> {{data.messages["Tasker - This is your selected Favorite OU"]}}
+    </div>
+  </div>
+  <div class="pull-right">
+    <img src="{{data.icons.Top24.src}}" title="{{data.icons.Top24.title}}"
+         alt="{{data.icons.Top24.alt}}" class="dtech-pad-all-10" 
+         ng-class="{'dtech-disabled': widget.parentSelectedId == widget.currentTop, 'dtech-enabled': widget.parentSelectedId != widget.currentTop}"
+         ng-click="zoomToTop();"/>
+
+    <img src="{{data.icons.DefaultOU24.src}}" title="{{data.icons.DefaultOU24.title}}"
+         alt="{{data.icons.DefaultOU24.alt}}" class="dtech-pad-all-10" 
+         ng-class="{'dtech-disabled': widget.parentSelectedId == data.settings.defaultOU.value, 'dtech-enabled': widget.parentSelectedId != data.settings.defaultOU.value}"
+         ng-click="zoomToDefaultOU();"/>
+
+    <img src="{{data.icons.Favorite24.src}}" title="{{data.icons.Favorite24.title}}"
+         alt="{{data.icons.Favorite24.alt}}" class="dtech-pad-all-10"
+         ng-class="{'dtech-disabled': widget.parentSelectedId == data.settings.favorite.value, 'dtech-enabled': widget.parentSelectedId != data.settings.favorite.value}"
+         ng-click="zoomToFavorite();"/>
+
+    <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+         alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
+
+    <img src="{{data.icons.ZoomSelected24.src}}" title="{{data.icons.ZoomSelected24.title}}"
+         alt="{{data.icons.ZoomSelected24.alt}}" 
+         class="dtech-pad-all-10" 
+         ng-click="zoomToSelected();"/>
+
+    <img src="{{data.icons.ZoomEntire24.src}}" title="{{data.icons.ZoomEntire24.title}}"
+         alt="{{data.icons.ZoomEntire24.alt}}" 
+         class="dtech-pad-all-10" 
+         ng-click="zoomToFullTree();"/>
+
+    <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+         alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
+
+    <select type="text" id= "selectPercent" class="dropdown" ng-model="data.settings.selectPercent"
+            ng-change="zoomToPercent();" >
+      <option value="100" 
+              [selected]="data.settings.selectPercent==100" 
+              >100%</option>
+      <option value="75"
+              [selected]="data.settings.selectPercent==75" 
+              >75%</option>
+      <option value="50"
+              [selected]="data.settings.selectPercent==50" 
+              >50%</option>
+      <option value="25"
+              [selected]="data.settings.selectPercent==25" 
+              >25%</option>
+      <option value="tree"
+              [selected]="data.settings.selectPercent==tree" 
+              >{{data.messages["Tasker - Entire Tree"]}}</option>
+    </select>      
+  </div>
+</div>    ]]></template>
+    </sp_widget>
+</record_update>
