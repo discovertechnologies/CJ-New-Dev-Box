@@ -16,6 +16,8 @@
 	var modalObjects;
 	var $go;
 	var diagram;
+	// this is used to set the initial select percent
+	var diagramInitCompleted = false;	
 	// overview is the picture-in-picture image of the diagram
 	var myOverview;
 	var treeOrientation;
@@ -41,12 +43,13 @@
 		c.data.topIconOpacity = c.data.settings.isFullScreen? TREE_CONST.icon_opacity_normal :0.0;
 		c.data.showIcons = false;
 		c.data.topOU="";
+		
+		// load orientation from the header widget
+		treeOrientation = c.data.widgetTreeHeaderToolbar.data.settings.treeOrientation;
 		// set default tree orientation based on system setting (this will change when user perference is enabled)
-		if(c.data.settings.treeOrientation == 'Horizontal'){
-			treeOrientation = "Horizontal";
+		if(treeOrientation == 'Horizontal'){
 			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
 		} else {
-			treeOrientation = "Vertical";
 			treeNodeAngle = TREE_CONST.verticalTreeAngle;
 		}
 
@@ -620,7 +623,6 @@
 
 		// STRY0116812
 		evt.table = c.data.table; //d.sys_class_name || d.table;
-		c.data.selectedId = evt.sys_id;
 		// RJ -ET - Story 4
 		evt.parent = d.parent;
 		c.data.selectedId = evt.sys_id;
@@ -969,6 +971,7 @@
 	};	
 	
 	function resetDiagram(){
+		diagramInitCompleted = false;	
 		if(diagram != undefined){
 			myOverview.div = null;
 			myOverview = null;
@@ -986,35 +989,72 @@
 				resizeDiagram();
 				var node = diagram.findNodeForKey(c.data.selectedId);
 				diagram.centerRect(node.actualBounds);
-
+				// the diagram is initialized so the initial scale can be set
+				// NOTE: zoomToFit and zoomToRect do not work in this init function
+				// so calling a timeout function to initialize the scale
+				$timeout(function(){ _initializeScale();},200);				
 			});
 
 			// TREE FOOTER TOOLBAR
 			// STRY0117600 - this event handler is called when the diagram bounds change
 			diagram.addDiagramListener("ViewportBoundsChanged", function(e) {
+				// set the footer scale when bounds change
+				// but wait until init is completed
 				if(viewPortHeight != diagram.viewportBounds.height){
+					// this block only runs once per diagram load
+					if(diagramInitCompleted){
+						// only need to set scale after initial load
+						// STRY0117945
+						c.data.widgetTreeFooterToolbar.scale(diagram.scale);					
+					}
+
 					var node = diagram.findNodeForKey(c.data.selectedId);
 					// and center it and select it
 					// STRY0072032
 					diagram.centerRect(node.actualBounds);
 					viewPortHeight = diagram.viewportBounds.height;
 				}
-
 			});
 		}
 	}
 
+	// ***************************************
+	// this block only runs once
+	// BEGIN BLOCK
+	// ***************************************
+	function _initializeScale(){
+		if(c.data.widgetTreeFooterToolbar.data.isTree){
+			// submit percent change back to server
+			diagram.zoomToRect(diagram.documentBounds);
+		} else {
+			// get the initial scale from the footer widget
+			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbar.data.settings.diagramScale);
+		}
+		diagramInitCompleted=true;
+	}
+
+	// ***************************************
+	// END BLOCK
+	// ***************************************
+	
 	// TREE FOOTER TOOLBAR
 	// STRY0117600 - move toolbar into separate widget to use same functionality across all
 	function _setToolbarProperties(){
 		// STRY0117600 - pass a reference to diagram to toolbar
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		c.data.widgetTreeFooterToolbar.diagram = diagram;
+		if(diagramInitCompleted){
+			// this is needed to reset zoom to custom when the diagram changes
+			c.data.widgetTreeFooterToolbar.resetDiagram(diagram);
+		} else {
+			c.data.widgetTreeFooterToolbar.diagram = diagram;
+		}
+		
+		//c.data.widgetTreeFooterToolbar.diagram = diagram;
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
 		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
 		c.data.widgetTreeFooterToolbar.currentTop = c.data.currentTopOU;
-		
+
 		// STRY0117600 - pass a reference to diagram to toolbar
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
 		c.data.widgetTreeHeaderToolbar.diagram = diagram;
@@ -1022,12 +1062,12 @@
 		// this sets the selected id on the footer tooltip when the selected id changes
 		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
 		c.data.widgetTreeHeaderToolbar.currentTop = c.data.currentTopOU;
-		
+
 	}
 
 	function resizeDiagram() {
 		// DFCT0010275
-		if($scope.data.map.length > 0){	
+		if($scope.data.map && $scope.data.map.length > 0){	
 			// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
 			// STRY0116823				
 			//				var diagramHeight = parseInt(diagram.documentBounds.height > TREE_CONST.diagramMinHeight ? diagram.documentBounds.height: TREE_CONST.diagramMinHeight);
@@ -1055,6 +1095,7 @@
 		}
 		diagram =
 			$go(go.Diagram, TREE_CONST.node_id, {
+			initialAutoScale: go.Diagram.Uniform,
 			allowZoom: true,		
 			// define the layout for the diagram
 			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
@@ -1071,14 +1112,6 @@
 		diagram.allowVerticalScroll=true;
 		// Define a trivial link template with no arrowhead
 		diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
-
-		if(c.data.settings.selectPercent=="tree"){
-			diagram.initialAutoScale = go.Diagram.Uniform;
-		} else {
-			diagram.scale = parseInt(c.data.settings.selectPercent)/100;
-		}
-
-		diagram.commandHandler.scrollToPart(diagram.findNodeForKey(c.data.selectedId));
 	}
 	
 	function _createNodeTemplate(){
@@ -2031,6 +2064,12 @@
 //                                       In Client controller, addImage() binding source, comment out case c.data.icons.Request16.src
 //                                         to always show icon for request updates no matter value in data.isAdmin
 //                                       Changes in Client controller
+// 2.8   - 2022-04-18 - raj -  STRY0117945 - Org Hierarchy – Preset Zoom Dropdown- Custom Zoom will display in dropdown
+//                                         - Changes in Client Controller
+// 2.8   - 2022-04-20 - raj -  STRY0120908 - As any Tasker User, if "Org Hierarchy Fullscreen" is accessible from the "Layout Dropdown", I do NOT want it accessible anywhere else.
+//                                         - Changes in HTML and ServerScript
+// 2.8   - 2022-04-20 - raj -  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout
+//                                         - Changes in HTML and ServerScript
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2051,6 +2090,7 @@
 			_processInput();
 		} else {
 			_initialLoad();
+			_loadToolBars();
 		}
 	}
 	
@@ -2088,25 +2128,30 @@
 		}
 
 		var selectedId = _setSelected();
+		
+		_loadOUmap(selectedId, undefined);	
+	}
+
+	function _loadToolBars(){
 		// TREE HEADER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
+		// STRY0120908 - added show separator
 		var header_widget_parameters = {
 			baseWidget: 'discovertasker-officehierarchy',
-				iconGroup: 'header'
+			showSeparator: false,
+			iconGroup: 'header'
 		};
 		data.widgetTreeHeaderToolbar = $sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters); 
-		
+
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
 		var footer_widget_parameters = {
 			baseWidget: 'discovertasker-officehierarchy',
-				iconGroup: 'footer'
+			iconGroup: 'footer'
 		};
-		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters); 
-		
-		_loadOUmap(selectedId, undefined);					
+		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters);
 	}
-
+	
 	// STRY0117600 structuring code for maintainability 
 	function _processInput(){
 		if(input.topOU){
@@ -2229,17 +2274,15 @@
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2753</sys_mod_count>
+        <sys_mod_count>2794</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-04-20 20:25:18</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-04-26 14:13:13</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -2272,21 +2315,6 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
 <!-- DFCT0010275 -->
 <div id="main_body" ng-show="data.settings.topParentNeeded==false" class="panel panel-default">
   <div id="panel_heading" class="panel-heading">
-    <div ng-switch="data.settings.page_id" class="pull-right">
-      <div ng-switch-when="discovertasker_officehierarchy" class="pull-right">
-        <span class="pull-right" >
-          <a target="_self" ng-href="?id=discovertasker_ouhierarchy_full_screeen&table={{data.table}}&sys_id={{data.selectedId}}" role="link">
-            <img src="{{data.icons.Fullscreen16.src}}" title="{{data.icons.Fullscreen16.title}}" alt="{{data.icons.Fullscreen16.alt}}" class="dtech-pad-all-10"  />
-          </a>
-        </span>
-      </div>
-      <!-- STRY0113679 -->
-      <div ng-switch-when="discovertasker_ouhierarchy_full_screeen" class="pull-right">
-        <a target="_self" ng-href="?id=discovertasker_officehierarchy&table={{data.table}}&sys_id={{data.selectedId}}&view=sp" role="link">
-            <img src="{{data.icons.MinimizeFullScreen16.src}}" title="{{data.icons.MinimizeFullScreen16.title}}" alt="{{data.icons.MinimizeFullScreen16.alt}}" class="dtech-pad-all-10" />
-        </a>
-      </div>
-    </div>
     <!-- TREE HEADER TOOLBAR -->
     <sp-widget widget="data.widgetTreeHeaderToolbar"></sp-widget>
     <div id="panel_title" >

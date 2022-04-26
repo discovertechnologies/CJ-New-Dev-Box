@@ -6,6 +6,8 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This script include loads the icons and text messages for Tasker Widgets.  &#13;
+ 2.8 | 2022-04-20 | raj |  STRY0120908 - As any Tasker User, if "Org Hierarchy Fullscreen" is accessible from the "Layout Dropdown", I do NOT want it accessible anywhere else.&#13;
+ 2.8 | 2022-04-20 | raj |  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout&#13;
  2.8 | 2022-04-05 | raj |  STRY0117600 - Update Templates to match the UI of Org Hierarchy &#13;
 2.8 | 2022-03-28 | mmcc | STRY0108687 - DIA - Organizational Hierarchy Visual Indicators- Popover OUHA List- Additional Styling Changes&#13;
   Added Message key 'Tasker - Pending Request'&#13;
@@ -36,13 +38,12 @@ var TaskerWidgetIconsAndMessages = Class.create();
 TaskerWidgetIconsAndMessages.prototype = {
     initialize: function(widgetId) {
 		this.widgetId = widgetId;
+		this.PREFERENCE_FAVORITE = 'DTechApps.Tasker.FavoriteOU';
+		this.PREFERENCE_PERCENT= 'DTechApps.Tasker.' + widgetId + '.diagramScale';
+		// STRY0117951
+		this.PREFERENCE_TREE_ORIENTATION = 'DTechApps.Tasker.' + widgetId + '.treeOrientation';
     },
-	
-	PREFERENCE_FAVORITE: 'DTechApps.Tasker.FavoriteOU',
-	PREFERENCE_PERCENT: 'DTechApps.Tasker.selectPercent',
-	// STRY0117951
-	PREFERENCE_TREE_ORIENTATION: 'DTechApps.Tasker.treeOrientation',
-	
+		
 	// this loads all TaskerWidgetMessage and titles that are not part of icons
 	loadMessages: function() {
 		var widgetMessages;
@@ -59,6 +60,17 @@ TaskerWidgetIconsAndMessages.prototype = {
 			case 'discovertasker-processtemplatetreegraph':	
 				widgetMessages = this._load_template_widgetMessages();
 				break;
+			case 'discovertasker-processtemplatetreegraph-footer':	
+				widgetMessages = this._load_toolTip_footer_widgetMessages();
+				break;
+			case 'discovertasker-officehierarchy-footer':
+				widgetMessages = this._load_ORG_toolTip_footer_widgetMessages();
+				break;
+			// 'discovertasker-officehierarchy-header' - NO MESSAGES
+			// 'discovertasker-processtemplatetreegraph-header' - NO MESSAGES
+			default: 
+				widgetMessages = {};
+				break;
 		}
 		return widgetMessages;
 	},
@@ -67,9 +79,15 @@ TaskerWidgetIconsAndMessages.prototype = {
 	loadIcons: function() {
 		var icons = {};
 		switch (this.widgetId){
+			case 'discovertasker-officehierarchy-header':
+				icons = this._load_tree_header_icons(icons);
+				break;
 			case 'discovertasker-officehierarchy':
 				icons = this._load_officehiearachy_icons(icons);
-				icons = this._load_tree_icons(icons);
+				break;
+			case 'discovertasker-officehierarchy-footer':
+				icons = this._load_ORG_toolTip_footer_icons(icons);
+				icons = this._load_tree_footer_icons(icons);
 				break;
 			case 'discovertasker_dynamic_breadcrumbs':
 				icons = this._load_breadcrumb_icons(icons);
@@ -77,8 +95,14 @@ TaskerWidgetIconsAndMessages.prototype = {
 			case 'discovertasker-widget-in-modal':
 				icons = this._load_widgetInModal_icons(icons);
 				break;
+			case 'discovertasker-processtemplatetreegraph-header':	
+				icons = this._load_tree_header_icons(icons);
+				break;
 			case 'discovertasker-processtemplatetreegraph':
-				icons = this._load_tree_icons(icons);
+				// no icons yet, all font awesome
+				break;
+			case 'discovertasker-processtemplatetreegraph-footer':
+				icons = this._load_tree_footer_icons(icons);
 				break;
 		}
 		return icons;
@@ -87,11 +111,26 @@ TaskerWidgetIconsAndMessages.prototype = {
 	loadDefaultsAndSettings: function($sp){
 		var settings;
 		switch (this.widgetId){
+			case 'discovertasker-officehierarchy-header':
+				settings = this._load_tree_header_defaultsAndSettings($sp);
+				break;
 			case 'discovertasker-officehierarchy':
 				settings = this._load_officehierarchy_defaultsAndSettings($sp);
+				settings = this._load_ORG_tooltip_footer_defaultsAndSettings(settings, $sp);
+				break;
+			case 'discovertasker-officehierarchy-footer':
+				// need OU additional settings here
+				settings = this._load_tree_footer_defaultsAndSettings();
+				settings = this._load_ORG_tooltip_footer_defaultsAndSettings(settings, $sp);
+				break;
+			case 'discovertasker-processtemplatetreegraph-header':	
+				settings = this._load_tree_header_defaultsAndSettings($sp);
 				break;
 			case 'discovertasker-processtemplatetreegraph':
 				settings = this._load_template_defaultsAndSettings($sp);
+				break;
+			case 'discovertasker-processtemplatetreegraph-footer':
+				settings = this._load_tree_footer_defaultsAndSettings();
 				break;
 		}
 		return settings;
@@ -108,6 +147,65 @@ TaskerWidgetIconsAndMessages.prototype = {
 	savePreferenceFavorite: function(newFavorite){
 		gs.getUser().savePreference(this.PREFERENCE_FAVORITE, JSON.stringify(newFavorite));	
 	},	
+	
+	// ------------------------------------------------------------------------------------------------------------------
+	// BEGIN - Default Tool Tip section
+	// ------------------------------------------------------------------------------------------------------------------
+	_load_toolTip_footer_widgetMessages: function(){
+		var widgetMessages = {};
+		widgetMessages['Tasker - Entire Tree'] = gs.getMessage('Tasker - Entire Tree');
+		widgetMessages['Tasker - Custom Zoom'] = gs.getMessage('Tasker - Custom Zoom');
+
+		return widgetMessages;
+	},	
+
+	_load_tree_header_icons: function(icons){
+		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Hierarchy"), alt: gs.getMessage("Tasker - View as Horizontal Hierarchy")});
+		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Hierarchy"), alt: gs.getMessage("Tasker - View as Vertical Hierarchy")});
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});
+		return icons;
+	},
+	
+	_load_tree_footer_icons: function(icons){
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});		
+		icons["ZoomEntire24"] = this._buildIcon({imageName: 'ZoomEntire24.svg', title: gs.getMessage("Tasker - View the Entire Organization"), alt: gs.getMessage("Tasker - Entire Organization")});
+		icons["ZoomSelected24"] = this._buildIcon({imageName: 'ZoomSelected24.svg', title: gs.getMessage("Tasker - Zoom into Selected OU"), alt: gs.getMessage("Tasker - Selected OU")});
+		icons["Top24"] = this._buildIcon({imageName: 'TopOU24.svg', title: gs.getMessage("Tasker - Navigate to Top"), alt: gs.getMessage("Tasker - Go to Top")});
+		return icons;
+	},
+	
+	_load_tree_header_defaultsAndSettings: function($sp){
+		settings = {};
+
+		var treeOrientation = gs.getUser().getPreference(this.PREFERENCE_TREE_ORIENTATION);
+		if(treeOrientation){
+			settings.treeOrientation = treeOrientation;
+		} else {
+			// get the default
+			var defaultIsVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
+			if(defaultIsVertical){
+				settings.treeOrientation = "Vertical";
+			} else {
+				settings.treeOrientation = "Horizontal";
+			}
+		}
+		return settings;
+
+	},
+	_load_tree_footer_defaultsAndSettings: function(){
+		settings = {};
+		var diagramScale = gs.getUser().getPreference(this.PREFERENCE_PERCENT);
+		if(diagramScale){
+			settings.diagramScale = diagramScale;
+		} else {
+			settings.diagramScale = 1.0;
+		}
+		return settings;
+	},
+
+	// ------------------------------------------------------------------------------------------------------------------
+	// END - Default Tool Tip section
+	// ------------------------------------------------------------------------------------------------------------------
 	// ------------------------------------------------------------------------------------------------------------------
 	// BEGIN - Template section
 	// ------------------------------------------------------------------------------------------------------------------
@@ -125,30 +223,7 @@ TaskerWidgetIconsAndMessages.prototype = {
 		} else {
 			// TODO: May want to pull default from the form load here
 			settings.service_portal_url_suffix = '';
-		}
-
-		
-		// TODO, THIS WILL CHANGE WHEN DECISIONS MADE ON MANAGING PREFERENCE SAVES
-		var selectPercent = gs.getUser().getPreference(this.PREFERENCE_PERCENT);
-		if(selectPercent){
-			settings.selectPercent = selectPercent;
-		} else {
-			settings.selectPercent = 100;
-		}
-		// TODO, THIS WILL CHANGE WHEN DECISIONS MADE ON MANAGING PREFERENCE SAVES
-		var treeOrientation = gs.getUser().getPreference(this.PREFERENCE_TREE_ORIENTATION);
-		if(treeOrientation){
-			settings.treeOrientation = treeOrientation;
-		} else {
-			// get the default
-			var defaultIsVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
-			if(defaultIsVertical){
-				settings.treeOrientation = "Vertical";
-			} else {
-				settings.treeOrientation = "Horizontal";
-			}
-		}
-		
+		}		
 		return settings;
 	},
 	
@@ -170,7 +245,6 @@ TaskerWidgetIconsAndMessages.prototype = {
 		widgetMessages["Warning Parent Before Last Subtask"] = gs.getMessage('The projected {0} of one (1) or more Subtasks exceeds the projected {1} of this task');
 		widgetMessages["Warning Parent Before this Task"] = gs.getMessage("This Subtask's projected {0}  exceeds the projected {1} of the Parent Task");
 		
-		widgetMessages['Tasker - Entire Tree'] = gs.getMessage('Tasker - Entire Tree');
 /*		
 		
 		// 2.8 | 2022-03-16 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
@@ -214,39 +288,6 @@ TaskerWidgetIconsAndMessages.prototype = {
 		if(count.next())
 			topHierarchy = count.getAggregate('COUNT');
 		settings.topParentNeeded = topHierarchy < 1;
-		// getDefaultId for user
-		var orgScripts = new OrganizationalScripts();
-		var defaultOUId = orgScripts.GetUserDefaultOU(gs.getUserID()) + '';
-		// get top ou for the user based on default id
-		var defaultOUTopId =orgScripts.getTopOUId(defaultOUId);
-		settings.defaultOU = {value: defaultOUId, topId: defaultOUTopId};
-		
-		var favoriteOU = gs.getUser().getPreference(this.PREFERENCE_FAVORITE);
-		if(favoriteOU){
-			settings.favorite = JSON.parse(favoriteOU);
-		} else {
-			settings.favorite = {value: "",	topId: ""};
-		}
-		var selectPercent = gs.getUser().getPreference(this.PREFERENCE_PERCENT);
-		if(selectPercent){
-			settings.selectPercent = selectPercent;
-		} else {
-			settings.selectPercent = 100;
-		}
-		// STRY0117951
-		var treeOrientation = gs.getUser().getPreference(this.PREFERENCE_TREE_ORIENTATION);
-		if(treeOrientation){
-			settings.treeOrientation = treeOrientation;
-		} else {
-			// get the default
-			var defaultIsVertical = new tasking_System_Settings_Scripts().systemControlSetting().VerticalTree;
-			if(defaultIsVertical){
-				settings.treeOrientation = "Vertical";
-			} else {
-				settings.treeOrientation = "Horizontal";
-			}
-		}
-		
 		return settings;
 	},
 	
@@ -279,9 +320,6 @@ TaskerWidgetIconsAndMessages.prototype = {
 		
 		widgetMessages['Tasker - Top Organization(s) Only'] = gs.getMessage('Tasker - Top Organization(s) Only');
 		widgetMessages['Tasker - A top Organizational Unit needs to be created, click here to create one'] = gs.getMessage('Tasker - A top Organizational Unit needs to be created, click here to create one');
-		widgetMessages['Tasker - Set selected as Favorite OU'] = gs.getMessage('Tasker - Set selected as Favorite OU');
-		widgetMessages['Tasker - This is your selected Favorite OU'] = gs.getMessage('Tasker - This is your selected Favorite OU');
-		widgetMessages['Tasker - Entire Tree'] = gs.getMessage('Tasker - Entire Tree');
 		
 		return widgetMessages;
 	},
@@ -306,38 +344,49 @@ TaskerWidgetIconsAndMessages.prototype = {
 		icons["Divider"] = this._buildIcon({imageName: 'Divider.svg', title: "", alt: ""});
 		icons["GenericAddSub16"] = this._buildIcon({imageName: 'GenericAddSub16.svg', title: gs.getMessage("Tasker - Create Sub OU"), alt: gs.getMessage("Tasker - Add Sub OU")});
 		icons["LockOpenBadge24"] = this._buildIcon({imageName: 'LockOpenBadge24.svg', title: gs.getMessage("Tasker - Permissive Organizational Unit"), alt: gs.getMessage("Tasker - OU is Permissive")});
+		
+		icons["TopOU24_Blue"] = this._buildIcon({imageName: 'TopOU24_Blue.svg', title: gs.getMessage("Tasker - Create Top Organizational Unit"), alt: gs.getMessage("Tasker - Create Top Organizational Unit")});
+		return icons;
+	},
+	
+	_load_ORG_toolTip_footer_widgetMessages: function(){
+		var widgetMessages = this._load_toolTip_footer_widgetMessages();
+		widgetMessages['Tasker - Set selected as Favorite OU'] = gs.getMessage('Tasker - Set selected as Favorite OU');
+		widgetMessages['Tasker - This is your selected Favorite OU'] = gs.getMessage('Tasker - This is your selected Favorite OU');
+		return widgetMessages;
+	},
+	
+	// note this is different than other setting loads as it takes settings because the standard footer settings is loaded first
+	_load_ORG_tooltip_footer_defaultsAndSettings: function(settings, $sp){
+		// getDefaultId for user
+		var orgScripts = new OrganizationalScripts();
+		var defaultOUId = orgScripts.GetUserDefaultOU(gs.getUserID()) + '';
+		// get top ou for the user based on default id
+		var defaultOUTopId =orgScripts.getTopOUId(defaultOUId);
+		settings.defaultOU = {value: defaultOUId, topId: defaultOUTopId};
+
+		var favoriteOU = gs.getUser().getPreference(this.PREFERENCE_FAVORITE);
+		if(favoriteOU){
+			settings.favorite = JSON.parse(favoriteOU);
+		} else {
+			settings.favorite = {value: "",	topId: ""};
+		}
+
+		return settings;
+	},
+	
+	_load_ORG_toolTip_footer_icons: function(icons){
 		// the icons below are tree view icons, but only used in OU
 		icons["Favorite24"] = this._buildIcon({imageName: 'Favorite24.svg', title: gs.getMessage("Tasker - Navigate to Favorited OU"), alt: gs.getMessage("Tasker - Favorite OU")});
 		icons["DefaultOU24"] = this._buildIcon({imageName: 'DefaultOU24.svg', title: gs.getMessage("Tasker - Navigate to my default OU"), alt: gs.getMessage("Tasker - Default OU")});
 		icons["AddToFavorite24"] = this._buildIcon({imageName: 'AddToFavorite24.svg', title: gs.getMessage("Tasker - Set selected as Favorite OU"), alt: gs.getMessage("Tasker - Add Favorite")});
 		icons["FavoriteFilled24"] = this._buildIcon({imageName: 'FavoriteFilled24.svg', title: gs.getMessage("Tasker - This is your selected Favorite OU"), alt: gs.getMessage("Tasker - Selected Favorite")});
-		// the icons below are tree view icons, but the text changes in each tree
-		icons["Fullscreen16"] = this._buildIcon({imageName: 'Fullscreen16.svg', title: gs.getMessage("Tasker - Maximize Organizational Hierarchy to Full Screen"), alt: gs.getMessage("Tasker - Full Screen View")});
-		icons["MinimizeFullScreen16"] = this._buildIcon({imageName: 'MinimizeFullScreen16.svg', title: gs.getMessage("Tasker - Minimize Organizational Hierarchy to Split view"), alt: gs.getMessage("Tasker - Bifold View")});
-
-		icons["TopOU24_Blue"] = this._buildIcon({imageName: 'TopOU24_Blue.svg', title: gs.getMessage("Tasker - Create Top Organizational Unit"), alt: gs.getMessage("Tasker - Create Top Organizational Unit")});
-		
 		return icons;
 	},
 	// ------------------------------------------------------------------------------------------------------------------
 	// END - Office Hiearachy section
 	// ------------------------------------------------------------------------------------------------------------------
 	
-	// ------------------------------------------------------------------------------------------------------------------
-	// BEGIN - Tree Zoom Iconis
-	// ------------------------------------------------------------------------------------------------------------------
-	_load_tree_icons: function(icons){
-		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Hierarchy"), alt: gs.getMessage("Tasker - View as Horizontal Hierarchy")});
-		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Hierarchy"), alt: gs.getMessage("Tasker - View as Vertical Hierarchy")});
-		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});		
-		icons["ZoomEntire24"] = this._buildIcon({imageName: 'ZoomEntire24.svg', title: gs.getMessage("Tasker - View the Entire Organization"), alt: gs.getMessage("Tasker - Entire Organization")});
-		icons["ZoomSelected24"] = this._buildIcon({imageName: 'ZoomSelected24.svg', title: gs.getMessage("Tasker - Zoom into Selected OU"), alt: gs.getMessage("Tasker - Selected OU")});
-		icons["Top24"] = this._buildIcon({imageName: 'TopOU24.svg', title: gs.getMessage("Tasker - Navigate to Top"), alt: gs.getMessage("Tasker - Go to Top")});
-		return icons;
-	},
-	// ------------------------------------------------------------------------------------------------------------------
-	// END - Tree Zoom Iconis
-	// ------------------------------------------------------------------------------------------------------------------
 	
 	// STRY0117947 
 	_load_breadcrumbs_widgetMessages: function(){
@@ -398,13 +447,13 @@ TaskerWidgetIconsAndMessages.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-02-20 01:00:57</sys_created_on>
         <sys_id>546ed891db3905501e1792c5d496198b</sys_id>
-        <sys_mod_count>131</sys_mod_count>
+        <sys_mod_count>163</sys_mod_count>
         <sys_name>TaskerWidgetIconsAndMessages</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_546ed891db3905501e1792c5d496198b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-07 03:49:47</sys_updated_on>
+        <sys_updated_on>2022-04-24 21:03:54</sys_updated_on>
     </sys_script_include>
 </record_update>

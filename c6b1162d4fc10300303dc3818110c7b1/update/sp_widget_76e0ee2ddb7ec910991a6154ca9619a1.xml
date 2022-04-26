@@ -1,15 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
+        <client_script><![CDATA[function ($scope, spUtil, $timeout) {
 	var c = this;
 	var TOOL_BAR_CONST;
-
+	var isCustom = false;
 	// call main function
 	main();
 	function main(){
 		TOOL_BAR_CONST = _loadTollBarConstants();
+		c.data.zoomPercents = _loadZoomPercents();
 		_initOnLoadComplete();
+	}
+	function _loadZoomPercents(value) {
+		var lZoomPercents = [
+			{value: "1", text: "100%"},
+			{value: ".75", text: "75%"},
+			{value: ".50", text: "50%"},
+			{value: ".25", text: "25%"},
+			{value: "tree", text: c.data.messages["Tasker - Entire Tree"]},
+			{value: "custom", text: c.data.messages["Tasker - Custom Zoom"]}
+		];
+		return lZoomPercents;
+	}
+	
+	function _getSelectedBasedOnValue(value){
+		var index = -1;
+		for (var i = 0; i < c.data.zoomPercents.length; i++) {
+			if(c.data.zoomPercents[i].value==value){
+				index = i;
+				break;
+			}
+		}
+		$scope.data.selectedValue = c.data.zoomPercents[index];
+	}
+	
+	$scope.shouldShow = function(zoomPct){
+		var show = false;
+		if(zoomPct.value=="custom")
+			show = isCustom;
+		else 
+			show = true;
+			
+		return show;
 	}
 	
 	// STRY0117600
@@ -17,15 +50,102 @@
 		var oTOOL_BAR_CONST = {
 		};
 		return oTOOL_BAR_CONST;
-	}		
+	}	
 	
+	function _setSelectPercent(scale){
+		var selectPercent = "";
+		var scaleNumeric = 1.0;
+		isCustom = false;
+		scaleNumeric = Number.parseFloat(scale);
+		c.data.settings.diagramScale = scaleNumeric;
+		 
+		switch(scaleNumeric){
+			case 1: case 0.75: case 0.5: case 0.25:
+				selectPercent = scaleNumeric;
+				break;
+			default: 
+				// if the viewport height or the width is within 20 pixels of the documengBounds height or width, set to tree
+				// we are checking both height and width to avoid checking the orientation, but we could check orientation and then only check one or the other
+				// the only challenge might be that the header has orientation and the footer has the size setting
+				if(c.widget.diagram && 
+					 c.widget.diagram.viewportBounds && 
+					 c.widget.diagram.documentBounds){
+					if(
+						(((c.widget.diagram.viewportBounds.width + 5)>=
+							c.widget.diagram.documentBounds.width) &&
+						 ((c.widget.diagram.viewportBounds.width - 5)<=
+							c.widget.diagram.documentBounds.width)) ||
+						(((c.widget.diagram.viewportBounds.height + 5)>=
+							c.widget.diagram.documentBounds.height) &&
+						 ((c.widget.diagram.viewportBounds.height - 5)<=
+							c.widget.diagram.documentBounds.height))
+					)
+					{
+						// used to select tree from the dropdown
+						selectPercent="tree";
+						// used to save tree back to the server
+						c.data.isTree=true;
+					} else {
+						// used to add custom to the drop down and select it
+						selectPercent="custom";
+						// used to save the custom value back on the server
+						isCustom = true;
+					}
+				}
+		}
+		_getSelectedBasedOnValue(selectPercent);
+	}
+
+	// new to trap diagram changes and reset the selected and zoom percent
+	c.widget.resetDiagram = function(){
+		// set to true to force an update of the select percent
+		// set to false once the selectPercent is updated
+		if(c.data.isTree){
+			$scope.zoomToFullTree();
+			_setSelectPercent(c.widget.diagram.scale);			
+		} else if(c.data.settings.diagramScale){
+			_setSelectPercent(c.data.settings.diagramScale);			
+		}	
+	}
+	
+	// STRY0117945 - set custom scale or reset to a zoomPercent
+	c.widget.scale = function(scale){
+		c.data.isTree=false;
+		if(c.data.settings.diagramScale != scale){
+			// save previous select percent in order to save "custom"
+			var previousZoomPct = c.data.settings.diagramScale;
+			_setSelectPercent(scale);
+			$timeout(
+				function(){ 
+					// this function ensures that when the user custom zooms it gets saved
+					if(previousZoomPct != c.data.settings.diagramScale){
+						$scope.$apply(); 
+						// save the custom zoom number
+						$scope.data.settings.diagramScale=scale;
+						$scope.data.percentChanged = true; 
+						spUtil.update($scope).then(function() {
+							return;
+						});
+					}
+				},
+				200);
+		}
+	}
+
 	// NOTE: this is not needed when control is loaded from the server
 	//       It was left in for cases where developers would want to load from client
 	//       this emits to the parent when the control completes building
 	function _initOnLoadComplete(){
-		angular.element(document).ready(function () {
-			$scope.$emit('tasker-tree-footer-toolbar.initComplete');
-		});
+		// only push resize when footer is done loading
+		if(c.data.iconGroup == "footer"){
+			angular.element(document).ready(function () {
+				// tell the wrapping widget that the toolbar has finished loading
+				$scope.$emit('tasker-tree-footer-toolbar.initComplete');
+				// set the selected precent
+				_setSelectPercent(c.data.settings.diagramScale);
+			});
+			
+		}
 	}
 	
 	// Switch to Horizontal
@@ -47,7 +167,7 @@
 	// add the selected node to the favorites for the user
 	$scope.addToFavorites = function() {
 		var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
-		c.widget.diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
+		c.widget.diagram.commandHandler.resetZoom($scope.data.settings.diagramScale);
 		c.widget.diagram.centerRect(selectedNode.actualBounds);			
 		
 		$scope.data.favoriteChanged = true; 
@@ -109,8 +229,8 @@ alert('Temporary Message - default OU not in current diagram');
 	// Zoom to Selected
 	$scope.zoomToSelected = function() {
 		_zoomToSelected();
-		if(parseInt($scope.data.settings.selectPercent)!=100){
-			$scope.data.settings.selectPercent='100';
+		if(Number.parseFloat(c.data.settings.diagramScale)!=1.0){
+			$scope.data.settings.diagramScale=1.0;
 			$scope.data.percentChanged = true; 
 			spUtil.update($scope).then(function() {
 				// submit percent change back to server
@@ -121,33 +241,44 @@ alert('Temporary Message - default OU not in current diagram');
 	
 	// Zoom to full tree
 	$scope.zoomToFullTree = function() {
-		c.widget.diagram.zoomToRect(c.widget.diagram.documentBounds);
-		if($scope.data.settings.selectPercent!="tree"){
-			$scope.data.settings.selectPercent="tree";
-
+		if(!c.data.isTree){
+			$scope.data.isTree=true;
+			c.data.isTree=true;
 			$scope.data.percentChanged = true; 
-			spUtil.update($scope).then(function() {
-				// submit percent change back to server
-				return;
-			});
-		}		
+			spUtil.update($scope);	
+		}
+		// submit percent change back to server
+		c.widget.diagram.zoomToRect(c.widget.diagram.documentBounds);
+		// reset scale after saving tree
+		c.data.settings.diagramScale = c.widget.diagram.scale;
+		// set the selected precent
+		_getSelectedBasedOnValue("tree");
 	};
 	
 	// Zoom to Percentage
 	$scope.zoomToPercent = function() {
-		if($scope.data.settings.selectPercent=="tree"){
-			this.zoomToFullTree();
-		} else {
-			var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
-			c.widget.diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
-			c.widget.diagram.centerRect(selectedNode.actualBounds);			
+		var lScale;
+		if($scope.data.selectedValue) {
+			switch($scope.data.selectedValue.value){
+				case "tree":
+					$scope.zoomToFullTree();
+					break;
+				case "custom":  // skip, no post back
+					break;
+				default:
+					$scope.data.settings.diagramScale=Number.parseFloat($scope.data.selectedValue.value);
+					$scope.data.percentChanged = true; 
+					spUtil.update($scope).then(function() {
+						// submit percent change back to server
+						var selectedNode = c.widget.diagram.findNodeForKey(c.widget.parentSelectedId);
+						c.widget.diagram.commandHandler.resetZoom($scope.data.settings.diagramScale);
+						c.widget.diagram.centerRect(selectedNode.actualBounds);
+						// set the selected precent
+						_setSelectPercent(c.data.settings.diagramScale);
+					});
+					break;
+			}			
 		}
-		
-		$scope.data.percentChanged = true; 
-		spUtil.update($scope).then(function() {
-			// submit percent change back to server
-			return;
-		});
 
 	};
 	function _zoomToSelected(){
@@ -192,6 +323,10 @@ alert('Temporary Message - default OU not in current diagram');
 // Script Continued Below
 // 2.8   - 2022-04-05 - raj -  STRY0117600 - Update Templates to match the UI of Org Hierarchy 
 //                                         - Changes in Server Script, client controller, HTML, UI Script and Template
+// 2.8   - 2022-04-20 - raj -  STRY0120908 - As any Tasker User, if "Org Hierarchy Fullscreen" is accessible from the "Layout Dropdown", I do NOT want it accessible anywhere else.
+//                                         - Changes in HTML and ServerScript
+// 2.8   - 2022-04-20 - raj -  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout
+//                                         - Changes in HTML and ServerScript
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -200,29 +335,31 @@ alert('Temporary Message - default OU not in current diagram');
 	var taskWidgetData = new TaskWidgetData();
 	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
 	data.iconGroup = (input || {}).iconGroup || (options || {}).iconGroup || undefined;
+	data.showSeparator = (input || {}).showSeparator || (options || {}).showSeparator || undefined;
 	
 	// todo, figure out how to adjust to know if Org or not
 
 	// if messages not loaded, load messages
-	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages(data.baseWidget);
+	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages(data.baseWidget + '-' + data.iconGroup);
 	
 	main();
 	function main() {
 		
 		if(input){
 			_processInput();
-		}// else {
+			data.settings = input.settings;
+			data.messages = input.messages;
+			data.icons = input.icons;
+		} else {
 			_initialLoad();
-//		}			
-		
-		
-		// INPUT GOES HERE
-
-		
+		}			
 	}
 
 	function _initialLoad(){
 		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+		if(data.iconGroup == "footer"){
+			data.isTree = (data.settings.diagramScale == "tree");
+		}
 		data.messages = taskWidgetIconsAndMessage.loadMessages();
 		data.icons = taskWidgetIconsAndMessage.loadIcons();
 	}
@@ -233,7 +370,14 @@ alert('Temporary Message - default OU not in current diagram');
 			taskWidgetIconsAndMessage.savePreferenceOrientation(input.settings.treeOrientation);
 		} else if(input.percentChanged){
 			data.percentChanged = false;
-			taskWidgetIconsAndMessage.savePreferencePercent(input.settings.selectPercent);
+			var scaleToSet;
+			if(input.isTree){
+				scaleToSet = "tree";
+			} else {
+				scaleToSet = input.settings.diagramScale;
+			}
+			// save scale instead of selected percent to account for cusotm zoom
+			taskWidgetIconsAndMessage.savePreferencePercent(scaleToSet);
 		} else if(input.favoriteChanged){
 			data.favoriteChanged = false;
 			taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);		
@@ -247,14 +391,14 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-04-11 16:09:41</sys_created_on>
         <sys_id>76e0ee2ddb7ec910991a6154ca9619a1</sys_id>
-        <sys_mod_count>68</sys_mod_count>
+        <sys_mod_count>242</sys_mod_count>
         <sys_name>Tasker - Tree Toolbar Icons</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_76e0ee2ddb7ec910991a6154ca9619a1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-13 22:28:25</sys_updated_on>
+        <sys_updated_on>2022-04-26 15:10:55</sys_updated_on>
         <template><![CDATA[<!-- This section is used for the HEADER icont group -->
 <div ng-if="data.iconGroup=='header'" class="dtech-push-right-flexbox">
   <div class="pull-right">
@@ -268,7 +412,7 @@ alert('Temporary Message - default OU not in current diagram');
          ng-class="{'dtech-disabled': data.settings.treeOrientation=='Vertical', 'dtech-enabled': data.settings.treeOrientation!='Vertical'}"
          ng-click="switchToVertical();"/>
 
-    <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
+    <img ng-if="data.showSeparator" src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
          alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
 
   </div>
@@ -323,24 +467,10 @@ alert('Temporary Message - default OU not in current diagram');
     <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
          alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
 
-    <select type="text" id= "selectPercent" class="dropdown" ng-model="data.settings.selectPercent"
-            ng-change="zoomToPercent();" >
-      <option value="100" 
-              [selected]="data.settings.selectPercent==100" 
-              >100%</option>
-      <option value="75"
-              [selected]="data.settings.selectPercent==75" 
-              >75%</option>
-      <option value="50"
-              [selected]="data.settings.selectPercent==50" 
-              >50%</option>
-      <option value="25"
-              [selected]="data.settings.selectPercent==25" 
-              >25%</option>
-      <option value="tree"
-              [selected]="data.settings.selectPercent==tree" 
-              >{{data.messages["Tasker - Entire Tree"]}}</option>
-    </select>      
+    <select id="selectPercent" class="dropdown" ng-model="data.selectedValue"
+            ng-change="zoomToPercent();"
+            ng-options="zoomPct.text for zoomPct in data.zoomPercents 
+                        | filter:shouldShow"></select>      
   </div>
 </div>    ]]></template>
     </sp_widget>
