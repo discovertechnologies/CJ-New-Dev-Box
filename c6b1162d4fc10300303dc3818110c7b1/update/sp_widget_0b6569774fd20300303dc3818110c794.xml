@@ -16,18 +16,23 @@
 	var modalObjects;
 	var $go;
 	var diagram;
+	// this is used to set the initial select percent
+	var diagramInitCompleted = false;	
+	// overview is the picture-in-picture image of the diagram
 	var myOverview;
 	var treeOrientation;
 	var treeNodeAngle;
 	var url_id;
 	var watcher;
-
+	// TREE FOOTER TOOLBAR
+	var viewPortHeight = 0;
+	
 	// call main function
 	main();
 
 	function main(){
-		TREE_CONST = loadTreeConstants();
-		modalObjects = loadModalObjects();
+		TREE_CONST = _loadTreeConstants();
+		modalObjects = _loadModalObjects();
 		$go = go.GraphObject.make;  // for conciseness in defining templates
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; avatar popover
 		c.data.isPopoverOpened = false;
@@ -38,12 +43,13 @@
 		c.data.topIconOpacity = c.data.settings.isFullScreen? TREE_CONST.icon_opacity_normal :0.0;
 		c.data.showIcons = false;
 		c.data.topOU="";
+		
+		// load orientation from the header widget
+		treeOrientation = c.data.widgetTreeHeaderToolbar.data.settings.treeOrientation;
 		// set default tree orientation based on system setting (this will change when user perference is enabled)
-		if(c.data.settings.treeOrientation == 'Horizontal'){
-			treeOrientation = "Horizontal";
+		if(treeOrientation == 'Horizontal'){
 			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
 		} else {
-			treeOrientation = "Vertical";
 			treeNodeAngle = TREE_CONST.verticalTreeAngle;
 		}
 
@@ -75,21 +81,9 @@
 			// STRY0116823
 			resetDiagram();
 		}
-
-		// DFCT0010275
-		if($scope.data.map.length > 0){	
-			// this event handler is called when the diagram is first ready
-			diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
-				var node = diagram.findNodeForKey(c.data.selectedId);
-				// and center it and select it
-				// STRY0072032
-				diagram.centerRect(node.actualBounds);
-			});
-		}		
-		
 	}
 
-	function loadTreeConstants() {	
+	function _loadTreeConstants() {	
 		var oTREE_CONST = {
 			//var font = "13px Helvetica, Arial, sans-serif";
 			// STRY0113880
@@ -168,7 +162,7 @@
 		return oTREE_CONST;
 	}
 
-	function loadModalObjects(){
+	function _loadModalObjects(){
 		var oModalObjects = {
 			informationForm: {
 				modalType: "form",
@@ -253,126 +247,21 @@
 		resizeDiagram();
 	});
 	
-	// Switch to Horizontal
-	$scope.switchToHorizontal = function() {
-		$scope.data.settings.treeOrientation="Horizontal";
+	// TREE HEADER TOOLBAR
+	// STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
+	$scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function(){
 		treeOrientation="Horizontal";
 		treeNodeAngle=0;
-		$scope.data.orientationChanged = true; 
-		spUtil.update($scope).then(function() {
-			// submit favorite change back to server
-			resetDiagram();
-			$scope.zoomToSelected();
-			return;
-		});
-	};
+		resetDiagram();
+	});
 	
-	// Switch to Horizontal
-	$scope.switchToVertical = function() {
-		$scope.data.settings.treeOrientation="Vertical";
+	// TREE HEADER TOOLBAR
+	// STRY0117600 - this event is raised when the switch to vertical icon is clicked 
+	$scope.$on("$tasker-tree-toolbar-icons.switchToVertical", function(){
 		treeOrientation="Vertical";
 		treeNodeAngle=90;
-		$scope.data.orientationChanged = true; 
-		spUtil.update($scope).then(function() {
-			// submit favorite change back to server
-			resetDiagram();
-			$scope.zoomToSelected();
-			return;
-		});
-	};
-	
-	// add selected ou to favorites
-	$scope.addToFavorites = function() {
-		var selectedNode = diagram.findNodeForKey(c.data.selectedId);
-		diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
-		diagram.centerRect(selectedNode.actualBounds);			
-		
-		$scope.data.favoriteChanged = true; 
-		$scope.data.settings.favorite = {
-			value: c.data.selectedId,
-			topId: c.data.currentTopOU};
-		spUtil.update($scope).then(function() {
-			// submit favorite change back to server
-			return;
-		});
-	};
-	
-	// Zoom to Favorite
-	$scope.zoomToFavorite = function() {
-// TODO - post back change if top ou of favorite is not current top ou
-		if(c.data.settings.favorite.value && c.data.settings.favorite.value != c.data.selectedId){
-			c.data.selectedId = c.data.settings.favorite.value;
-			var favoriteOUNode = diagram.findNodeForKey(c.data.settings.favorite.value);
-			if(favoriteOUNode){
-				diagram.select(favoriteOUNode);
-			} else {
-// TODO - determine if we want a message here 
-// 				Or if we want me to load a different tree, 
-// 				or, if we wnat to prompt to load a differnt tree
-alert('Temporary Message - favorite OU not in current diagram');				
-			}
-		}
-
-	};
-	
-	// Zoom to Default OU
-	$scope.zoomToDefaultOU = function() {
-		if(c.data.settings.defaultOU.value && c.data.settings.defaultOU.value != c.data.selectedId){
-			c.data.selectedId = c.data.settings.defaultOU.value;
-			var defaultOUNode = diagram.findNodeForKey(c.data.settings.defaultOU.value);
-			if(defaultOUNode){
-				diagram.select(defaultOUNode);
-			} else {
-// TODO - determine if we want a message here 
-// 				Or if we want me to load a different tree, 
-// 				or, if we wnat to prompt to load a differnt tree
-alert('Temporary Message - default OU not in current diagram');				
-			}
-		}
-	};
-	
-	// Zoom to Top OU
-	$scope.zoomToTopOU = function() {
-		if(c.data.currentTopOU && c.data.currentTopOU != c.data.selectedId){
-			c.data.selectedId = c.data.currentTopOU;
-			var topOUNode = diagram.findNodeForKey(c.data.currentTopOU);
-			if(topOUNode){
-				diagram.select(topOUNode);
-			}
-		}
-	};
-
-	// Zoom to Selected
-	$scope.zoomToSelected = function() {
-		var selectedNode = diagram.findNodeForKey(c.data.selectedId);
-		diagram.commandHandler.resetZoom(1.0);
-		$scope.data.settings.selectPercent='100';
-		diagram.centerRect(selectedNode.actualBounds);
-	};
-
-	// Zoom to full tree
-	$scope.zoomToFullTree = function() {
-		$scope.data.settings.selectPercent="tree";
-		diagram.zoomToRect(diagram.documentBounds);
-	};
-	
-	// Zoom to Selected
-	$scope.zoomToPercent = function() {
-		if($scope.data.settings.selectPercent=="tree"){
-			this.zoomToFullTree();
-		} else {
-			var selectedNode = diagram.findNodeForKey(c.data.selectedId);
-			diagram.commandHandler.resetZoom($scope.data.settings.selectPercent/100);
-			diagram.centerRect(selectedNode.actualBounds);			
-		}
-		
-		$scope.data.percentChanged = true; 
-		spUtil.update($scope).then(function() {
-			// submit percent change back to server
-			return;
-		});
-
-	};
+		resetDiagram();
+	});
 	
 	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	function initRecordWatcher(table, filter) {
@@ -598,6 +487,11 @@ alert('Temporary Message - default OU not in current diagram');
 			c.data.isProfileDataNeeded = true;
 		}
 		c.data.getUserGUID = value;
+		// TREE FOOTER TOOLBAR
+		// STRY0117600 - does not like diagram posted back to server
+		c.data.widgetTreeFooterToolbar.diagram = null;
+		c.data.widgetTreeHeaderToolbar.diagram = null;
+
 		c.server.update().then(function(){
 			// find the node to update again
 			var nodeData = diagram.model.findNodeDataForKey(nodeKey);
@@ -616,6 +510,11 @@ alert('Temporary Message - default OU not in current diagram');
 				}
 				diagram.model.updateTargetBindings(nodeData);
 			}
+			// TREE FOOTER TOOLBAR
+			// STRY0117600 - does not like diagram posted back to server
+			// readd diagram when returns from server
+			c.data.widgetTreeFooterToolbar.diagram = diagram;
+			c.data.widgetTreeHeaderToolbar.diagram = diagram;
 		});
 	}
 	
@@ -669,11 +568,16 @@ alert('Temporary Message - default OU not in current diagram');
 	}
 
 	$scope.$on("field.change",function(evt,params){
+		// TREE FOOTER TOOLBAR
+		// STRY0117600 - does not like diagram posted back to server
+		c.data.widgetTreeFooterToolbar.diagram = null;
+		c.data.widgetTreeHeaderToolbar.diagram = null;
+
 		c.data.topOU = $scope.topOU.value;
 		c.data.selectedId = c.data.topOU;
 		c.server.update().then(function(){
 			// STRY0116823
-			resetDiagram();				
+			resetDiagram();
 		});
 		broadcastTopNodeChange(c.data.selectedId);
 	});
@@ -719,10 +623,15 @@ alert('Temporary Message - default OU not in current diagram');
 
 		// STRY0116812
 		evt.table = c.data.table; //d.sys_class_name || d.table;
-		c.data.selectedId = evt.sys_id;
 		// RJ -ET - Story 4
 		evt.parent = d.parent;
 		c.data.selectedId = evt.sys_id;
+		// TREE FOOTER TOOLBAR
+		// STRY0117600 - need to update the child widget toolbar footer
+		// this sets the selected id on the footer tooltip when the selected id changes
+		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+		
 		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
 		$rootScope.$broadcast('$sp.list.click', evt);
 
@@ -834,9 +743,10 @@ alert('Temporary Message - default OU not in current diagram');
 								case c.data.icons.ProcessRequestBadge24.src:
 									lSource = data.isAdmin && data.u_outstanding_request_count > 0?img.src:'';
 									break;
-								case c.data.icons.Request16.src:
-									lSource = !data.isAdmin?img.src:'';
-									break;
+								// 2.8 | 2022-04-18 | mmcc | STRY0119470  - All Tasker users should have access to use organization requests icon
+								//case c.data.icons.Request16.src:
+								//	lSource = !data.isAdmin?img.src:'';
+								//	break;
 								case c.data.icons.GenericAddSub16.src:
 								case c.data.icons.Divider:
 									lSource = data.isAdmin?img.src:'';
@@ -1061,36 +971,121 @@ alert('Temporary Message - default OU not in current diagram');
 	};	
 	
 	function resetDiagram(){
+		diagramInitCompleted = false;	
 		if(diagram != undefined){
 			myOverview.div = null;
 			myOverview = null;
 		}		
 		drawTree();
-		resizeDiagram();
+		_setToolbarProperties();
 		// STRY0116823
 		myOverview =  $go(go.Overview, "myOverview",
     { observed: diagram}); // , contentAlignment: go.Spot.Center
+		// DFCT0010275
+		if($scope.data.map.length > 0){	
+			// // STRY0072032 - this event handler is called when the diagram is first ready
+			// LayoutCompleted fires whenever the layout changes
+			diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
+				resizeDiagram();
+				var node = diagram.findNodeForKey(c.data.selectedId);
+				diagram.centerRect(node.actualBounds);
+				// the diagram is initialized so the initial scale can be set
+				// NOTE: zoomToFit and zoomToRect do not work in this init function
+				// so calling a timeout function to initialize the scale
+				$timeout(function(){ _initializeScale();},200);				
+			});
+
+			// TREE FOOTER TOOLBAR
+			// STRY0117600 - this event handler is called when the diagram bounds change
+			diagram.addDiagramListener("ViewportBoundsChanged", function(e) {
+				// set the footer scale when bounds change
+				// but wait until init is completed
+				if(viewPortHeight != diagram.viewportBounds.height){
+					// this block only runs once per diagram load
+					if(diagramInitCompleted){
+						// only need to set scale after initial load
+						// STRY0117945
+						c.data.widgetTreeFooterToolbar.scale(diagram.scale);					
+					}
+
+					var node = diagram.findNodeForKey(c.data.selectedId);
+					// and center it and select it
+					// STRY0072032
+					diagram.centerRect(node.actualBounds);
+					viewPortHeight = diagram.viewportBounds.height;
+				}
+			});
+		}
+	}
+
+	// ***************************************
+	// this block only runs once
+	// BEGIN BLOCK
+	// ***************************************
+	function _initializeScale(){
+		if(c.data.widgetTreeFooterToolbar.data.isTree){
+			// submit percent change back to server
+			diagram.zoomToRect(diagram.documentBounds);
+		} else {
+			// get the initial scale from the footer widget
+			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbar.data.settings.diagramScale);
+		}
+		diagramInitCompleted=true;
+	}
+
+	// ***************************************
+	// END BLOCK
+	// ***************************************
+	
+	// TREE FOOTER TOOLBAR
+	// STRY0117600 - move toolbar into separate widget to use same functionality across all
+	function _setToolbarProperties(){
+		// STRY0117600 - pass a reference to diagram to toolbar
+		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
+		if(diagramInitCompleted){
+			// this is needed to reset zoom to custom when the diagram changes
+			c.data.widgetTreeFooterToolbar.resetDiagram(diagram);
+		} else {
+			c.data.widgetTreeFooterToolbar.diagram = diagram;
+		}
+		
+		//c.data.widgetTreeFooterToolbar.diagram = diagram;
+		// STRY0117600 - pass selectedId to toolbar
+		// this sets the selected id on the footer tooltip when the selected id changes
+		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbar.currentTop = c.data.currentTopOU;
+
+		// STRY0117600 - pass a reference to diagram to toolbar
+		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
+		c.data.widgetTreeHeaderToolbar.diagram = diagram;
+		// STRY0117600 - pass selectedId to toolbar
+		// this sets the selected id on the footer tooltip when the selected id changes
+		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbar.currentTop = c.data.currentTopOU;
 
 	}
 
 	function resizeDiagram() {
 		// DFCT0010275
-		if($scope.data.map.length > 0){	
-				// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
-				// STRY0116823				
-				//				var diagramHeight = parseInt(diagram.documentBounds.height > TREE_CONST.diagramMinHeight ? diagram.documentBounds.height: TREE_CONST.diagramMinHeight);
-				//				var diagramHeight = 500;
-				var panelHeight = angular.element(document.getElementById('main_body')).height();
-				var headingHeight = angular.element(document.getElementById('panel_heading')).height();
-				var titleHeight = angular.element(document.getElementById('panel_title')).height();
-				var footerHeight = angular.element(document.getElementById('panel_footer')).height();
-				var map_page_Height = TREE_CONST.minHeight + panelHeight - (headingHeight + titleHeight + footerHeight);
-				//				jQuery("#" + TREE_CONST.node_id).height(map_page_Height);
-				angular.element(document.getElementById(TREE_CONST.node_id)).height(map_page_Height + 'px');
+		if($scope.data.map && $scope.data.map.length > 0){	
+			// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
+			// STRY0116823				
+			//				var diagramHeight = parseInt(diagram.documentBounds.height > TREE_CONST.diagramMinHeight ? diagram.documentBounds.height: TREE_CONST.diagramMinHeight);
+			//				var diagramHeight = 500;
+			var panelHeight = angular.element(document.getElementById('main_body')).height();
+			var headingHeight = angular.element(document.getElementById('panel_heading')).height();
+			var titleHeight = angular.element(document.getElementById('panel_title')).height();
+			var footerHeight = angular.element(document.getElementById('panel_footer')).height();
+			var map_page_Height = TREE_CONST.minHeight + panelHeight - (headingHeight + titleHeight + footerHeight);
+//			diagram.div.height(map_page_Height + 'px');
+//			diagram.requestUpdate();
+			//				jQuery("#" + TREE_CONST.node_id).height(map_page_Height);
+			angular.element(document.getElementById(TREE_CONST.node_id)).height(map_page_Height + 'px');
+			
+			// Select the node using the sys_id parameter supplied.
+			var node_select = diagram.findNodeForKey(c.data.selectedId);
+			diagram.select(node_select);
 		}
-		// Select the node using the sys_id parameter supplied.
-		var node_select = diagram.findNodeForKey(c.data.selectedId);
-		diagram.select(node_select);
 	}
 	
 	function drawTree() {
@@ -1100,6 +1095,7 @@ alert('Temporary Message - default OU not in current diagram');
 		}
 		diagram =
 			$go(go.Diagram, TREE_CONST.node_id, {
+			initialAutoScale: go.Diagram.Uniform,
 			allowZoom: true,		
 			// define the layout for the diagram
 			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
@@ -1110,23 +1106,15 @@ alert('Temporary Message - default OU not in current diagram');
 		diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850
 		//diagram.toolManager.toolTipDuration = ; // default is 5000
 		
-		diagram.nodeTemplate = createNodeTemplate();
+		diagram.nodeTemplate = _createNodeTemplate();
 
 		diagram.select(diagram.findNodeForKey(c.data.selectedId));
 		diagram.allowVerticalScroll=true;
 		// Define a trivial link template with no arrowhead
 		diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
-
-		if(c.data.settings.selectPercent=="tree"){
-			diagram.initialAutoScale = go.Diagram.Uniform;
-		} else {
-			diagram.scale = parseInt(c.data.settings.selectPercent)/100;
-		}
-
-		diagram.commandHandler.scrollToPart(diagram.findNodeForKey(c.data.selectedId));
 	}
 	
-	function createNodeTemplate(){
+	function _createNodeTemplate(){
 
 		var nodeTemplate = $go(go.Node, treeOrientation,
 													 { selectionAdorned: false,
@@ -1145,17 +1133,17 @@ alert('Temporary Message - default OU not in current diagram');
 															obj.findObject('Icons').visible=false;
 														}
 													 },
-													 createTreeNode(),
+													 _createTreeNode(),
 													 $go("TreeExpanderButton") // this was overkill for small diagrams (shows the icon to expand/collapse)
 													);
 		return nodeTemplate;		
 	}
 	
-	function createTreeNode(){
+	function _createTreeNode(){
 		// STRY0111888 - changed to spot panel
 		var treeNode =
 				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
-						createOurterRoundedRectangle(),
+						_createOurterRoundedRectangle(),
 						// moved up b/c corner pictures were behind hover panel
 						$go(go.Panel, "Auto", 
 								createTMsAdminsNameAbbr(),
@@ -1172,7 +1160,7 @@ alert('Temporary Message - default OU not in current diagram');
 		return treeNode;
 	}
 	
-	function createOurterRoundedRectangle(){
+	function _createOurterRoundedRectangle(){
 		// STRY0113936, STRY0111888 - set width and height
 		var roundedRectangle = 
 				$go(go.Shape, "RoundedRectangle", { strokeWidth: TREE_CONST.outlineWidth, width: TREE_CONST.nodeOuterRectangelWidth, height:TREE_CONST.nodeOuterRectangelHeight},
@@ -1711,8 +1699,18 @@ alert('Temporary Message - default OU not in current diagram');
 		// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
 		if (c.data.popoverListOptions.isSpinnerShown) {
 			c.data.ouId = obj.part.data.sys_id;
+			// TREE FOOTER TOOLBAR
+			// STRY0117600 - does not like diagram posted back to server
+			c.data.widgetTreeFooterToolbar.diagram = null;
+			c.data.widgetTreeHeaderToolbar.diagram = null;
 
 			c.server.update().then(function() {
+				// TREE FOOTER TOOLBAR
+				// STRY0117600 - does not like diagram posted back to server
+				// reset to diagram after it returns from server
+				c.data.widgetTreeFooterToolbar.diagram = diagram;
+				c.data.widgetTreeHeaderToolbar.diagram = diagram;
+
 				c.data.popoverListRecord.persons = c.data.updatedOUList;
 				c.data.popoverListOptions.isSpinnerShown = false;
 			})['finally'](function() {
@@ -2060,129 +2058,153 @@ alert('Temporary Message - default OU not in current diagram');
 //                                       Changes in controller Script
 // 2.8 | 2022-04-05 | raj  | DFCT0010838 - Javascript Error - Selecting an OU from the Organizational Hierarchy dropdown displays error messages and selected OU does NOT display
 //                                       In Client controller, server script
+// 2.8   - 2022-04-05 - raj -  STRY0117600 - Update Templates to match the UI of Org Hierarchy 
+//                                         - Changes in Server Script
+// 2.8 | 2022-04-18 | mmcc | STRY0119470  - All Tasker users should have access to use organization requests icon
+//                                       In Client controller, addImage() binding source, comment out case c.data.icons.Request16.src
+//                                         to always show icon for request updates no matter value in data.isAdmin
+//                                       Changes in Client controller
+// 2.8   - 2022-04-18 - raj -  STRY0117945 - Org Hierarchy – Preset Zoom Dropdown- Custom Zoom will display in dropdown
+//                                         - Changes in Client Controller
+// 2.8   - 2022-04-20 - raj -  STRY0120908 - As any Tasker User, if "Org Hierarchy Fullscreen" is accessible from the "Layout Dropdown", I do NOT want it accessible anywhere else.
+//                                         - Changes in HTML and ServerScript
+// 2.8   - 2022-04-20 - raj -  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout
+//                                         - Changes in HTML and ServerScript
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; declare once as global
 	var taskWidgetData = new TaskWidgetData();
+	// if messages not loaded, load messages
+	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-officehierarchy');
 	
 	//  STRY0113883 - reworked code flow
 	main();
 	
 	function main() {
-		// if messages not loaded, load messages
-		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-officehierarchy');
 		// DFCT0010813
 		data.table = 'x_153465_discovert_discover_office_hierarchy';
 
 		if(input){
-			if(input.orientationChanged){
-				taskWidgetIconsAndMessage.savePreferenceOrientation(input.settings.treeOrientation);
-				return;
-			}
-			// save percent change and return
-			if(input.percentChanged){
-				taskWidgetIconsAndMessage.savePreferencePercent(input.settings.selectPercent);
-				return;
-			}
-			if(input.favoriteChanged){
-				taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);
-				return;
-			}
-			if(input.topOU){
-				loadOUmap(input.topOU,input.topOU);
-				return;
-			}
-			//  STRY0113883
-			if(input.isPhotoDataNeeded){
-				data.isPhotoDataNeeded = false;
-				data.updatedPhoto = loadPhoto(input.getUserGUID, false);
-			}
-			//  STRY0113883
-			if(input.isProfileDataNeeded){
-				data.isProfileDataNeeded = false;
-				data.updatedPhoto = loadPhoto(input.getUserGUID, false);
-				data.updatedProfile = loadProfile(input.getUserGUID);
-			}
-			
-			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
-			if(input.isOuMemberListNeeded) {
-				data.isOuMemberListNeeded = false;
-				data.updatedOUList = [];
-				data.updatedOUList = taskWidgetData.getHoverMembersArray(input.ouId);
-			}
-			
-			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
-			if(input.isContactListNeeded) {
-				data.isContactListNeeded = false;
-				data.updatedOUList = [];
-				data.updatedOUList = taskWidgetData.getHoverContactsArray(input.ouId);
-			}
-			
-			// STRY0115436 - STRY0108687
-			if(input.isOuTaskManagerListNeeded) {
-				data.isOuTaskManagerListNeeded = false;
-				data.updatedOUList = [];
-				data.updatedOUList = taskWidgetData.getOUTaskMManagersHoverArray(input.ouId);
-			}
-			// STRY0115436 - STRY0108687
-			if(input.isOuHierarchyAdminListNeeded) {
-				data.isOuHierarchyAdminListNeeded = false;
-				data.updatedOUList = [];
-				data.updatedOUList = taskWidgetData.getOUHierarchyAdministratorsHoverArray(input.ouId);
-			}
-			
+			_processInput();
 		} else {
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; init as an empty object
-			data.popoverRecord = {};
-			
-			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
-			data.popoverListRecord = {};
-			data.popoverListOptions = {
-				isSimplePopover: false,
-				isSpinnerShown: false,
-				maxRowsToDisplay: 5,
-				modalType: 'listModal',
-				objWidget: {}
-			};
-			
-			data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
-			data.currentUser = gs.getUserID();
-
-			data.messages = taskWidgetIconsAndMessage.loadMessages();
-			data.icons = taskWidgetIconsAndMessage.loadIcons();
-
-			// STRY0101474  - DFCT0010275
-			data.isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
-
-			// DFCT0010813 - moved down to load messages and icons
-			// if there is no top OU, then stop
-			if (data.settings.topParentNeeded) {
-				return;
-			}
-			
-			var selectedId = setSelected();
-			loadOUmap(selectedId, undefined);			
+			_initialLoad();
+			_loadToolBars();
 		}
 	}
 	
+	// ---------------------------------------------------------------------------
+	// Begin of Functions
+	// ---------------------------------------------------------------------------
+	// STRY0117600 structuring code for maintainability 
+	function _initialLoad(){
+		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; init as an empty object
+		data.popoverRecord = {};
+
+		// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+		data.popoverListRecord = {};
+		data.popoverListOptions = {
+			isSimplePopover: false,
+			isSpinnerShown: false,
+			maxRowsToDisplay: 5,
+			modalType: 'listModal',
+			objWidget: {}
+		};
+
+		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+		data.currentUser = gs.getUserID();
+
+		data.messages = taskWidgetIconsAndMessage.loadMessages();
+		data.icons = taskWidgetIconsAndMessage.loadIcons();
+
+		// STRY0101474  - DFCT0010275
+		data.isGHA = new	UserInfoScripts().UserHasRole('x_153465_discovert.tasker_organizational_admin');
+
+		// DFCT0010813 - moved down to load messages and icons
+		// if there is no top OU, then stop
+		if (data.settings.topParentNeeded) {
+			return;
+		}
+
+		var selectedId = _setSelected();
+		
+		_loadOUmap(selectedId, undefined);	
+	}
+
+	function _loadToolBars(){
+		// TREE HEADER TOOLBAR
+		// STRY0117600 - move toolbar into separate widget to use same functionality across all
+		// STRY0120908 - added show separator
+		var header_widget_parameters = {
+			baseWidget: 'discovertasker-officehierarchy',
+			showSeparator: false,
+			iconGroup: 'header'
+		};
+		data.widgetTreeHeaderToolbar = $sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters); 
+
+		// TREE FOOTER TOOLBAR
+		// STRY0117600 - move toolbar into separate widget to use same functionality across all
+		var footer_widget_parameters = {
+			baseWidget: 'discovertasker-officehierarchy',
+			iconGroup: 'footer'
+		};
+		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters);
+	}
+	
+	// STRY0117600 structuring code for maintainability 
+	function _processInput(){
+		if(input.topOU){
+			data.topOU = input.topOU;
+			_loadOUmap(input.topOU,input.topOU);
+		} else if(input.isPhotoDataNeeded){
+			//  STRY0113883
+			data.isPhotoDataNeeded = false;
+			data.updatedPhoto = _loadPhoto(input.getUserGUID, false);
+		} else if(input.isProfileDataNeeded){
+			//  STRY0113883
+			data.isProfileDataNeeded = false;
+			data.updatedPhoto = _loadPhoto(input.getUserGUID, false);
+			data.updatedProfile = _loadProfile(input.getUserGUID);
+		} else if(input.isOuMemberListNeeded) {
+			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+			data.isOuMemberListNeeded = false;
+			data.updatedOUList = [];
+			data.updatedOUList = taskWidgetData.getHoverMembersArray(input.ouId);
+		} else if(input.isContactListNeeded) {
+			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
+			data.isContactListNeeded = false;
+			data.updatedOUList = [];
+			data.updatedOUList = taskWidgetData.getHoverContactsArray(input.ouId);
+		} else if(input.isOuTaskManagerListNeeded) {
+			// STRY0115436 - STRY0108687
+			data.isOuTaskManagerListNeeded = false;
+			data.updatedOUList = [];
+			data.updatedOUList = taskWidgetData.getOUTaskMManagersHoverArray(input.ouId);
+		} else if(input.isOuHierarchyAdminListNeeded) {
+			// STRY0115436 - STRY0108687				
+			data.isOuHierarchyAdminListNeeded = false;
+			data.updatedOUList = [];
+			data.updatedOUList = taskWidgetData.getOUHierarchyAdministratorsHoverArray(input.ouId);
+		}		
+	}
+	
 	//  STRY0113883
-	function loadProfile(userGUID) {
+	function _loadProfile(userGUID) {
 		return taskWidgetData.loadProfileInfo(userGUID);		
 	}
 	
 	//  STRY0113883
-	function loadPhoto(userGUID, asBackgroundImage) {
+	function _loadPhoto(userGUID, asBackgroundImage) {
 		return taskWidgetData.loadPhotoInfo(userGUID, asBackgroundImage);
 	}
 	
-	function loadOUmap(selectedId, topOU){
+	function _loadOUmap(selectedId, topOU){
 		// DFCT0010813
 		var map = data.map = [];
 		data.selectedId = selectedId;
 		
-		var gr_ou = getTopOUgr(selectedId, topOU);
+		var gr_ou = _getTopOUgr(selectedId, topOU);
 		data.currentTopOU = gr_ou.getUniqueValue();
 		if (!data.currentTopOU  || data.currentTopOU == '') {
 			data.currentTopOU = null;
@@ -2206,7 +2228,7 @@ alert('Temporary Message - default OU not in current diagram');
 
 	}
 
-	function setSelected(){
+	function _setSelected(){
 		var sys_id;
 		var selectedId;
 		
@@ -2225,7 +2247,7 @@ alert('Temporary Message - default OU not in current diagram');
 		
 	}
 	
-	function getTopOUgr (selectedId, topOU){
+	function _getTopOUgr (selectedId, topOU){
 		var currentTopOU;
 		if(topOU){
 			currentTopOU = topOU;
@@ -2253,14 +2275,14 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2671</sys_mod_count>
+        <sys_mod_count>2794</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-05 19:09:32</sys_updated_on>
+        <sys_updated_on>2022-04-26 14:13:13</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -2293,40 +2315,8 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
 <!-- DFCT0010275 -->
 <div id="main_body" ng-show="data.settings.topParentNeeded==false" class="panel panel-default">
   <div id="panel_heading" class="panel-heading">
-    <div ng-switch="data.settings.page_id" class="pull-right">
-      <div ng-switch-when="discovertasker_officehierarchy" class="pull-right">
-        <span class="pull-right" >
-          <a target="_self" ng-href="?id=discovertasker_ouhierarchy_full_screeen&table={{data.table}}&sys_id={{data.selectedId}}" role="link">
-            <img src="{{data.icons.Fullscreen16.src}}" title="{{data.icons.Fullscreen16.title}}" alt="{{data.icons.Fullscreen16.alt}}" class="dtech-pad-all-10"  />
-          </a>
-        </span>
-      </div>
-      <!-- STRY0113679 -->
-      <div ng-switch-when="discovertasker_ouhierarchy_full_screeen" class="pull-right">
-        <a target="_self" ng-href="?id=discovertasker_officehierarchy&table={{data.table}}&sys_id={{data.selectedId}}&view=sp" role="link">
-            <img src="{{data.icons.MinimizeFullScreen16.src}}" title="{{data.icons.MinimizeFullScreen16.title}}" alt="{{data.icons.MinimizeFullScreen16.alt}}" class="dtech-pad-all-10" />
-        </a>
-      </div>
-    </div>
-    <!-- STRY0117951 -->
-    <div class="dtech-push-right-flexbox">
-      <div class="pull-right">
-        <img src="{{data.icons.OrgHierarchy24.src}}" title="{{data.icons.OrgHierarchy24.title}}"
-             alt="{{data.icons.OrgHierarchy24.alt}}" class="dtech-pad-all-10" 
-             ng-class="{'dtech-disabled': data.settings.treeOrientation=='Horizontal', 'dtech-enabled': data.settings.treeOrientation!='Horizontal'}"
-             ng-click="switchToHorizontal();"/>
-
-        <img src="{{data.icons['OrgHierarchy-Vertical24'].src}}" title="{{data.icons['OrgHierarchy-Vertical24'].title}}"
-             alt="{{data.icons['OrgHierarchy-Vertical24'].alt}}" class="dtech-pad-all-10" 
-             ng-class="{'dtech-disabled': data.settings.treeOrientation=='Vertical', 'dtech-enabled': data.settings.treeOrientation!='Vertical'}"
-             ng-click="switchToVertical();"/>
-
-        <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
-             alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
-
-      </div>
-    </div>
-
+    <!-- TREE HEADER TOOLBAR -->
+    <sp-widget widget="data.widgetTreeHeaderToolbar"></sp-widget>
     <div id="panel_title" >
       <div class="dtech-box" >
         <!--STRY0117949  -->
@@ -2348,7 +2338,7 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   <div class="page_map_wrapper">
 
     <div> <!--class="m-t-sm"> -->
-      <div onload="createDiagram();" id="page_map" class="page-map" ng-show="data.currentTopOU"></div>
+      <div id="page_map" class="page-map" ng-show="data.currentTopOU"></div>
       <!-- STRY0116823 -->
       <div id="myOverview" ></div>   
     </div>
@@ -2366,75 +2356,8 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   
   <!-- STRY0113668 -->
   <div id="panel_footer" class="panel-footer">
-    <div class="dtech-push-right-flexbox">
-      <div class="pull-left">
-        <div ng-show="data.selectedId != data.settings.favorite.value">
-          <img 
-               src="{{data.icons.AddToFavorite24.src}}" title="{{data.icons.AddToFavorite24.title}}"
-               alt="{{data.icons.AddToFavorite24.alt}}" class="dtech-pad-all-10" 
-               ng-click="addToFavorites();"
-               /> {{data.messages["Tasker - Set selected as Favorite OU"]}}
-        </div>
-
-        <div ng-show="data.selectedId == data.settings.favorite.value">
-          <img 
-               src="{{data.icons.FavoriteFilled24.src}}" title="{{data.icons.FavoriteFilled24.title}}"
-               alt="{{data.icons.FavoriteFilled24.alt}}" class="dtech-pad-all-10" 
-               /> {{data.messages["Tasker - This is your selected Favorite OU"]}}
-        </div>
-      </div>
-      <div class="pull-right">
-        <img src="{{data.icons.Top24.src}}" title="{{data.icons.Top24.title}}"
-             alt="{{data.icons.Top24.alt}}" class="dtech-pad-all-10" 
-             ng-class="{'dtech-disabled': data.selectedId == data.currentTopOU, 'dtech-enabled': data.selectedId != data.currentTopOU}"
-             ng-click="zoomToTopOU();"/>
-
-        <img src="{{data.icons.DefaultOU24.src}}" title="{{data.icons.DefaultOU24.title}}"
-             alt="{{data.icons.DefaultOU24.alt}}" class="dtech-pad-all-10" 
-             ng-class="{'dtech-disabled': data.selectedId == data.settings.defaultOU.value, 'dtech-enabled': data.selectedId != data.settings.defaultOU.value}"
-             ng-click="zoomToDefaultOU();"/>
-
-        <img src="{{data.icons.Favorite24.src}}" title="{{data.icons.Favorite24.title}}"
-             alt="{{data.icons.Favorite24.alt}}" class="dtech-pad-all-10"
-             ng-class="{'dtech-disabled': data.selectedId == data.settings.favorite.value, 'dtech-enabled': data.selectedId != data.settings.favorite.value}"           
-             ng-click="zoomToFavorite();"/>
-
-        <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
-             alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
-
-        <img src="{{data.icons.ZoomSelected24.src}}" title="{{data.icons.ZoomSelected24.title}}"
-             alt="{{data.icons.ZoomSelected24.alt}}" 
-             class="dtech-pad-all-10" 
-             ng-click="zoomToSelected();"/>
-
-        <img src="{{data.icons.ZoomEntire24.src}}" title="{{data.icons.ZoomEntire24.title}}"
-             alt="{{data.icons.ZoomEntire24.alt}}" 
-             class="dtech-pad-all-10" 
-             ng-click="zoomToFullTree();"/>
-
-        <img src="{{data.icons.Divider_Black.src}}" title="{{data.icons.Divider_Black.title}}"
-             alt="{{data.icons.Divider_Black.alt}}" class="dtech-pad-all-10"/>
-
-        <select type="text" id= "selectPercent" class="dropdown" ng-model="data.settings.selectPercent"
-                ng-change="zoomToPercent();" >
-          <option value="100" 
-                  [selected]="data.settings.selectPercent==100" 
-                  >100%</option>
-          <option value="75"
-                  [selected]="data.settings.selectPercent==75" 
-                  >75%</option>
-          <option value="50"
-                  [selected]="data.settings.selectPercent==50" 
-                  >50%</option>
-          <option value="25"
-                  [selected]="data.settings.selectPercent==25" 
-                  >25%</option>
-          <option value="tree"
-                  [selected]="data.settings.selectPercent==tree" 
-                  >{{data.messages["Tasker - Entire Tree"]}}</option>
-        </select>      
-      </div>
-    </div>    
+    <!-- TREE FOOTER TOOLBAR -->
+    <sp-widget widget="data.widgetTreeFooterToolbar"></sp-widget>
   </div>
 </div>]]></template>
     </sp_widget>
