@@ -122,7 +122,8 @@
 			node_active_bg: '#33738e',
 			// STRY0113880
 			node_inactive_bg: '#949597',
-			node_selected_border: '#FFD247',
+			node_selected_border: '#00A4FF',
+			node_selected_border_stroke_width: 4,
 			
 			nodeOuterRectangelWidth: 310,
 			nodeOuterRectangelHeight: 70,		
@@ -241,28 +242,9 @@
 		$timeout.cancel(c.popoverListTimeout);
 	});
 
-	$(window).on("resize", function() {
-		// not sure why, but increasing the minHeight seems to work, but not sure why
-		TREE_CONST.minHeight = 12;
-		resizeDiagram();
-	});
-	
-	// TREE HEADER TOOLBAR
-	// STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
-	$scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function(){
-		treeOrientation="Horizontal";
-		treeNodeAngle=0;
-		resetDiagram();
-	});
-	
-	// TREE HEADER TOOLBAR
-	// STRY0117600 - this event is raised when the switch to vertical icon is clicked 
-	$scope.$on("$tasker-tree-toolbar-icons.switchToVertical", function(){
-		treeOrientation="Vertical";
-		treeNodeAngle=90;
-		resetDiagram();
-	});
-	
+	// -----------------------------------------------------------------------------------------------------------------
+	// START RECORD WATCHER BLOCK
+	// -----------------------------------------------------------------------------------------------------------------
 	// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	function initRecordWatcher(table, filter) {
 		if (watcher)
@@ -478,7 +460,6 @@
 
 		diagram.model.updateTargetBindings(nodeData);
 	}
-	
 	// STRY0113883 load user profile and/or Photo information
 	function loadUserInfo(fieldType, nodeKey, fieldName, value, displayValue){
 		if (fieldType == 'photo') {
@@ -517,38 +498,72 @@
 			c.data.widgetTreeHeaderToolbar.diagram = diagram;
 		});
 	}
+	// -----------------------------------------------------------------------------------------------------------------
+	// END RECORD WATCHER BLOCK
+	// -----------------------------------------------------------------------------------------------------------------
 	
-	// DFCT0010275
-	$scope.openNewModal = function() {
-		spModal.open({
-			title: 'New Top Organizational Unit',
-			backdrop:'static',
-			widget: 'discovertasker-formtab',
-			widgetInput: {
-				table: c.data.table,
-				view: 'Simple',
-				sys_id: "-1",
-				omitHeader: 'true',
-				isModal: true //,
-			},
-			size: 'lg',
-			buttons: [],
-			// 2.7.2 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
-			footerStyle: {
-				'display': 'none'
-			}
-		});		
-	};
-	
+	// -----------------------------------------------------------------------------------------------------------------
+	// START EVENTS RAISED
+	// -----------------------------------------------------------------------------------------------------------------
 	function broadcastTopNodeChange(topId) {
 		var evt = {};
-			evt.sys_id = topId;
-			evt.table = 'x_153465_discovert_discover_office_hierarchy';
-			// RJ -ET - Story 4
-			evt.parent = '';
-			$rootScope.$broadcast('$sp.list.click', evt);
-		}
+		evt.sys_id = topId;
+		evt.table = 'x_153465_discovert_discover_office_hierarchy';
+		// RJ -ET - Story 4
+		evt.parent = '';
+		$rootScope.$broadcast('$sp.list.click', evt);
+	}
 	
+	function nodeSelectionChanged(node) {
+		var evt = {};
+		var d = node.data;
+		evt.sys_id = d.sys_id;
+		if (evt.sys_id == c.data.selectedId)  // get called twice by gojs
+			return;
+
+		// STRY0116812
+		evt.table = c.data.table; //d.sys_class_name || d.table;
+		// RJ -ET - Story 4
+		evt.parent = d.parent;
+		c.data.selectedId = evt.sys_id;
+		// TREE FOOTER TOOLBAR
+		// STRY0117600 - need to update the child widget toolbar footer
+		// this sets the selected id on the footer tooltip when the selected id changes
+		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+
+		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
+		$rootScope.$broadcast('$sp.list.click', evt);
+
+		diagram.centerRect(node.actualBounds);
+	}
+	// -----------------------------------------------------------------------------------------------------------------
+	// END EVENTS RAISED
+	// -----------------------------------------------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------------------------
+	// START EVENTS MONITORED
+	// -----------------------------------------------------------------------------------------------------------------
+	// RJ -ET - Story 4
+	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+		// STRY0074663 Only rebroadcast if the node changed
+		if(c.data.selectedId != parms.sys_id){
+			c.data.selectedId = parms.sys_id;
+			// Select the node using the sys_id parameter supplied.
+			var node_select = diagram.findNodeForKey(c.data.selectedId);
+			diagram.select(node_select);
+			diagram.centerRect(node_select.actualBounds);
+		}
+
+	});
+	
+	// -----------------------------------------------------------------------------------------------------------------
+	// END EVENTS MONITORED
+	// -----------------------------------------------------------------------------------------------------------------
+	
+	// -----------------------------------------------------------------------------------------------------------------
+	// ORG HIERARCHY FEATURES
+	// -----------------------------------------------------------------------------------------------------------------
 	// STRY0074597
 	$scope.topOnlyCheck = function() {
 		setOUPicker();
@@ -599,44 +614,6 @@
 			}
 		});
 	};
-		
-	// RJ -ET - Story 4
-	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
-	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-		// STRY0074663 Only rebroadcast if the node changed
-		if(c.data.selectedId != parms.sys_id){
-			c.data.selectedId = parms.sys_id;
-			// Select the node using the sys_id parameter supplied.
-			var node_select = diagram.findNodeForKey(c.data.selectedId);
-			diagram.select(node_select);
-			diagram.centerRect(node_select.actualBounds);
-		}
-
-	});
-
-	function nodeSelectionChanged(node) {
-		var evt = {};
-		var d = node.data;
-		evt.sys_id = d.sys_id;
-		if (evt.sys_id == c.data.selectedId)  // get called twice by gojs
-			return;
-
-		// STRY0116812
-		evt.table = c.data.table; //d.sys_class_name || d.table;
-		// RJ -ET - Story 4
-		evt.parent = d.parent;
-		c.data.selectedId = evt.sys_id;
-		// TREE FOOTER TOOLBAR
-		// STRY0117600 - need to update the child widget toolbar footer
-		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
-		
-		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
-		$rootScope.$broadcast('$sp.list.click', evt);
-
-		diagram.centerRect(node.actualBounds);
-	}
 	
 	$scope.$on("field.change", function(evt, parms) {
 		if (parms.field.name == 'page')
@@ -648,225 +625,36 @@
 		var searchParms = $location.search();
 		$location.search({id: searchParms.id, p: p});
 	}
-
-	// STRY0108231
-	function toolTipDataListJSON(textHeader, bindingList) {
-		var toolTip;
-		var underline = '_';
-
-		var toolDataListJSON = 
-				$go(go.Adornment, "Spot", "Auto",
-						$go(go.Shape, "RoundedRectangle", {fill: TREE_CONST.toolTipBackgroundColor}),
-						$go(go.Panel, {width:300},
-								$go(go.Panel, "Vertical", {defaultAlignment: go.Spot.Left},
-										$go(go.Panel, {defaultAlignment: go.Spot.Left},
-												$go(go.TextBlock, 
-														textHeader, 
-														{textAlign:"left", margin:4, background: TREE_CONST.toolTipBackgroundColor}
-													 ),
-												$go(go.TextBlock, 
-														underline.repeat(100), 
-														{opacity: 0.5, stroke: TREE_CONST.toolTipHeaderTextColor, textAlign:"left", margin: 4, background: TREE_CONST.toolTipBackgroundColor}
-													 )
-											 ),
-										$go(go.Panel, {defaultAlignment: go.Spot.Left},
-												$go(go.Panel, "Table", new go.Binding("itemArray", bindingList),
-														{ margin: 4,
-														 defaultAlignment: go.Spot.Left,
-														 itemTemplate:
-														 $go(go.Panel, "TableRow",
-																 {defaultAlignment: go.Spot.Left},
-																 $go(go.TextBlock, new go.Binding("text", "displayName"),
-																		 { column: 0, 
-																			textAlign:"left",
-																			background: TREE_CONST.toolTipBackgroundColor
-																		 }
-																		)
-																)
-														})
-											 )
-									 )
-							 )
-					 );
-		return toolDataListJSON;
-	}
-
-		// STRY0108231
-	function toolTipSimple(object) {
-		var toolTip;
-		var underline = '_';
-		
-		var toolDataListJSON = 
-				$go(go.Adornment, "Spot", "Auto",
-						$go(go.Shape, "RoundedRectangle", {fill: TREE_CONST.toolTipBackgroundColor}),
-						$go(go.Panel, "Auto", //{width:300},
-								$go(go.Panel, "Vertical", {defaultAlignment: go.Spot.Left},
-										$go(go.Panel, {defaultAlignment: go.Spot.Left},
-												$go(go.TextBlock, 
-														object.title, 
-														{textAlign:"left", margin:4, background: TREE_CONST.toolTipBackgroundColor}
-													 )
-											 )
-									 )
-							 )
-					 );
-		return toolDataListJSON;
-	}
 	
-	function addImage(img, opacity, toolTiptextHeader, toolTipBindingList) {
-// NOTE: put go.picture in a function and pass what you need to clean this up
-
-		// STRY0101474 - if the image wasn't laoded, don't add the image NOTE: we may wat to put placeholder here IF it is defined to keep the space
-		if(img.src == undefined){
-			img.src = '';
-		}
+	// -----------------------------------------------------------------------------------------------------------------
+	// ORG HIERARCHY FEATURES
+	// -----------------------------------------------------------------------------------------------------------------
 		
-		var imageJSON =
-			$go(go.Picture, 
-				{margin: new go.Margin(TREE_CONST.imageMarginTop, TREE_CONST.imageMarginRight, TREE_CONST.imageMarginBottom, TREE_CONST.imageMarginLeft),
-				 alignment: go.Spot.TopRight,
-				 source: img.src,
-				 opacity: opacity}, 
-					new go.Binding("opacity", toolTipBindingList, function(data){
-							var lOpacity;
-							if(toolTipBindingList == ''){
-								// for now, leave always on
-								lOpacity = opacity;
-							} else {
-								lOpacity = data != ''? TREE_CONST.icon_opacity_normal:0.0;
-							}
-							return lOpacity; // != ''? TREE_CONST.icon_opacity_normal:0.0;
-						}),
-					new go.Binding("source", '', function(data){
-							var lSource;
-							switch (img.src){
-								case c.data.icons.ProcessRequestBadge24.src:
-									lSource = data.isAdmin && data.u_outstanding_request_count > 0?img.src:'';
-									break;
-								// 2.8 | 2022-04-18 | mmcc | STRY0119470  - All Tasker users should have access to use organization requests icon
-								//case c.data.icons.Request16.src:
-								//	lSource = !data.isAdmin?img.src:'';
-								//	break;
-								case c.data.icons.GenericAddSub16.src:
-								case c.data.icons.Divider:
-									lSource = data.isAdmin?img.src:'';
-									break;
-								default:
-									lSource = img.src;
-									break;
-							}
-							return lSource;
-						}),					
-				{mouseEnter: function(e, obj) {
-					 obj.saveOpacity = obj.opacity;
-					if(obj.opacity != 0.0)  // only change if icon is showing
-					 obj.opacity = TREE_CONST.icon_opacity_hover;
-				 },
-				 mouseLeave: function(e, obj) {
-					 obj.opacity = obj.saveOpacity;
-					 obj.saveOpacity = null;
-				 },
-				 click: function(e, obj) {
-					 var objWidget = null;
-					 switch (obj.source){
-						 case c.data.icons.Information16.src:
-						 case c.data.icons.taskManager.src:
-						 case c.data.icons.Admin16.src:
-							 objWidget = _buildFormWidgetObject(modalObjects.informationForm, 'Tasker - Organizational Unit Information', obj.part.data, false); 
-							 openFormModal(objWidget); 
-							 break;
-						 case c.data.icons.SubOU16.src:
-							 objWidget = _buildListWidgetObject(modalObjects.subOUList, 'Tasker - List of Sub OUs', obj.part.data);
-							 openListModal(objWidget);
-							 break;
-						 case c.data.icons.OUMembers16.src:
-							 objWidget = _buildListWidgetObject(modalObjects.membersOUList, 'Tasker - List of Members', obj.part.data);
-							 openListModal(objWidget);
-							 break;
-						 case c.data.icons.Contacts16.src:
-							 objWidget = _buildListWidgetObject(modalObjects.contactsOUList, 'Tasker - List of Contacts', obj.part.data);
-							 openListModal(objWidget);
-							 break;
-						 case c.data.icons.Reports16.src:
-							 objWidget = JSON.parse(JSON.stringify(modalObjects.OUReport));
-							 objWidget.title = c.data.messages["Tasker - OU Reports for "] + ' - ' + obj.part.data.name;
-							 objWidget.filter = objWidget.filter + obj.part.data.key; 
-							 openReportModal(objWidget);
-							 break;
-						 // STRY0101474
-						 case c.data.icons.ProcessRequestBadge24.src:
-							 // 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
-							 var url = '?id=discover_simple_processing_form&dcu_sys_id=&dcu_table=x_153465_discovert_tasker_requests' +
-									'&dcu_ref=u_ou_parent&dcu_view=&query=u_ou_parent=' +
-									obj.part.data.key +
-									'^u_status=In progress&o=u_requested&d=desc';
-							 window.open(url, '_blank');
-							 break;
-						 case c.data.icons.RelatedTasks16.src:
-							 objWidget = _buildListWidgetObject(modalObjects.relatedTaskOUList, 'Tasker - Related Tasks', obj.part.data);
-							 openListModal(objWidget);
-							 break;
-						 case c.data.icons.Request16.src:
-							 objWidget = _buildFormWidgetObject(modalObjects.requestChangeForm, 'Tasker - Title - Request Hierarchy Update', obj.part.data, true);
-							 objWidget.sys_id = -1;
-							 objWidget.u_ou_parent = obj.part.data.key; 
-							 openFormModal(objWidget); 
-							 break;
-						 case c.data.icons.GenericAddSub16.src:
-							 objWidget = _buildFormWidgetObject(modalObjects.createNewForm, 'Tasker - Create New Sub OU', obj.part.data, true);
-							 objWidget.sys_id = -1; 
-							 objWidget.parent = obj.part.data.key; 
-							 objWidget.query = 'parent=' + obj.part.data.key;
-							 openFormModal(objWidget); 
-							 break;
-							 
-						 // STRY0101474 - used for divider
-						 default:
-							 break;
-					 }
-					 e.handled = true;
-				 }		 
-				},					
-				new go.Binding("toolTip", "", function(e, obj){
-				var toolTip = '';
-//  2.8 | 2022-03-10 | mmcc | STRY0114672 Original if else
-// 				if(toolTiptextHeader!='') {
-// 					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
-// 				} else if(img.title != '') {
-// 					toolTip = toolTipSimple(img);
-// 				}
-				// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; block the click; Popover List start	
-				if (obj.source == c.data.icons.OUMembers16.src ||
-					obj.source == c.data.icons.Contacts16.src || 
-					obj.source == c.data.icons.taskManager.src ||
-					obj.source == c.data.icons.Admin16.src ||
-					obj.source == c.data.icons.ProcessRequestBadge24.src) {
-					toolTip = $go(go.HTMLInfo, {
-						show: _showPopoverList,
-						hide: _hidePopoverList
-					});
-				} else if (obj.source == c.data.icons.LockOpenBadge24.src ||
-					obj.source == c.data.icons.Information16.src ||
-					obj.source == c.data.icons.SubOU16.src ||
-					obj.source == c.data.icons.RelatedTasks16.src ||
-					obj.source == c.data.icons.Request16.src ||
-					obj.source == c.data.icons.GenericAddSub16.src) {
-					toolTip = $go(go.HTMLInfo, {
-						show: _showPopoverSimple,
-						hide: _hidePopoverSimple
-					});
-				} else if(toolTiptextHeader!='') {
-					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
-				} else if(img.title != '') {
-					toolTip = toolTipSimple(img);
-				}
-				// 2.8 | 2022-03-10 | mmcc | STRY0114672; List Popover end
-				return toolTip;
-			})
-		);
-		return imageJSON;
-	}	
-
+	// -----------------------------------------------------------------------------------------------------------------
+	// START ICON MODALS
+	// -----------------------------------------------------------------------------------------------------------------
+	// DFCT0010275
+	$scope.openNewModal = function() {
+		spModal.open({
+			title: 'New Top Organizational Unit',
+			backdrop:'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: {
+				table: c.data.table,
+				view: 'Simple',
+				sys_id: "-1",
+				omitHeader: 'true',
+				isModal: true //,
+			},
+			size: 'lg',
+			buttons: [],
+			// 2.7.2 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+			footerStyle: {
+				'display': 'none'
+			}
+		});		
+	};
+	
 	openFormModal = function(widgetObject) {
 		_setPopoverDisplayNone('popoverWrapper');
 		_setPopoverDisplayNone('popoverWrapperList');
@@ -969,6 +757,37 @@
 		});
 
 	};	
+	// -----------------------------------------------------------------------------------------------------------------
+	// END ICON MODALS
+	// -----------------------------------------------------------------------------------------------------------------	
+	
+	// **************************************************************************************************************
+	// STRY0119818 - NOTE: reorganized Template and OU to put all of the repeated functions in the same block of code
+	// TREE Code functions in all trees 
+	// BEGIN BLOCK
+	// **************************************************************************************************************	
+	
+	$(window).on("resize", function() {
+		// not sure why, but increasing the minHeight seems to work, but not sure why
+		TREE_CONST.minHeight = 12;
+		resizeDiagram();
+	});
+	
+	// TREE HEADER TOOLBAR
+	// STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
+	$scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function(){
+		treeOrientation="Horizontal";
+		treeNodeAngle=0;
+		resetDiagram();
+	});
+	
+	// TREE HEADER TOOLBAR
+	// STRY0117600 - this event is raised when the switch to vertical icon is clicked 
+	$scope.$on("$tasker-tree-toolbar-icons.switchToVertical", function(){
+		treeOrientation="Vertical";
+		treeNodeAngle=90;
+		resetDiagram();
+	});	
 	
 	function resetDiagram(){
 		diagramInitCompleted = false;	
@@ -1114,6 +933,17 @@
 		diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape));  // the link shape
 	}
 	
+	// **************************************************************************************************************
+	// STRY0119818 - NOTE: reorganized Template and OU to put all of the repeated functions in the same block of code
+	// TREE Code functions in all trees 
+	// END BLOCK
+	// **************************************************************************************************************	
+	
+	// **************************************************************************************************************	
+	// DRAW TREE AND TREE LAYOUT FUCNTIONS
+	// This block contains the functions that define the tree structure and capabilities
+	// START BLOCK
+	// **************************************************************************************************************	
 	function _createNodeTemplate(){
 
 		var nodeTemplate = $go(go.Node, treeOrientation,
@@ -1166,15 +996,28 @@
 				$go(go.Shape, "RoundedRectangle", { strokeWidth: TREE_CONST.outlineWidth, width: TREE_CONST.nodeOuterRectangelWidth, height:TREE_CONST.nodeOuterRectangelHeight},
 						// if selected, outline the rectangle
 						new go.Binding("stroke", "isSelected", function(s){
-					if (s)
-						return TREE_CONST.node_selected_border; 
-					else
-						return null;}).ofObject(""),
+							if (s)
+								return TREE_CONST.node_selected_border; 
+							else
+								return null;}).ofObject(""),
+						// if we want to have same border width even on selected, remove this section
+						new go.Binding("strokeWidth", "isSelected", function(s) {
+							if (s)
+								return TREE_CONST.node_selected_border_stroke_width;
+							else
+								return null;}).ofObject(""),
 						new go.Binding("fill", "active", function (t){
-					if(t)
-						return TREE_CONST.node_active_bg;
-					else
-						return TREE_CONST.node_inactive_bg;})
+							if(t)
+								return TREE_CONST.node_active_bg;
+							else
+								return TREE_CONST.node_inactive_bg;}),
+								// this does not appear to create a dashed border.  not sure if it is broken or if dash is not recognized
+								new go.Binding("strokeDashArray", "isSelected", function(s) {
+									if (s)
+										return "dash";
+									else
+										return null;
+								}).ofObject("")						
 					 );
 		return roundedRectangle;		
 	}
@@ -1443,6 +1286,232 @@
 		return outstandingRequestIcon;
 	}
 
+	function addImage(img, opacity, toolTiptextHeader, toolTipBindingList) {
+// NOTE: put go.picture in a function and pass what you need to clean this up
+
+		// STRY0101474 - if the image wasn't laoded, don't add the image NOTE: we may wat to put placeholder here IF it is defined to keep the space
+		if(img.src == undefined){
+			img.src = '';
+		}
+		
+		var imageJSON =
+			$go(go.Picture, 
+				{margin: new go.Margin(TREE_CONST.imageMarginTop, TREE_CONST.imageMarginRight, TREE_CONST.imageMarginBottom, TREE_CONST.imageMarginLeft),
+				 alignment: go.Spot.TopRight,
+				 source: img.src,
+				 opacity: opacity}, 
+					new go.Binding("opacity", toolTipBindingList, function(data){
+							var lOpacity;
+							if(toolTipBindingList == ''){
+								// for now, leave always on
+								lOpacity = opacity;
+							} else {
+								lOpacity = data != ''? TREE_CONST.icon_opacity_normal:0.0;
+							}
+							return lOpacity; // != ''? TREE_CONST.icon_opacity_normal:0.0;
+						}),
+					new go.Binding("source", '', function(data){
+							var lSource;
+							switch (img.src){
+								case c.data.icons.ProcessRequestBadge24.src:
+									lSource = data.isAdmin && data.u_outstanding_request_count > 0?img.src:'';
+									break;
+								// 2.8 | 2022-04-18 | mmcc | STRY0119470  - All Tasker users should have access to use organization requests icon
+								//case c.data.icons.Request16.src:
+								//	lSource = !data.isAdmin?img.src:'';
+								//	break;
+								case c.data.icons.GenericAddSub16.src:
+								case c.data.icons.Divider:
+									lSource = data.isAdmin?img.src:'';
+									break;
+								default:
+									lSource = img.src;
+									break;
+							}
+							return lSource;
+						}),					
+				{mouseEnter: function(e, obj) {
+					 obj.saveOpacity = obj.opacity;
+					if(obj.opacity != 0.0)  // only change if icon is showing
+					 obj.opacity = TREE_CONST.icon_opacity_hover;
+				 },
+				 mouseLeave: function(e, obj) {
+					 obj.opacity = obj.saveOpacity;
+					 obj.saveOpacity = null;
+				 },
+				 click: function(e, obj) {
+					 var objWidget = null;
+					 switch (obj.source){
+						 case c.data.icons.Information16.src:
+						 case c.data.icons.taskManager.src:
+						 case c.data.icons.Admin16.src:
+							 objWidget = _buildFormWidgetObject(modalObjects.informationForm, 'Tasker - Organizational Unit Information', obj.part.data, false); 
+							 openFormModal(objWidget); 
+							 break;
+						 case c.data.icons.SubOU16.src:
+							 objWidget = _buildListWidgetObject(modalObjects.subOUList, 'Tasker - List of Sub OUs', obj.part.data);
+							 openListModal(objWidget);
+							 break;
+						 case c.data.icons.OUMembers16.src:
+							 objWidget = _buildListWidgetObject(modalObjects.membersOUList, 'Tasker - List of Members', obj.part.data);
+							 openListModal(objWidget);
+							 break;
+						 case c.data.icons.Contacts16.src:
+							 objWidget = _buildListWidgetObject(modalObjects.contactsOUList, 'Tasker - List of Contacts', obj.part.data);
+							 openListModal(objWidget);
+							 break;
+						 case c.data.icons.Reports16.src:
+							 objWidget = JSON.parse(JSON.stringify(modalObjects.OUReport));
+							 objWidget.title = c.data.messages["Tasker - OU Reports for "] + ' - ' + obj.part.data.name;
+							 objWidget.filter = objWidget.filter + obj.part.data.key; 
+							 openReportModal(objWidget);
+							 break;
+						 // STRY0101474
+						 case c.data.icons.ProcessRequestBadge24.src:
+							 // 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
+							 var url = '?id=discover_simple_processing_form&dcu_sys_id=&dcu_table=x_153465_discovert_tasker_requests' +
+									'&dcu_ref=u_ou_parent&dcu_view=&query=u_ou_parent=' +
+									obj.part.data.key +
+									'^u_status=In progress&o=u_requested&d=desc';
+							 window.open(url, '_blank');
+							 break;
+						 case c.data.icons.RelatedTasks16.src:
+							 objWidget = _buildListWidgetObject(modalObjects.relatedTaskOUList, 'Tasker - Related Tasks', obj.part.data);
+							 openListModal(objWidget);
+							 break;
+						 case c.data.icons.Request16.src:
+							 objWidget = _buildFormWidgetObject(modalObjects.requestChangeForm, 'Tasker - Title - Request Hierarchy Update', obj.part.data, true);
+							 objWidget.sys_id = -1;
+							 objWidget.u_ou_parent = obj.part.data.key; 
+							 openFormModal(objWidget); 
+							 break;
+						 case c.data.icons.GenericAddSub16.src:
+							 objWidget = _buildFormWidgetObject(modalObjects.createNewForm, 'Tasker - Create New Sub OU', obj.part.data, true);
+							 objWidget.sys_id = -1; 
+							 objWidget.parent = obj.part.data.key; 
+							 objWidget.query = 'parent=' + obj.part.data.key;
+							 openFormModal(objWidget); 
+							 break;
+							 
+						 // STRY0101474 - used for divider
+						 default:
+							 break;
+					 }
+					 e.handled = true;
+				 }		 
+				},					
+				new go.Binding("toolTip", "", function(e, obj){
+				var toolTip = '';
+//  2.8 | 2022-03-10 | mmcc | STRY0114672 Original if else
+// 				if(toolTiptextHeader!='') {
+// 					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
+// 				} else if(img.title != '') {
+// 					toolTip = toolTipSimple(img);
+// 				}
+				// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; block the click; Popover List start	
+				if (obj.source == c.data.icons.OUMembers16.src ||
+					obj.source == c.data.icons.Contacts16.src || 
+					obj.source == c.data.icons.taskManager.src ||
+					obj.source == c.data.icons.Admin16.src ||
+					obj.source == c.data.icons.ProcessRequestBadge24.src) {
+					toolTip = $go(go.HTMLInfo, {
+						show: _showPopoverList,
+						hide: _hidePopoverList
+					});
+				} else if (obj.source == c.data.icons.LockOpenBadge24.src ||
+					obj.source == c.data.icons.Information16.src ||
+					obj.source == c.data.icons.SubOU16.src ||
+					obj.source == c.data.icons.RelatedTasks16.src ||
+					obj.source == c.data.icons.Request16.src ||
+					obj.source == c.data.icons.GenericAddSub16.src) {
+					toolTip = $go(go.HTMLInfo, {
+						show: _showPopoverSimple,
+						hide: _hidePopoverSimple
+					});
+				} else if(toolTiptextHeader!='') {
+					toolTip = toolTipDataListJSON(toolTiptextHeader, toolTipBindingList);
+				} else if(img.title != '') {
+					toolTip = toolTipSimple(img);
+				}
+				// 2.8 | 2022-03-10 | mmcc | STRY0114672; List Popover end
+				return toolTip;
+			})
+		);
+		return imageJSON;
+	}	
+	// **************************************************************************************************************	
+	// DRAW TREE AND TREE LAYOUT FUCNTIONS
+	// This block contains the functions that define the tree structure and capabilities
+	// END BLOCK
+	// **************************************************************************************************************	
+	
+	// -----------------------------------------------------------------------------------------------------------------
+	// START TOOLTIPS
+	// -----------------------------------------------------------------------------------------------------------------
+	// STRY0108231
+	function toolTipDataListJSON(textHeader, bindingList) {
+		var toolTip;
+		var underline = '_';
+
+		var toolDataListJSON = 
+				$go(go.Adornment, "Spot", "Auto",
+						$go(go.Shape, "RoundedRectangle", {fill: TREE_CONST.toolTipBackgroundColor}),
+						$go(go.Panel, {width:300},
+								$go(go.Panel, "Vertical", {defaultAlignment: go.Spot.Left},
+										$go(go.Panel, {defaultAlignment: go.Spot.Left},
+												$go(go.TextBlock, 
+														textHeader, 
+														{textAlign:"left", margin:4, background: TREE_CONST.toolTipBackgroundColor}
+													 ),
+												$go(go.TextBlock, 
+														underline.repeat(100), 
+														{opacity: 0.5, stroke: TREE_CONST.toolTipHeaderTextColor, textAlign:"left", margin: 4, background: TREE_CONST.toolTipBackgroundColor}
+													 )
+											 ),
+										$go(go.Panel, {defaultAlignment: go.Spot.Left},
+												$go(go.Panel, "Table", new go.Binding("itemArray", bindingList),
+														{ margin: 4,
+														 defaultAlignment: go.Spot.Left,
+														 itemTemplate:
+														 $go(go.Panel, "TableRow",
+																 {defaultAlignment: go.Spot.Left},
+																 $go(go.TextBlock, new go.Binding("text", "displayName"),
+																		 { column: 0, 
+																			textAlign:"left",
+																			background: TREE_CONST.toolTipBackgroundColor
+																		 }
+																		)
+																)
+														})
+											 )
+									 )
+							 )
+					 );
+		return toolDataListJSON;
+	}
+
+		// STRY0108231
+	function toolTipSimple(object) {
+		var toolTip;
+		var underline = '_';
+		
+		var toolDataListJSON = 
+				$go(go.Adornment, "Spot", "Auto",
+						$go(go.Shape, "RoundedRectangle", {fill: TREE_CONST.toolTipBackgroundColor}),
+						$go(go.Panel, "Auto", //{width:300},
+								$go(go.Panel, "Vertical", {defaultAlignment: go.Spot.Left},
+										$go(go.Panel, {defaultAlignment: go.Spot.Left},
+												$go(go.TextBlock, 
+														object.title, 
+														{textAlign:"left", margin:4, background: TREE_CONST.toolTipBackgroundColor}
+													 )
+											 )
+									 )
+							 )
+					 );
+		return toolDataListJSON;
+	}
+	
 	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; Start	
 	function showPopoverUserInfo(obj, diagram, tool) {
 		_runPopoverUserInfo(obj.part.data, diagram.lastInput);
@@ -1870,7 +1939,10 @@
 			c.data.popoverListOptions.isSpinnerShown = false;
 		}, diagram.toolManager.toolTipDuration - 100);
 	}
-	
+	// -----------------------------------------------------------------------------------------------------------------
+	// END TOOLTIPS
+	// -----------------------------------------------------------------------------------------------------------------
+		
 };]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------&#13;
@@ -2070,6 +2142,9 @@
 //                                         - Changes in HTML and ServerScript
 // 2.8   - 2022-04-20 - raj -  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout
 //                                         - Changes in HTML and ServerScript
+// 2.8   - 2022-04-20 - raj -  STRY0119818 - Task Tree Widget- New Buttons modify Zoom/Structure preferences
+//                                           NOTE: also reorganized Template and OU to put all of the repeated functions in the same block of code
+//                                         - Changes in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2275,14 +2350,14 @@
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2794</sys_mod_count>
+        <sys_mod_count>2802</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-26 14:13:13</sys_updated_on>
+        <sys_updated_on>2022-05-02 20:38:19</sys_updated_on>
         <template><![CDATA[<style >
 
 
