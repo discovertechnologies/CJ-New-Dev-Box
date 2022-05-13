@@ -6,10 +6,10 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>Includes Task related server scripts:&#13;
-&#13;
 2.8&#13;
 2.8 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX&#13;
   getDescendantsCount() can filter on closed_at&#13;
+2.7.3 | 2022-05-04 | raj  | DFCT0010884 - All child/descendant tasks of an ORDERED TASK should be in "WAIT" state until the earlier order task has been completed&#13;
 &#13;
 v2.7&#13;
 STRY0095102 - Stretch- HHS/ICE: The "Task" form and "Template" form field filters should account for users that have a "Parent" (Restricted) Group&#13;
@@ -625,20 +625,51 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
 			if(grSubTasksActiveOrder.next()){
 				if(parseInt(grSubTasksActiveOrder.task_order) < parseInt(grTask.task_order)){
 					return false;  // at this level the order active is less than the order active of the task - return false
-				} else {
+					// DFCT0010884 - moved recursive block so it executes if this is the first subtask at this level
+				/*} else {
 					// this level of the tree is active for this task
 					var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
 					if(grTaskParent.get(grTask.parent)){
 						// if this is not the top level, go up again and determine if that level is active
 						return this.isTaskOrderOfTaskActive(grTaskParent);
-					}
+					} */
 				}
+			// DFCT0010884 - returning true here didn't account for adding a new task at the lowest level and the parent task paused by order by
+			//} else {
+			//	// no active tasks at this level, so, this task can be active at this level if the parent is active
+			//	return true;
+			}
+			// DFCT0010884 - moved recursive block so it executes if this is the first subtask at this level
+			// this level of the tree is active for this task
+			var grTaskParent = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTaskParent.get(grTask.parent)){
+				// if this is not the top level, go up again and determine if that level is active
+				return this.isTaskOrderOfTaskActive(grTaskParent);
 			} else {
-				// no active tasks at this level, so, this task can be active at this level if the parent is active
 				return true;
 			}
 		},
 		
+		//---------------------------------------------------------------------------------------------
+		// v2.7.3 | 2022.05.05 | DFCT0010884 - All child/descendant tasks of an ORDERED TASK should be 
+		//                                     in "WAIT" state until the earlier order task has been completed
+		//---------------------------------------------------------------------------------------------
+		pauseOrder: function (grTask){
+			var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+			// Query to see if tasks are still active in this task order
+			grSubTasks.addQuery('parent', grTask.getUniqueValue());
+			grSubTasks.addQuery('active', true);
+			grSubTasks.query();
+			while(grSubTasks.next()){
+				grSubTasks.state = -3;
+				grSubTasks.update();
+				// if this task is paused by order by, pause all children of the task
+				if(grSubTasks.calchaschildren >0){
+					this.pauseOrder(grSubTasks);
+				}
+			}
+		},
+	
 		//---------------------------------------------------------------------------------------------
 		// v2.5.13 | 08.13.2020 | // STRY0076618 - on close or cancel if an order is complete, start next order
 		//---------------------------------------------------------------------------------------------
@@ -756,16 +787,14 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
         <sys_mod_count>264</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-04-13 19:55:22</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-05-11 17:47:50</sys_updated_on>
     </sys_script_include>
 </record_update>
