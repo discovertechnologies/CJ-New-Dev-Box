@@ -100,7 +100,10 @@
 //                                         In Server script, added code to get State Count for Draft. Added ending semicolon.
 //                                         In Client controller, changed to use "api.controller = function() {};", added the semicolon
 //                                         Changes made in HTML, CSS, Serverscript and Client controller.
-
+// 2.8 | 2022-05-17 | raj  |  STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
+//                                      changes in server script to allow multiple controls to set the filter level
+//                                      Fixed a problem with incomplete and cancelled tasks not showing correctly
+// 
 //------------------------------------------------------------------------------------------------------------------------
 
 (function(data) {
@@ -131,7 +134,12 @@
 	data.tableLabel = gr.getLabel();
 	data.table = gr.getTableName();
 	data.sys_id = gr.getUniqueValue();
+	data.showDesc=(input || {}).showDesc || (options || {}).showDesc || false;
 	data.dynamic_tree = $sp.getParameter("dynamic_tree"); // KT - TLV - STRY0057360 - Macro Widget
+	convertToBool(["showDesc", "dynamic_tree"]);
+	var showDescendantRollUp = data.showDesc || data.dynamic_tree;
+
+	
 	data.page = $sp.getParameter("id");
 	
 	data.nDraft = 0;
@@ -166,23 +174,24 @@
 	data.calchaschildren = gr.getValue('calchaschildren');
 	
 	if(data.calchaschildren > 0){
-		data.nDraft = getStateCount(data.table, data.sys_id, -6, data.dynamic_tree);
-		data.nWaiting = getStateCount(data.table, data.sys_id, -3, data.dynamic_tree);
-		data.nUnassigned = getStateCount(data.table, data.sys_id, -5, data.dynamic_tree);
-		data.nAssigned = getStateCount(data.table, data.sys_id, 1, data.dynamic_tree);
-		data.nAccepted = getStateCount(data.table, data.sys_id, 10, data.dynamic_tree);
-		data.nRejected = getStateCount(data.table, data.sys_id, 11, data.dynamic_tree);
-		data.nWorkScheduled = getStateCount(data.table, data.sys_id, 12, data.dynamic_tree);
-		data.nInProgress = getStateCount(data.table, data.sys_id, 13, data.dynamic_tree);
-		data.nInReview = getStateCount(data.table, data.sys_id, 14, data.dynamic_tree);
-		data.nRework = getStateCount(data.table, data.sys_id, 15, data.dynamic_tree);
-		data.nCompleted = getStateCount(data.table, data.sys_id, 3, data.dynamic_tree);
-		data.nIncompleted = getStateCount(data.table, data.sys_id, 4, data.dynamic_tree);
-		data.nCanceled = getStateCount(data.table, data.sys_id, 7, data.dynamic_tree);
+		// STRY0120403
+		data.nDraft = getStateCount(data.table, data.sys_id, -6, showDescendantRollUp);
+		data.nWaiting = getStateCount(data.table, data.sys_id, -3, showDescendantRollUp);
+		data.nUnassigned = getStateCount(data.table, data.sys_id, -5, showDescendantRollUp);
+		data.nAssigned = getStateCount(data.table, data.sys_id, 1, showDescendantRollUp);
+		data.nAccepted = getStateCount(data.table, data.sys_id, 10, showDescendantRollUp);
+		data.nRejected = getStateCount(data.table, data.sys_id, 11, showDescendantRollUp);
+		data.nWorkScheduled = getStateCount(data.table, data.sys_id, 12, showDescendantRollUp);
+		data.nInProgress = getStateCount(data.table, data.sys_id, 13, showDescendantRollUp);
+		data.nInReview = getStateCount(data.table, data.sys_id, 14, showDescendantRollUp);
+		data.nRework = getStateCount(data.table, data.sys_id, 15, showDescendantRollUp);
+		data.nCompleted = getStateCount(data.table, data.sys_id, 3, showDescendantRollUp);
+		data.nIncompleted = getStateCount(data.table, data.sys_id, 4, showDescendantRollUp);
+		data.nCanceled = getStateCount(data.table, data.sys_id, 7, showDescendantRollUp);
 	}
 	
 	//-------------------------------------------------------------------------------------------------------------------
-	function getStateCount(table, sys_id, statevalue, dynamic_tree) {
+	function getStateCount(table, sys_id, statevalue, showDescendantRollUp) {
 		
 		var nTotal = 0;
 		var nSubTotal = 0;
@@ -192,7 +201,13 @@
 		var filter = 'u_all_ancestors_tasksLIKE'+ sys_id;
 		
 		grTaskInstance = new GlideAggregate(table);
-		if (data.dynamic_tree == 'true') grTaskInstance.addQuery('u_all_ancestors_tasks', 'CONTAINS', sys_id); else grTaskInstance.addQuery('parent',sys_id); // KT - TLV - STRY0057360 - Macro Widget
+		// STRY0120403
+		if (showDescendantRollUp) {
+			grTaskInstance.addQuery('u_all_ancestors_tasks', 'CONTAINS', sys_id); 
+		} else{
+			grTaskInstance.addQuery('parent',sys_id); // KT - TLV - STRY0057360 - Macro Widget
+		}
+		
 		grTaskInstance.addAggregate('COUNT');
 		grTaskInstance.query();
 		
@@ -201,7 +216,13 @@
 		}
 		
 		grTaskInstanceSubTotal = new GlideAggregate(table);
-		if (data.dynamic_tree == 'true') grTaskInstanceSubTotal.addQuery('u_all_ancestors_tasks', 'CONTAINS', sys_id); else grTaskInstanceSubTotal.addQuery('parent',sys_id); // KT - TLV - STRY0057360 - Macro Widget
+		// STRY0120403
+		if (showDescendantRollUp){
+			grTaskInstanceSubTotal.addQuery('u_all_ancestors_tasks', 'CONTAINS', sys_id); 
+		} else {
+			grTaskInstanceSubTotal.addQuery('parent',sys_id); // KT - TLV - STRY0057360 - Macro Widget
+		}
+			
 		grTaskInstanceSubTotal.addQuery('state',statevalue);
 		grTaskInstanceSubTotal.addAggregate('COUNT');
 		grTaskInstanceSubTotal.query();
@@ -213,7 +234,12 @@
 		}
 		return percentage;
 	}
-	
+	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
+	function convertToBool(names) {
+		names.forEach(function(name) {
+			data[name] = data[name] == true || data[name] == 'true';
+		});
+	}
 })(data);
 ]]></script>
         <servicenow>false</servicenow>
@@ -221,14 +247,14 @@
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-27 18:13:50</sys_created_on>
         <sys_id>d6b235e2dbc91f003a8d6be3ca9619c4</sys_id>
-        <sys_mod_count>340</sys_mod_count>
+        <sys_mod_count>346</sys_mod_count>
         <sys_name>Tasker States Progress Bar</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d6b235e2dbc91f003a8d6be3ca9619c4</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2021-08-24 16:00:17</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-05-18 03:41:24</sys_updated_on>
         <template><![CDATA[<div ng-if="data.canRead" >
   <div ng-if="data.calchaschildren > 0 " class="progress">
     <div class="progress-bar Draft" role="progressbar" style="width: {{data.nDraft}}%" aria-valuenow="{{data.nDraft}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nDraft}}% Draft"> {{data.nDraft}}% Draft</div>
@@ -242,8 +268,8 @@
     <div class="progress-bar In Review" role="progressbar" style="width: {{data.nInReview}}%" aria-valuenow="{{data.nInReview}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nInReview}}% In Review"> {{data.nInReview}}% In Review</div>
     <div class="progress-bar Rework" role="progressbar" style="width: {{data.nRework}}%" aria-valuenow="{{data.nRework}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nRework}}% Rework"> {{data.nRework}}% Rework</div>
     <div class="progress-bar Completed" role="progressbar" style="width: {{data.nCompleted}}%" aria-valuenow="{{data.nCompleted}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nCompleted}}% Completed"> {{data.nCompleted}}% Completed</div>
-    <div class="progress-bar Closed Incomplete" role="progressbar" style="width: {{data.nCanceled}}%" aria-valuenow="{{data.nCompleted}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nCanceled}}% Canceled"> {{data.nCanceled}}% Canceled</div>
-    <div class="progress-bar Cancelled" role="progressbar" style="width: {{data.nIncompleted}}%" aria-valuenow="{{data.nCompleted}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nIncompleted}}% Incompleted"> {{data.nIncompleted}}% Incompleted</div>
+    <div class="progress-bar Closed Incomplete" role="progressbar" style="width: {{data.nCanceled}}%" aria-valuenow="{{data.nCanceled}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nCanceled}}% Canceled"> {{data.nCanceled}}% Canceled</div>
+    <div class="progress-bar Cancelled" role="progressbar" style="width: {{data.nIncompleted}}%" aria-valuenow="{{data.nIncompleted}}" aria-valuemin="0" aria-valuemax="101" title="{{data.nIncompleted}}% Incompleted"> {{data.nIncompleted}}% Incompleted</div>
 	</div>
   <div class="alert alert-info ng-binding ng-scope" ng-if="data.calchaschildren == 0 && data.page == 'tasker_dynamic_task_tree' ">
   	${This Task has no Subtasks}
