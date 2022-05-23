@@ -461,7 +461,6 @@
         $scope.setSearch();
 
     };
-
     // Makes Widget Async
     var title = $scope.data.title;
     if ($scope.options.use_instance_title == 'true')
@@ -474,12 +473,22 @@
     
     //jslog($scope.data.filter)
     $scope.loadingData = true;
+		// STRY0120403 if filter changed, then record count will change and we will need to update the count
+		var loadRowCount = c.data.row_count;
     $scope.server.update().then(function() {
+			
         //if ($scope.data.newButtonUnsupported)
         //jslog("Service Portal: New button not supported for sys_attachment list");
         $scope.loadingData = false;
         $scope.data.title = title;
         initRecordWatcher($scope.data.table, $scope.data.filter);
+				// STRY0120403 if filter changed, then record count will change and we will need to update the count
+				if(loadRowCount != c.data.row_count){
+					$scope.$emit("discovertasker-widget-data-table-update_count", {
+						count: c.data.row_count,
+						title: c.data.title || c.data.table_plural
+					});
+				}
     });
 
     function parseQuery(table, queryString) {
@@ -979,6 +988,9 @@ tbody tr:last-child {&#13;
 //
 // 2.8 | 2022-03-15 | raj  | STRY0117664 - Org Hierarchy Bifold- Revamp- Remove/Minimizing Header Content
 //                                      Changes in Client Controller
+// 2.8 | 2022-05-16 | raj  |  STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
+//                                      changes in client controller  - when filter changes for related list, need to raise a count update event
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1010,7 +1022,10 @@ tbody tr:last-child {&#13;
     // copy to data[name] from input[name] || option[name]
     optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
     optCopy(['platform_view', 'relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
-	
+		// STRY0120403 - breadcrumbs are passed in through input when they are set using spUtil.get
+		//               updated server and client to receive this setting from input or options
+		optCopy(['show_breadcrumbs']);
+		
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 
@@ -1217,14 +1232,14 @@ tbody tr:last-child {&#13;
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1258</sys_mod_count>
+        <sys_mod_count>1267</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-03-21 18:33:47</sys_updated_on>
+        <sys_updated_on>2022-05-18 21:39:20</sys_updated_on>
         <template><![CDATA[  <div class="panel panel-{{options.color}} b">
     <div class="panel-heading form-inline" ng-hide="options.hide_header">
       <span class="dropdown m-r-xs">
@@ -1262,7 +1277,8 @@ tbody tr:last-child {&#13;
     <!-- body -->
     <div class="panel-body">
       <h2 class="sr-only data-table-title">{{data.title || data.table_plural}} ${table} - ${page} {{data.p}}</h2>
-      <div ng-if="options.show_breadcrumbs && (data.filter || data.enable_filter)" class="filter-breadcrumbs">
+      <!-- STRY0120403 breadcrumbs were not showing when widget created from client script -->
+      <div ng-if="data.show_breadcrumbs && (data.filter || data.enable_filter)" class="filter-breadcrumbs">
 	    		<sp-widget widget="data.filterBreadcrumbs"></sp-widget>
       </div>
       <div class="alert alert-info" ng-if="!data.list.length && !data.num_pages && !data.invalid_table && !loadingData">
