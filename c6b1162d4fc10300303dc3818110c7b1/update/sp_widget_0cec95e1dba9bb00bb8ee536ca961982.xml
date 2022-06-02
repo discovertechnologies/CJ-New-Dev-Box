@@ -1,25 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope,$http, spUtil,$rootScope) {
+        <client_script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+function ($scope,$http, spUtil,$rootScope) {
 	var c = this;
+	// this is to prevent a post back in the $on when this
+	// widget pushed the broadcast notification
+	var changedByThisWidgetId = false;
 	if (!c.data.table)
 		return;
 
-	c.setfocus = function(){
-		if(c.data.isFilterSelected){
-			alert("RJ - testing - $scope.data.selectedFilterTitle: " + $scope.data.selectedFilterTitle +
-		 " - $scope.data.title: " + $scope.data.title + 
-		 " - $scope.data.isFilterSelected: " + $scope.data.isFilterSelected);	
-			
-		}
-	}
-	
-	
+	// added the update to reload as it wasn't reloading teh count
 	spUtil.recordWatch($scope, c.data.table, c.data.filter, function(){
 		// reload to get latest count
 		spUtil.update(c.data);
 	});
+	
 	// STRY0114448 - adding additional parameters
 	c.params = {
 		'table' : c.data.table,
@@ -32,12 +33,16 @@
 		'glyph' : c.options.glyph
 	};
 
+	// when the users selects this count,
+	// broadcast to the data table and other counts
 	c.selectCount = function(){
 			_broadCastFitlerChange();
 			$scope.data.filterChanged=true;
 			spUtil.update($scope);
 	}
 	
+	// when the user selects an item from the dynamic filter dropdown
+	// reload the count info and broadcast the selection
 	c.setDynamicFilter = function(filter){
 		// update the dynamic filter
 		c.data.table = filter.table;
@@ -46,33 +51,41 @@
 		c.data.o = filter.o;
 		c.data.d = filter.d;
 		c.data.count = filter.count;
-		
-		// set the parameters for the view
-		c.params.filter = filter.filter;
-		c.params.sp_page_dv = filter.view_all_page;
-		c.params.table = filter.table;
-		c.params.title = filter.filter_label;
-		c.params.d = filter.d;
-		c.params.o = filter.o;
-		c.params.field_list = filter.field_list;
-		_broadCastFitlerChange();
+		$scope.data.filterChanged=true;
+		spUtil.update($scope).then(function(){
+			// set the parameters for the view
+			c.params.filter = filter.filter;
+			c.params.sp_page_dv = filter.view_all_page;
+			c.params.table = filter.table;
+			c.params.title = filter.filter_label;
+			c.params.d = filter.d;
+			c.params.o = filter.o;
+			c.params.field_list = filter.field_list;
+			_broadCastFitlerChange();
+		});
 	}
 	
 	function _broadCastFitlerChange(){
+		// prevents post back when broadcast from this count item
+		changedByThisWidgetId = true;
 		$rootScope.$broadcast('countPanelClicked', c.params);			
 	}
+	
+	$rootScope.$on('countPanelClicked', function(e, parms) {
+		// prevents postback when this item sent broadcast
+		if(!changedByThisWidgetId){
+			c.data.selectedFilterTitle = parms.title;
+			c.data.isFilterSelected = (c.data.selectedFilterTitle==c.data.title);			
+		}
+		// reset to false after skipping local update
+		changedByThisWidgetId = false;
+	});
+	
 
 }
 ]]></client_script>
         <controller_as>c</controller_as>
-        <css>//------------------------------------------------------------------------------------------------------------------------
-// COMPANY: DISCOVER TECHNOLOGIES
-// CUSTOMIZED BY: KARINA TORRES 
-//------------------------------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------------------------------
-// 2.5.21 | 09.09.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
-//------------------------------------------------------------------------------------------------------------------------
-.dtech-filter-btn {
+        <css>.dtech-filter-btn {
   align-items: center;
   /* moved width below so ellipses is not forced into the 200px */
   height: 52px;
@@ -83,31 +96,49 @@
   padding:2px;
 } 
 
+/* this class is used to set focus.  
+It is the same style as the servicenow btn:focus 
+TODO - We may want to move into global class*/
+.dtech-btn-focus {
+  box-shadow: 0 0 0 1.5px #66afe9;
+  outline: 4px solid transparent;
+}
+
+/* sets the width for the filter text */
 .dtech-filter-width-200 {
     width: 200px;
 }
+
+/* set the border for the active button */
 .dtech-filter-btn:active  {
   border: 2px solid rgba(20, 146, 230, 1);
 } 
 
+/* set the hover boarder and background color */
 .dtech-filter-btn:hover{
   background-color: rgba(217, 237, 247, 1);
   border: 2px solid rgba(217, 237, 247, 1);
 } 
 
+/* sets border for disabled button*/
 .dtech-filter-btn:disabled {
   border: 2px solid rgba(20, 146, 230, 1);
 } 
 
+/* font to make the count number bolder and align left */
 .dtech-font-count {
   color: rgba(0, 0, 0, 1);
   font-size: 16px;
   font-weight: 600;
   text-align: left;
 } 
+
+/* sets disabled count */
 .dtech-font-count:disabled {
   color: rgba(175, 188, 194, 1);
 } 
+
+/* sets the font for the text of the count */
 .dtech-font-description {
   color: rgba(117, 117, 117, 1);
   font-size: 14px;
@@ -126,12 +157,16 @@
   /* 2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Added padding */
   padding: 10px 20px;
 }
+
 /* Bootstrap 3.3.6 default: .dropdown-menu &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; a:focus { */
+/* this overrides the defaults for dropdown items for the filter menu*/
 .dropdown-menu &gt; li &gt; ul &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; ul &gt; li &gt; a:focus {
   text-decoration: none;
   color: #2f3342;
   background-color: #f5f5f5;
 }
+
+/* this sets the color for the count badge for filter items*/
 .badge {
   background-color: $banner-count-bg;
   color: $banner-count-text;
@@ -154,17 +189,10 @@
   that follows the same percentage scheme: 0% represents absolute transparency and 100% represents absolute opacity 
   */
   box-shadow: 0 6px 12px rgba(0, 0, 0, .25); /* yields: box-shadow: 0 6px 12px rgb(0 0 0 / 25%); */
-  /* if not using left: auto */
-  /* left: -400px; */
+  right: 45px; /* aligns with right side of the count control*/
   left: auto; /* allows width to grow as needed */
+  
 
-  /* if not using .dtech-scrollable-menu */
-  /* right: 29px; */
-  right: 45px;
-  /* 2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Changed top, was -250 */
-/*  removed b/c list shortened and it moved closer to the top
-  top: -300px;
-*/
 }
 
 .dtech-margin-right-5px {
@@ -195,42 +223,7 @@
   color: #3A3F51;
   font-size: 14px;
   font-weight: normal;
-}
-
-/*
-.count {
-	margin-top: 0px;
-}
-
-div {
-	cursor: pointer;
-}
-
-.count.primary,
-.text-primary {
-	color: $brand-primary-text;
-}
-
-.count.info,
-.text-info {
-	color: $brand-info-text;
-}
-
-.count.sucess,
-.text-sucess {
-	color: $brand-success-text;
-}
-
-.count.warning,
-.text-warning {
-	color: $brand-warning-text;
-}
-
-.count.danger,
-.text-danger {
-	color: $brand-danger-text;
-}
-*/</css>
+}</css>
         <data_table>sp_instance_table</data_table>
         <demo_data>{
   "data": {
@@ -255,6 +248,10 @@ div {
         <public>false</public>
         <roles>x_153465_discovert.tasker_user</roles>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 //------------------------------------------------------------------------------------------------------------------------
 // WIDGET BASE: COUNT
@@ -271,28 +268,38 @@ div {
 	main();
 	
 	function main(){
-		var filterParams;
 		var page_filter;
 		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('tasker_count');
 		
 		if(input){
 			// if the filter changed, save it back
 			if(input.filterChanged){
-				taskWidgetIconsAndMessage.savePreferenceUserDefaultMainFilter(input.title);
+				taskWidgetIconsAndMessage.savePreferenceUserDefaultMainFilter(input.page_filter, input.title);
 			}
 		}
 		
+		// this is used to load the the dynamic fitler text
+		// when the default filters is in the dropdown list
+		data.filterInDynamicList = false;
 		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 
 		// load filter page
-		data.page_filter = _getFilterPage(data.settings.userDefaultLandingPage);
+		data.page_filter = data.settings.userDefaultLandingPage;
 		
 		// load currently selected fitler
-		data.selectedFilterTitle = _getSelectedFitlerTitle(data.settings.userDefaultMainFilter);
+		data.selectedFilterTitle = data.settings.userDefaultMainFilter;
 
+		// this function loads the drop down list based on the page
+		// it also determines if the selected fitler is in the current
+		/// dropdown so the count can be loaded
+		_loadDynamicFilter(data.selectedFilterTitle);
 		
-		_loadCountFilter(data.page_filter);
-		// data.title is set in the load count fitler function. don't move this line before that function
+		// loads the count filter for this count item
+		_loadCountFilter(data.page_filter, data.selectedFilterTitle);
+		// isFilterSelected is true when this item is currently loaded
+		// in the data table list
+		// data.title is set in the load count fitler function. 
+		// don't move this line before that function
 		data.isFilterSelected = data.selectedFilterTitle==data.title || undefined;
 
 		if (!data.table)
@@ -303,49 +310,31 @@ div {
 			data.iconName = _getIcon(options.icon);
 		}
 		
-		// load the count for hte filter
+		// load the count for this item based on filter 
 		data.count = _getDataCount();
-		
-		_loadDynamicFilter();
 
 	}
-	// load the filter page or set the default
-	function _getFilterPage(landingPage){
-		var page_filter;
-		page_filter = $sp.getParameter('page_filter') || '';
-		if(page_filter == ''){
-			// NOTE: look up for the user
-			if(landingPage){
-				page_filter =  landingPage;
-			} else {
-				// if user hasn't set then set default to task
-				page_filter = 'my_task_home_page';
+
+	// load the fitler based on the page
+	function _loadCountFilter(page_filter, selected_Filter){
+		var filterParams;
+		if(data.is_dynamic_filter && 
+			 data.filterInDynamicList &&
+			 selected_Filter){
+			filterParams = _loadFilterParams(selected_Filter);
+		}
+		// this if statement will be true when
+		// the fitler is not the dynamic filter and no fitler was saved
+		if(filterParams == undefined){
+			if(page_filter == 'my_task_home_page' && 
+				 options.tasker_filter_my_task_filter +'' != ''){
+				filterParams = _loadFilterParams(options.tasker_filter_my_task_filter)
+			} else if(page_filter == 'my_ous_tasks_home_page' &&
+								options.my_ous_tasks_home_page + '' != ''){
+				filterParams = _loadFilterParams(options.tasker_filter_my_ou_s_task_filter);
 			}
 		}
-		return page_filter;
-	}
-
-	// load currently selected filter
-	function _getSelectedFitlerTitle(mainFilter){
-		var defaultMainFilter;
-		if(mainFilter){
-			defaultMainFilter = mainFilter;
-		} else {
-			// set to ootb default filter
-			defaultMainFilter = "My Active Tasks";
-		}
-		return defaultMainFilter;
-	}
-	
-	// load the fitler based on the page
-	function _loadCountFilter(page_filter){
-		if(page_filter == 'my_task_home_page' &&
-			 options.tasker_filter_my_task_filter +'' != ''){
-			filterParams = _loadFilterParams(options.tasker_filter_my_task_filter)
-		} else if(page_filter == 'my_ous_tasks_home_page' && 
-							options.my_ous_tasks_home_page + '' != ''){
-			filterParams = _loadFilterParams(options.tasker_filter_my_ou_s_task_filter);
-		}
+		
 		// pull from the hard coded values
 		if(filterParams){
 			data.table = filterParams.table;
@@ -395,9 +384,9 @@ div {
 		}
 		return count;
 	}
-
-		function _loadDynamicFilter(){
-			data.is_dynamic_filter = false;
+	
+	function _loadDynamicFilter(selected_Filter){
+		data.is_dynamic_filter = false;
 		if(options.is_dynamic_filter == true || options.is_dynamic_filter == "true"){
 			data.is_dynamic_filter = true;
 			data.ellipsesIcon = _loadEllipsesFilterIcon();
@@ -408,13 +397,13 @@ div {
 			var OUsWhereIamAMember = tsss.getOUsWhereIamAMember();
 			// DFCT0010732
 			var OUsWhereIamAMemberAdmin = tsss.getMyOUMemberAdmins();
-			
+
 			// STRY0113382 - reorganized and moved the loading of filters up so we could set the default to the user if one existed
 			// DFCT0010732
-			data.filters = _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, data.page_filter);
+			data.filters = _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, data.page_filter, selected_Filter);
 
 		}			
-		}
+	}
 	
 	function _getFilterMenuHeaderPosition(taskerFilters, menuHeader) {
 		var position = -1;
@@ -446,7 +435,7 @@ div {
 		return iconName;
 	}
 	
-	function _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, pageFilter) {
+	function _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, pageFilter, selected_Filter) {
 		taskerFilters = [];
 		// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 		// Get an array filled with the Filter Menu Headers to use in the Filter More options
@@ -528,10 +517,13 @@ div {
 			if (position > -1) {
 				taskerFilters[position].subMenus.push(filter);
 			}
+			
+			// set flag that the selected filter is in the curent dynamic filter
+			if(filter.filter_label == selected_Filter){
+				data.filterInDynamicList = true;
+			}
 		}
 		// get task count for filter menu
-// TODO, may want this not to be coming from global
-		data.filtersFlag = false;
 		// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 		// Use forEach to get the counts
 		taskerFilters.forEach(function(menuItem) {
@@ -543,13 +535,6 @@ div {
 				if (count.next()) {
 					subMenu.count = count.getAggregate('COUNT');
 				}
-
-				// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
-				// no data goes into the span and nothing is shown therefore removing
-				if (subMenu.count > 0) {
-// TODO, may want this not to be coming from global
-					data.filtersFlag = true;
-				}
 			});
 		});
 		return taskerFilters;
@@ -560,24 +545,19 @@ div {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-05-21 02:58:10</sys_created_on>
         <sys_id>0cec95e1dba9bb00bb8ee536ca961982</sys_id>
-        <sys_mod_count>286</sys_mod_count>
+        <sys_mod_count>333</sys_mod_count>
         <sys_name>Tasker Count</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0cec95e1dba9bb00bb8ee536ca961982</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-05-25 23:30:54</sys_updated_on>
-        <template><![CDATA[<!--    
-ng-class="{autofocus: data.isFilterSelected}"
-autofocus="{data.isFilterSelected}"  -->
-<button class="dtech-filter-btn btn"
-        ng-init="alert();"
+        <sys_updated_on>2022-06-01 17:32:23</sys_updated_on>
+        <template><![CDATA[<button class="dtech-filter-btn btn"
+        ng-class="{'dtech-btn-focus': c.data.isFilterSelected==true}"
         ng-click="c.selectCount()"
         >
-  
-  <div class="flex-row flex-nowrap"
-       >
+  <div class="flex-row flex-nowrap" >
     <div class="flex-row dtech-filter-width-200">
       <div >
         <span ng-if="c.options.icon" >
@@ -595,20 +575,22 @@ autofocus="{data.isFilterSelected}"  -->
         <div class="dtech-font-description">{{c.data.title}}</div>
       </div>      
     </div>
-    <div ng-if="data.is_dynamic_filter" class="dropdown dtech-filter-ellipses">
+    <div ng-if="data.is_dynamic_filter" class="ng-scope dropdown label-tab dtech-filter-ellipses">
       <div ng-if="data.is_dynamic_filter"
            class="dropdown-toggle dtech-border-none" 
            type="button" id="dropdownMenu1"
            data-toggle="dropdown" 
            aria-haspopup="true"
-           aria-expanded="true">
+           aria-expanded="false">
         <img class="dtech-pad-all-10"
              src="{{::data.ellipsesIcon.src}}" 
              title="{{::data.ellipsesIcon.title}}" 
              alt="{{::data.ellipsesIcon.title}}" 
              />
-      </div>
+       </div>
       <ul ng-if="data.is_dynamic_filter"
+          role="menu"
+          id="filterMenu"
           class="dropdown-menu dtech-dropdown-menu-align-right dtech-scrollable-menu dtech-filter-dtech-border-none">
         <li ng-repeat="menuItem in data.filters"
             class="dropdown-header dtech-dropdown-header"            
@@ -618,9 +600,11 @@ autofocus="{data.isFilterSelected}"  -->
               ng-if="menuItem.subMenus" 
               aria-labelledby="dropdownMenu1">
             <li class="dtech-subMenu" 
+                role="presentation"
                 ng-repeat="filter in menuItem.subMenus" 
                 ng-click="c.setDynamicFilter(filter)">
               <a class="dtech-box dtech-subMenu-item" 
+                 role="menuitem" aria-haspopup="true" aria-expanded="false"
                  href="javascript:void(0)">{{filter.filter_label}}
                 <div class="dtech-flex-space-15px"></div>
                 <span ng-if="filter.count > 0" 
@@ -632,6 +616,7 @@ autofocus="{data.isFilterSelected}"  -->
       </ul>
     </div>
   </div>
-</button>]]></template>
+</button>
+]]></template>
     </sp_widget>
 </record_update>
