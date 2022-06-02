@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8    | 2022-02-13 - raj -  STRY0117523 - Org Hierarchy- Office Schedule Override- Add System Settings to turn on/off feature&#13;
+        <description>2.8    | 2022-06-02- bt - STRY0121937 - (Technical) New Function to return OU(s) where "I am a Task Manager and all descendants" and "I am a Task Manager and direct sub-offices"&#13;
+2.8    | 2022-02-13 - raj -  STRY0117523 - Org Hierarchy- Office Schedule Override- Add System Settings to turn on/off feature&#13;
 2.8    | 2022-02-11 | raj |  STRY0116257 - Simple Task Form- System Setting- Options for setting default for Task Page and Task Form view&#13;
 2.7.3 | 2022-04-21 | raj | DFCT0010835 - Creating an "OU Template" with a "Restricted Group" causes the "Assignment" field filters to be incorrect&#13;
 2.7.3 | 2022-04-21 | raj | DFCT0010826 - "Acceptance Overdue" Banner is NOT displayed to "Task Manager" or "Assigned Member" of task&#13;
@@ -572,6 +573,30 @@ tasking_System_Settings_Scripts.prototype = {
 		return offices;  
 	},
 	
+  	// returns a list of OUs where the logged-in user is a task manager plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
+	getTaskManagerOUsAndDescendents: function(user, level) {
+		var offices = [];
+		var officesAndDescendents = [];
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grOUs.addQuery('office_task_authority', 'true');
+		grOUs.addQuery('office_member', user);
+		grOUs.query();
+		while(grOUs.next()){
+			var OU = grOUs.getValue('discover_office_hierarchy');
+			offices.push(OU);
+			officesAndDescendents.push(OU);
+		}
+		for (i=0; i<offices.length; i++) {
+			// Get Descendents and add them to the siblings for each OU where I am a task Manager
+			officesAndDescendents = this.getDescendents(offices[i], officesAndDescendents, level);
+		}
+		if (officesAndDescendents.length > 0){
+			var au = new global.ArrayUtil();
+			officesAndDescendents = au.unique(officesAndDescendents);
+		}
+		return officesAndDescendents;  
+	},
+  
 	getAllRelatvieOUs: function(userOffices){
 		// userOffices is an array of sys_id strings
 		var offices = [];
@@ -604,13 +629,16 @@ tasking_System_Settings_Scripts.prototype = {
 		return offices;
 	},
 	
-	getDescendents: function(ou, offices){
+	//returns OUs downstream from the specified OU
+	getDescendents: function(ou, offices, level){
 		var grDescendents = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
 		grDescendents.addQuery('parent', ou);
 		grDescendents.query();
 		while(grDescendents.next()){
 			offices.push(grDescendents.getValue('sys_id'));
-			offices = this.getDescendents(grDescendents.getValue('sys_id'), offices);
+          //STRY0121937 - if the calling function only wants one level it will pass level 1 otherwise all levels will be returned
+			if (level != 1)
+				offices = this.getDescendents(grDescendents.getValue('sys_id'), offices);
 		}
 		return offices;
 	},
@@ -640,13 +668,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>210</sys_mod_count>
+        <sys_mod_count>212</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-22 15:54:45</sys_updated_on>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2022-06-02 18:03:24</sys_updated_on>
     </sys_script_include>
 </record_update>
