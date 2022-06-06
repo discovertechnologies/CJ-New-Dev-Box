@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2022-05-06 | mmcc | STRY0115297 - New Task Form- Allow users to start Tasks as Draft&#13;
+        <description>2.8     | 2022-06-03 | raj     | STRY0122187 - (REQs Improvement Story) OU Reassignment– Email Notification [N-20]&#13;
+2.7.3 | 2022-06-02 | raj     | STRY0122888 - Closing Tasks will DELETE ALL Draft Descendants&#13;
+2.8 | 2022-05-06 | mmcc | STRY0115297 - New Task Form- Allow users to start Tasks as Draft&#13;
 Added function uiAction_CreateDraftTask&#13;
 2.7.3 | 2022-05-12 | raj | DFCT0010918 - Email Notification is NOT working: "Extension Request Approved"&#13;
 2.7.3 | 2022-05-12 | raj | DFCT0010919 - Email Notification NOT working: Tasks Extension Request Rejected&#13;
@@ -186,6 +188,12 @@ Task_uiAction.prototype = {
 			}
 
 			while (grSubTasks.next()){
+				// STRY0122888 - if sub task is in draft state, delete instead of closing incomplete
+				if(grSubTasks.state == -6){
+					grSubTasks.deleteRecord();
+					continue;
+				}
+				
 				// STRY0076599
 				grSubTasks.state = stateToSetSubtasks;
 				grSubTasks.active = 'false';
@@ -923,6 +931,16 @@ Task_uiAction.prototype = {
                 bDateOk = false;
             }
         }
+		// STRY0122589 
+		var isActiveUnderDraft = false;
+		if(task.getValue('parent') != null){
+			var grParent = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			if(grParent.get(task.getValue('parent'))){
+				if(grParent.state == -6){
+					gs.addInfoMessage(gs.getMessage("An active task can't be created under a task in Draft State.  The Task was saved as a Draft Task"));
+				}
+			}
+		}		
         if (bDateOk) {
             task.insert();
             // Redirect
@@ -1132,6 +1150,8 @@ Task_uiAction.prototype = {
     },
 
     uiAction_RejectTaskForPrimaryAssignee: function(task) {
+		// STRY0122187
+		var previous_primaryAssignee = task.getDisplayValue("primary_assignee");
         if (task.comments.nil()) {
             gs.addErrorMessage(gs.getMessage('Comments are required when rejecting a Task'));
         } else {
@@ -1139,9 +1159,8 @@ Task_uiAction.prototype = {
             task.work_notes = gs.getMessage('Tasker - Comments for the Primary Assignee Task Rejection has been added by') + gs.getUserDisplayName();
             task.primary_assignee = "";
             task.update();
-
 			// DFCT0010924
-			gs.eventQueue('x_153465_discovert.NotifyOUAssignmentRej', task);
+			gs.eventQueue('x_153465_discovert.NotifyOUAssignmentRej', task, previous_primaryAssignee);
 
 			
             gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been rejected'));
@@ -1419,13 +1438,13 @@ Task_uiAction.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>245</sys_mod_count>
+        <sys_mod_count>250</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-05-13 20:25:12</sys_updated_on>
+        <sys_updated_on>2022-06-03 22:51:50</sys_updated_on>
     </sys_script_include>
 </record_update>
