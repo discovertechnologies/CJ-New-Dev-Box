@@ -7,6 +7,7 @@
         <client_callable>false</client_callable>
         <description>Includes Task related server scripts:&#13;
 2.8&#13;
+2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'&#13;
 2.8 | 2022-06-06 | raj         | STRY0122878 - Update "Wait State" to NOT wait for Drafts&#13;
 2.8 | 2022-06-05 | raj         | STRY0122215 - Banner Notification- New Filter in called "My Tasks with Subtasks Completed"&#13;
 2.8 | 2022-06-02 | raj         | STRY0122589 - New Subtask Form- Allow "Draft Subtasks" under Active Tasks&#13;
@@ -57,6 +58,26 @@ TaskerHelpers.prototype = {
 		this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
 	},
 	
+	// STRY0122882 
+	getDraftDescendantsCount: function (taskSysId) {
+		var countDescendants = '0';
+        var filter_ancestors = 'u_all_ancestors_tasksLIKE' + taskSysId;
+        var gaSubTasks = new GlideAggregate(this.tableRouteTaskInstance);
+
+        gaSubTasks.addEncodedQuery(filter_ancestors);
+		gaSubTasks.addQuery('sys_id', '!=', taskSysId);
+		gaSubTasks.addQuery('state', '-6'); // -6 = Draft
+        gaSubTasks.addAggregate('COUNT');
+        gaSubTasks.query();
+
+        if (gaSubTasks.next()) {
+            // Need to subtract 1 since this task is also in the list of ancestors
+            countDescendants = gaSubTasks.getAggregate('COUNT');
+        }
+		
+		// returns a string
+		return countDescendants;
+    },
 	// 2.7.0 | 2021-10-8 | mmcc | STRY0109110 - Draft Scheduled Tasks – UI – Delete Modal- Add Descendant tasks count
 	getDescendantsCount: function (params) {
 
@@ -88,6 +109,63 @@ TaskerHelpers.prototype = {
 		// returns a string
 		return countDescendants;
     },
+	
+	// STRY0122882 
+	getTaskToPublish: function(gr_task){
+		var taskToPublish = "";
+		var userCanPublish = new uiConditionCheck().canPublishDraftTask(gr_task);
+		if(!userCanPublish){
+			// find the task that can be published and provide link to page
+			taskToPublish = this._getDraftAncestor(gr_task);
+			// we know this task can't be pubhlished and we didn't find an ancestor in draft state at the top
+			// so, it cannot be publshed b/c of a previous task order, find a task in the earliest task order
+			if(!taskToPublish ||
+				taskToPublish == "" ||
+				taskToPublish == gr_task.getUniqueValue()){
+				taskToPublish = this._getDraftInPreviousTaskOrder(gr_task.parent, gr_task.task_order);
+			}
+		}		
+		return taskToPublish;
+	},
+	
+	// STRY0122882 - is the parent in a draft state
+	_getDraftAncestor: function(gr_task){
+		var ancestor_id;
+		// came into this function b/c the task is in draft state
+		// if no parent, then return this task as it is the top task
+		if(!gr_task.parent){
+			// return this task, it is the top draft task
+			ancestor_id = gr_task.getUniqueValue();
+		} else {
+			// go up to the parent
+			var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grParentTask.get(gr_task.parent)){
+				if(grParentTask.state == -6){
+					// parent is in draft state, call this function again to go up to the parent
+					ancestor_id = this._getDraftAncestor(grParentTask);
+				} else {
+					// parent task is not in draft, so this task is the highest draft task as we came into this function b/c this task is in draft
+					ancestor_id = gr_task.getUniqueValue();
+				}
+			}
+		}
+		return ancestor_id;
+	},
+	
+	// STRY0122882 - gets a the draft task in the lowest task order 
+	_getDraftInPreviousTaskOrder: function(parent_id, taskOrder){
+		var draftTaskInPreviousOrder;
+		var gr_draftTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+		gr_draftTasks.addQuery("parent", parent_id);
+		gr_draftTasks.addQuery("state", -6);
+		gr_draftTasks.addQuery("task_order", "<", taskOrder);
+		gr_draftTasks.orderBy("task_order");
+		gr_draftTasks.query();
+		if(gr_draftTasks.next()){
+			draftTaskInPreviousOrder = gr_draftTasks.getUniqueValue();
+		}
+		return draftTaskInPreviousOrder;
+	},
 	
 	// 2.5.3 - STRY0085438 
 	updateTaskPermission: function(current)
@@ -818,7 +896,11 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
 			return countActive;
 		},
 	
+		// RAJ - found this while working another story and noticed this would not work.
+		//       this function doesn't appear to be used as where it was called (in an ACL) it is commented out
+		//       but fixed any way in case used later
 		hasActiveTaskInOu: function(userId, ouId) {
+			var activeTasksInOU = false;
 			//lookup Task for assigned user in subject ou with active flag
 			var records = new GlideAggregate("x_153465_discovert_route_task_instance");
 			records.addQuery("assigned_to", userId);
@@ -826,7 +908,10 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
 			records.addQuery("active", true);
 			records.addAggregate("COUNT");
 			records.query();
-			return records.getAggregate("COUNT") > 0;
+			if(records.next()){
+				activeTasksInOU = records.getAggregate("COUNT") > 0;
+			}
+			return activeTasksInOU;
 		},
 		
 		type: 'TaskerHelpers'
@@ -835,13 +920,13 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
-        <sys_mod_count>273</sys_mod_count>
+        <sys_mod_count>277</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-07 12:54:38</sys_updated_on>
+        <sys_updated_on>2022-06-09 01:31:55</sys_updated_on>
     </sys_script_include>
 </record_update>

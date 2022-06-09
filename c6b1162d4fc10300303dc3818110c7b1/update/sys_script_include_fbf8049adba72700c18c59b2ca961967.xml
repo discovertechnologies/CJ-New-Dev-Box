@@ -7,6 +7,7 @@
         <client_callable>false</client_callable>
         <description>Collection of functions often used in a UI Action within the field Condition, returning a boolean which decides to run the action's script or not. &#13;
 These functions may also be called in Script Includes, Access Controls and Business Rules.&#13;
+2.8 | 2022-06-08 | raj        | STRY0122767 - Draft Task- Update "Publish Task(s)" buttons locations; Update Messaging for "Where to Publish Task(s)"&#13;
 2.8 | 2022-06-02 | raj        | STRY0123180 - Task Form- Task Owner or Task Originator able to "Run Template" for 'Draft Tasks'&#13;
 2.8 | 2022-05-19 | mmcc | STRY0122553 - Task Tree Management- Allow users to Run Template for Draft Tasks&#13;
 2.8 | 2022-05-19 | raj  | STRY0117108 - Task Tree Management- Allow users to "Run Template" for "Waiting Tasks"&#13;
@@ -270,18 +271,26 @@ uiConditionCheck.prototype = {
 		return answer;
 	},
 	
-	// STRY0105845 
-	canPublihsDraftTask: function(gr){
+	// STRY0122767 
+	canPublishDraftTask: function(gr_task){
 		var answer = false;
-		var isActive = gr.active;
+		var isActive = gr_task.active;
 		var currentUser = gs.getUserID();
-		var canRead = gr.canRead();
-		var inDraft = (gr.state == -6);
-		var isUserTaskOriginator = (gr.originator == currentUser);
-		var isTopTask = (!gr.parent);
-		
-		var inStateAllowedCurrentUser = (isTopTask && isUserTaskOriginator && inDraft);
-		
+		var canRead = gr_task.canRead();
+		var inDraft = (gr_task.state == -6);
+		var isUserTaskOriginator = (gr_task.originator == currentUser);
+		var isTopTask = (!gr_task.parent);
+		var parentInDraft = false;
+		var draftInPreviousTaskOrder = false;
+		var parent_id = gr_task.getValue("parent");
+		if(!isTopTask){
+			// check to see if parent is in draft state
+			parentInDraft = this._isParentDraft(parent_id);
+			// counts tasks in previous order and returns false if zero
+			draftInPreviousTaskOrder = this._isDraftInPreviousTaskOrder(parent_id, gr_task.task_order);
+		}
+		var canTaskBePublished = (inDraft && (isTopTask || (!parentInDraft && !draftInPreviousTaskOrder)));
+		var inStateAllowedCurrentUser = (canTaskBePublished && isUserTaskOriginator);
 		
 		if(canRead && isActive && inStateAllowedCurrentUser){
 			answer = true;
@@ -290,7 +299,33 @@ uiConditionCheck.prototype = {
 		}
 		return answer;
 	},
-
+	
+	// STRY0122767 - is the parent in a draft state
+	_isParentDraft: function(parent_id){
+		var parentIsDraft = false;
+		var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(grParentTask.get(parent_id)){
+			parentIsDraft = (grParentTask.state == -6);
+		}
+		return parentIsDraft;
+	},
+	
+	// STRY0122767 - counts tasks in previous order and returns false if zero
+	_isDraftInPreviousTaskOrder: function(parent_id, taskOrder){
+		var draftTaskInPreviousOrder = false;
+		var ga_draftTasks = new GlideAggregate('x_153465_discovert_route_task_instance');
+		ga_draftTasks.addQuery("parent", parent_id);
+		ga_draftTasks.addQuery("state", -6);
+		ga_draftTasks.addQuery("task_order", "<", taskOrder);
+		ga_draftTasks.addAggregate("COUNT");
+		ga_draftTasks.query();
+		if(ga_draftTasks.next()){
+			var countDraftInPreviousOrder = ga_draftTasks.getAggregate("COUNT");
+			draftTaskInPreviousOrder = countDraftInPreviousOrder > 0;
+		}
+		return draftTaskInPreviousOrder;
+	},
+	
 	// STRY0100724 likely this update fixes an issue where start Template on the client was not limiting enough.  
 	// It only looked to see if a user had the rights to run
 	// It would have been difficult to open a template instance as you would come from a place where you would have already chosen a template 
@@ -1853,13 +1888,13 @@ uiConditionCheck.prototype = {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>533</sys_mod_count>
+        <sys_mod_count>546</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-03 02:55:26</sys_updated_on>
+        <sys_updated_on>2022-06-09 01:55:00</sys_updated_on>
     </sys_script_include>
 </record_update>

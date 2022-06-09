@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[initPage();
+
+// Use this function to initialize variables at page load
+function initPage() {
+	// set a default radio button as selected
+	gel('taskOnly').checked = true;
+}
+
+// dialog_button id="cancel" was clicked, user does not want to reopen the task
+function onCancel() {
+	// below will auto close popup
+	GlideDialogWindow.get().destroy();
+	return false;
+}
+
+// dialog_button id="submit" was clicked, user confirms wanting to reopen the task
+function onSubmit() {
+	
+	return true;
+}
+]]></client_script>
+        <description>New UI Page to prompt from Platform about publisighn draft tasks&#13;
+&#13;
+2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'</description>
+        <direct>false</direct>
+        <endpoint>x_153465_discovert_publiish_draft_task_prompt.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+
+	<!-- Import a style sheet that the customer can edit -->
+	<!-- Tasker Theme Stytle Sheet use GlideRecord tablename: sp.css  is not accessible-->
+	<!-- Content Management > Design > Style Sheets use GlideRecord tablename: content.css -->
+	<g:evaluate object="true">
+		<!-- can have multiple stylesheets -->
+		var styleSheets = [];
+
+		styleSheets.push("tasker-modal-prompt-UIPages.css");
+
+		var linkTags = [];
+		for (var sheet in styleSheets) {
+		var css = new GlideRecord("content_css");
+		css.addQuery("name", styleSheets[sheet]);
+		css.query();
+		css.next();
+		linkTags.push(css.sys_id+".cssdbx?ver="+css.sys_updated_on);
+		}
+	</g:evaluate>
+	<j:forEach var="jvar_link" items="${linkTags}">
+		<link href="${jvar_link}" rel="stylesheet" type="text/css"></link>
+	</j:forEach>
+
+	<!-- Cache static messages -->
+	<g:messages>
+		Tasker - Please choose to publish only the top task or all of its subtasks as well
+		Tasker - Button - Confirm
+		Tasker - This Task Only
+		Tasker - This Task and all {0} Subtasks
+	</g:messages>
+
+	<g:ui_form>
+		<!-- pass variables from the Client Script (where spModal.open is or new GlideModal is) -->
+		<j:set var="jvar_taskSysId" value="${sysparm_taskSysId}"/>
+
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
+
+		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_messageOpenTasksCount" jelly="true">
+			var messageOpenTasksCount = '';
+			var descendantsCount = 0;
+
+			var taskerHelpers = new TaskerHelpers();
+			descendantsCount = taskerHelpers.getDraftDescendantsCount(jelly.jvar_taskSysId);
+			
+			messDescendantsCount = gs.getMessage('Tasker - This Task and all {0} Subtasks', [descendantsCount]);
+		</g:evaluate>
+
+		<div class="dtech-modal-widget-body">
+
+			<div class="dtech-text-center dtech-standard-text-color">
+				<span id="msgBody1">
+					${gs.getMessage('Tasker - Please choose to publish only the top task or all of its subtasks as well')}
+				</span>
+			</div>
+			<br></br>
+
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="publishType" id="taskOnly" 
+							   aria-label="${gs.getMessage('Tasker - This Task Only')}" value="taskOnly"></input>
+						<label id="msgBody2TaskOnly" for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task Only')}</label>
+					</div>
+				</div>
+
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="publishType" id="allSubtasks" 
+							   aria-label="${gs.getMessage('Tasker - This Task and all subtasks')}" value="allSubtasks"></input>
+						<label id="msgBody2AllSubtasks" for="allSubtasks" 
+							   class="dtech-standard-text-color dtech-radio-inline">${jvar_messageOpenTasksCount}
+						</label>
+					</div>
+				</div>
+			</div>
+			<br></br>
+
+		</div>
+		<div id="footer" class="dtech-modal-widget-footer dtech-box">
+			<g:dialog_button 
+							 id="cancel"
+							 title="${gs.getMessage('cancel')}"
+							 type="button"
+							 style_class="btn btn-default dtech-max-width-fit-content"
+							 onclick="return onCancel();"
+							 >${gs.getMessage('cancel')}
+			</g:dialog_button>
+			<g:dialog_button 
+							 id="submit"
+							 title="${gs.getMessage('Tasker - Button - Confirm')}"
+							 type="submit"
+							 style_class="btn btn-primary dtech-max-width-fit-content dtech-push-right "
+							 onclick="onSubmit();"
+							 >${gs.getMessage('Tasker - Button - Confirm')}
+			</g:dialog_button>
+		</div>
+
+	</g:ui_form>
+</j:jelly>]]></html>
+        <name>publiish_draft_task_prompt</name>
+        <processing_script><![CDATA[reopenTasks();
+
+function reopenTasks() {
+    var grSelectedTask = new GlideRecord("x_153465_discovert_route_task_instance");
+    grSelectedTask.addQuery('sys_id', sysid); //comes from hidden input tag name attribute
+    grSelectedTask.query();
+    if (grSelectedTask.next()) {
+        // Calls a Server function
+        new Task_uiAction().uiAction_PublishDraftTasks(grSelectedTask, publishType); //comes from radio input tag name attribute
+    }
+	
+	response.sendRedirect("/x_153465_discovert_route_task_instance.do?sys_id=" + sysid);
+}]]></processing_script>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-06-08 18:59:31</sys_created_on>
+        <sys_id>4804b5d4db441d901e1792c5d49619e8</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>publiish_draft_task_prompt</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_page_4804b5d4db441d901e1792c5d49619e8</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-06-08 19:15:43</sys_updated_on>
+    </sys_ui_page>
+</record_update>
