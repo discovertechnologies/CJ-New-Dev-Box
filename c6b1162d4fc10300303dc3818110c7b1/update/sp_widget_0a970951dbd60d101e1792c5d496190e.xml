@@ -1334,7 +1334,8 @@ Have modal fit the viewport height with its own scrollbar start
 	var arrRelatedLists= options.relatedLists_to_include;
 	data.hideActivity = options.hideActivity;
 	data.hideDocuments = options.hideDocuments;
-
+	data.hideRelatedLists = options.hideRelatedLists;
+	
 	// STRY0120403
 	var filterDesc = '';
 	var showDesc = false;
@@ -1342,26 +1343,26 @@ Have modal fit the viewport height with its own scrollbar start
 		showDesc = true;
 			filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.sys_id;
 	}
-	var rlParams =	{
-		arrRelatedLists: arrRelatedLists, 
-		f_related_lists: data.f._related_lists,
-		rec: rec, 
-		filterDesc: filterDesc,
-		table: data.table,
-		canCreateSubTask: data.canCreateSubTask, 
-		emailEnabled: data.emailEnabled,
-		hideDocuments: data.hideDocuments,
-		page_id: data.page_id,
-		view: data.view, 
-		isModal: data.isModal,
-		sharedAttachSys_ID: data.sharedAttachSys_ID,
-		attachmentSharedFolderON: data.AttachmentSharedFolderON, 
-		myAttachSys_ID: myAttachSys_ID,
-		attachmentsON: data.SNAttachmentsON
-	};	
-// TODO - NEED TO NOT LOAD RELATED LISTS IF HIDERELATEDLIST IS TRUE		
-	data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
-
+	if(!data.hideRelatedLists){
+		var rlParams =	{
+			arrRelatedLists: arrRelatedLists, 
+			f_related_lists: data.f._related_lists,
+			rec: rec, 
+			filterDesc: filterDesc,
+			table: data.table,
+			canCreateSubTask: data.canCreateSubTask, 
+			emailEnabled: data.emailEnabled,
+			hideDocuments: data.hideDocuments,
+			page_id: data.page_id,
+			view: data.view, 
+			isModal: data.isModal,
+			sharedAttachSys_ID: data.sharedAttachSys_ID,
+			attachmentSharedFolderON: data.AttachmentSharedFolderON, 
+			myAttachSys_ID: myAttachSys_ID,
+			attachmentsON: data.SNAttachmentsON
+		};	
+		data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
+	}
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
 		var page = new GlideRecord('sp_page');
@@ -1397,41 +1398,6 @@ Have modal fit the viewport height with its own scrollbar start
 
 	// STRY0119587 - only load if activity requested
 	if(!data.hideActivity){
-		data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
-			table: data.table,
-			sys_id: data.sys_id,
-			includeExtended: true,
-			title: "${Activity}",
-			use_dynamic_placeholder: true,
-			btnLabel: "${Post}"
-		});
-
-		// Activity formatter is hardcoded to set specific options
-		for (var f in data.f._formatters) {
-			var fm = data.f._formatters[f];
-			if (fm.formatter == "activity.xml") {
-				fm.hardcoded = true;
-				fm.widgetInstance = $sp.getWidget('widget-ticket-conversation', {
-					table: data.table,
-					sys_id: data.sys_id,
-					includeExtended: true,
-					title: 'Audit/Notes', //"${Activity}",
-					use_dynamic_placeholder: true,
-					btnLabel: "${Post}"
-				});
-			} else if (fm.formatter == "com_glideapp_servicecatalog_veditor" || fm.formatter == "com_glideapp_questionset_default_question_editor") {
-				var qsConfig = $sp.getValue('quick_start_config');
-				if (qsConfig)
-					qsConfig = JSON.parse(qsConfig)[0];
-				fm.widgetInstance = $sp.getWidget(fm.widget, {
-					table: data.table,
-					sys_id: data.sys_id,
-					readonly_variable_editor: qsConfig ? qsConfig.readonly_variable_editor : 'false'
-				});
-			} else
-				fm.widgetInstance = $sp.getWidget(fm.widget, data);
-		}
-		
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Activity Log
     //------------------------------------------------------------------------------------------------------------------------
@@ -1441,13 +1407,12 @@ Have modal fit the viewport height with its own scrollbar start
 
 			// STRY0120403
 		if(showDesc){
-			filter_audit = 'taskid_u_all_ancestors_tasksLIKE' + data.sys_id;
+			filter_audit = 'taskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.sys_id;
 		} else {
 			filter_audit = 'taskid_sys_id=' + data.sys_id;
 		}
     var o_audit = "journalid_sys_created_on";
     var d_audit = "desc";
-
     var subTasksActivity_Options = {
         title: 'Activity Log',
         table: data.table_audit,
@@ -1467,10 +1432,48 @@ Have modal fit the viewport height with its own scrollbar start
         o: o_audit,
         d: d_audit
     };
+		data.activityLogs = [];
+		var subTasksActivity = {};
+		subTasksActivity.widget = $sp.getWidget('discovertasker-widget-data-table', subTasksActivity_Options); //widget-data-table //discovertasker-widget-data-table
+		data.activityLogs.push(subTasksActivity);
 
-		
-    data.subTasksActivity = $sp.getWidget('discovertasker-widget-data-table', subTasksActivity_Options); //widget-data-table //discovertasker-widget-data-table
+		data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
+			table: data.table,
+			sys_id: data.sys_id,
+//      filter: filter_audit,
+			includeExtended: true,
+			title: "${Activity}",
+			use_dynamic_placeholder: true,
+			btnLabel: "${Post}"
+		});
 
+		// Activity formatter is hardcoded to set specific options
+		for (var f in data.f._formatters) {
+			var fm = data.f._formatters[f];
+			if (fm.formatter == "activity.xml") {
+				fm.hardcoded = true;
+				fm.widgetInstance = $sp.getWidget('widget-ticket-conversation', {
+					table: data.table,
+					sys_id: data.sys_id,
+//					filter: filter_audit,
+					includeExtended: true,
+					title: 'Audit/Notes', //"${Activity}",
+					use_dynamic_placeholder: true,
+					btnLabel: "${Post}"
+				});
+			} else if (fm.formatter == "com_glideapp_servicecatalog_veditor" || fm.formatter == "com_glideapp_questionset_default_question_editor") {
+				var qsConfig = $sp.getValue('quick_start_config');
+				if (qsConfig)
+					qsConfig = JSON.parse(qsConfig)[0];
+				fm.widgetInstance = $sp.getWidget(fm.widget, {
+					table: data.table,
+					sys_id: data.sys_id,
+//					filter: filter_audit,
+					readonly_variable_editor: qsConfig ? qsConfig.readonly_variable_editor : 'false'
+				});
+			} else
+				fm.widgetInstance = $sp.getWidget(fm.widget, data);
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------------------------------
@@ -1511,14 +1514,14 @@ Have modal fit the viewport height with its own scrollbar start
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>141</sys_mod_count>
+        <sys_mod_count>171</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-05-23 19:33:48</sys_updated_on>
+        <sys_updated_on>2022-06-13 03:30:17</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1709,7 +1712,7 @@ Have modal fit the viewport height with its own scrollbar start
         <ul class="nav nav-tabs" role="tablist">
 <!-- todo set active class based on default in options or to the first tab on load -->
 
-          <li ng-class="{'active': $index==0 && !data.hideRelatedLists}" ng-switch="rl.table" ng-repeat="rl in data.f._related_lists" >
+          <li ng-class="{'active': !data.hideRelatedLists}" ng-switch="rl.table" ng-repeat="rl in data.f._related_lists" >
             <!-- REQUEST TYPE -->
             <a ng-switch-when="x_153465_discovert_tasker_requests" 
                ng-if="!data.hideRelatedLists && data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_office_hierarchy'" 
@@ -1814,7 +1817,7 @@ Have modal fit the viewport height with its own scrollbar start
           <li id="sp" ng-show="true" role="presentation" ng-repeat="rs in data._docint_widget._docint_tabs"
               ng-if="!data.hideDocuments && rs.table != 'sys_attachment' && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
               ng-class="{'dtech-modal-scroll-height-standard': data.isModal==true,
-                        'active': $index==0 && !data.hideDocuments && data.hideRelatedLists}"
+                        'active': !data.hideDocuments && data.hideRelatedLists}"
             >
             <a href="#{{rs.id}}" role="tab" data-toggle="tab"
                data-target="#{{rs.id}}" aria-controls="rs.id" title="Documents are stored in SharePoint via Doc. Integrator"
@@ -1837,7 +1840,7 @@ Have modal fit the viewport height with its own scrollbar start
     </div>
     <div class="tab-content">
       <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
-      <div ng-class="{'active': $index==0 && !data.hideRelatedLists}" class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
+      <div ng-class="{'active': !data.hideRelatedLists}" class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
         <div>
           <div class="alert alert-danger" ng-if="data.invalid_table">
             Table not defined '{{data.table_label}}'
@@ -1919,7 +1922,7 @@ Have modal fit the viewport height with its own scrollbar start
            ng-repeat="rs in data._docint_widget._docint_tabs"
            ng-if="!data.hideDocuments && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
            ng-class="{'dtech-modal-scroll-height-standard': data.isModal==true,
-                     'active': $index==0 && !data.hideDocuments && data.hideRelatedLists}">
+                     'active': !data.hideDocuments && data.hideRelatedLists}">
         <sp-widget widget="rs.widget"></sp-widget>
       </div>
       <!-- Activity -->
@@ -1931,10 +1934,12 @@ Have modal fit the viewport height with its own scrollbar start
         </div>
       </div>
       <!-- Activity Log -->
-      <div ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
+      <div ng-if="!data.hideActivity && 
+                  data.table == 'x_153465_discovert_route_task_instance'" 
+           ng-repeat = "al in data.activityLogs"
            class="tab-pane" id="TaskAuditLog">
         <div class="col-md-12">
-            <sp-widget widget="data.subTasksActivity"></sp-widget>
+            <sp-widget widget="al.widget"></sp-widget>
         </div>
       </div>
       <!-- ******************************************************************************** -->
