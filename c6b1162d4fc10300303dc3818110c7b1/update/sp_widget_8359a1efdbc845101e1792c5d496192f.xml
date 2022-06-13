@@ -7,9 +7,50 @@
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {		
+function ($scope, $location, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {		
 	var c = this;
 
+	// STRY0120675
+	$rootScope.$on("$locationChangeSuccess", function(e, newUrl){
+		// if sys_id changed, then update ids
+		if($location.search().sys_id != c.data.sys_id ||
+			 $location.search().table != c.data.table){
+			c.data.sys_id = $location.search().sys_id;
+			c.data.table = $location.search().table; 
+			updateURLs(c.data.menu.items);
+		}
+
+	});
+
+	// // STRY0120675 there is a very similar server script
+	function updateURLs(items){
+		for (var i in items){
+			var item = items[i];
+			var currentHref = item.href;
+			if(item.href && item.baseURL){
+				item.href = item.baseURL;
+			}
+			// if URL has sys_id, then update it
+			if(currentHref && c.data.sys_id && c.data.sys_id != ""){
+				// add new sys_id
+				item.href = item.href + "&sys_id=" + c.data.sys_id;
+			}
+			// if URL has table, then update it
+			if(currentHref && c.data.table && c.data.table != ""){
+				// add new table
+				item.href = item.href + "&table=" + c.data.table;
+			}
+			
+			// if item has items recurse
+			if(item.items && item.items.length > 0){
+				updateURLs(item.items);
+			}
+			// process the scripted items also
+			if(item.scriptedItems && item.scriptedItems.items && item.scriptedItems.items.length > 0){
+				updateURLs(item.scriptedItems.items);
+			}
+		}
+	}
 	$scope.collapse = function() {
 		$rootScope.$emit('sp-navbar-collapse');
 	}
@@ -18,6 +59,7 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 	$scope.accessibilityEnabled = spAriaUtil.g_accessibility === "true";
 
 	var cancelTooltipPromise;
+
 	$scope.$on('sp_loading_indicator', function(e, value) {
 		$scope.loadingIndicator = value;
 	});
@@ -38,11 +80,11 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 
 	// set the user's default home page
 	c.pageChanged = function(item){
-		if(item.src == "Task24.svg" && 
+		if(item.src == "Task_Black24.svg" && 
 			c.data.settings.userDefaultLandingPage != "my_task_home_page"){
 			$scope.data.newPage = "my_task_home_page";
 			$scope.data.pageChanged=true;
-		} else if(item.src == "Office24.svg" && 
+		} else if(item.src == "TaskManager_Black24.svg" && 
 			c.data.settings.userDefaultLandingPage != "my_ous_tasks_home_page"){
 			$scope.data.newPage = "my_ous_tasks_home_page";
 			$scope.data.pageChanged=true;
@@ -315,6 +357,8 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 //                                         Changes made in tasker_menuTemplate - added a check for condition on each item
 // 2.8   | 2022-05-15 | raj | STRY0118963 - Homepage to Org Hierarchy- System remembers user in Bifold/Fullscreen/Table/List
 //                                         Changes made in Server Script
+// 2.8   | 2022-06-09 | raj | STRY0120675 - Task Form- Using 'Layout Navigator' will remember what task record the user was on
+//                                         Changes made tasker-spDropdownTreeTemplate to all href to be updated after load
 // 
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
@@ -338,6 +382,8 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 		
 		// STRY0114307 - need sys_id for links
 		data.sys_id = $sp.getParameter("sys_id");
+		// STRY0120675
+		data.table = $sp.getParameter("table");
 
 		getMenuItems(menu_id);
 
@@ -378,12 +424,12 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 					case "Divider_Black.svg":
 						item.isDivider = true;
 						break;
-					case "Task24.svg":
+					case "Task_Black24.svg":
 						if(data.settings.userDefaultLandingPage == "my_task_home_page"){
 							item.isSelectedPage = true;
 						}
 						break;
-					case "Office24.svg":
+					case "TaskManager_Black24.svg":
 						if(data.settings.userDefaultLandingPage == "my_ous_tasks_home_page"){
 							item.isSelectedPage = true;
 						}
@@ -391,8 +437,27 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
 				}
 			}
 			// if item has href and doesn't have sys_id in href, add the id
-			if(item.href && item.href.indexOf("sys_id") == -1){
-				item.href = item.href + "&sys_id=" + data.sys_id;
+			if(item.href){
+				// STRY0120675
+				item.baseURL = item.href;
+				// STRY0120675
+				if(item.href.indexOf("sys_id") == -1 &&
+					data.sys_id  && 
+					 data.sys_id != null &&
+					 data.sys_id != "null" &&
+					 data.sys_id != ""){
+					item.href = item.href + "&sys_id=" + data.sys_id;
+				}
+				// STRY0120675
+				if(item.href.indexOf("table") == -1 &&
+					 data.table  &&
+					 data.table != null &&
+					 data.table != "null" &&
+					 data.table != ""){
+					item.href = item.href + "&table=" + data.table;
+				} else if(item.table && item.table != ''){
+					item.href = item.href + "&table=" + item.table;
+				}
 			}
 			
 			// if item has items recurse
@@ -412,14 +477,14 @@ function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-12-02 00:22:08</sys_created_on>
         <sys_id>8359a1efdbc845101e1792c5d496192f</sys_id>
-        <sys_mod_count>204</sys_mod_count>
+        <sys_mod_count>227</sys_mod_count>
         <sys_name>Tasker - Header Menu</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_8359a1efdbc845101e1792c5d496192f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-04 18:38:06</sys_updated_on>
+        <sys_updated_on>2022-06-11 22:02:56</sys_updated_on>
         <template><![CDATA[<ul aria-label="${Header menu}" role="menubar"
     class="dtech-dropdown-menu-align-center">
   <li ng-repeat="item in visibleItems" 

@@ -41,7 +41,7 @@ STRY0085438 - FIX: Javascript error on new "Modals"</description>
 // STRY0102134 - Apply Default Schedule to Task Information
 // 2.7.0 | 2021-11-08 | mmcc | DFCT0010645 - Platform Reopen Task button does not open modal for some Views
 // 2.7.3 | 2022-04-20 | raj  | DFCT0010874 - "Information Only"  Task is NOT working on the "Simple Task" form. The state doesn't move to "Complete".
-
+// 2.8 | 2022-06-08 | raj    | STRY0122767 - Draft Task- Update "Publish Task(s)" buttons locations; Update Messaging for "Where to Publish Task(s)"
 (function executeRule(current, previous /*null when async*/) {
 	// 2.7.0 | 2021-11-08 | mmcc | DFCT0010645 - Platform Reopen Task button does not open modal for some Views
 	g_scratchpad.active = current.active; // will be true/false as string 
@@ -50,7 +50,8 @@ STRY0085438 - FIX: Javascript error on new "Modals"</description>
 	g_scratchpad.assigned_to = current.getValue("assigned_to");
 	
 	// STRY0085438
-	var taskPermissions = new TaskerHelpers().updateTaskPermission(current);
+	var taskerHelpers = new TaskerHelpers();
+	var taskPermissions = taskerHelpers.updateTaskPermission(current);
 	g_scratchpad.taskPermissions = JSON.stringify(taskPermissions);
 	
 	var taskOwnerId = current.u_task_requester;
@@ -156,8 +157,33 @@ STRY0085438 - FIX: Javascript error on new "Modals"</description>
 	}
 	// STRY0109183 - Remove "Tasker Email" related list/ tab when "Disable Email Task Information" is set to true
 	g_scratchpad.emailDiabled = gs.getProperty("x_153465_discovert.#DisableExportTaskToEmailFunction") == "true";
-	
+	g_scratchpad.taskToPublishMessage = "";
+	// STRY0122767 - if draft check if user can publish and raise message for where publish can happen
+	if(current.state == -6){
+		var taskToPublish = taskerHelpers.getTaskToPublish(current);
+		
+		if(taskToPublish && taskToPublish != ''){
+			var page_id = gs.action.getGlideURI().get("id");
+			var gURL = gs.getProperty("glide.servlet.uri");
 
+			if(page_id && page_id != null && page_id != ''){
+				var portal_suffix = new tasker_User_Form_Preferences()._getDefaultServicePortalSuffix();
+				gURL = gURL +
+					portal_suffix +
+					"?id="+ gs.action.getGlideURI().get("id") +
+					"&table=" + current.getTableName() + 
+					"&sys_id=" + taskToPublish;
+			} else {
+				gURL = gURL + current.getTableName() + ".do?" + 
+					"&sys_id=" + taskToPublish;
+			}
+			
+			g_scratchpad.taskToPublishMessage = 
+				gs.getMessage("Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task.") + 
+				"<a href=" +  gURL.toString() + "&target=_blank" + ">" +
+				gs.getMessage("Tasker - Take me to the Earliest Task-Order Draft Task...") + "</a>";
+		}
+	}
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>admin</sys_created_by>
@@ -165,7 +191,7 @@ STRY0085438 - FIX: Javascript error on new "Modals"</description>
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>e5784befdbc29f003a8d6be3ca961965</sys_id>
-        <sys_mod_count>69</sys_mod_count>
+        <sys_mod_count>93</sys_mod_count>
         <sys_name>Tasker - onLoad - set max routes</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -173,7 +199,7 @@ STRY0085438 - FIX: Javascript error on new "Modals"</description>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_e5784befdbc29f003a8d6be3ca961965</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-20 20:25:46</sys_updated_on>
+        <sys_updated_on>2022-06-09 03:50:08</sys_updated_on>
         <template/>
         <when>before_display</when>
     </sys_script>
