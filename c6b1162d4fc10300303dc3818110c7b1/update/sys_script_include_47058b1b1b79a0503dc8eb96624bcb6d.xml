@@ -7,7 +7,9 @@
         <client_callable>false</client_callable>
         <description>Script include for all Banner Notifications.&#13;
 These were all in the Portal page.&#13;
-Moving them here to improve performance and maintainability.</description>
+Moving them here to improve performance and maintainability.&#13;
+&#13;
+2.8 | 2022-06-13 | raj | STRY0121807 - Resolve Modern Portal Filter Issues</description>
         <name>TaskerBannerFilters</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -34,14 +36,17 @@ TaskerBannerFilters.prototype = {
 		this.viewAllLinkView = '';
 		this.viewAllLinkFilter = '';
 		// return values
-		var items;
-		var record_watchers;
+		this.items = [];
+		this.record_watchers = [];
 		this.count = 0;
+		// STRY0102134 - Apply Default Schedule to Task Information
+		this.tdc = new TaskerDurationCalculator();
+		this.today = new GlideDateTime().getDate();
+		this.taskSystemSettings = new tasking_System_Settings_Scripts();
     },
 
 	loadBannerCounts: function(bannerHeaderMenu, OUsWhereIamAMemberAdmin, OUsWhereIamAMember){
-		taskerFilters = [];
-
+		
 		// get filter from filters table
 		// STRY0101803 - had to change to glide record as some users couldn't see the Table field
 		var gr_filters = new GlideRecord('x_153465_discovert_tasker_filters');
@@ -53,7 +58,9 @@ TaskerBannerFilters.prototype = {
 
 		while (gr_filters.next()) {
 			var currentFilter = gr_filters.getDisplayValue('u_filter');
-// TODO - check when finished if this was used
+			// STRY0121807
+			var filterLabel = gr_filters.getDisplayValue('u_filter_label');
+			// TODO - need to build a "not in" fitler in order to remove this
 			if (currentFilter.indexOf("OUsWhereIamAMemberAdmin") > 0) {
 				currentFilter = currentFilter.replace("OUsWhereIamAMemberAdmin", OUsWhereIamAMemberAdmin);
 			}
@@ -64,6 +71,8 @@ TaskerBannerFilters.prototype = {
 			var DiscoverControllerURL = gr_filters.getValue('u_discover_controller_url');
 			DiscoverControllerURL = DiscoverControllerURL != null ? (DiscoverControllerURL == true) : false;
 
+			// STRY0121807 - custom fitler is retunred if one exists, otherwise, same filter is returned
+			currentFilter = this._getCustomFilter(currentFilter, filterLabel, gr_filters);
 			var filter = {
 				filter: currentFilter,
 				table: gr_filters.getDisplayValue('u_table.name'),
@@ -72,7 +81,7 @@ TaskerBannerFilters.prototype = {
 				modal_title_fields: gr_filters.getDisplayValue('u_modal_title_fields') + '',
 				modal_title_field_separator: gr_filters.getDisplayValue('u_modal_title_field_separator') + '',
 				hoverField: gr_filters.getDisplayValue('u_hover_field') + '',
-				filter_label: gr_filters.getDisplayValue('u_filter_label'),
+				filter_label: filterLabel,
 				view_all_page: gr_filters.getDisplayValue('u_view_all_page'),
 				// STRY0101803
 				// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
@@ -84,19 +93,17 @@ TaskerBannerFilters.prototype = {
 				d: gr_filters.getDisplayValue('u_direction'),
 				
 				// this label for menu item
-				label:gr_filters.getDisplayValue('u_filter_label'),
+				label:filterLabel,
 				// set the menu item type to link
 				type:"link",
 				// set the link title
-				title:gr_filters.getDisplayValue('u_filter_label'),
+				title:filterLabel,
 				// needed in menu template
 				items:[],
 				href: '?id=' + gr_filters.u_banner_list_page_id + 
 					'&view=' + gr_filters.u_banner_list_view_name + 
-				'&table=' + gr_filters.getDisplayValue('u_table.name') + '&filter=' + currentFilter + '&label=' + gr_filters.getDisplayValue('u_filter_label')
+				'&table=' + gr_filters.getDisplayValue('u_table.name') + '&filter=' + currentFilter + '&label=' + filterLabel
 			};
-			// custom fitler is retured if one exists, otherwise, same filter is returned
-			filter.filter = this._getCustomFilter(filter.filter, filter.title);
 			filter.isBannerItem = true;
 			var count = new GlideAggregate(filter.table);
 			count.addEncodedQuery(filter.filter);
@@ -104,6 +111,9 @@ TaskerBannerFilters.prototype = {
 			count.query();
 			if (count.next()) {
 				filter.count = count.getAggregate('COUNT');
+			}
+			if(filter.count > 0){
+				this.count += filter.count;
 			}
 			// NOTE - always add the filter and the record watcher
 			//        HTML will only sho if (!isBannerItem || (isBannerItem && count>0)
@@ -115,150 +125,151 @@ TaskerBannerFilters.prototype = {
 		}
 	},
 	
-	_getCustomFilter: function(filter, fitlerName){
-		switch (fitlerName){
-			case "Acceptance Overdue":
-				filter = this._getFilterAcceptanceOverdue();
-				break;
-			case "Awaiting Assignment":
-				filter = this._getFilterAwaitingAssignment();
-				break;
-			case "Awaiting Assignment Overdue":
-				filter = this._getFilterAwaitingAssignmentOverdue();
-				break;
-			case "Awaiting OU Reassignment":
-				filter = this._getFilterAwaitingOUReassignment();
-				break;				
-		}
-		return filter;
-	},
-	
-	// TODO - revisit and see how many of these functions can be combined and improved
-	_getFilterAcceptanceOverdue: function(){
-		var fitler;
-		var u = gs.getUser().getID();
-		var daysBeforeTaskAcceptanceIsOverdue = gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
-		var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-
-		// STRY0102134 - Apply Default Schedule to Task Information
-		var tdc = new TaskerDurationCalculator();
-		var today = new GlideDateTime().getDate();
-
-		// find the end date in the schedule
-		var dayInSchedule = tdc.calculateDateOfAddedBusinessDays(null, daysBeforeTaskAcceptanceIsOverdue, today);
-
-		//------------------------------------------------------------------------------------------------------------------
-		// Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
-		// Get the list of OUs where the current user is a Task Manager
-		var primary_assigneeFilter = "primary_assigneeIN";
-		var taskSystemSettings = new tasking_System_Settings_Scripts();
-		// DFCT0010669
-		var aMyOUTaskManager = taskSystemSettings.getMyOUTaskManagers();
-
-		// DFCT0010826 - only load items for offices where there is no task manager
-		var aOUsWithNoTaskManager = taskSystemSettings.getOUsWithNoTaskManager();
-
-
-		// DFCT0010826 - state did not have ^, so no tasks were returned for task manager.  Assigned to was added so users see where they are overdue also
-		filter = "primary_assigneeIN" + aMyOUTaskManager.join(",") + "^state=1^suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule +
-			"^NQassigned_to=" + u + "^state=1^suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule;
-		if(isGTA){
-			// DFCT0010826 - changed to only load items for offices where there is no task manager
-			filter = "primary_assigneeIN" + aOUsWithNoTaskManager.join(",") + "^state=1^suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule;
-		}	
-		var aOUSchedules = tdc.getOUsWithScheduleOverride(aMyOUTaskManager);
-
-		if(aOUSchedules.length > 0) {
-			for (i=0; i<aOUSchedules.length; i++) {
-				var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-				if(grOU.get(aOUSchedules[i].ouId)){
-					var overrideDayInSchedule = tdc.calculateDateOfAddedBusinessDays(grOU, daysBeforeTaskAcceptanceIsOverdue, today);
-					filter += '^NQprimary_assignee=' + aOUSchedules[i].ouId + '^state=1^suspense_dateISNOTEMPTY^suspense_date<='+overrideDayInSchedule;
-				}
+	_getCustomFilter: function(filter, fitlerName, gr_filters){
+		// NOTE: once you are finished modifying all of these, check the cusotmer filter boolean before coming into this function
+		var isCustomFilter = gr_filters.u_is_custom_filter;
+		if(isCustomFilter){
+			var objCustomFilter = JSON.parse(filter);
+			var filterFunction = objCustomFilter.functionName;				
+			switch (filterFunction){
+				case "_get_task_user_acceptance_overdue":
+					filter = this._get_task_user_acceptance_overdue();
+					break;
+				case "_get_task_manager_acceptance_overdue":
+					filter = this._get_task_manager_acceptance_overdue();
+					break;
+				case "_get_task_administrator_acceptance_overdue":
+					filter = this._get_task_administrator_acceptance_overdue();
+					break;
+				case "_get_task_manager_awaiting_assignment_overdue":
+					filter = this._get_task_manager_awaiting_assignment_overdue();
+					break;
+				case "_get_task_administrator_awaiting_assignment_overdue":
+					filter = this._get_task_administrator_awaiting_assignment_overdue();
+					break;
+				case "_get_task_user_awaiting_OU_reassignment":
+					filter = this._get_task_user_awaiting_OU_reassignment();
+					break;
 			}
 		}
 		return filter;
 	},
-	
-	// TODO - revisit and see how many of these functions can be combined and improved
-	_getFilterAwaitingAssignment: function(){
-		var u = gs.getUser().getID();
-		//------------------------------------------------------------------------------------------------------------------
-		// Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
-		// Get the list of OUs where the current user is a Task Manager
-		var primary_assigneeFilter = "primary_assigneeIN";
-		var taskSystemSettings = new tasking_System_Settings_Scripts();
-		// DFCT0010669 
-		primary_assigneeFilter += taskSystemSettings.getMyOUTaskManagers().join(",");
-		// Get the list of OUs where the current user is a Member
-		var primary_assigneeMemberFilter = "primary_assigneeIN";
-		// DFCT0010669 
-		primary_assigneeMemberFilter +=   taskSystemSettings.getOUsWhereIamAMember().join(",");
-
-		var filter = 'stateIN-5,11^' + primary_assigneeFilter;
-		var filterMember = 'stateIN-5,11^' + primary_assigneeMemberFilter + '^primary_assignee.tasking_authoritiesISEMPTY';
-		filter = filter + '^NQ' + filterMember;
-		var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-		if(isGTA){
-			var filterGTA = 'stateIN-5,11^primary_assigneeISNOTEMPTY^primary_assignee.tasking_authoritiesISEMPTY';
-			filter = filter + '^NQ' + filterGTA;
-		}
+	_get_task_user_acceptance_overdue: function() {
+		var fitler;
+		var daysBeforeTaskAcceptanceIsOverdue =
+			gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+		// find the end date in the schedule
+		var dayInSchedule = 
+			this.tdc.calculateDateOfAddedBusinessDays(null, daysBeforeTaskAcceptanceIsOverdue, this.today);
+		
+		filter = "^assigned_toDYNAMIC90d1921e5f510100a9ad2572f2b477fe^state=1^" + 
+			"suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule;
+		
 		return filter;
 	},
 	
-	// TODO - revisit and see how many of these functions can be combined and improved
-	_getFilterAwaitingAssignmentOverdue: function(){
-		var u = gs.getUser().getID();
-		var DaysSinceTaskWasUnassignedOrRejectedWarning = gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
+	_get_task_manager_acceptance_overdue: function(){
+		var fitler;
+		var daysBeforeTaskAcceptanceIsOverdue =
+			gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+		// find the end date in the schedule
+		var dayInSchedule = 
+			this.tdc.calculateDateOfAddedBusinessDays(null, daysBeforeTaskAcceptanceIsOverdue, this.today);
+		
+		// DFCT0010669
+		var aMyOUTaskManager = this.taskSystemSettings.getMyOUTaskManagers();
+				
+		filter = "primary_assigneeIN" + 
+			aMyOUTaskManager.join(",") +
+			"^primary_assignee.u_schedule_overrideISEMPTY" + 
+			"^state=1^suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule;
+		
+		var aOUSchedules = this.tdc.getOUsWithScheduleOverride(aMyOUTaskManager);
+		var filterOverrideOUs = 
+			this._getFilterAcceptanceOverdueOverriedOUs(aOUSchedules, daysBeforeTaskAcceptanceIsOverdue);
+		filter += filterOverrideOUs;
+
+		return filter;
+	},
+	
+	_get_task_administrator_acceptance_overdue: function(){
+		var filter;
+		var daysBeforeTaskAcceptanceIsOverdue =
+			gs.getProperty("x_153465_discovert.#DaysBeforeTaskAcceptanceIsOverdue");
+		// find the end date in the schedule
+		var dayInSchedule = 
+			this.tdc.calculateDateOfAddedBusinessDays(null, daysBeforeTaskAcceptanceIsOverdue, this.today);
+		// DFCT0010826 - only load items for offices where there is no task manager
+		var aOUsWithNoTaskManager = this.taskSystemSettings.getOUsWithNoTaskManager();
+		
+		// DFCT0010826 - changed to only load items for offices where there is no task manager
+		filter = "primary_assigneeIN" + 
+			aOUsWithNoTaskManager.join(",") + 
+			"^primary_assignee.u_schedule_overrideISEMPTY" + 
+			"^state=1^suspense_dateISNOTEMPTY^suspense_date<="+ dayInSchedule;
+		
+		var aOUSchedules = this.tdc.getOUsWithScheduleOverride(aOUsWithNoTaskManager);
+
+		var filterOverrideOUs = 
+			this._getFilterAcceptanceOverdueOverriedOUs(aOUSchedules, daysBeforeTaskAcceptanceIsOverdue);
+		filter += filterOverrideOUs;
+		return filter;
+	},
+	
+	_getFilterAcceptanceOverdueOverriedOUs: function(aOUSchedules, daysBeforeTaskAcceptanceIsOverdue){
+		var filter = "";
+		if(aOUSchedules.length > 0) {
+			for (i=0; i<aOUSchedules.length; i++) {
+				var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+				if(grOU.get(aOUSchedules[i].ouId)){
+					var overrideDayInSchedule = this.tdc.calculateDateOfAddedBusinessDays(grOU, daysBeforeTaskAcceptanceIsOverdue, this.today);
+					filter += '^NQprimary_assignee=' + aOUSchedules[i].ouId + 
+						'^state=1^suspense_dateISNOTEMPTY^suspense_date<='+overrideDayInSchedule;
+				}
+			}
+		}
+
+		return filter;
+	},
+		
+	_get_task_manager_awaiting_assignment_overdue: function(){
+		var filter;
+		var DaysSinceTaskWasUnassignedOrRejectedWarning = 
+			gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
 		// DFCT0010833 -  change to negative to subtract days instead of adding days to today.
 		if(parseInt(DaysSinceTaskWasUnassignedOrRejectedWarning)>0){
 			DaysSinceTaskWasUnassignedOrRejectedWarning = 0 - DaysSinceTaskWasUnassignedOrRejectedWarning;
 		}
-		var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-
-		// STRY0102134 - Apply Default Schedule to Task Information
-		var tdc = new TaskerDurationCalculator();
-		var today = new GlideDateTime();
 
 		// find the end date in the schedule
-		var dayInSchedule = tdc.calculateDateOfAddedBusinessDays(null, DaysSinceTaskWasUnassignedOrRejectedWarning, today);
-		//------------------------------------------------------------------------------------------------------------------
+		var dayInSchedule = this.tdc.calculateDateOfAddedBusinessDays(null, DaysSinceTaskWasUnassignedOrRejectedWarning, this.today);		
+	
+		//------------------------------------------------------------------------------------------
 		// Build the Filter using Task Manger OUs, OUs where member and GTA if they are in that role
 		// Get the list of OUs where the current user is a Task Manager
-		var taskSystemSettings = new tasking_System_Settings_Scripts();
 		// DFCT0010669
-		var aMyOUTaskManager = taskSystemSettings.getMyOUTaskManagers();
+		var aMyOUTaskManager = this.taskSystemSettings.getMyOUTaskManagers();
 
-		var filter = "primary_assigneeIN" + aMyOUTaskManager.join(",") + '^primary_assignee.u_schedule_overrideISEMPTY^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
-
-		if(isGTA){
-			// load all items and use the sytem wide default for the delay days
-			filter = 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
-		}
-
-		var aOUSchedules = tdc.getOUsWithScheduleOverride(aMyOUTaskManager);
-
-		if(aOUSchedules.length > 0) {
-			for (i=0; i<aOUSchedules.length; i++) {
-				var grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-				if(grOU.get(aOUSchedules[i].ouId)){
-					var overrideDayInSchedule = tdc.calculateDateOfAddedBusinessDays(grOU, DaysSinceTaskWasUnassignedOrRejectedWarning, today);
-					filter += '^NQprimary_assignee=' + aOUSchedules[i].ouId + '^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+overrideDayInSchedule;
-				}
-			}
-		}
+		filter = "primary_assigneeIN" + aMyOUTaskManager.join(",") + 
+			'^u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
 
 		return filter;
 	},
-	
-	// TODO - revisit and see how many of these functions can be combined and improved
-	_getFilterAwaitingOUReassignment: function(){
-		var u = gs.getUser().getID();
-		var filter = 'active=true^state=11^primary_assigneeISEMPTY';
-		if(!gs.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin")){
-			filter += '^state=11^primary_assigneeISEMPTY^u_task_requesterDYNAMIC90d1921e5f510100a9ad2572f2b477fe^active=true'; 
+
+	_get_task_administrator_awaiting_assignment_overdue: function(){
+		var filter;
+		var DaysSinceTaskWasUnassignedOrRejectedWarning = 
+			gs.getProperty("x_153465_discovert.#DaysSinceTaskWasUnassignedOrRejectedWarning");
+		// DFCT0010833 -  change to negative to subtract days instead of adding days to today.
+		if(parseInt(DaysSinceTaskWasUnassignedOrRejectedWarning)>0){
+			DaysSinceTaskWasUnassignedOrRejectedWarning = 0 - DaysSinceTaskWasUnassignedOrRejectedWarning;
 		}
+
+		// find the end date in the schedule
+		var dayInSchedule = this.tdc.calculateDateOfAddedBusinessDays(null, DaysSinceTaskWasUnassignedOrRejectedWarning, this.today);
 		
+		filter = 'u_last_unassigned_dateISNOTEMPTY^state=-5^ORstate=11^u_last_unassigned_date<='+dayInSchedule;
+
 		return filter;
 	},
 	
@@ -346,13 +357,13 @@ TaskerBannerFilters.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-24 19:53:53</sys_created_on>
         <sys_id>47058b1b1b79a0503dc8eb96624bcb6d</sys_id>
-        <sys_mod_count>47</sys_mod_count>
+        <sys_mod_count>81</sys_mod_count>
         <sys_name>TaskerBannerFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_47058b1b1b79a0503dc8eb96624bcb6d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-05 18:20:33</sys_updated_on>
+        <sys_updated_on>2022-06-20 14:20:56</sys_updated_on>
     </sys_script_include>
 </record_update>
