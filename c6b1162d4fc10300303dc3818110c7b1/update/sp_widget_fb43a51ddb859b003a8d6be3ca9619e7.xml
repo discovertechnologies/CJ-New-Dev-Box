@@ -51,7 +51,11 @@
 
 	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	var watcher;
-	initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+
+	// DFCT0010894, DFCT0010897, DFCT0010896, DFCT0010895, DFCT0010770
+	if(c.data.sys_id && c.data.sys_id != -1){
+		initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+	}
 	function initRecordWatcher(table, filter) {
 		if (watcher)
 			watcher.unsubscribe();
@@ -83,20 +87,22 @@
 		}
 	}	
 	var tableId = $scope.data.sys_id != -1 ? $scope.data.sys_id : ($scope.data.f ? $scope.data.f._attachmentGUID : -1);
-	spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + tableId, function (response, data) {
-		$scope.attachmentHandler.getAttachmentList();
-		if (response.data) {
-			var options = {};
-			options.operation = response.data.operation;
-			options.filename = response.data.display_value;
-			options.sys_id = tableId;
-			options.table = $scope.data.table;
-			options.state = (response.data.record && response.data.record.state) ? response.data.record.state.value : "";
-			if (options.operation === 'update' && options.state === 'not_available')
-				$rootScope.$broadcast("attachment.updated", options);
-		}
-	});
-
+	// DFCT0010894, DFCT0010897, DFCT0010896, DFCT0010895, DFCT0010770
+	if(tableId && tableId != -1){
+		spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + tableId, function (response, data) {
+			$scope.attachmentHandler.getAttachmentList();
+			if (response.data) {
+				var options = {};
+				options.operation = response.data.operation;
+				options.filename = response.data.display_value;
+				options.sys_id = tableId;
+				options.table = $scope.data.table;
+				options.state = (response.data.record && response.data.record.state) ? response.data.record.state.value : "";
+				if (options.operation === 'update' && options.state === 'not_available')
+					$rootScope.$broadcast("attachment.updated", options);
+			}
+		});
+	}
 	afterLoadFormReturns();
 
 	// STRY0069986- RJ - Cert Push - Template DocInt Fix
@@ -288,7 +294,6 @@
 			size: 'lg'
 		}).then(function () {
 			//console.log('widget dismissed');
-			//alert(' c.modalInstance' +  c.modalInstance);
 			//$window.location.href = "/sp";
 		});
 	};
@@ -427,6 +432,59 @@
 		onListClick(e, parms);
 	});
 
+	// STRY0119918
+	c.widget.saveAsDraft = function(newFormObjSelected){
+		c.data.saveOnDraftChange = true;
+		$scope.data.view = newFormObjSelected.sn_view;
+		var fieldValues = newFormObjSelected.fieldValues;
+		c._setFieldValues(fieldValues);
+		//01713ba91b538d90d6062023b24bcba4 is the 'save_as_draft' guid
+		g_form.submit('01713ba91b538d90d6062023b24bcba4');
+	}	
+	// STRY0119918
+	c.widget.updateDraft = function(newFormObjSelected){
+		c.data.saveOnDraftChange = true;
+		$scope.data.view = newFormObjSelected.sn_view;
+		var fieldValues = newFormObjSelected.fieldValues;
+		c._setFieldValues(fieldValues);
+		// save instead of submitting 
+		g_form.save();
+	}		
+	// STRY0119918
+	c.widget.checkChanges = function(){
+		var fMsg = '';
+		var serializeChanges = g_form.serialize(true);
+		if(serializeChanges.length>0){
+			var valueChanged = false;
+			var changeFieldList = [];
+			for (var field in serializeChanges) {
+				// for Task order, we are rebuilding the value list on the fly
+				// so ignor if value = original value
+				var objField = serializeChanges[field];
+				if(objField.name == "task_order" && 
+					 objField.value == objField.originalValue){
+
+				} else {
+					valueChanged = true;
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+			}
+			return valueChanged;
+		} else {
+			return false;
+		}
+	}
+	// set for form fields
+	c._setFieldValues = function(fieldValues){
+		if(fieldValues && fieldValues.length>0){
+			for (var i = 0; i < fieldValues.length; i++){
+				var field = fieldValues[i];
+				if(c.data.f._fields[field.field]){
+					g_form.setValue(field.field, field.value);
+				}
+			}			
+		}		
+	}
 	$scope.openNewModal = function(table, title, view, query, sys_id) {
 		// If the form is dirty, ask the user if they would like to save the record
 		var fMsg = '';
@@ -521,18 +579,24 @@
 						//							"&table=" + $scope.data.table + "&sys_id=" + sysID;
 						//							$location.url(redirectUrlNew);
 
-						c.data.getURL=true;
+						// STRY0119918
 						c.data.sys_id=sysID;
-						c.data.view=c.data.url_Properties.view;
-						c.data.isValid = false;
-						c.data.loadingIndicator = true;
-						c.data.emptyStateTemplate = false;
-						$scope.server.update().then(function(data) {
-							redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
-							$location.url(redirectUrlNew);
+						if(!c.data.saveOnDraftChange){
+							c.data.getURL=true;
+							c.data.view=c.data.url_Properties.view;
+							c.data.isValid = false;
+							c.data.loadingIndicator = true;
+							c.data.emptyStateTemplate = false;
+							$scope.server.update().then(function(data) {
+								redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+								$location.url(redirectUrlNew);
+							});
+						} else {
+							c.data.saveOnDreaftChange = false; // set back to false after skipping the URL redirect
+						}
+						loadForm(c.data.table, c.data.sys_id).then(function(){
+							$rootScope.$broadcast("sp.form.submitted", {sys_id: c.data.sys_id});
 						});
-
-
 						break;
 						// STRY0093947
 					case 'x_153465_discovert_discover_routing_template':
@@ -745,8 +809,10 @@
 		f.view = $scope.data.view;
 		return $scope.server.update().then(function(){
 			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-			initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
-
+			// DFCT0010894, DFCT0010897, DFCT0010896, DFCT0010895, DFCT0010770
+			if(c.data.sys_id && c.data.sys_id != -1){
+				initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);	
+			}
 			afterLoadFormReturns();
 		});
 	}
@@ -1421,6 +1487,16 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      Changes in HTML Only
 // 2.8 | 2022-06-02 | raj  | STRY0122589 - New Subtask Form- Allow "Draft Subtasks" under Active Tasks
 //                                      Changes in Server Script and Client Controller
+// 2.8 | 2022-06-13 | raj  | STRY0119580 - Existing Task Form- Form View buttons- "Advanced Form" and "Quick Form"
+//                                      Changes in Server Script and Client Controller and HTML
+// 2.8 | 2022-06-16 | raj | STRY0119918 - New Task Form- Allow switching Form Views save the Task as Draft
+//                                      Changes in Client Controller
+// 2.8 | 2022-06-17 | raj | DFCT0010894 - Opening "Request" modal causes "getEventTarget() called with invalid record reference: x_153465_discovert_tasker_requests.for event: user.view, could have been
+//													DFCT0010897 - Opening "Tasker Email" modal causes "Warnings" in log: "getEventTarget() called with invalid record reference: x_153465_discovert_tasker_email.
+//													DFCT0010896 - Opening "New Task" causes "Warnings" getEventTarget() called with invalid record reference: x_153465_discovert_route_task_instance .view, could have deleted
+//													DFCT0010895 - Opening "New Template" causes "Warnings" in log: getEventTarget() called with invalid record reference: x_153465_discovert_discover_routing_template deleted
+//													DFCT0010770 - Opening "OU Member" modal causes "Warnings" in log: "getEventTarget() called with invalid record reference"
+//																			Changes in Client Script
 // 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1552,23 +1628,11 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		return;
 	}
 
-	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
-	if(data.table == 'x_153465_discovert_route_task_instance'){
-		// set view to blank to load system default by default or the view based on view rule for the task
-		var view = '';
-		if(data.sys_id == -1){
-			// for new items data.view will be set on the input for a modal, and on the url for a full page new item
-			view = data.view || $sp.getParameter("view");
-		}
-		url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
-		data.view = url_Properties.view;
-	} else {
-		data.view = data.view || $sp.getParameter("view") || "sp"; // SP default
-	}
-
 	// TODO Multi-language
 	data.OrgFullscreen16 = {"src":'Fullscreen16.svg', "title": gs.getMessage("Open Organizational Hierarchy in full screen view"), "alt": gs.getMessage('Full Screen View')};
 	data.TaskFullscreen16 = {"src":'Fullscreen16.svg', "title": gs.getMessage("Open task in new tab"), "alt": gs.getMessage('Open Task')};	
+	data.AdvancedTask24 = {"src":'AdvancedTask24.svg', "title": gs.getMessage("Tasker - AdvancedTask24.svg"), "alt": gs.getMessage('Tasker - AdvancedTask24.svg')};	
+	data.QuickTask24 = {"src":'QuickTask24.svg', "title": gs.getMessage("Tasker - QuickTask24.svg"), "alt": gs.getMessage('Tasker - QuickTask24.svg')};	
 	if(data.omit_icons!=true){
 		// 2.8 | 2022-04-14 | mmcc | STRY0119578 - Existing Task Form- Remove DTLV icon and Task Tree View icon
 		// data.TreeNodes16 = {"src":'TreeNodes16.svg', "title": gs.getMessage("Open Task Tree View"), "alt": gs.getMessage('Task Tree View')};
@@ -1607,10 +1671,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		// STRY0109208 - Add Create Icon
 		data.createTaskTitle = gs.getMessage('Create Subtask');
 	}
-
-	// STRY0113838
-	data.url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id,data.view);
-
+	
 	// 2.7.0 | 2021-09-07 | mmcc | STRY0105158 - After creation of a new template, redirect is showing the wrong widget on the right column
 	// From new template page, get the Top task for the Template Details Page
 	if (data.page_id == 'discovertasker_processtemplatedetails' &&
@@ -1649,6 +1710,25 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
 	if (!data.isValid)
 		return;
+	
+	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
+	// moved this logic below the record get so the record state could be used in the logic
+	if(data.table == 'x_153465_discovert_route_task_instance'){
+		// set view to blank to load system default by default or the view based on view rule for the task
+		var view = '';
+		// new task or draft task, allow view to change
+		if(data.sys_id == -1 || rec.state == -6){
+			// for new items data.view will be set on the input for a modal, and on the url for a full page new item
+			// rj test			
+			view = data.view || (input || {}).view || (options || {}).view || $sp.getParameter("view");
+		}
+		url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
+		data.view = url_Properties.view;
+	} else {
+		data.view = data.view || $sp.getParameter("view") || "sp"; // SP default
+	}
+	// STRY0113838
+	data.url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id,data.view);
 	
 	// 2.7.0 | 2021-10-22 | mmcc | DFCT0010600 - Deleting the Top Task from Portal App does not redirect to the Tasker Portal Board
 	// DFCT0010600 old if statement
@@ -1971,14 +2051,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4157</sys_mod_count>
+        <sys_mod_count>4219</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-03 00:54:00</sys_updated_on>
+        <sys_updated_on>2022-06-19 18:44:19</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2083,31 +2163,31 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <span class="col-2 cell dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
 
         <div class="col-7 dtech-max-width-fit-content" >
-          <!-- Task Full Screen icon section -->
-          <div ng-if="data.table=='x_153465_discovert_route_task_instance'">
-            <div ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown'">
-              <img src="{{data.TaskFullscreen16.src}}" title="{{data.TaskFullscreen16.title}}"
-                   alt="{{data.TaskFullscreen16.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
-              <img ng-if="data.omit_icons!=true && data.sys_id!=-1" src="{{data.Divider.src}}" title="{{data.Divider.title}}"
-                   alt="{{data.Divider.alt}}" class="dtech-pad-all-10"/>
-            </div>
-          </div>
-
           <!-- Header Icons -->
           <div ng-switch="data.table">
-
             <div ng-switch-when="x_153465_discovert_route_task_instance">
               <div ng-if="data.omit_icons!=true && data.sys_id!=-1" class="dtech-push-right-flexbox">
+              <img src="{{data.AdvancedTask24.src}}" title="{{data.AdvancedTask24.title}}"
+                   alt="{{data.AdvancedTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+              <img src="{{data.QuickTask24.src}}" title="{{data.QuickTask24.title}}"
+                   alt="{{data.QuickTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+
+              <img ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown'"
+                   src="{{data.TaskFullscreen16.src}}" title="{{data.TaskFullscreen16.title}}"
+                   alt="{{data.TaskFullscreen16.alt}}" class="dtech-enabled dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+              <img ng-if="data.omit_icons!=true && data.sys_id!=-1" src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+                   alt="{{data.Divider.alt}}" class="dtech-pad-all-10"/>
+                
                 <img src="{{data.Information16.src}}" title="{{data.Information16.title}}"
-                     alt="{{data.Information16.alt}}" class="dtech-pad-all-10" ng-click="openOperationalModal()"/>
+                     alt="{{data.Information16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openOperationalModal()"/>
                 <img src="{{data.Member16.src}}" title="{{data.Member16.title}}"
-                     alt="{{data.Member16.alt}}" class="dtech-pad-all-10" ng-click="openAssignmentModal()"/>
+                     alt="{{data.Member16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openAssignmentModal()"/>
                 <img src="{{data.Schedule16.src}}" title="{{data.Schedule16.title}}"
-                     alt="{{data.Schedule16.alt}}" class="dtech-pad-all-10" ng-click="openDurationModal()"/>
+                     alt="{{data.Schedule16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openDurationModal()"/>
                 <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
                      alt="{{data.Divider.alt}}" class="dtech-pad-all-10" ng-show="data.canCreateSubTask"/>
                 <img src="{{data.GenericAdd16.src}}" title="{{data.GenericAdd16.title}}"
-                     alt="{{data.GenericAdd16.alt}}" class="dtech-pad-all-10" ng-click="openCreateModal()"
+                     alt="{{data.GenericAdd16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openCreateModal()"
                      ng-show="data.canCreateSubTask"/>
               </div>
 
