@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This Script was designed to load the  form preferences for any task&#13;
+2.8    | 2022-06-21 - raj -  STRY0116257 - System Setting- Options for limiting available views and setting default "Task Form view" for New Task Forms&#13;
 2.8   | 2022-05-11 | raj | STRY0119569 -  New Task Form- Form Selector&#13;
 &#13;
 2.7.3 | 2022-05-17 | raj | DFCT0010933 - FNS System Down - Cannot open tasks if Tasker Portal is not the default portal&#13;
@@ -26,6 +27,12 @@ g_taskUserFormPreferences = {};
 var tasker_User_Form_Preferences = Class.create();
 tasker_User_Form_Preferences.prototype = {
     initialize: function() {
+		// STRY0116257
+		this.tsss = new tasking_System_Settings_Scripts();
+		this._formViewsEnabled = this.tsss.getTaskerTaskFormViewsEnabled();
+		// STRY0119569 - this constant is in tasker_User_Form_Preferences
+		this.PREFERENCE_DEFAULT_TASK_FORM_VIEW = 'DTechApps.Tasker.' + '.defaultTaskFormView';
+
 		// DFCT0010755
 		this.g_taskUserFormPreferences = g_taskUserFormPreferences;
 		if (this.g_taskUserFormPreferences.lastRefreshDateTime != undefined){
@@ -44,28 +51,75 @@ tasker_User_Form_Preferences.prototype = {
 	
 	loadFormViews: function(view_type){
 		var taskFormViews = [];
-		var taskFormView;
-		var gr_task_form_views = new GlideRecordSecure("x_153465_discovert_tasker_form_views");
-		gr_task_form_views.addQuery("u_active", true);
-		gr_task_form_views.addQuery("u_view_type", view_type);
-		gr_task_form_views.orderBy("u_order");
-		gr_task_form_views.query();
-		while(gr_task_form_views.next()){
-			taskFormView = this._loadFormViewObject(gr_task_form_views);
-			taskFormViews.push(taskFormView);
+		// STRY0116257 - if the viewtype is disabled, return empty list
+		if(this._formViewsEnabled.contains(view_type)){
+			var taskFormView;
+			var gr_task_form_views = new GlideRecordSecure("x_153465_discovert_tasker_form_views");
+			gr_task_form_views.addQuery("u_active", true);
+			gr_task_form_views.addQuery("u_view_type", view_type);
+			gr_task_form_views.orderBy("u_order");
+			gr_task_form_views.query();
+			while(gr_task_form_views.next()){
+				taskFormView = this._loadFormViewObject(gr_task_form_views);
+				taskFormViews.push(taskFormView);
+			}
 		}
 		return taskFormViews;
 	},
 	
+	// INPUT: Task record or null
+	// RETURN the Form View object for the task.  If no task, return user default, if no user default saved yet, return system default
+	getDefaultTaskerFormView: function(gr_task){
+		var defaultFormViewId;
+		var taskFormView;
+		if(gr_task && gr_task.u_servicenow_form_view) {
+			defaultFormViewId = gr_task.u_servicenow_form_view;
+		} else {
+			var defaultTaskFormView = gs.getUser().getPreference(this.PREFERENCE_DEFAULT_TASK_FORM_VIEW);
+			if(defaultTaskFormView){
+				defaultFormViewId = defaultTaskFormView;
+			} else {
+				defaultFormViewId = this.tsss.getTaskerDefaultView();
+			}
+		}
+		taskFormView = this._getDefaultFormViewUsingId(defaultFormViewId);
+		return taskFormView;
+	},
+	
+	// Object Returned 
+	//    taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};
+	// NOTE: if no form views for a task type, then this will return an undefined object
+	_getDefaultFormViewUsingId: function(tfv_sys_id){
+		var taskFormView;
+		var gr_task_form_views = new GlideRecordSecure("x_153465_discovert_tasker_form_views");
+		if(gr_task_form_views.get(tfv_sys_id)){
+			taskFormView = this._loadFormViewObject(gr_task_form_views);
+		} else {
+			// technically this should not be necessary, but since an early 2.8 push stored object instead of id
+			// if the sys_id isn't found, reset to the system default
+			var defaultFormViewId = this.tsss.getTaskerDefaultView();
+			if(tfv_sys_id != defaultFormViewId){
+				if(gr_task_form_views.get(defaultFormViewId)){
+					taskFormView = this._loadFormViewObject(gr_task_form_views);
+				}
+			}
+		}
+		return taskFormView;
+	},
+
 	// INPUT: Tasker Type value, View Type value
 	// RETURN the lowest order Form View object 
-	// Object Returend - taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", filter: ""};
+	// Object Returned - 
+	//    taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};
 	// NOTE: if no form views for a task type, then this will return an undefined object
 	getDeafultFormViewForType: function(taskerTypeValue, viewType){
 		var taskFormView;
 		var gr_task_form_views = new GlideRecordSecure("x_153465_discovert_tasker_form_views");
 		// look for both sys_id and name for the type
-		gr_task_form_views.addQuery("u_tasker_type", taskerTypeValue).addOrCondition("u_tasker_type.tasker_type", taskerTypeValue);
+		if(viewType != 'advanced_view'){
+			gr_task_form_views.addQuery("u_tasker_type", taskerTypeValue).addOrCondition("u_tasker_type.tasker_type", taskerTypeValue);	
+		}
+		gr_task_form_views.addQuery("u_view_type", viewType);
 		gr_task_form_views.orderBy("u_order");
 		gr_task_form_views.query();
 		
@@ -74,11 +128,12 @@ tasker_User_Form_Preferences.prototype = {
 		}
 		return taskFormView;
 	},
-	
+
 	// loads a form view object from the form view record
-	// taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", filter: ""};
+	// Object Returned
+	//    taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};
 	_loadFormViewObject: function(gr_task_form_views){
-		var taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", filter: "", fieldValues: []};
+		var taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};
 		var fieldValues = [];
 		var filter = gr_task_form_views.getValue("u_form_filter");
 		var arrfields = filter.split('^');
@@ -95,6 +150,7 @@ tasker_User_Form_Preferences.prototype = {
 			sys_id: gr_task_form_views.getUniqueValue(),
 			icon:"", 
 			description: gr_task_form_views.getDisplayValue("u_description"),
+			view_type: gr_task_form_views.getValue("u_view_type"),
 			title: gr_task_form_views.getDisplayValue("u_display_name"),
 			sn_view: gr_task_form_views.getDisplayValue("u_servicenow_form_view"),
 			filter: gr_task_form_views.getValue("u_form_filter"),
@@ -191,21 +247,20 @@ tasker_User_Form_Preferences.prototype = {
 
 	loadMyFormPreferences: function (OUsWhereIamAMember, OUsWhereIamATaskManager, UserTopOUs){
 		// STRY0114645 
-		var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
 		var userID = gs.getUserID();
 		
 		// if user's OUs are not passed in, load them
 		// USE this for all loadMy - because it uses session variable to avoid loading
 		if(!OUsWhereIamAMember)
-			OUsWhereIamAMember = tsss.getOUsWhereIamAMember();
+			OUsWhereIamAMember = this.tsss.getOUsWhereIamAMember();
 		
 		if (!OUsWhereIamATaskManager) {
-			OUsWhereIamATaskManager = tsss.getMyOUTaskManagers();
+			OUsWhereIamATaskManager = this.tsss.getMyOUTaskManagers();
 		}
 
 		// STRY0114645 
 		if (!UserTopOUs) {
-			UserTopOUs = tsss.getTopOUsForUser(OUsWhereIamAMember);
+			UserTopOUs = this.tsss.getTopOUsForUser(OUsWhereIamAMember);
 		}
 		
 		// DFCT0010708 - STRY0114645 
@@ -214,11 +269,10 @@ tasker_User_Form_Preferences.prototype = {
 	
 	// DFCT0010708
 	loadUserFormPreferences: function (userID){
-		var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
-		var OUsWhereUserIsAMember = tsss.getOUsWhereUserIsAMember(userID);
-		var OUsWhereUserIsTaskManager = tsss.getUserOUTaskManagers(userID);
+		var OUsWhereUserIsAMember = this.tsss.getOUsWhereUserIsAMember(userID);
+		var OUsWhereUserIsTaskManager = this.tsss.getUserOUTaskManagers(userID);
 		// STRY0114645 
-		var UserTopOUs = tsss.getTopOUsForUser(OUsWhereUserIsAMember);
+		var UserTopOUs = this.tsss.getTopOUsForUser(OUsWhereUserIsAMember);
 		// STRY0114645 
 		return this._userFormPreferences(userID, OUsWhereUserIsAMember, OUsWhereUserIsTaskManager, UserTopOUs);
 	},
@@ -258,7 +312,8 @@ tasker_User_Form_Preferences.prototype = {
 		url_Properties.pageTable = 'x_153465_discovert_route_task_instance';
 
 		// STRY0114645
-		var system_default_view = gs.getProperty("x_153465_discovert.default_task_view") + '';
+		var obj_system_default_view = this.getDefaultTaskerFormView();
+		var system_default_view = obj_system_default_view.sn_view;
 		// if view passed, use it, if not, use system property if set, otherwise, set to simple_task
 		url_Properties.view =  current_view != '' ? current_view :
 					system_default_view != '' ? system_default_view :'simple_task';
@@ -266,6 +321,7 @@ tasker_User_Form_Preferences.prototype = {
 		url_Properties.portal_url_ref = this.g_taskUserFormPreferences.defaultServicePortal;
 		var gr_task_pref = new GlideRecord(url_Properties.pageTable);
 		if(gr_task_pref.get(sys_id)){
+			var task_default_form_view = this.getDefaultTaskerFormView(gr_task_pref);
 			var getFormToLoadOptions = this.g_taskUserFormPreferences.Preferences.filter(function (pref){
 				var matchFailure = 
 					(pref.u_task_user.displayValue != '' && pref.u_task_user.displayValue != null && pref.u_task_user.value.toString().indexOf(userID)==-1) || 
@@ -286,7 +342,12 @@ tasker_User_Form_Preferences.prototype = {
 				if(formToLoad.u_servicenow_portal_page.displayValue != '' && formToLoad.u_servicenow_portal_page.displayValue != null){
 					url_Properties.pageId = formToLoad.u_servicenow_portal_page.value;	
 				}
-				if(formToLoad.u_servicenow_form_view.displayValue != '' && formToLoad.u_servicenow_form_view.displayValue != null){
+				// form view is different for now pages are still loaded from the Form preference override, but form views are loaded from the task record
+				// This will change as the page will move into the form view table and we will load the page from the task reference also
+				// this will work much better as it will be set on creation, not set using the current override.
+				if(gr_task_pref.u_servicenow_form_view && gr_task_pref.u_servicenow_form_view != ''){
+					url_Properties.view = task_default_form_view.sn_view;
+				} else if(formToLoad.u_servicenow_form_view.displayValue != '' && formToLoad.u_servicenow_form_view.displayValue != null){
 					url_Properties.view = formToLoad.u_servicenow_form_view.value;	
 				}
 				if(formToLoad.u_service_portal.displayValue != '' && formToLoad.u_service_portal.displayValue != null){
@@ -296,8 +357,7 @@ tasker_User_Form_Preferences.prototype = {
 			} else if(gr_task_pref.getDisplayValue("u_servicenow_form_view") != ""){
 				// if there is no form override, and the view is set for the task, set the view for the task based on the user selection
 
-				// TODO - before shipping 2.8, determine if more needs to be done here
-				url_Properties.view = gr_task_pref.getDisplayValue("u_servicenow_form_view");
+				url_Properties.view = task_default_form_view.sn_view;
 				
 			}
 		}
@@ -352,13 +412,13 @@ tasker_User_Form_Preferences.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-07-21 01:42:57</sys_created_on>
         <sys_id>700e2f90db6978501e1792c5d49619f1</sys_id>
-        <sys_mod_count>182</sys_mod_count>
+        <sys_mod_count>202</sys_mod_count>
         <sys_name>tasker_User_Form_Preferences</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_700e2f90db6978501e1792c5d49619f1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-18 04:04:58</sys_updated_on>
+        <sys_updated_on>2022-06-23 22:27:16</sys_updated_on>
     </sys_script_include>
 </record_update>
