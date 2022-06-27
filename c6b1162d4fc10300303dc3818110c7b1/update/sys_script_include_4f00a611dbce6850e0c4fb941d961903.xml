@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'&#13;
+        <description>2.8     | 2022-06-26 | raj     |  STRY0111263 - Rejecting an Approval Task- Enhance cascade closing tasks to 'Descendants of Parent Approval' and 'Task Order'&#13;
+2.8     | 2022-06-26 | raj     |  STRY0123458 - Enhancing SEQ Approval- Approval Tasks no longer needs 'Wait for Subtasks" checked to allow 'Rejecting Approval Subtask' to 'cascade close ancestors'&#13;
+2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'&#13;
 2.8     | 2022-06-03 | raj     | STRY0122187 - (REQs Improvement Story) OU Reassignment– Email Notification [N-20]&#13;
 2.7.3 | 2022-06-02 | raj     | STRY0122888 - Closing Tasks will DELETE ALL Draft Descendants&#13;
 2.8 | 2022-05-06 | mmcc | STRY0115297 - New Task Form- Allow users to start Tasks as Draft&#13;
@@ -124,42 +126,111 @@ Task_uiAction.prototype = {
 		if(task.parent){
 			var grParent = new GlideRecord('x_153465_discovert_route_task_instance');
 			if (grParent.get(task.parent)){
-				if( grParent.u_wait_for_subtasks_to_finish == true){
-					if(grParent.work_item_type == "review_item" && task.decision == sRejected){
-						// Parent task is also a task with an approve reject task type, cancel the parent
-						// *************************************************************************************
-						// DFCT0010460 
-						grParent.work_notes = 'This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by ' + gs.getMessage('Tasker - (Reviewer):') + " " + gs.getUserDisplayName() + gs.getMessage('Tasker -  (Comment):') + task.comments;
-						grParent.decision = sRejected;
-						grParent.state = 4; // closed incomplete this should be in an application constant
-						grParent.active = 'false';
-						
-						// DFCT0010592
-						grParent.setValue('closed_at', task.getValue('closed_at'));
-						grParent.closed_by = task.closed_by;
-						grParent.setValue('work_end', task.getValue('work_end'));
-						
-						//var gdt = new GlideDateTime();
-						//grParent.work_end = gdt.getValue();
-						grParent.update();
-						// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
-						gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
-						
-						// If we want to add parent close response log entry when a child rejection closes it, make the call right here
-						// DFCT0010577 - recursively move up
-						if(grParent.parent){
-							this._startParentOrCloseParentRecursive(grParent);
-						}
-					} else{
-						// STRY0076597 - a child closed, check to see if all siblings for this task are closed.  If all siblings are closed and parent is in wait state, wake it up
-						grParent.state = TaskerHelper.getUpdatedState(grParent);
-						grParent.update();
-					}
+				// STRY0123458 removed the if on wait for subtasks
+				if(grParent.work_item_type == "review_item" && task.decision == sRejected){
+					// Parent task is also a task with an approve reject task type, cancel the parent
+					// *************************************************************************************
+					// DFCT0010460 
+					grParent.work_notes = 'This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by ' + gs.getMessage('Tasker - (Reviewer):') + " " + gs.getUserDisplayName() + gs.getMessage('Tasker -  (Comment):') + task.comments;
+					grParent.decision = sRejected;
+					grParent.state = 4; // closed incomplete this should be in an application constant
+					grParent.active = 'false';
+
+					// DFCT0010592
+					grParent.setValue('closed_at', task.getValue('closed_at'));
+					grParent.closed_by = task.closed_by;
+					grParent.setValue('work_end', task.getValue('work_end'));
+
+					//var gdt = new GlideDateTime();
+					//grParent.work_end = gdt.getValue();
+					grParent.update();
+					// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
+					gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
+
+					// If we want to add parent close response log entry when a child rejection closes it, make the call right here
+					// DFCT0010577 - recursively move up
+					this._closeRelatedTasks(grParent);
+				} else{
+					// STRY0076597 - a child closed, check to see if all siblings for this task are closed.  If all siblings are closed and parent is in wait state, wake it up
+					// STRY0111263
+					this._closeTaskOrderDependentApprovals(grParent, task, task.getValue("task_order"));
+					grParent.state = TaskerHelper.getUpdatedState(grParent);
+					grParent.update();
 				}
 			}
 		}
 	},
+	
+	// STRY0111263 - Rejecting an Approval Task- Enhance cascade closing tasks to 'Descendants of Parent Approval' and 'Task Order' 
+	_closeTaskOrderDependentApprovals: function(grParent, task, taskOrder){
+		// TechDebt the text Rejected should be moved into a "constant" so all places use that constant
+		var sRejected = 'Rejected';
+		var countActiveInOrder = 0;
+		var countActiveInLaterOrder = 0;
+		taskOrder = parseInt(taskOrder);
+		var nextOrder = taskOrder + 1;
 
+		// close all all approval tasks in the current task order
+		var grSiblings = new GlideRecord('x_153465_discovert_route_task_instance');
+		var gaActiveInOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
+		var gaActiveInLaterOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
+		grSiblings.addQuery("parent", grParent.getUniqueValue());
+		grSiblings.addQuery("task_order", taskOrder);
+		grSiblings.addQuery("work_item_type", "review_item");
+		grSiblings.addQuery("active", true);
+		grSiblings.query();
+		while(grSiblings.next()){
+			this._closeSibling(grSiblings, task);
+		}
+		
+		// count non-approval tasks (approvals were all clsed, so just count acitve), in the current order
+		gaActiveInOrder.addQuery("parent", grParent.getUniqueValue());
+		gaActiveInOrder.addQuery("task_order", taskOrder);
+		gaActiveInOrder.addQuery("active", true);
+		gaActiveInOrder.addAggregate('COUNT');
+        gaActiveInOrder.query();
+        if (gaActiveInOrder.next()){
+			countActiveInOrder = gaActiveInOrder.getAggregate('COUNT');
+		}
+		// if no active task that are not review type in current order, move to next order
+		if(countActiveInOrder==0){
+			gaActiveInLaterOrder.addQuery("parent", grParent.getUniqueValue());
+			gaActiveInLaterOrder.addQuery("task_order",">", taskOrder);
+			gaActiveInLaterOrder.addQuery("active", true);
+			gaActiveInLaterOrder.addAggregate('COUNT');
+			gaActiveInLaterOrder.query();
+			if (gaActiveInLaterOrder.next()){
+				countActiveInLaterOrder = gaActiveInLaterOrder.getAggregate('COUNT');
+			}
+			// if there are active tasks in the next order, but not in this order, look for a non review
+			// type in the next order
+			if(countActiveInLaterOrder>0){
+				// recurse this function to move to the next task order
+				this._closeTaskOrderDependentApprovals(grParent, task, nextOrder);
+
+			}
+		}
+	},
+	// STRY0111263 - Rejecting an Approval Task- Enhance cascade closing tasks to 'Descendants of Parent Approval' and 'Task Order'
+	_closeSibling:function(grSibling, task){
+		grSibling.work_notes = 'This Task was an Approval Task dependent on a sibling completion.  A sibling was rejected causing this task to also be rejected by ' + gs.getMessage('Tasker - (Reviewer):') + " " + gs.getUserDisplayName() + gs.getMessage('Tasker -  (Comment):') + task.comments;
+		grSibling.decision = sRejected;
+		grSibling.state = 4; // closed incomplete this should be in an application constant
+		grSibling.active = 'false';
+
+		// DFCT0010592
+		grSibling.setValue('closed_at', task.getValue('closed_at'));
+		grSibling.closed_by = task.closed_by;
+		grSibling.setValue('work_end', task.getValue('work_end'));
+
+		//var gdt = new GlideDateTime();
+		//grParent.work_end = gdt.getValue();
+		grSibling.update();
+		// TODO: MULTILANGUAGE
+		gs.addInfoMessage(grSibling.number + ' has been successfully '+ sRejected +' and marked as Completed');
+		
+	},
+	
 	// DFCT0010577 - this was moved out of the business rule and performed here
 	_closeSubTasksRecursive: function(task){
 		var sRejected = 'Rejected';
@@ -1444,13 +1515,13 @@ Task_uiAction.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>251</sys_mod_count>
+        <sys_mod_count>257</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-08 12:49:11</sys_updated_on>
+        <sys_updated_on>2022-06-27 21:32:35</sys_updated_on>
     </sys_script_include>
 </record_update>
