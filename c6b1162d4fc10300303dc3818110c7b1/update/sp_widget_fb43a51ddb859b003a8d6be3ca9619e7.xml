@@ -135,13 +135,15 @@
 	//extension
 	//This runs at first load.
 	function loadDynamicDocIntWidgets() {
-		for (var i in $scope.data._docint_widget._docint_tabs) {
-			var _tab = $scope.data._docint_widget._docint_tabs[i];
+		if($scope.data._docint_widget){
+			for (var i in $scope.data._docint_widget._docint_tabs) {
+				var _tab = $scope.data._docint_widget._docint_tabs[i];
 
-			// only clear the tab if it isn't the default empty tab
-			if((c.data.DocIntShareFolderON || $scope.data._docint_widget._docint_tabs[i].caption != 'Shared Documents') ){
-				loadDocIntWidget($scope.data._docint_widget._docint_tabs[i]);
-			}
+				// only clear the tab if it isn't the default empty tab
+				if((c.data.DocIntShareFolderON || $scope.data._docint_widget._docint_tabs[i].caption != 'Shared Documents') ){
+					loadDocIntWidget($scope.data._docint_widget._docint_tabs[i]);
+				}
+			}			
 		}
 	}
 
@@ -173,17 +175,19 @@
 		// STRY0119587
 		if (!c.data.hideDocuments ){
 			if (e && e.source) {
-				for (var i in $scope.data._docint_widget._docint_tabs) {
-					//
-					var _section = $scope.data._docint_widget._docint_tabs[i];
-					if (e.source == _section.id + _section.caption) {
-						if (e.count) {
-							_section.count = e.count;
+				if($scope.data._docint_widget){
+					for (var i in $scope.data._docint_widget._docint_tabs) {
+						//
+						var _section = $scope.data._docint_widget._docint_tabs[i];
+						if (e.source == _section.id + _section.caption) {
+							if (e.count) {
+								_section.count = e.count;
+							}
+							if (e.errorMessages) {
+								_section.error = e.errorMessages;
+							}
+							break;
 						}
-						if (e.errorMessages) {
-							_section.error = e.errorMessages;
-						}
-						break;
 					}
 				}
 			}
@@ -239,6 +243,17 @@
 		window.open(redirectUrlNew, '_blank');
 	};
 
+	// STRY0119580 - toggle between advanced and quick task
+	$scope.toggleFormView = function(view_type){
+		$scope.submitting = true;
+		$scope.data.toggleForm = true;
+		$scope.data.toggle_view_type = view_type;
+		$scope.data.tasker_type = g_form.getValue('tasker_type');
+		$scope.server.update($scope).then(function () {
+			$scope.submitting = false;
+		});
+		
+	}
 	// 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis 
 	$scope.openTaskFullScreen = function() {
 		var urlRef = c.data.url_Properties.portal_url_ref == undefined ? 'discovertaskerportal' : c.data.url_Properties.portal_url_ref;
@@ -438,6 +453,7 @@
 		$scope.data.view = newFormObjSelected.sn_view;
 		var fieldValues = newFormObjSelected.fieldValues;
 		c._setFieldValues(fieldValues);
+		$scope.submitting = true;
 		//01713ba91b538d90d6062023b24bcba4 is the 'save_as_draft' guid
 		g_form.submit('01713ba91b538d90d6062023b24bcba4');
 	}	
@@ -447,6 +463,7 @@
 		$scope.data.view = newFormObjSelected.sn_view;
 		var fieldValues = newFormObjSelected.fieldValues;
 		c._setFieldValues(fieldValues);
+		$scope.submitting = true;
 		// save instead of submitting 
 		g_form.save();
 	}		
@@ -537,14 +554,24 @@
 	}
 
 	$scope.$on("spModel.uiActionComplete", function(evt, response) {
+
 		// 2021.04.15 - Fix issue with form submit when to reload the form
 		// *************** Customization Start ***************************
 		// RAJ - Added below to close window when finished
 		// STRY0074663
-		if (c.data.isModal) {
+		if (c.data.isModal && 
+				c.data.baseWidget != "new_tasker_selection") {
 			$scope.$parent.$parent.$dismiss();
 			return;
 		} // 09.10
+
+		// this was added to tell New task form the uiaction has finished
+		var sysID = (response && response.isInsert) ? response.sys_id : $scope.data.sys_id;
+		var params = {};
+		params.action = c.data.currentAction;
+		params.rec_sys_id = sysID;
+		$rootScope.$broadcast('sp.form.ui_action.uiActionComplete', params);
+
 		// *************** Customization End ***************************
 
 		// START - RAJ Remove post back on Modals
@@ -557,8 +584,8 @@
 		//               If data.sys_id was -1, then the new item is from thei form.  The Create UI Action for task redirects.  So, the key case should not get here
 		//               If data.sys_id is NOT -1, then the response Insert is NOT for this form.
 		if ($scope.data.sys_id ==-1 && 
-			($scope.data.table == 'x_153465_discovert_route_task_instance' || $scope.data.table == 'x_153465_discovert_discover_routing_template')){
-			var sysID = (response && response.isInsert) ? response.sys_id : $scope.data.sys_id;
+			($scope.data.table == 'x_153465_discovert_route_task_instance' || 
+			 $scope.data.table == 'x_153465_discovert_discover_routing_template')){
 			var error;
 			if (response.$$uiNotification[0]) {
 				if (response.$$uiNotification[0].type == "error") {
@@ -566,6 +593,12 @@
 				} else {
 					error = false;
 				}
+			}
+
+			// if this widget is embeded in the new_tasker_selection widget, 
+			// then let that widget handle what happens next
+			if (c.data.baseWidget == "new_tasker_selection") {
+				return;
 			}
 
 			if (response && response.isInsert && (!error)) {
@@ -713,10 +746,12 @@
 	});
 
 	$scope.triggerUIAction = function(action) {
+		// STRY0119918
+		c.data.currentAction = action;
 		if ($scope.data.disableUIActions && !action.primary) {
 			return;
 		}
-		$rootScope.$broadcast('sp.form.ui_action.triggered');
+		$rootScope.$broadcast('sp.form.ui_action.triggered', action);
 		if (action.action_name == 'createSchedule') {
 			$('button[gsft_id="9a33e9b6db6e6380bb8ee536ca96190d"]').remove();
 		}
@@ -736,7 +771,8 @@
 				}
 
 				// STRY0074663
-				if ($scope.submitting == true && c.data.isModal) {
+				if ($scope.submitting == true && c.data.isModal &&
+					 c.data.baseWidget != "new_tasker_selection") {
 					$scope.$parent.$parent.$dismiss();
 				} // 09.10
 			} 
@@ -854,10 +890,11 @@
 				(c.data.table == 'x_153465_discovert_route_task_instance' ||
 				 c.data.table == 'x_153465_discovert_discover_routing_template' ||
 				 c.data.table == 'x_153465_discovert_route_tasks')) {
-
-				for (var i in $scope.data._docint_widget.config_form_sections) {
-					var ui_section_name = $scope.data._docint_widget.config_form_sections[i];
-					g_form.setSectionDisplay(ui_section_name, false);
+				if($scope.data._docint_widget){
+					for (var i in $scope.data._docint_widget.config_form_sections) {
+						var ui_section_name = $scope.data._docint_widget.config_form_sections[i];
+						g_form.setSectionDisplay(ui_section_name, false);
+					}
 				}
 			}
 			/****************************************************************/
@@ -1504,6 +1541,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 (function($sp, input, data, options, gs) {
 	// DFCT0010657
 	var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+	data.allowFormViewToggle = tasking_System_Settings_Scripts.TASK_FORM_PROPERTY_VALUE == tasking_System_Settings_Scripts.CONST_BOTH_QUICK_AND_ADVANCED_TASK_FORMS;
 	var url_Properties = {};
 	if (input && input.getURL==true){
 		// if just getting the URL, then get URL and return
@@ -1548,6 +1586,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.omit_icons=(input || {}).omit_icons || (options || {}).omit_icons || false; 
 	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions;
 	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;
+	// STRY0119580
+	data.toggleForm = false;
+	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
+
 	//------------------------------------------------------------------------------------------------------------------------
 	// CUSTOM
 	//------------------------------------------------------------------------------------------------------------------------
@@ -1569,7 +1611,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.service_portal_url_suffix = '';
 	}
 
-
 	data.page_id = $sp.getParameter("id");
 	data.sys_id = $sp.getParameter("sys_id");
 	data.filter = $sp.getParameter("filter") || $sp.getValue('filter');
@@ -1587,6 +1628,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.table = input.table;
 		data.sys_id = input.sys_id;
 		data.view = input.view;
+		// STRY0119580 - toggle of quick / advanced clicked, load other view
+		if(input.toggleForm){
+			data.taskFormView = oUserPref.getDeafultFormViewForType(input.tasker_type, input.toggle_view_type);
+		}
 
 		//STRY0056591
 		if (input.parent)
@@ -1714,16 +1759,32 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
 	// moved this logic below the record get so the record state could be used in the logic
 	if(data.table == 'x_153465_discovert_route_task_instance'){
-		// set view to blank to load system default by default or the view based on view rule for the task
-		var view = '';
-		// new task or draft task, allow view to change
-		if(data.sys_id == -1 || rec.state == -6){
-			// for new items data.view will be set on the input for a modal, and on the url for a full page new item
-			// rj test			
-			view = data.view || (input || {}).view || (options || {}).view || $sp.getParameter("view");
+		// STRY0119580 - if data.taskFormView was not set by input above, set here
+		if(data.taskFormView){
+			data.view = data.taskFormView.sn_view;
+
+		} else {
+			// set view to blank to load system default by default or the view based on view rule for the task
+			var view = '';
+
+			data.taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};	
+
+			// new task or draft task, allow view to change
+			if(data.sys_id == -1 || rec.state == -6){
+				// for new items data.view will be set on the input for a modal, and on the url for a full page new item
+				view = data.view || (input || {}).view || (options || {}).view || $sp.getParameter("view");
+			} else {
+				// STRY0119580
+				var taskFormView = oUserPref.getDefaultTaskerFormView(rec);
+				if(taskFormView){
+					data.taskFormView = taskFormView;
+				}			
+			}
+
+			url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
+			data.view = url_Properties.view;
 		}
-		url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
-		data.view = url_Properties.view;
+		
 	} else {
 		data.view = data.view || $sp.getParameter("view") || "sp"; // SP default
 	}
@@ -1787,11 +1848,21 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.permissiveOUTasking = gs.getProperty('x_153465_discovert.PermissiveOUTaskingOptions') != 'Off'; 
 		data.taskingUnlocked = rec.u_ou_is_permissive == true;
 	}
-
 	//data.canAttach = data.canWrite && gs.hasRole(gs.getProperty('glide.attachment.role')) && !GlideTableDescriptor.get(data.table).getED().getBooleanAttribute("no_attachment"); //for GLOBAL app
 	//var gtd = new GlideTableDescriptor(data.table);
 	//&& !gtd.get(data.table).getED().getBooleanAttribute("no_attachment"); 
 	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view);
+	// STRY0119580 - toggle of quick / advanced clicked, load other view
+	//             - this sets the value for all old data
+	if(data.table == 'x_153465_discovert_route_task_instance' && data.taskFormView){
+		if(!data.f._fields.u_servicenow_form_view ||
+			 data.f._fields.u_servicenow_form_view.value == ""){
+			data.f._fields.u_servicenow_form_view.value = data.taskFormView.sys_id;
+			data.f._fields.u_servicenow_form_view.displayValue = data.taskFormView.title;
+		}
+	}
+		
+
 
 	// STRY0063505 | in debugging the process docs story, we realized data.isActive was only set if the field was on the form.
 	data.isActive = false;
@@ -2051,14 +2122,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4219</sys_mod_count>
+        <sys_mod_count>4279</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-19 18:44:19</sys_updated_on>
+        <sys_updated_on>2022-06-26 00:35:18</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2167,16 +2238,26 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           <div ng-switch="data.table">
             <div ng-switch-when="x_153465_discovert_route_task_instance">
               <div ng-if="data.omit_icons!=true && data.sys_id!=-1" class="dtech-push-right-flexbox">
-              <img src="{{data.AdvancedTask24.src}}" title="{{data.AdvancedTask24.title}}"
-                   alt="{{data.AdvancedTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
-              <img src="{{data.QuickTask24.src}}" title="{{data.QuickTask24.title}}"
-                   alt="{{data.QuickTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+                <!-- STRY0119580 toggle between advanced and quick task-->
+                <img ng-if="data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection'"
+                     src="{{data.AdvancedTask24.src}}" title="{{data.AdvancedTask24.title}}"
+                     alt="{{data.AdvancedTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" 
+                     ng-class="{'dtech-disabled': data.taskFormView.view_type=='advanced_view', 'dtech-enabled': data.taskFormView.view_type=='quick_view'}"
+                     ng-click="toggleFormView('advanced_view')"/>
+                <img ng-if="data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection'"
+                     src="{{data.QuickTask24.src}}" title="{{data.QuickTask24.title}}"
+                     alt="{{data.QuickTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" 
+                     ng-class="{'dtech-disabled': data.taskFormView.view_type=='quick_view', 'dtech-enabled': data.taskFormView.view_type=='advanced_view'}"
+                     ng-click="toggleFormView('quick_view')"/>
 
-              <img ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown'"
-                   src="{{data.TaskFullscreen16.src}}" title="{{data.TaskFullscreen16.title}}"
-                   alt="{{data.TaskFullscreen16.alt}}" class="dtech-enabled dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
-              <img ng-if="data.omit_icons!=true && data.sys_id!=-1" src="{{data.Divider.src}}" title="{{data.Divider.title}}"
-                   alt="{{data.Divider.alt}}" class="dtech-pad-all-10"/>
+                <img ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown' || (data.baseWidget=='new_tasker_selection' && data.sys_id !=-1)"
+                     src="{{data.TaskFullscreen16.src}}" title="{{data.TaskFullscreen16.title}}"
+                     alt="{{data.TaskFullscreen16.alt}}" class="dtech-enabled dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+                <img ng-if="(data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown' || (data.baseWidget=='new_tasker_selection' && data.sys_id !=-1)) ||
+                            (data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection') &&
+                            data.omit_icons!=true && data.sys_id!=-1" 
+                     src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+                     alt="{{data.Divider.alt}}" />
                 
                 <img src="{{data.Information16.src}}" title="{{data.Information16.title}}"
                      alt="{{data.Information16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openOperationalModal()"/>
@@ -2185,7 +2266,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
                 <img src="{{data.Schedule16.src}}" title="{{data.Schedule16.title}}"
                      alt="{{data.Schedule16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openDurationModal()"/>
                 <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
-                     alt="{{data.Divider.alt}}" class="dtech-pad-all-10" ng-show="data.canCreateSubTask"/>
+                     alt="{{data.Divider.alt}}" ng-show="data.canCreateSubTask"/>
                 <img src="{{data.GenericAdd16.src}}" title="{{data.GenericAdd16.title}}"
                      alt="{{data.GenericAdd16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openCreateModal()"
                      ng-show="data.canCreateSubTask"/>

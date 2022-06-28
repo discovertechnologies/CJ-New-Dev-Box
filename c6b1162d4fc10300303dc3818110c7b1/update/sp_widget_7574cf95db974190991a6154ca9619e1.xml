@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller=function($scope, $location, $rootScope,spModal,$uibModal, spUtil, amb, $timeout) {
+        <client_script><![CDATA[api.controller=function($scope, $location, $rootScope,spModal,$uibModal, spUtil, amb, $timeout, $log) {
   /* widget controller */
   var c = this;
 	// used in _switchTaskFormView to switch form 
 	var newObjSelected = {};
 	main();
 	function main(){
+		c.data.submitting = false;
 		// currently no code in main
 	}
 	
@@ -17,11 +18,20 @@
 		newObjSelected = objSelected;
 		var isDataDirty = c.data.new_task_widget_forms[0].widget.checkChanges();
 		if(isDataDirty){
+			var title = "";
+			if(!c.data.sys_id || c.data.sys_id == -1){
+				title = c.data.messages["Tasker - Delete Form Data"];
+			} else {
+				title = c.data.messages["Tasker - Update Form View"];
+			}
 			var modalSelection = {};
 			spModal.open({
-				title: c.data.messages["Tasker - Delete Form Data"],
+				title: title,
+				widgetInput: {
+					sys_id: c.data.sys_id
+				},
 				backdrop: 'static',
-				widget: 'tasker_modal_save_draf_prompt',
+				widget: 'tasker_modal_save_draft_prompt',
 				size: 'md',
 				shared: modalSelection,
 				buttons: [],
@@ -36,6 +46,7 @@
 					// if no sys_id, the post back is called below once the sys_id is returned
 					// call here if sys_id exists, no need to wait for save to complete
 					if(!c.data.sys_id || c.data.sys_id == -1){
+						c.data.modalPromptSaving = true;
 						c.data.new_task_widget_forms[0].widget.saveAsDraft(newObjSelected);	
 					} else {
 						_switchTaskFormView(true);
@@ -52,20 +63,65 @@
 			_switchTaskFormView(true);
 		}
 	}
-	$rootScope.$on("sp.form.submitted", function (event, params) {
-		c.data.sys_id = params.sys_id;
-		_switchTaskFormView(false);
+	
+	$rootScope.$on("sp.form.ui_action.uiActionComplete", function (event, params) {
+		c.data.submitting = false;
+		// if this control is saving based on the modal prompt, reset form view
+		if(c.data.modalPromptSaving){
+			c.data.sys_id = params.rec_sys_id;
+			_switchTaskFormView(false);
+			c.data.modalPromptSaving=false;
+		}
+		// if in modal, the modal should close
+		if(c.data.isModal){
+			$scope.$parent.$parent.$dismiss();
+		}
+	
+		// enable form
+		// if not save as draft, update or cancel, then redirect to new page
+		if(params.action)
+			if(params.action.action_name != "save_as_draft" &&
+				params.action.action_name != "sysverb_update"){
+			c.data.sys_id=params.rec_sys_id;
+			c.data.getURL=true;
+			// without this check there were a couple of unexpected errors in the browser
+			if($scope.data.settings &&
+				 $scope.data.settings.defaultTaskFormView){
+				c.data.view=$scope.data.settings.defaultTaskFormView.sn_view;
+			}
+			$scope.server.update().then(function(data) {
+				var redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+				$location.url(redirectUrlNew);
+			});			
+		} else{
+			c.data.sys_id = params.rec_sys_id;
+			// set new object to current if not set
+			if(!newObjSelected){
+				newObjSelected = $scope.data.settings.defaultTaskFormView;
+			}
+			_switchTaskFormView(false);
+		}
+
+	});
+	
+	$rootScope.$on("sp.form.ui_action.triggered", function (event, action) {
+		c.data.submitting = true;
+		// action triggered disable selector until finished	
 	});
 	
 	function _switchTaskFormView(saveChanges){
+		c.data.submitting = true;
 		// change selected item in HTML before post back so selection is updated quickly
 		c.data.selected_id = newObjSelected.sys_id;
 
-		var search = $location.search();
-		search.sys_id = c.data.sys_id;
-		search.view = newObjSelected.sn_view;
-		search.spa = 1;
-		$location.search(search).replace();
+		if(c.data.sys_id && c.data.sys_id != -1){
+			var search = $location.search();
+			search.sys_id = c.data.sys_id;
+			search.view = newObjSelected.sn_view;
+			search.spa = 1;
+			$location.search(search).replace();
+		}
+		
 		// if task exists, update the saved task to switch to a different view
 		if(saveChanges && c.data.sys_id && c.data.sys_id != -1){
 			c.data.new_task_widget_forms[0].widget.updateDraft(newObjSelected);	
@@ -76,7 +132,9 @@
 		$scope.data.settings.defaultTaskFormView = undefined; // clear previous object
 		$scope.data.settings.defaultTaskFormView = newObjSelected;
 		$scope.data.sys_id = c.data.sys_id;
-		spUtil.update($scope);				
+		spUtil.update($scope).then(function(){
+			c.data.submitting = false;
+		});
 	}
 };]]></client_script>
         <controller_as>c</controller_as>
@@ -203,6 +261,9 @@
 //------------------------------------------------------------------------------------------------------------------------
 // 2.8 | 2022-05-05 | raj  | STRY0119569 - As a Tasker User, I want to be able to select different form views on New Task Form.
 //											New widget built to handle creating new tasks based on task type
+// 2.8    | 2022-06-21 - raj -  STRY0116257 - System Setting- Options for limiting available views and setting default "Task Form view" for New Task Forms
+//											Updates in Server and HTML
+//
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
   /* populate the 'data' object */
@@ -212,6 +273,9 @@
 	data.settings = {};
 	data.advancedTaskerTypes = [];
 	data.taskerTypes = [];
+	// STRY0116257
+	data.showAdvancedViews = false;
+	data.showQuickViews = false;
 
 	main();
 	function main(){
@@ -221,8 +285,25 @@
 		
 		// save form view preference
 		if(input){
+			if (input.getURL==true){
+				var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+				var url_Properties = {};
+				// if just getting the URL, then get URL and return
+				url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id,input.view);
+				data.sys_id = input.sys_id;
+				data.pageId = url_Properties.pageId;
+				data.pageTable = url_Properties.pageTable;
+				data.view = url_Properties.view;
+				data.portal_url_ref = url_Properties.portal_url_ref;
+				data.isValid = false;
+				data.loadingIndicator = true;
+				// only call once
+				data.getURL = false;
+				return;
+			}				
+			
 			if(input.defaultTaskFormViewUpdated){
-				taskWidgetIconsAndMessage.savePreferenceDefaultTaskFormView(input.settings.defaultTaskFormView);
+				taskWidgetIconsAndMessage.savePreferenceDefaultTaskFormView(input.settings.defaultTaskFormView.sys_id);
 			}
 			if(input.sys_id){
 				data.sys_id = input.sys_id;
@@ -238,13 +319,23 @@
 		
 		data.advancedTaskerTypes = taskerFormPreferences.loadFormViews("advanced_view");
 		data.taskerTypes = taskerFormPreferences.loadFormViews("quick_view");
+		// STRY0116257
+		data.showAdvancedViews = data.advancedTaskerTypes.length>0;
+		data.showQuickViews = data.taskerTypes.length>0;
+
 		// NOTE: currently the default is saved as a name, but should be saved as object
 		data.selected_id = data.settings.defaultTaskFormView.sys_id;
 		
 		data.bifold = (input || {}).bifold || (options || {}).bifold || false;		
 		data.isModal = (input || {}).isModal || (options || {}).isModal || false;
-		data.omit_icons = (input || {}).omit_icons || (options || {}).omit_icons || false;
-		data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;
+		// if the task has been saved, then show the header and icons
+		if(data.sys_id != -1){
+			data.omit_icons = false;
+			data.omitHeader = false;
+		} else {
+			data.omit_icons = (input || {}).omit_icons || (options || {}).omit_icons || false;
+			data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;
+		}
 		data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions || false;
 
 		data.query  = (input || {}).query || (options || {}).query || "";
@@ -269,6 +360,7 @@
 				query:  loadQuery,
 				bifold:data.bifold,
 				isModal:data.isModal,
+				baseWidget: "new_tasker_selection",
 				shared: {}
 			}
 			data.new_task_widget_forms = [];
@@ -288,40 +380,40 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-05-05 20:37:54</sys_created_on>
         <sys_id>7574cf95db974190991a6154ca9619e1</sys_id>
-        <sys_mod_count>408</sys_mod_count>
+        <sys_mod_count>455</sys_mod_count>
         <sys_name>New Tasker Selection</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_7574cf95db974190991a6154ca9619e1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-18 23:15:30</sys_updated_on>
+        <sys_updated_on>2022-06-28 06:24:33</sys_updated_on>
         <template><![CDATA[<div class="dtech-new-task-container">
 
   <div class="flex-child component-selector">
 
-    <ul class = "ul-selector">
+    <ul ng-if="data.showAdvancedViews" class = "ul-selector">
       <li class="li-selector"
           ng-class="{'li-selected': att.sys_id==data.selected_id}"
           tooltip-placement="auto bottom-center"
           uib-tooltip="{{att.description}}"
           ng-repeat="att in ::data.advancedTaskerTypes"
-          ng-click="selectType(att)">
+          ng-click="data.submitting || selectType(att)">
         <div class="li-flex-row">
           <div class="li-flex-row-child">{{att.title}}</div>
           <div class="li-flex-row-child" ng-class="{'li-flex-row-left-pointer': att.sys_id==data.selected_id}"></div>
         </div>          
       </li>
     </ul>
-    <div class = "component-selector-divider"/>
-    <div class = "component-selector-header">
+    <div ng-if="data.showQuickViews && data.showAdvancedViews" class = "component-selector-divider"/>
+    <div ng-if="data.showQuickViews" class = "component-selector-header">
       {{data.messages["Tasker - Quick Tasking"]}}
     </div>
-    <ul class = "ul-selector">
+    <ul ng-if="data.showQuickViews" class = "ul-selector">
       <li class = "li-selector"
           ng-class="{'li-selected': tt.sys_id==data.selected_id}"
           ng-repeat="tt in ::data.taskerTypes" 
-          ng-click="selectType(tt)" >
+          ng-click="data.submitting || selectType(tt)" >
         <div class="li-flex-row">
           <div class="flex-text">{{tt.title}}</div>
           <div class="flex-pointer" ng-class="{'li-flex-row-left-pointer': tt.sys_id==data.selected_id}"></div>
