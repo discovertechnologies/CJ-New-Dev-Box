@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function ($scope, spUtil, $timeout) {
+        <client_script><![CDATA[function ($scope, spModal, spUtil, $timeout) {
 	var c = this;
 	var TOOL_BAR_CONST;
 	var isCustom = false;
@@ -182,17 +182,19 @@
 	
 		// Zoom to Favorite
 	$scope.zoomToFavorite = function() {
-// TODO - post back change if top ou of favorite is not current top ou
+		// STRY0121023
 		if(c.data.settings.favorite.value && c.data.settings.favorite.value != c.widget.parentSelectedId){
-			c.widget.parentSelectedId = c.data.settings.favorite.value;
+			var newSelectedId = c.data.settings.favorite.value;
 			var favoriteOUNode = c.widget.diagram.findNodeForKey(c.data.settings.favorite.value);
 			if(favoriteOUNode){
+				c.widget.parentSelectedId = c.data.settings.favorite.value;
 				c.widget.diagram.select(favoriteOUNode);
 			} else {
-// TODO - determine if we want a message here 
-// 				Or if we want me to load a different tree, 
-// 				or, if we wnat to prompt to load a differnt tree
-alert('Temporary Message - favorite OU not in current diagram');				
+				// if user selected to stop prompt, don't show again
+				var changeTree = true;
+				if(!c.data.settings.favoriteStopPrompt){
+					changeTree =_promptChangeTree("favoriteOU", newSelectedId);
+				}
 			}
 		}
 
@@ -200,19 +202,73 @@ alert('Temporary Message - favorite OU not in current diagram');
 
 		// Zoom to Default OU
 	$scope.zoomToDefaultOU = function() {
+		// STRY0121017
 		if(c.data.settings.defaultOU.value && c.data.settings.defaultOU.value != c.widget.parentSelectedId){
-			c.widget.parentSelectedId = c.data.settings.defaultOU.value;
+			var newSelectedId = c.data.settings.defaultOU.value;
+			
 			var defaultOUNode = c.widget.diagram.findNodeForKey(c.data.settings.defaultOU.value);
 			if(defaultOUNode){
+				c.widget.parentSelectedId = c.data.settings.defaultOU.value;
 				c.widget.diagram.select(defaultOUNode);
 			} else {
-// TODO - determine if we want a message here 
-// 				Or if we want me to load a different tree, 
-// 				or, if we wnat to prompt to load a differnt tree
-alert('Temporary Message - default OU not in current diagram');				
+				// if user selected to stop prompt, don't show again
+				var changeTree = true;
+				if(!c.data.settings.defaultStopPrompt){
+					changeTree = _promptChangeTree("defaultOU", newSelectedId);
+				}
 			}
 		}
 	};
+	
+	// STRY0121023 - STRY0121017
+	// raise to OU Tree change to different tree (represented by the OU provided)									
+	function _parentChangeDiagram(selectedId){
+		var params = {};
+		params.sys_id = selectedId;
+		$scope.$emit('tasker-tree-footer-toolbar.changeTree',params);
+	}
+	
+	// STRY0121023 - STRY0121017
+	function _promptChangeTree(changeType, new_ou_id){
+		var title = c.data.messages["Tasker - Leave Current Organization Tree?"];
+
+		var modalSelection = {};
+		spModal.open({
+			title: title,
+			widgetInput: {
+				favoriteOU: (changeType=="favoriteOU"),
+				defaultOU: (changeType=="defaultOU")
+			},
+			backdrop: 'static',
+			widget: 'tasker_modal_org_change_tree_confirm',
+			size: 'md',
+			shared: modalSelection,
+			buttons: [],
+			footerStyle: {
+				'display': 'none'
+			}
+		}).then(function(response) {
+			// here when a primary button (continue to new tree)
+			if(modalSelection.confirm){
+				if(modalSelection.stopPrompt){
+					// post back here to not show again
+					if(changeType == "favoriteOU"){
+						c.data.settings.favoriteStopPrompt = true;
+						$scope.data.favoriteStopPrompt = true;
+					} else if(changeType == "defaultOU"){
+						c.data.settings.defaultStopPrompt = true;
+						$scope.data.defaultStopPrompt = true;
+					}
+					spUtil.update($scope);			
+				}
+				// change to new tree
+				_parentChangeDiagram(new_ou_id);
+				
+			}
+		}, function() {
+			// cancel selected, do not change tree
+		});
+	}
 
 	// Zoom to Top OU
 	$scope.zoomToTop = function() {
@@ -235,7 +291,7 @@ alert('Temporary Message - default OU not in current diagram');
 			spUtil.update($scope).then(function() {
 				// submit percent change back to server
 				return;
-			});			
+			});
 		}
 	};
 	
@@ -381,7 +437,13 @@ alert('Temporary Message - default OU not in current diagram');
 		} else if(input.favoriteChanged){
 			data.favoriteChanged = false;
 			taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);		
-		}	
+		// STRY0121023
+		} else if(input.favoriteStopPrompt){
+			taskWidgetIconsAndMessage.savePreferenceFavoriteStopPrompt();
+		// STRY0121017
+		} else if(input.defaultStopPrompt){
+			taskWidgetIconsAndMessage.savePreferenceDefaultStopPrompt();
+		}
 
 	}
 	
@@ -391,14 +453,14 @@ alert('Temporary Message - default OU not in current diagram');
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-04-11 16:09:41</sys_created_on>
         <sys_id>76e0ee2ddb7ec910991a6154ca9619a1</sys_id>
-        <sys_mod_count>242</sys_mod_count>
+        <sys_mod_count>252</sys_mod_count>
         <sys_name>Tasker - Tree Toolbar Icons</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_76e0ee2ddb7ec910991a6154ca9619a1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-26 15:10:55</sys_updated_on>
+        <sys_updated_on>2022-07-05 14:31:58</sys_updated_on>
         <template><![CDATA[<!-- This section is used for the HEADER icont group -->
 <div ng-if="data.iconGroup=='header'" class="dtech-push-right-flexbox">
   <div class="pull-right">
