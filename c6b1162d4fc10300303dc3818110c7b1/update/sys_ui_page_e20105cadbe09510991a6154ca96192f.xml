@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[initPage();
+
+// Use this function to initialize variables at page load
+function initPage() {
+	// set a default radio button as selected
+	gel('activeTaskOnly').checked = true;
+}
+
+// when the label is clicked update the radio button
+function labelClick (value){
+	gel(value).checked = true;
+}
+
+// dialog_button id="cancel" was clicked, user does not want to reopen the task
+function onCancel() {
+	// below will auto close popup
+	GlideDialogWindow.get().destroy();
+	return false;
+}
+
+// dialog_button id="submit" was clicked, user confirms wanting to reopen the task
+function onSubmit() {
+	// clear the previous modified to allow clean post back with the values passed in
+	g_form.modified=false;
+	return true;
+}
+]]></client_script>
+        <description>New UI Page to prompt from Platform about updating OU and changing the Tasker Number values for tasks&#13;
+</description>
+        <direct>false</direct>
+        <endpoint>x_153465_discovert_tasker_org_abbreviation_change_prompt.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+
+	<!-- Import a style sheet that the customer can edit -->
+	<!-- Tasker Theme Stytle Sheet use GlideRecord tablename: sp.css  is not accessible-->
+	<!-- Content Management > Design > Style Sheets use GlideRecord tablename: content.css -->
+	<g:evaluate object="true">
+		<!-- can have multiple stylesheets -->
+		var styleSheets = [];
+
+		styleSheets.push("tasker-modal-prompt-UIPages.css");
+
+		var linkTags = [];
+		for (var sheet in styleSheets) {
+		var css = new GlideRecord("content_css");
+		css.addQuery("name", styleSheets[sheet]);
+		css.query();
+		css.next();
+		linkTags.push(css.sys_id+".cssdbx?ver="+css.sys_updated_on);
+		}
+	</g:evaluate>
+	<j:forEach var="jvar_link" items="${linkTags}">
+		<link href="${jvar_link}" rel="stylesheet" type="text/css"></link>
+	</j:forEach>
+
+	<!-- Cache static messages -->
+	<g:messages>
+		cancel
+		Tasker - Button - Update
+		Warning
+		Tasker - You are about to update the OU Abbreviation
+		Tasker - OU Abbreviation is referenced in Tasker Number
+		Tasker - Please choose which existing tasks to update
+		Tasker - Only Active Tasks in the OU ({0} tasks will be updated)
+		Tasker - Active and Closed Tasks in the OU ({0} tasks will be updated)
+		Tasker - Only on New Tasks
+	</g:messages>
+
+	<g:ui_form>
+		<!-- pass variables from the Client Script (where spModal.open is or new GlideModal is) -->
+		<j:set var="jvar_ou_id" value="${sysparm_ou_id}"/>
+		<j:set var="jvar_form_values" value="${sysparm_form_values}"/>
+
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<input type="hidden" id="sysid" name="sysid"  value="${jvar_ou_id}"/>
+		<input type="hidden" id="form_values" name="form_values"  value="${jvar_form_values}"/>
+		<!-- Get Active Task  count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_messageActiveTasksCount" jelly="true">
+			var messageActiveTasksCount = '';
+			var activeTasksInOU = 0;
+			var taskerHelpers = new TaskerHelpers();
+			activeTasksInOU = taskerHelpers.countTasksInOU(jelly.jvar_ou_id, true);
+			messActiveTasksCount = gs.getMessage('Tasker - Only Active Tasks in the OU ({0} tasks will be updated)', [activeTasksInOU]);
+		</g:evaluate>
+		
+		<!-- Get All Task  count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_messageAllTasksCount" jelly="true">
+
+			var messageAllTasksCount = '';
+			var allTasksInOU = 0;
+			var taskerHelpers = new TaskerHelpers();
+			allTasksInOU = taskerHelpers.countTasksInOU(jelly.jvar_ou_id, false);
+			messAllTasksCount = gs.getMessage('Tasker - Active and Closed Tasks in the OU ({0} tasks will be updated)', [allTasksInOU]);			
+		</g:evaluate>
+
+			
+
+		<div class="dtech-modal-widget-body">
+			<!-- warning icon -->
+			<div class="dtech-text-center">
+				<img id="msgBody1" src="Warning64.svg"/>
+			</div>
+			<!-- warning text -->
+			<div class="dtech-text-center">
+				<h1 class="text-uppercase">${gs.getMessage('Warning')}!</h1>
+			</div>
+			<br/>
+
+			<div class="dtech-text-center dtech-task-name">
+				<span>${gs.getMessage('Tasker - You are about to update the OU Abbreviation')}</span>
+			</div>
+			<br/>
+			<br/>
+			<!-- Information icon -->
+			<div class="dtech-text-center">
+				<img class="dtech-pad-right-5" id="msgBody4" src="InfoRound24.svg"/>
+				<span >${gs.getMessage('Tasker - OU Abbreviation is referenced in Tasker Number')}</span>
+			</div>
+			<br/>
+			<br/>
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="updateType" id="activeTaskOnly" aria-label="${jvar_messageActiveTasksCount}" value="activeTasksOnly" ></input>
+						<label id="msgactiveTaskOnly" for="activeTaskOnly" class="dtech-standard-text-color dtech-radio-inline"
+							   onclick="labelClick('activeTasksOnly');"
+							   >${jvar_messageActiveTasksCount}</label>
+					</div>
+				</div>
+
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="updateType" id="allTasks" aria-label="${jvar_messageAllTasksCount}" value="allTasks" ></input>
+						<label id="msgallTasks" for="allTasks" class="dtech-standard-text-color dtech-radio-inline"
+							   onclick="labelClick('allTasks');"
+							   >${jvar_messageAllTasksCount}</label>
+					</div>
+				</div>
+
+				<div class="row">
+					<div class="col-md-10 col-md-offset-2">
+						<input type="radio" name="updateType" id="futureTasks" aria-label="${gs.getMessage('Tasker - Only on New Tasks')}" value="futureTasks"></input>
+						<label id="msgfutureTasks" for="futureTasks" class="dtech-standard-text-color dtech-radio-inline" 
+							   onclick="labelClick('futureTasks');"
+							   >${gs.getMessage('Tasker - Only on New Tasks')}</label>
+					</div>
+				</div>
+			</div>
+			<br></br>
+		</div>
+
+		<div id="footer" class="dtech-modal-widget-footer dtech-box">
+			<g:dialog_button 
+							 id="cancel"
+							 title="${gs.getMessage('cancel')}"
+							 type="button"
+							 style_class="btn btn-default dtech-max-width-fit-content"
+							 onclick="return onCancel();"
+							 >${gs.getMessage('cancel')}
+			</g:dialog_button>
+			<g:dialog_button 
+							 id="submit"
+							 title="${gs.getMessage('Tasker - Button - Update')}"
+							 type="submit"
+							 style_class="btn btn-primary dtech-max-width-fit-content dtech-push-right "
+							 onclick="onSubmit();"
+							 >${gs.getMessage('Tasker - Button - Update')}
+			</g:dialog_button>
+		</div>
+
+	</g:ui_form>
+</j:jelly>]]></html>
+        <name>tasker_org_abbreviation_change_prompt</name>
+        <processing_script><![CDATA[changeTaskerNumber();
+
+function changeTaskerNumber() {
+	var th = new TaskerHelpers();
+	var oTasksUpdated;
+	var ou_id = sysid;
+	var msgEnd;
+
+	var formValues = form_values;
+	var oFormValues = JSON.parse(formValues);
+	var gr_ou = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+	if(gr_ou.get(sysid)){
+		for(var i in oFormValues){
+			var field = oFormValues[i];
+			var name = field.name.split('.')[1];
+			if(name.length <=0){
+				// if no . in the name, reset to original value
+				name = field.name;
+			}
+			gr_ou.setValue(name, field.value);
+		}
+		gr_ou.update();
+
+		if(updateType == "activeTasksOnly"){ //comes from radio input tag name attribute
+			oTasksUpdated = th.updateTaskerNumber(ou_id, true);
+		}else if(updateType == "allTasks"){
+			oTasksUpdated = th.updateTaskerNumber(ou_id, false);
+		}
+		if(updateType != "futureTasks"){
+			msgEnd = gs.getMessage("Tasker - The number of Tasker Numbers updated in the Organizational Unit with Abbreviation [{0}]. was [{1}]").replace('{0}',oTasksUpdated.ou_abbreviation).replace('{1}',oTasksUpdated.tasksUpdated);
+			gs.addInfoMessage(msgEnd);
+		}
+	}
+	
+	response.sendRedirect("/x_153465_discovert_discover_office_hierarchy.do?sys_id=" + sysid);
+}]]></processing_script>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-07-08 22:17:38</sys_created_on>
+        <sys_id>e20105cadbe09510991a6154ca96192f</sys_id>
+        <sys_mod_count>16</sys_mod_count>
+        <sys_name>tasker_org_abbreviation_change_prompt</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_page_e20105cadbe09510991a6154ca96192f</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-09 04:26:33</sys_updated_on>
+    </sys_ui_page>
+</record_update>
