@@ -19,6 +19,9 @@
 			if (c.data.parent == '') {
 				// STRY0113838
 				var url = '/' + $scope.portal.url_suffix;
+				if(c.data.templateTaskSysId || c.data.templateSysId){
+					url = url + "?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template";
+				}
 				$location.url(url);
 			}
 		});
@@ -29,7 +32,9 @@
 </css>
         <data_table>sp_instance</data_table>
         <demo_data/>
-        <description>2.7.0 Create a new widget for delete task modal popup, based  off of widget Tasker Modal - Task Cancellation Comment.&#13;
+        <description>2.8.0 - 2022-07-09 - raj - STRY0119137 - Stretch- Template UI Clean Up- Delete Top Template Task Confirmation Modal (moved delete to new script)&#13;
+2.8.0 - 2022-07-09 - raj -  STRY0119138 - Stretch- Template UI Clean Up- Delete Template Subtask Confirmation Modal (moved delete to new script)&#13;
+2.7.0 Create a new widget for delete task modal popup, based  off of widget Tasker Modal - Task Cancellation Comment.&#13;
 2.7.0 | 2021-08-29 | mmcc | STRY0107404 - Draft Scheduled Tasks – UI – Delete Modal &#13;
 2.7.0 | 2021-09-03 | mmcc | DFCT0010476 - "Acknowledgement Prompt" does not have an "Acknowledge" button so users cannot use Tasker&#13;
 2.7.0 | 2021-09-14 | mmcc | STRY0099532 - DIA- 'Mass Reopen' Task Tree Modal (MVP)&#13;
@@ -38,7 +43,7 @@
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
-        <id>tasker_modal_delete_task_prompt</id>
+        <id>tasker_modal_delete_prompt</id>
         <internal>false</internal>
         <link><![CDATA[function link(scope, element, attrs, controller) { 
 
@@ -96,79 +101,156 @@
 //                                         Changes made in Client Script
 // 2.7.0 | 2021-11-18 | raj  | STRY0114416 - 4 - 2.7 Certification Fixes
 //                                         Changes made in Server Script
+// 2.8.0 - 2022-07-09 - raj - STRY0119137 - Stretch- Template UI Clean Up- Delete Top Template Task Confirmation Modal (moved delete to new script)
+// 2.8.0 - 2022-07-09 - raj -  STRY0119138 - Stretch- Template UI Clean Up- Delete Template Subtask Confirmation Modal (moved delete to new script)
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options) {
-    main();
+	main();
 
-    function main() {
-        if (input) {
-            if (input.submit == true) {
-                // run delete step
-				// STRY0114416 - 4
-                var gr_delete_modal = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-                if (gr_delete_modal.get(input.taskSysId)) {
-                    // DFCT0010541
-                    data.parent = gr_delete_modal.parent ? gr_delete_modal.getValue('parent') + '' : '';
-                    new Task_uiAction().uiAction_DeleteTasks(gr_delete_modal);
-                }
+	function main() {
+		if (input) {
+			if (input.submit == true) {
+				_processInput();
+			} else {
+				// copy to data[name] from input[name] || option[name]
+				_optCopy(['taskSysId', 'taskNumberShortDescription']);
+				_optCopy(['templateSysId', 'templateNumberShortDescription']);
+				_optCopy(['templateTaskSysId', 'templateTaskNumberShortDescription', 'isTopTemplateTask']);
 
-            } else {
-                // copy to data[name] from input[name] || option[name]
-                _optCopy(['taskSysId', 'taskNumberShortDescription']);
 				_buildMessages();
 				_setDataDefaults();
-            }
-        }
-    }
-
-    function _buildMessages() {
-        data.cancelButtonText = gs.getMessage('cancel');
-        data.submitButtonText = gs.getMessage('Tasker - Button - Delete Task');
-        data.submitButtonTitle = gs.getMessage('Delete');
+			}
+		}
+	}
+	
+	function _processInput(){
+		if(input.taskSysId){
+			// run delete step
+			// STRY0114416 - 4
+			var gr_delete_modal = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+			if (gr_delete_modal.get(input.taskSysId)) {
+				// DFCT0010541
+				data.parent = gr_delete_modal.parent ? gr_delete_modal.getValue('parent') + '' : '';
+				new Task_uiAction().uiAction_DeleteTasks(gr_delete_modal);			
+			}
+		} else if(input.templateTaskSysId){
+			var gr_delete_temp_task = new GlideRecordSecure('x_153465_discovert_route_tasks');
+			if(gr_delete_temp_task.get(input.templateTaskSysId)){
+				data.parent = gr_delete_temp_task.parent ? gr_delete_temp_task.getValue('parent') + '' : '';
+				new Template_uiAction().uiAction_DeleteTemplateTask(gr_delete_temp_task);
+			}
+			
+		} else if(input.templateSysId){
+			var gr_delete_temp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+			if(gr_delete_temp.get(input.templateSysId)){
+				new Template_uiAction().uiAction_DeleteTemplate(gr_delete_temp);	
+			}
+		}
+	}
+	function _buildMessages() {
+		data.cancelButtonText = gs.getMessage('cancel');
+		
+		data.submitButtonTitle = gs.getMessage('Delete');
+		if(!data.templateTaskSysId && data.templateSysId){
+			data.submitButtonText = gs.getMessage('Tasker - Button - Delete Template');
+		} else {
+			data.submitButtonText = gs.getMessage('Tasker - Button - Delete Task');
+		}
+					
 
 		data.msgBody2 = gs.getMessage('Warning');
-		data.msgBody3 = input.taskNumberShortDescription;
-		data.msgBody4 = gs.getMessage('Tasker - You are about to permanently delete this task with all its {0} subtasks', [_getDescendantsCount()]);
-        data.msgBody5 = gs.getMessage('Tasker - Are you sure you would like to continue?');
-        data.msgBody6 = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
-    }
-	
-	function _getDescendantsCount() {
-		// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-		var details = {
-			taskSysId: data.taskSysId,
-			countType: 'ALL'
-		};
+		var messageShortDescription = "";
+		var messageCount = "";
+		var count = -1;
+		if(data.taskSysId){
+			messageShortDescription = data.taskNumberShortDescription;
+			count = _getDescendantsCount();
+			messageCount = gs.getMessage('Tasker - You are about to permanently delete this task with all its {0} subtasks', [count]);
+		} else if(data.templateTaskSysId){
+			messageShortDescription = data.templateTaskNumberShortDescription;
+			count = _getDescendantsCount();
+			if(!data.isTopTemplateTask || data.isTopTemplateTask == 'false'){
+				messageCount = gs.getMessage('Tasker - You are about to permanently delete this template task with all its {0} template subtasks', [count]);
+			} else {
+				messageCount = gs.getMessage('Tasker - This will also delete the entire template with all its {0} template tasks', [count]);
+			}
+		} else if(data.templateSysId){
+			messageShortDescription = data.templateNumberShortDescription;
+			count = _getDescendantsCount();
+			messageCount = gs.getMessage('Tasker - This will also delete the entire template with all its {0} template tasks', [count]);
+		}
+
+		data.msgBody3 = messageShortDescription;
+		data.msgBody3_5 = gs.getMessage('Tasker - You are about to permanently delete a Top Template Task');
+
 		
+		data.msgBody4 = messageCount;
+		data.msgBody5 = gs.getMessage('Tasker - Are you sure you would like to continue?');
+		
+		var messageInfo = "";
+		if(data.isTopTemplateTask){
+			messageInfo = gs.getMessage('Tasker - You are about to permanently delete a Top Template Task');
+		} else {
+			messageInfo = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
+		}
+		data.msgBody6 = messageInfo;
+	}
+
+	function _getDescendantsCount() {
+		var count = -1;
+		var useTempMessage = false;
+		var taskTemplateHelpers = new TaskTemplateHelpers();
 		var taskerHelpers = new TaskerHelpers();
-		return taskerHelpers.getDescendantsCount(details);
-    }
+		if(data.taskSysId){
+			// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
+			var details = {
+				taskSysId: data.taskSysId,
+				countType: 'ALL'
+			};
+			count = taskerHelpers.getDescendantsCount(details);
+		} else if(data.templateTaskSysId){
+			if(!data.isTopTemplateTask || data.isTopTemplateTask == 'false'){
+					count = taskTemplateHelpers.countTemplateTaskSubTasks(data.templateTaskSysId);
+			} else {
+				useTempMessage = true;
+			}
+		} else if(data.templateSysId){
+				useTempMessage = true;
+		}
+		// if using template message then, build it
+		if(useTempMessage){
+			count = taskTemplateHelpers.countAllTemplateTasks(data.templateSysId);
+		}
+		
+		return count;
+	}
 
-    // copy to data from input or options
-    function _optCopy(names) {
-        names.forEach(function(name) {
-            data[name] = input[name] || options[name];
-        });
-    }
+	// copy to data from input or options
+	function _optCopy(names) {
+		names.forEach(function(name) {
+			data[name] = input[name] || options[name];
+		});
+	}
 
-    function _setDataDefaults() {
-        data.submit = false;
-    }
+	function _setDataDefaults() {
+		data.submit = false;
+	}
 })($sp, input, data, options);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-08-30 00:00:04</sys_created_on>
         <sys_id>48be459ddb9e3c101048570bd396197d</sys_id>
-        <sys_mod_count>94</sys_mod_count>
+        <sys_mod_count>107</sys_mod_count>
         <sys_name>Tasker Modal - Delete Task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_48be459ddb9e3c101048570bd396197d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-18 05:07:31</sys_updated_on>
+        <sys_updated_on>2022-07-11 04:20:51</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
   <div class="dtech-text-center">
     <img id="msgBody1" src="Warning64.svg"/>
@@ -181,6 +263,14 @@
   <div class="dtech-text-center dtech-task-name">
     <span>{{data.msgBody3}}</span>
   </div>
+  
+  <div ng-if="data.isTopTemplateTask">
+    <div class="dtech-text-center dtech-standard-text-color">
+      <span>{{data.msgBody3_5}}</span>
+    </div>
+    <br/>
+  </div>
+
   
   <div class="dtech-text-center dtech-task-name">
     <span>{{data.msgBody4}}</span>
