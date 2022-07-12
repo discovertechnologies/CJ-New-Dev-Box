@@ -45,15 +45,6 @@
 		TREE_CONST = _loadTreeConstants();
 		$go = go.GraphObject.make; // for conciseness in defining templates
 
-		// load orientation from the header widget
-		treeOrientation = c.data.widgetTreeHeaderToolbar.data.settings.treeOrientation;
-		// set default tree orientation based on system setting (this will change when user perference is enabled)
-		if(treeOrientation == 'Horizontal'){
-			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
-		} else {
-			treeNodeAngle = TREE_CONST.verticalTreeAngle;
-		}
-		
     // STRY0040294
     if ((!c.data.selectedId || c.data.selectedId == 'null')  && c.data.topParentTask_id) {
         c.data.selectedId = c.data.topParentTask_id;
@@ -78,7 +69,7 @@
 		
 		// STRY0069986 - one draw tree function, not 2 places with the same logic.
     if ($scope.data.topParentTask_id) {
-      resetDiagram();
+			resetDiagram();
     }
 	}
 	
@@ -292,8 +283,8 @@
 									if(changes[change]=='active' && !nodeChangedFound.parent){
 										// TREE FOOTER TOOLBAR
 										// STRY0117600 - does not like diagram posted back to server
-										c.data.widgetTreeFooterToolbar.diagram = null;
-										c.data.widgetTreeHeaderToolbar.diagram = null;
+										c.data.widgetTreeFooterToolbars[0].diagram = null;
+										c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
 										// the active flag changed on the top neode, need to reset data.canRunTemplate
 										// in the future, find a way to just call back to the server to only update that field
@@ -590,8 +581,8 @@
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - need to update the child widget toolbar footer
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
 
 		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
 		$rootScope.$broadcast('$sp.list.click', evt);
@@ -608,8 +599,8 @@
 	$rootScope.$on('dataTableClick', function(evt, item) {
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - does not like diagram posted back to server
-		c.data.widgetTreeFooterToolbar.diagram = null;
-		c.data.widgetTreeHeaderToolbar.diagram = null;
+		c.data.widgetTreeFooterToolbars[0].diagram = null;
+		c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
 		$scope.data.selectedId = item.sys_id;
 		$scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
@@ -623,6 +614,8 @@
 		spUtil.update($scope).then(function() {
 			// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 			initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition=" + $scope.data.templateId);
+			// STRY0121782 - settings changed, force reload of the settings
+			treeOrientation=undefined;
 			resetDiagram();
 			// STRY0123864 - changing the selected template updates the URL
 			$location.search('table', $scope.data.table).search('sys_id', item.sys_id).search('spa', 1);
@@ -732,8 +725,21 @@
 		treeNodeAngle=90;
 		resetDiagram();
 	});
-	
+
 	function resetDiagram(){
+		// STRY0121782 allow tree orientation to change when diagram changes
+		if(c.data.widgetTreeHeaderToolbars){
+			if(!treeOrientation){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
+			// set default tree orientation based on system setting (this will change when user perference is enabled)
+			if(treeOrientation == 'Horizontal'){
+				treeNodeAngle = TREE_CONST.horizontalTreeAngle;
+			} else {
+				treeNodeAngle = TREE_CONST.verticalTreeAngle;
+			}
+		}
 		diagramInitCompleted = false;	
 		if(diagram != undefined){
 			myOverview.div = null;
@@ -768,8 +774,10 @@
 					// this block only runs once per diagram load
 					if(diagramInitCompleted){
 						// only need to set scale after initial load
-						// STRY0117945
-						c.data.widgetTreeFooterToolbar.scale(diagram.scale);					
+						// STRY0117945 STRY0121782 (cleared error when toolbar wasn't loaded)
+						if(c.data.widgetTreeFooterToolbars){
+							c.data.widgetTreeFooterToolbars[0].scale(diagram.scale);
+						}
 					}
 	
 					var node = diagram.findNodeForKey(c.data.selectedId);
@@ -788,12 +796,12 @@
 	// BEGIN BLOCK
 	// ***************************************
 	function _initializeScale(){
-		if(c.data.widgetTreeFooterToolbar.data.isTree){
+		if(c.data.widgetTreeFooterToolbars[0].data.isTree){
 			// submit percent change back to server
 			diagram.zoomToRect(diagram.documentBounds);
 		} else {
 			// get the initial scale from the footer widget
-			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbar.data.settings.diagramScale);
+			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
 		}
 		diagramInitCompleted=true;
 	}
@@ -808,22 +816,22 @@
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
 		if(diagramInitCompleted){
 			// this is needed to reset zoom to custom when the diagram changes
-			c.data.widgetTreeFooterToolbar.resetDiagram(diagram);
+			c.data.widgetTreeFooterToolbars[0].resetDiagram(diagram);
 		} else {
-			c.data.widgetTreeFooterToolbar.diagram = diagram;
+			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
 		}
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeFooterToolbar.currentTop = c.data.topParentTask_id;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].currentTop = c.data.topParentTask_id;
 
 		// STRY0117600 - pass a reference to diagram to toolbar
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		c.data.widgetTreeHeaderToolbar.diagram = diagram;
+		c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.currentTop = c.data.topParentTask_id;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].currentTop = c.data.topParentTask_id;
 
 	}
 	
@@ -1363,6 +1371,8 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                      Changes made in HTML, CSS and Client controller
 // 2.8   - 2022-07-04 - raj -  STRY0124682 - Task Tree Widget- "Information Icon" matches the Task Form "Information Icon" - NOTE also updated Template Tree
 //                                         - Changes in Client Controller
+// 2.8   - 2022-07-11 - raj -  STRY0121782 - Stretch- Template Task Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1396,11 +1406,12 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 			// input not passed, load based on URL
 			given_sys_id = $sp.getParameter("sys_id");		
 			data.table = $sp.getParameter("table");	
-			_loadToolBars();
 		}
 
 		// moved seeting of the selectedid into getting of template
 		_loadTemplate(given_sys_id, data.table);
+		// STRY0121782 - load after template is loaded
+		_loadToolBars();
 	}
 
 	function _loadToolBars(){
@@ -1409,18 +1420,24 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 		// STRY0120908 - added show separator
 		var header_widget_parameters = {
 			baseWidget: 'discovertasker-processtemplatetreegraph',
+			// STRY0121782
+			topId: data.topParentTask_id,
 			showSeparator: true,
 			iconGroup: 'header'
 		};
-		data.widgetTreeHeaderToolbar = $sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters); 
+		data.widgetTreeHeaderToolbars=[];
+		data.widgetTreeHeaderToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters)); 
 
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
 		var footer_widget_parameters = {
 			baseWidget: 'discovertasker-processtemplatetreegraph',
+			// STRY0121782
+			topId: data.topParentTask_id,
 			iconGroup: 'footer'
 		};
-		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters);
+		data.widgetTreeFooterToolbars = [];
+		data.widgetTreeFooterToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters));
 	}
 	
 	function _loadTemplate(sys_id, table){
@@ -1510,14 +1527,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>2308</sys_mod_count>
+        <sys_mod_count>2330</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-04 15:26:41</sys_updated_on>
+        <sys_updated_on>2022-07-12 21:13:38</sys_updated_on>
         <template><![CDATA[<div id="main_body" class="dtech-topstick-posabso flex-column panel panel-default">
   <div id="panel_heading" class="panel-heading dtech-panel-heading-height-75">
     <div class="modal-body text-right" ng-if="data.selectedId" class="pull-right">
@@ -1533,7 +1550,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
     </div>
     <!-- TREE HEADER TOOLBAR -->
     <div ng-show="data.topParentTask_id">
-      <sp-widget widget="data.widgetTreeHeaderToolbar"></sp-widget>
+      <div ng-repeat="headerBar in data.widgetTreeHeaderToolbars">
+      	<sp-widget widget="headerBar"></sp-widget>
+      </div>
     </div>
     <h4 id="panel_title" class="panel-title">
       <span ng-if="!data.templateName && data.settings.page_id != 'discovertasker_processtemplatedetails'">
@@ -1563,8 +1582,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
   <div id="panel_footer" 
        ng-show="data.topParentTask_id"
        class="panel-footer">
-    <!-- TREE FOOTER TOOLBAR -->
-    <sp-widget widget="data.widgetTreeFooterToolbar"></sp-widget>      
+    <div ng-repeat="footerBar in data.widgetTreeFooterToolbars">
+      <!-- TREE FOOTER TOOLBAR -->
+      <sp-widget widget="footerBar"></sp-widget>
+    </div>
   </div>  
 </div>]]></template>
     </sp_widget>

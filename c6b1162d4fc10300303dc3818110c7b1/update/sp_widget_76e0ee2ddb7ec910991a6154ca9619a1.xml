@@ -70,7 +70,18 @@
 				if(c.widget.diagram && 
 					 c.widget.diagram.viewportBounds && 
 					 c.widget.diagram.documentBounds){
-					if(
+					// on inital load, bounds were coming in wrong
+					// this was forcint to tree for custom settings
+					if(isNaN(c.widget.diagram.documentBounds.width) || 
+						isNaN(c.widget.diagram.documentBounds.height)){
+						if(c.data.isTree==true){
+							selectPercent="tree";	
+						} else {
+							isCustom = true;
+							selectPercent="custom";	
+							c.data.isTree=false;
+						}
+					} else if(
 						(((c.widget.diagram.viewportBounds.width + 5)>=
 							c.widget.diagram.documentBounds.width) &&
 						 ((c.widget.diagram.viewportBounds.width - 5)<=
@@ -90,6 +101,7 @@
 						selectPercent="custom";
 						// used to save the custom value back on the server
 						isCustom = true;
+						c.data.isTree=false;
 					}
 				}
 		}
@@ -115,23 +127,25 @@
 			// save previous select percent in order to save "custom"
 			var previousZoomPct = c.data.settings.diagramScale;
 			_setSelectPercent(scale);
-			$timeout(
-				function(){ 
-					// this function ensures that when the user custom zooms it gets saved
-					if(previousZoomPct != c.data.settings.diagramScale){
-						$scope.$apply(); 
-						// save the custom zoom number
-						$scope.data.settings.diagramScale=scale;
-						$scope.data.percentChanged = true; 
-						spUtil.update($scope).then(function() {
-							return;
-						});
-					}
-				},
-				200);
+			$timeout(_timeoutChangeScale(previousZoomPct,scale),200);
 		}
 	}
+	// noticed in a previous effort that embedded functions do not work well
+	// when in other fuctions
+	function _timeoutChangeScale(previousZoomPct,scale){
+		// this function ensures that when the user custom zooms it gets saved
+		if(previousZoomPct != c.data.settings.diagramScale){
+			// save the custom zoom number
+			$scope.data.settings.diagramScale=scale;
+			$scope.data.isTree=c.data.isTree;
+			$scope.data.percentChanged = true; 
+			spUtil.update($scope).then(function() {
+				return;
+			});
 
+		}
+	}
+	
 	// NOTE: this is not needed when control is loaded from the server
 	//       It was left in for cases where developers would want to load from client
 	//       this emits to the parent when the control completes building
@@ -301,14 +315,15 @@
 			$scope.data.isTree=true;
 			c.data.isTree=true;
 			$scope.data.percentChanged = true; 
-			spUtil.update($scope);	
+			spUtil.update($scope).then(function() {
+				// submit percent change back to server
+				c.widget.diagram.zoomToRect(c.widget.diagram.documentBounds);
+				// reset scale after saving tree
+				c.data.settings.diagramScale = c.widget.diagram.scale;
+				// set the selected precent
+				_getSelectedBasedOnValue("tree");				
+			});
 		}
-		// submit percent change back to server
-		c.widget.diagram.zoomToRect(c.widget.diagram.documentBounds);
-		// reset scale after saving tree
-		c.data.settings.diagramScale = c.widget.diagram.scale;
-		// set the selected precent
-		_getSelectedBasedOnValue("tree");
 	};
 	
 	// Zoom to Percentage
@@ -323,6 +338,7 @@
 					break;
 				default:
 					$scope.data.settings.diagramScale=Number.parseFloat($scope.data.selectedValue.value);
+					$scope.data.isTree=false;
 					$scope.data.percentChanged = true; 
 					spUtil.update($scope).then(function() {
 						// submit percent change back to server
@@ -384,12 +400,21 @@
 // 2.8   - 2022-04-20 - raj -  STRY0120909- Org Hierarchy Fullscreen- Revamp as a Page Layout
 //                                         - Changes in HTML and ServerScript
 //
+// 2.8   - 2022-07-11 - raj -  STRY0121782 - Stretch- Template Task Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
+// 2.8   - 2022-07-11 - raj -  STRY0121780 - Stretch- Task Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
+// 2.8   - 2022-07-11 - raj -  STRY0125624 - Stretch- Org Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel; declare once as global
 	var taskWidgetData = new TaskWidgetData();
 	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
+	// STRY0121782 - STRY0121780 - STRY0125624
+	data.topId = (input || {}).topId || (options || {}).topId || undefined;
+	
 	data.iconGroup = (input || {}).iconGroup || (options || {}).iconGroup || undefined;
 	data.showSeparator = (input || {}).showSeparator || (options || {}).showSeparator || undefined;
 	
@@ -400,22 +425,29 @@
 	
 	main();
 	function main() {
-		
+		_getSettings();
 		if(input){
 			_processInput();
-			data.settings = input.settings;
 			data.messages = input.messages;
 			data.icons = input.icons;
-		} else {
+		}
+		if(!data.messages){
 			_initialLoad();
 		}			
 	}
-
-	function _initialLoad(){
+	
+		// STRY0121782 - STRY0121780 - STRY0125624
+	function _getSettings(){
+		taskWidgetIconsAndMessage.setTopId(data.topId);
 		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 		if(data.iconGroup == "footer"){
 			data.isTree = (data.settings.diagramScale == "tree");
 		}
+	}
+
+
+	function _initialLoad(){
+		// STRY0121782 - STRY0121780 - STRY0125624
 		data.messages = taskWidgetIconsAndMessage.loadMessages();
 		data.icons = taskWidgetIconsAndMessage.loadIcons();
 	}
@@ -424,6 +456,7 @@
 		if(input.orientationChanged){
 			data.orientationChanged = false;
 			taskWidgetIconsAndMessage.savePreferenceOrientation(input.settings.treeOrientation);
+			data.settings.treeOrientation = input.settings.treeOrientation;
 		} else if(input.percentChanged){
 			data.percentChanged = false;
 			var scaleToSet;
@@ -432,11 +465,16 @@
 			} else {
 				scaleToSet = input.settings.diagramScale;
 			}
+			// reset the is tree value
+			data.isTree=input.isTree;
 			// save scale instead of selected percent to account for cusotm zoom
 			taskWidgetIconsAndMessage.savePreferencePercent(scaleToSet);
+			data.settings.diagramScale = input.settings.diagramScale;
+			
 		} else if(input.favoriteChanged){
 			data.favoriteChanged = false;
 			taskWidgetIconsAndMessage.savePreferenceFavorite(input.settings.favorite);		
+			data.settings.favorite = input.settings.favorite;
 		// STRY0121023
 		} else if(input.favoriteStopPrompt){
 			taskWidgetIconsAndMessage.savePreferenceFavoriteStopPrompt();
@@ -453,14 +491,14 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-04-11 16:09:41</sys_created_on>
         <sys_id>76e0ee2ddb7ec910991a6154ca9619a1</sys_id>
-        <sys_mod_count>252</sys_mod_count>
+        <sys_mod_count>287</sys_mod_count>
         <sys_name>Tasker - Tree Toolbar Icons</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_76e0ee2ddb7ec910991a6154ca9619a1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-05 14:31:58</sys_updated_on>
+        <sys_updated_on>2022-07-12 21:14:14</sys_updated_on>
         <template><![CDATA[<!-- This section is used for the HEADER icont group -->
 <div ng-if="data.iconGroup=='header'" class="dtech-push-right-flexbox">
   <div class="pull-right">
