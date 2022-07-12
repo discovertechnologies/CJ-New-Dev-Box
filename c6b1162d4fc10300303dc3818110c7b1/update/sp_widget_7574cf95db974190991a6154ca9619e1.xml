@@ -6,16 +6,22 @@
   var c = this;
 	// used in _switchTaskFormView to switch form 
 	var newObjSelected = {};
-	c.data.promptChangesStarted = false;
 	main();
 	function main(){
 		c.data.submitting = false;
+		c.data.promptChangesStarted = false;
 		// currently no code in main
 	}
 
 	// ServiceNow dirty flag still popping up, need to figure out how to block it
 	$scope.$on('$locationChangeStart', function (event, next, current) {
-		if(!c.data.promptChangesStarted && next && current && next != current){
+		var loc = $location.search();
+		// url change is actually saving data, skip function in this call
+		// this method was added to prompt for save on attempting to leave page
+		if(loc.id=="discovertasker_newtask"){
+			return undefined;
+		}
+		if(!c.data.submitting && !c.data.promptChangesStarted && next && current && next != current){
 			c.data.promptChangesStarted = true;
 			var isDataDirty = c.data.new_task_widget_forms[0].widget.checkChanges();
 			var nextURL = $location.path();
@@ -23,7 +29,7 @@
 				_promptDiscardChanges(false, nextURL);
 			} else {
 				$location.url(nextURL);
-				return true;
+				return undefined;
 
 			}
 			return undefined;
@@ -36,12 +42,13 @@
 		newObjSelected = objSelected;
 		var isDataDirty = c.data.new_task_widget_forms[0].widget.checkChanges();
 		// if dirty, the function above will handle the switch
-		if(isDataDirty){
+		if(isDataDirty || c.data.view != newObjSelected.sn_view){
 			_promptDiscardChanges(true);
 		} else {
 			_switchTaskFormView(true);
 		}
 	}
+	
 	function _promptDiscardChanges(switchTaskFormView, newURL){
 		var title = "";
 		if(!c.data.sys_id || c.data.sys_id == -1){
@@ -71,7 +78,7 @@
 				// if no sys_id, the post back is called below once the sys_id is returned
 				// call here if sys_id exists, no need to wait for save to complete
 				if(!c.data.sys_id || c.data.sys_id == -1){
-					c.data.modalPromptSaving = true;
+					c.data.promptChangesStarted = true;
 					c.data.new_task_widget_forms[0].widget.saveAsDraft(newObjSelected);	
 				} else {
 					if(switchTaskFormView){
@@ -100,10 +107,10 @@
 	$rootScope.$on("sp.form.ui_action.uiActionComplete", function (event, params) {
 		c.data.submitting = false;
 		// if this control is saving based on the modal prompt, reset form view
-		if(c.data.modalPromptSaving){
+		if(c.data.promptChangesStarted){
 			c.data.sys_id = params.rec_sys_id;
 			_switchTaskFormView(false);
-			c.data.modalPromptSaving=false;
+			c.data.promptChangesStarted=false;
 		}
 		// if in modal, the modal should close
 		if(c.data.isModal){
@@ -112,29 +119,29 @@
 	
 		// enable form
 		// if not save as draft, update or cancel, then redirect to new page
-		if(params.action)
+		if(params.action){
 			if(params.action.action_name != "save_as_draft" &&
-				params.action.action_name != "sysverb_update"){
-			c.data.sys_id=params.rec_sys_id;
-			c.data.getURL=true;
-			// without this check there were a couple of unexpected errors in the browser
-			if($scope.data.settings &&
-				 $scope.data.settings.defaultTaskFormView){
-				c.data.view=$scope.data.settings.defaultTaskFormView.sn_view;
+				 params.action.action_name != "sysverb_update"){
+				c.data.sys_id=params.rec_sys_id;
+				c.data.getURL=true;
+				// without this check there were a couple of unexpected errors in the browser
+				if($scope.data.settings &&
+					 $scope.data.settings.defaultTaskFormView){
+					c.data.view=$scope.data.settings.defaultTaskFormView.sn_view;
+				}
+				$scope.server.update().then(function(data) {
+					var redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+					$location.url(redirectUrlNew);
+				});			
+			} else{
+				c.data.sys_id = params.rec_sys_id;
+				// set new object to current if not set
+				if(!newObjSelected){
+					newObjSelected = $scope.data.settings.defaultTaskFormView;
+				}
+				_switchTaskFormView(false);
 			}
-			$scope.server.update().then(function(data) {
-				var redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
-				$location.url(redirectUrlNew);
-			});			
-		} else{
-			c.data.sys_id = params.rec_sys_id;
-			// set new object to current if not set
-			if(!newObjSelected){
-				newObjSelected = $scope.data.settings.defaultTaskFormView;
-			}
-			_switchTaskFormView(false);
 		}
-
 	});
 	
 	$rootScope.$on("sp.form.ui_action.triggered", function (event, action) {
@@ -368,7 +375,7 @@ move into the service portal style sheets and imported&#13;
 
 		// NOTE: currently the default is saved as a name, but should be saved as object
 		data.selected_id = data.settings.defaultTaskFormView.sys_id;
-		
+		data.view = data.settings.defaultTaskFormView.sn_view;
 		data.bifold = (input || {}).bifold || (options || {}).bifold || false;		
 		data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 		// if the task has been saved, then show the header and icons
@@ -422,17 +429,15 @@ move into the service portal style sheets and imported&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-05-05 20:37:54</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>7574cf95db974190991a6154ca9619e1</sys_id>
-        <sys_mod_count>558</sys_mod_count>
+        <sys_mod_count>579</sys_mod_count>
         <sys_name>New Tasker Selection</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_7574cf95db974190991a6154ca9619e1</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-07-11 05:03:16</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-12 06:48:41</sys_updated_on>
         <template><![CDATA[<div ng-switch="convertIsModalToString()">
   <div ng-switch-when="true">
     <div class="dtech-new-task-container" >
