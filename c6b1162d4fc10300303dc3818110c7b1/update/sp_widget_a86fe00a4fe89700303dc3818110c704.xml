@@ -12,8 +12,12 @@
 		$scope.server.update();
 		c.activeTab = c.data.tabs[0].tabName;
 	};
-	
-	c.activeTab = c.data.tabs[0].tabName;
+	// STRY0125255 - STRY0123997
+	if(c.data.selTab){
+		c.activeTab =c.data.selTab;
+	} else {
+		c.activeTab = c.data.tabs[0].tabName;
+	}
 	
 	var tab = {
 		className: "active"
@@ -45,7 +49,7 @@
 		});
 	};
 	c.showTab = function (tab, e) {
-		c.activeTab = tab;
+		c.activeTab = tab.tabName;
 		target = e.target;
 		$(target).parents('.nav-tabs').find('li').removeClass('active');
 		$(target).parents('li').addClass('active');
@@ -61,6 +65,44 @@
 		});
 	});
 	
+	// STRY0125255 - STRY0123997 - item selected, update url with selected tab and page index
+	$rootScope.$on('dataTableClick', function(e, parms) {
+		var page_index = 1;
+		for (var i in $scope.data.tabs) {
+			
+			var tab = $scope.data.tabs[i];			
+			if(c.activeTab==tab.tabName){
+				if(tab.page_index){
+					page_index = tab.page_index;
+				}
+				$location.search("p", page_index).search("selTab", c.activeTab).search("spa",1);
+			}
+		}
+	});
+	
+	// STRY0125255 - STRY0123997
+	$scope.$on("discovertasker-widget-data-table-update_page_index", function (event, e) {
+		if (e && e.title) {
+			for (var i in $scope.data.tabs) {
+				var tab = $scope.data.tabs[i];
+				if(e.title == tab.tabTitle && tab.page_index != e.page_index){
+					tab.page_index = e.page_index;
+				}
+			}
+		}
+	});	
+	
+	// STRY0120403 if filter changed, then record count will change and we will need to receive an updated count
+	$scope.$on("discovertasker-widget-data-table-update_count", function (event, e) {
+		if (e && e.title) {
+			for (var i in $scope.data.tabs) {
+				var tab = $scope.data.tabs[i];
+				if(e.title == tab.tabTitle && tab.count != e.count){
+					tab.count = e.count;
+				}
+			}
+		}
+	});	
 };]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------&#13;
@@ -248,17 +290,23 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //                                      updated cm-widget-body padding-right to 5px and padding-bottom to 0.
 //                                      In Server script, in widgetParams added isBifold.
 //                                      Changes made in HTML, CSS and Server script
+// 2.8.0 | 2022-07-14 | raj  | STRY0125255 - Template Layout- Add "Template List Page" as an option
+// 2.8.0 | 2022-07-14 | raj  | STRY0123997 - Templates- System will remember Template Record when switching from any Template Page to the Template List
 //
 //------------------------------------------------------------------------------------------------------------------------
 
-(function(data) {
+(function($sp, input, data, options, gs) {
 
     data.page_id = "";
     data.showInactiveProcess = false;
     if (input)
         data.showInactiveProcess = input.showInactiveProcess;
-    data.p = data.p || 1;
-    data.page_index = (data.p - 1);
+	
+		// STRY0125255 - STRY0123997
+		data.selTab = $sp.getParameter("selTab");
+		data.p = $sp.getParameter("p");
+    data.page_index = parseInt(data.p || 1);
+	
     data.window_size = $sp.getValue('maximum_entries') || 10;
     data.window_start = (data.page_index * data.window_size);
     data.window_end = (((data.page_index + 1) * data.window_size));
@@ -316,14 +364,42 @@ li.hover-effect.cm-subs-tab.active {&#13;
 								tab.visible = tabVisible; // gs.hasRole(tab.role);// || UserPermissions.userHasProcessTemplateAdminRights();
                 tab.count = getTableCountbyFilter(tab.table, tab.filter);
                 tab.className = '';
-                tab.dataTableWidget = $sp.getWidget('discovertasker-widget-data-table', widgetParams); //widget-data-table
-                if (tab.visible)
-                    tabs.push(tab);
             }
+					tab.widgetParams = widgetParams;
+					if (tab.visible)
+						tabs.push(tab);
+					
         }
     }
-    if (tabs.length > 0)
-        tabs[0].className = 'active';
+		if (tabs.length > 0){
+			// STRY0125255 - STRY0123997
+			if(data.selTab){
+				// find selected tab and mark active
+				for (var t in tabs){
+					var tab1 = tabs[t];
+					if(tab1.tabName == data.selTab){
+						// STRY0125255 - STRY0123997 set the page index for hte selected template
+						if(data.page_index){
+							tab1.widgetParams.p=data.page_index;	
+						}
+						tab1.className = 'active';
+						break;
+					}
+				}
+			} else{
+				tabs[0].className = 'active';
+			}
+		}
+
+		// create the tabs with the page_index set
+		for (var t2 in tabs){
+			var tab3 = tabs[t2];
+			tab3.dataTableWidget = $sp.getWidget('discovertasker-widget-data-table', tab3.widgetParams); //widget-data-table	
+		}
+					
+                
+
+	
     data.tabs = tabs;
 
     function getTabData(link) {
@@ -388,22 +464,20 @@ li.hover-effect.cm-subs-tab.active {&#13;
     }
 
 
-})(data);]]></script>
+})($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>976</sys_mod_count>
+        <sys_mod_count>1001</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-06-22 13:49:32</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-15 20:52:10</sys_updated_on>
         <template><![CDATA[<div>
  <div class="dtech-topstick-posabso flex-column panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane">
     <div class="flex-column justify-between dtech-panel-heading-height-75 panel-heading cm-widget-tabs" role="tabpanel">
@@ -412,7 +486,9 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <span class="glyphicon glyphicon-refresh" aria-hidden="true" ng-click="c.refresh()"></span>
       </div>
     	<ul class="nav nav-tabs">
-      	<li role="tab" ng-repeat="tab in data.tabs" class="hover-effect cm-subs-tab {{tab.className}}" ng-if="tab.dataTableWidget" ng-click="c.showTab(tab.tabName, $event)">
+      	<li role="tab" ng-repeat="tab in data.tabs" class="hover-effect cm-subs-tab {{tab.className}}" 
+            ng-if="tab.dataTableWidget" 
+            ng-click="c.showTab(tab, $event)">
           <!-- 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating, removed colonX2 -->
         	<a class="csm-link-disabled" tabindex="{{$index}}">
           	{{tab.tabTitle}}
