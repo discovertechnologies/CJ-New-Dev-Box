@@ -69,6 +69,10 @@
 			name: 'page'
 		};
 		if ($scope.data.selectedId) {
+			if(c.data.widgetTreeHeaderToolbars){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
 			// STRY0116823
 			resetDiagram();
 		}
@@ -594,6 +598,11 @@
 					value: $scope.data.selectedId,
 					name: 'page'
 				};
+				// STRY0121782 - settings changed, force reload of the settings
+				if(c.data.widgetTreeHeaderToolbars){
+					// load orientation from the header widget
+					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+				}
 				// STRY0116823
 				resetDiagram();
 				broadcastTopNodeChange(c.data.currentTopOU);
@@ -613,6 +622,11 @@
 		c.data.topOU = $scope.topOU.value;
 		c.data.selectedId = c.data.topOU;
 		c.server.update().then(function(){
+			// STRY0121782 - settings changed, force reload of the settings
+			if(c.data.widgetTreeHeaderToolbars){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
 			// STRY0116823
 			resetDiagram();
 		});
@@ -813,28 +827,22 @@
 	
 	function resetDiagram(){
 		// STRY0125624 allow tree orientation to change
-		if(c.data.widgetTreeHeaderToolbars){
-			// load orientation from the header widget
-			if(!treeOrientation){
-				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
-			}
-			// set default tree orientation based on system setting (this will change when user perference is enabled)
-			if(treeOrientation == 'Horizontal'){
-				treeNodeAngle = TREE_CONST.horizontalTreeAngle;
-			} else {
-				treeNodeAngle = TREE_CONST.verticalTreeAngle;
-			}
+		// set default tree orientation based on system setting (this will change when user perference is enabled)
+		if(treeOrientation == 'Horizontal'){
+			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
+		} else {
+			treeNodeAngle = TREE_CONST.verticalTreeAngle;
 		}
+
 		diagramInitCompleted = false;	
-		if(diagram != undefined){
-			myOverview.div = null;
-			myOverview = null;
-		}		
 		drawTree();
 		_setToolbarProperties();
-		// STRY0116823
-		myOverview =  $go(go.Overview, "myOverview",
-    { observed: diagram}); // , contentAlignment: go.Spot.Center
+		 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, no need to destroy overviewdiv
+		if (myOverview == undefined) {
+			// STRY0116823
+			myOverview =  $go(go.Overview, "myOverview",
+												{ observed: diagram}); // , contentAlignment: go.Spot.Center
+		}
 		// DFCT0010275
 		if($scope.data.map.length > 0){	
 			// // STRY0072032 - this event handler is called when the diagram is first ready
@@ -924,20 +932,6 @@
 	function resizeDiagram() {
 		// DFCT0010275
 		if($scope.data.map && $scope.data.map.length > 0){	
-			// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
-			// STRY0116823				
-			//				var diagramHeight = parseInt(diagram.documentBounds.height > TREE_CONST.diagramMinHeight ? diagram.documentBounds.height: TREE_CONST.diagramMinHeight);
-			//				var diagramHeight = 500;
-			var panelHeight = angular.element(document.getElementById('main_body')).height();
-			var headingHeight = angular.element(document.getElementById('panel_heading')).height();
-			var titleHeight = angular.element(document.getElementById('panel_title')).height();
-			var footerHeight = angular.element(document.getElementById('panel_footer')).height();
-			var map_page_Height = TREE_CONST.minHeight + panelHeight - (headingHeight + titleHeight + footerHeight);
-//			diagram.div.height(map_page_Height + 'px');
-//			diagram.requestUpdate();
-			//				jQuery("#" + TREE_CONST.node_id).height(map_page_Height);
-			angular.element(document.getElementById(TREE_CONST.node_id)).height(map_page_Height + 'px');
-			
 			// Select the node using the sys_id parameter supplied.
 			var node_select = diagram.findNodeForKey(c.data.selectedId);
 			diagram.select(node_select);
@@ -945,18 +939,19 @@
 	}
 	
 	function drawTree() {
-		if(diagram != undefined){
-			diagram.div = null;
-			diagram = null;
-		}
-		diagram =
-			$go(go.Diagram, TREE_CONST.node_id, {
-			initialAutoScale: go.Diagram.Uniform,
-			allowZoom: true,		
-			// define the layout for the diagram
-			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
-		});
-
+			// STRY0125255 - 
+			if (diagram == undefined) {		diagram =
+					$go(go.Diagram, TREE_CONST.node_id, {
+					initialAutoScale: go.Diagram.Uniform,
+					allowZoom: true,		
+					// define the layout for the diagram
+					layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
+				});
+			}	else {
+				 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
+				diagram.clear();
+				diagram.layout.angle = treeNodeAngle;
+			}
 		diagram.model = new go.TreeModel($scope.data.map);
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
 		diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850
@@ -2398,14 +2393,14 @@
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2824</sys_mod_count>
+        <sys_mod_count>2827</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-12 21:42:41</sys_updated_on>
+        <sys_updated_on>2022-07-16 04:52:52</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -2436,8 +2431,8 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
 </div>
 
 <!-- DFCT0010275 -->
-<div id="main_body" ng-show="data.settings.topParentNeeded==false" class="panel panel-default">
-  <div id="panel_heading" class="panel-heading">
+<div id="main_body" ng-show="data.settings.topParentNeeded==false" class="dtech-topstick-posabso flex-column panel panel-default">
+  <div id="panel_heading" class="panel-heading dtech-panel-heading-height-75">
     <div ng-repeat="headerBar in data.widgetTreeHeaderToolbars">
       <!-- TREE HEADER TOOLBAR -->
       <sp-widget widget="headerBar"></sp-widget>
@@ -2461,10 +2456,10 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
     </div>
   </div>
 <!--  <div class="panel-body">  -->
-  <div class="page_map_wrapper">
+  <div class="flexbox">
 
-    <div> <!--class="m-t-sm"> -->
-      <div id="page_map" class="page-map" ng-show="data.currentTopOU"></div>
+    <div class="flex-column flex-grow" > <!--class="m-t-sm"> -->
+      <div id="page_map" class="flex-column flex-grow page-map" ng-show="data.currentTopOU"></div>
       <!-- STRY0116823 -->
       <div id="myOverview" ></div>   
     </div>
