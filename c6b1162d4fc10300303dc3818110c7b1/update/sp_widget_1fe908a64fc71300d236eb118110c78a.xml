@@ -13,9 +13,14 @@
 						c.data = $scope.data;
 					});
 				}
-					
-			
     };
+	
+		// STRY0120403
+		$scope.changeFilter = function(filterToUse){
+			$scope.data.taskFilter = filterToUse;
+			c.data.taskFilter = filterToUse;
+			spUtil.update($scope);
+		};
     /*
     $("td:contains(true)").css("color","green");
     $("td:contains(false)").css("color","red");
@@ -1009,6 +1014,8 @@ tbody tr:last-child {&#13;
 //                                      Changes made in HTML and Server script
 // 2.8.0 | 2022-07-14 | raj  | STRY0125255 - Template Layout- Add "Template List Page" as an option
 // 2.8.0 | 2022-07-14 | raj  | STRY0123997 - Templates- System will remember Template Record when switching from any Template Page to the Template List
+// 2.8.0 | 2022-07-16 | raj  |  STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
+//                                      changes in server script, client controller and html
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1019,6 +1026,24 @@ tbody tr:last-child {&#13;
     data.msg = {};
     data.msg.sortingByAsc = gs.getMessage("Sorting by ascending");
     data.msg.sortingByDesc = gs.getMessage("Sorting by descending");
+		// STRY0120403
+		var msgKeyTaskFilter24 = "Tasker - " + data.page_id + " - TaskFilter24.svg";
+		var msgTaskFilter24 = gs.getMessage(msgKeyTaskFilter24);
+		// if the key and message are the same, then no message for this page, load the default message
+		if(msgTaskFilter24 == msgKeyTaskFilter24){
+			msgTaskFilter24 = gs.getMessage("Tasker - Show results for this Task only");		
+		}
+		data.TaskFilter24 = {"src":'TaskFilter24.svg', "title": msgTaskFilter24, "alt": msgTaskFilter24};
+
+		// STRY0120403
+		var msgKeyTaskFilterList24 = "Tasker - " + data.page_id + " - TaskFilterList24.svg";
+		var msgTaskFilterList24 = gs.getMessage(msgKeyTaskFilterList24);
+		// if the key and message are the same, then no message for this page, load the default message
+		if(msgTaskFilterList24 == msgKeyTaskFilterList24){
+			msgTaskFilterList24 = gs.getMessage("Tasker - Show results for this Task and all descendants");
+
+		}
+		data.TaskFilterList24 = {"src":'TaskFilterList24.svg', "title": msgTaskFilterList24, "alt": msgTaskFilterList24};
 
     data.title = options.title || input.title;
     data.fromModal = input.fromModal || '';
@@ -1041,13 +1066,17 @@ tbody tr:last-child {&#13;
     // copy to data[name] from input[name] || option[name]
     optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
     optCopy(['platform_view', 'relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
-		// STRY0120403 - breadcrumbs are passed in through input when they are set using spUtil.get
+		// STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
+	//                 breadcrumbs are passed in through input when they are set using spUtil.get
 		//               updated server and client to receive this setting from input or options
-		optCopy(['show_breadcrumbs']);
-		
+		optCopy(['show_breadcrumbs', 'showStatesMultipleBar', 'hideTaskFilter', 'parentField', 'task_id' , 'originalFilter']);
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 	
+	// save the oringal filter for the switch from task to all descendants
+	if(!data.originalFilter){
+		data.originalFilter=data.filter;
+	}
 	// 2.8 | 2022-06-17 | mmcc | DFCT0010888 - Zoom buttons are Not always correctly displayed on the Template List page
 	data.isBifold = (input || {}).isBifold || (options || {}).isBifold || false;
 
@@ -1059,7 +1088,6 @@ tbody tr:last-child {&#13;
     data.view = data.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
 		// DFCT0010593
 		data.platform_view = data.platform_view || data.view;
-	
 		data.table = data.table || $sp.getValue('table') || $sp.getParameter('table');
 		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
 		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
@@ -1071,13 +1099,12 @@ tbody tr:last-child {&#13;
 		} else {
 			data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
 		}
-
-	
     data.keywords = data.keywords || $sp.getValue('keywords') || $sp.getParameter('keywords');
     data.p = data.p || $sp.getValue('p') || $sp.getParameter('p') || 1;
     data.p = parseInt(data.p);
 		// STRY0125255 STRY0123997 - find the selected item
 		data.selectedId = $sp.getValue("selectedId") || $sp.getParameter('sys_id');
+		data.page_id = $sp.getParameter("id");
 
     data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by') || $sp.getParameter('order_by') || $sp.getParameter('o');
     data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction') || $sp.getParameter('order_direction') || $sp.getParameter('d');
@@ -1138,6 +1165,44 @@ tbody tr:last-child {&#13;
     data.table_label = gr.getLabel();
     //data.table_plural = gr.getPlural(); // From Global. KTorres
     data.table_plural = input.title || data.table_label;
+
+			// STRY0120403
+		data.taskFilter = "TaskOnly";
+		if(input && input.taskFilter){
+			data.taskFilter = input.taskFilter;
+			// when scope change clicked reset base filter to original filter
+			data.filter = data.originalFilter;
+		}
+		// STRY0120403
+		var filterDesc = '';
+		var showDesc = false;
+		if(data.taskFilter=='TaskAndDescendents'){
+			showDesc = true;
+			filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.task_id;
+		}
+	
+		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
+		if(filterDesc !=''){
+			if(data.task_id && data.task_id!=-1 && 
+				 data.table == 'x_153465_discovert_route_task_instance'){
+				// for subtasks on the task table, change the filter used//		
+				data.filter = data.filter + "^OR" + data.parentField + '.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksCONTAINS' + data.task_id;
+			}
+
+			if(data.table=='x_153465_discovert_activity_view'){
+				if(data.task_id && data.task_id!=-1){
+					// STRY0120403
+					if(showDesc){
+						data.filter = 'taskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.task_id;
+					} else {
+						data.filter = 'taskid_sys_id=' + data.task_id;
+					}
+				}
+			} else {
+				// add the descendants filter to the field
+				data.filter = data.filter + "^OR" + data.parentField + "." + filterDesc; 
+			}
+		}
 
     if (data.filter) {
         if (data.filterACLs)
@@ -1242,7 +1307,19 @@ tbody tr:last-child {&#13;
         data.list.push(record);
     }
 
-
+		//------------------------------------------------------------------------------------------------------------------------
+		// STRY0120403- TAB: PROGRESS BAR
+		//------------------------------------------------------------------------------------------------------------------------
+		// 
+		// would be nice to eventually make this a boolean eventually
+		data.widgetInstanceMultipleBar=undefined;
+		if(data.showStatesMultipleBar){
+			data.widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
+				table: data.table,
+				sys_id: data.sys_id,
+				showDesc: showDesc
+			});
+		}
 
     var breadcrumbWidgetParams = {
         table: data.table,
@@ -1264,16 +1341,19 @@ tbody tr:last-child {&#13;
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1310</sys_mod_count>
+        <sys_mod_count>1333</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-15 20:51:38</sys_updated_on>
+        <sys_updated_on>2022-07-17 23:37:07</sys_updated_on>
         <template><![CDATA[  <div ng-class="{'dtech-overflow-hidden': data.isModal==true}" class="flex-column flex-grow dtech-margin-bottom-0 panel panel-{{options.color}} b">
     <div class="panel-heading form-inline" ng-hide="options.hide_header">
+ <div class="container-menu-row">
+    
+    
       <span class="dropdown m-r-xs">
         <button aria-label="${Table menu}" class="btn dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="optionsMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
         <ul class="dropdown-menu" aria-labelledby="optionsMenu">
@@ -1289,22 +1369,41 @@ tbody tr:last-child {&#13;
           </li>
         </ul>
       </span>
-      <span class="panel-title"><i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>{{data.title || data.table_plural}}</span>
+    
+    <span class="col-3 cell panel-title" aria-label="{{data.title || data.table_plural}}">
+		  <span class="title-ellipsised" uib-tooltip="{{data.title || data.table_plural}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
+<!--      <span class="panel-title"> -->
+        <i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>
+        {{data.title || data.table_plural}}
       <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; remove && data.canCreate -->
       <!-- <button name="new" role="link" class="btn btn-primary btn-sm m-l-xs" ng-click="newRecord()" ng-if="data.show_new && data.canCreate && !data.newButtonUnsupported" aria-label="${Create new record}">${New}</button> -->
       <button name="new" role="link" class="btn btn-primary btn-sm m-l-xs" ng-click="newRecord()" ng-if="data.show_new && !data.newButtonUnsupported" aria-label="${Create new record}">${New}</button>
+   		</span>
+   </span>
+   	<!-- STRY0120403 - support filtering to show data for a single task or for all subtasks -->
+ <div class="col-7 dtech-max-width-fit-content" >
+      <div class="dtech-push-right-flexbox" ng-if="!data.hideTaskFilter && data.task_id && data.task_id != -1" >
+        <img src="{{data.TaskFilter24.src}}" title="{{data.TaskFilter24.title}}"
+							ng-class="{'dtech-disabled': data.taskFilter == 'TaskOnly', 'dtech-enabled': data.taskFilter != 'TaskOnly'}"
+             alt="{{data.TaskFilter24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskOnly')"/>
+        <img src="{{data.TaskFilterList24.src}}" title="{{data.TaskFilterList24.title}}"
+							ng-class="{'dtech-disabled': data.taskFilter == 'TaskAndDescendents', 'dtech-enabled': data.taskFilter != 'TaskAndDescendents'}"
+             	alt="{{data.TaskFilterList24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskAndDescendents')"/>
+      </div>
+    </div>
       <div class="pull-right" ng-if="options.show_keywords">
-		<form ng-submit="setSearch(true)">
-        <div class="input-group">
-          <input type="text" name="datatable-search" ng-model="data.keywords" class="form-control" placeholder="${Keyword Search}">
-          <span class="input-group-btn">
-            <button name="search" class="btn btn-default" type="submit" aria-label="${Search}"><span class="glyphicon glyphicon-search"></span></button>
-          </span>
-        </div>
+        <form ng-submit="setSearch(true)">
+          <div class="input-group">
+            <input type="text" name="datatable-search" ng-model="data.keywords" class="form-control" placeholder="${Keyword Search}">
+            <span class="input-group-btn">
+              <button name="search" class="btn btn-default" type="submit" aria-label="${Search}"><span class="glyphicon glyphicon-search"></span></button>
+            </span>
+          </div>
         </form>
       </div>
+
+</div>
       <div class="clearfix"></div>
-      
     </div>
     <!-- body -->
     <div class="flex-column flex-grow panel-body">
@@ -1319,7 +1418,12 @@ tbody tr:last-child {&#13;
       <div class="alert alert-info" ng-if="loadingData">
           <fa name="spinner" spin="true"></fa> ${Loading data}...
        </div>
-      
+      <!-- STRY0120403 -->
+      <div ng-if="data.showStatesMultipleBar && data.table == 'x_153465_discovert_route_task_instance'"
+           class="dtech-pad-all-10">
+        <sp-widget widget="data.widgetInstanceMultipleBar"></sp-widget>
+      </div>
+
       <!-- scroll table start -->
         <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; new <div> add table-responsive, ng-class -->
         <div class="table-responsive" 
