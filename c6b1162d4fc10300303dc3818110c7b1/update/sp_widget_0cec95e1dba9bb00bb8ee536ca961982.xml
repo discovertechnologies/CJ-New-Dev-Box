@@ -45,22 +45,15 @@ function ($scope,$http, spUtil,$rootScope) {
 	// reload the count info and broadcast the selection
 	c.setDynamicFilter = function(filter){
 		// update the dynamic filter
-		c.data.table = filter.table;
-		c.data.filter = filter.filter;
-		c.data.title = filter.filter_label;
-		c.data.o = filter.o;
-		c.data.d = filter.d;
-		c.data.count = filter.count;
+		$scope.data.tasker_filter_id = filter.tasker_filter_id;
+		$scope.data.table = filter.table;
+		$scope.data.filter = filter.filter;
+		$scope.data.title = filter.filter_label;
+		$scope.data.o = filter.o;
+		$scope.data.d = filter.d;
+		$scope.data.count = filter.count;
 		$scope.data.filterChanged=true;
 		spUtil.update($scope).then(function(){
-			// set the parameters for the view
-			c.params.filter = filter.filter;
-			c.params.sp_page_dv = filter.view_all_page;
-			c.params.table = filter.table;
-			c.params.title = filter.filter_label;
-			c.params.d = filter.d;
-			c.params.o = filter.o;
-			c.params.field_list = filter.field_list;
 			_broadCastFitlerChange();
 		});
 	}
@@ -68,6 +61,16 @@ function ($scope,$http, spUtil,$rootScope) {
 	function _broadCastFitlerChange(){
 		// prevents post back when broadcast from this count item
 		changedByThisWidgetId = true;
+		
+			// set the parameters for the view
+			c.params.tasker_filter_id = c.data.tasker_filter_id;
+			c.params.filter = c.data.filter;
+			c.params.sp_page_dv = c.data.view_all_page;
+			c.params.table = c.data.table;
+			c.params.title = c.data.title;
+			c.params.d = c.data.d;
+			c.params.o = c.data.o;
+			c.params.field_list = c.data.field_list;	
 		$rootScope.$broadcast('countPanelClicked', c.params);			
 	}
 	
@@ -274,7 +277,8 @@ TODO - We may want to move into global class*/
 		if(input){
 			// if the filter changed, save it back
 			if(input.filterChanged){
-				taskWidgetIconsAndMessage.savePreferenceUserDefaultMainFilter(input.page_filter, input.title);
+				var objDefaultMainFilter = {displayValue:input.title, value:input.tasker_filter_id};
+				taskWidgetIconsAndMessage.savePreferenceUserDefaultMainFilter(input.page_filter, objDefaultMainFilter);
 			}
 		}
 		
@@ -287,20 +291,21 @@ TODO - We may want to move into global class*/
 		data.page_filter = data.settings.userDefaultLandingPage;
 		
 		// load currently selected fitler
-		data.selectedFilterTitle = data.settings.userDefaultMainFilter;
+		data.selectedFilterTitle = data.settings.userDefaultMainFilter.displayValue;
+		data.selectedFilterId = data.settings.userDefaultMainFilter.value;
 
 		// this function loads the drop down list based on the page
 		// it also determines if the selected fitler is in the current
 		/// dropdown so the count can be loaded
-		_loadDynamicFilter(data.selectedFilterTitle);
+		_loadDynamicFilter(data.selectedFilterId);
 		
 		// loads the count filter for this count item
-		_loadCountFilter(data.page_filter, data.selectedFilterTitle);
+		_loadCountFilter(data.page_filter, data.selectedFilterId);
 		// isFilterSelected is true when this item is currently loaded
 		// in the data table list
 		// data.title is set in the load count fitler function. 
 		// don't move this line before that function
-		data.isFilterSelected = data.selectedFilterTitle==data.title || undefined;
+		data.isFilterSelected = data.selectedFilterId==data.tasker_filter_id || undefined;
 
 		if (!data.table)
 			return;
@@ -316,27 +321,31 @@ TODO - We may want to move into global class*/
 	}
 
 	// load the fitler based on the page
-	function _loadCountFilter(page_filter, selected_Filter){
+	function _loadCountFilter(page_filter, selected_filter_id){
 		var filterParams;
+		var filterId;
 		if(data.is_dynamic_filter && 
 			 data.filterInDynamicList &&
-			 selected_Filter){
-			filterParams = _loadFilterParams(selected_Filter);
+			 selected_filter_id){
+			filterParams = _loadFilterParams(selected_filter_id);
 		}
 		// this if statement will be true when
 		// the fitler is not the dynamic filter and no fitler was saved
 		if(filterParams == undefined){
 			if(page_filter == 'my_task_home_page' && 
 				 options.tasker_filter_my_task_filter +'' != ''){
+				filterId = options.tasker_filter_my_task_filter;
 				filterParams = _loadFilterParams(options.tasker_filter_my_task_filter)
 			} else if(page_filter == 'my_ous_tasks_home_page' &&
 								options.my_ous_tasks_home_page + '' != ''){
+				filterId = options.my_ous_tasks_home_page;
 				filterParams = _loadFilterParams(options.tasker_filter_my_ou_s_task_filter);
 			}
 		}
 		
 		// pull from the hard coded values
 		if(filterParams){
+			data.tasker_filter_id = filterParams.tasker_filter_id;
 			data.table = filterParams.table;
 			data.filter = filterParams.filter || 'sys_id!=NULL';
 			data.title = filterParams.title;
@@ -344,6 +353,7 @@ TODO - We may want to move into global class*/
 			data.d = filterParams.order_direction || 'DESC';
 			data.field_list = filterParams.field_list || '';
 		}else{
+			data.tasker_filter_id = filterId;
 			data.table = options.table;
 			data.filter = options.filter || 'sys_id!=NULL';
 			data.title = options.title;
@@ -359,6 +369,7 @@ TODO - We may want to move into global class*/
 		var gr_portal_filter = new GlideRecord('x_153465_discovert_tasker_filters');
 		if(gr_portal_filter.get(filterId)){
 			filterParams = {
+				tasker_filter_id: gr_portal_filter.getUniqueValue(),
 				table:  gr_portal_filter.getDisplayValue('u_table.name'),
 				filter: gr_portal_filter.getDisplayValue('u_filter'),
 				title: gr_portal_filter.getDisplayValue('u_filter_label'),
@@ -366,7 +377,7 @@ TODO - We may want to move into global class*/
 				o: gr_portal_filter.getDisplayValue('u_order_by'),
 				d: gr_portal_filter.getDisplayValue('u_direction'),
 				field_list: gr_portal_filter.getDisplayValue('u_field_list') + ''
-			}
+			};
 		}
 		return filterParams;
 	}
@@ -385,7 +396,7 @@ TODO - We may want to move into global class*/
 		return count;
 	}
 	
-	function _loadDynamicFilter(selected_Filter){
+	function _loadDynamicFilter(selected_Filter_id){
 		data.is_dynamic_filter = false;
 		if(options.is_dynamic_filter == true || options.is_dynamic_filter == "true"){
 			data.is_dynamic_filter = true;
@@ -400,7 +411,7 @@ TODO - We may want to move into global class*/
 
 			// STRY0113382 - reorganized and moved the loading of filters up so we could set the default to the user if one existed
 			// DFCT0010732
-			data.filters = _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, data.page_filter, selected_Filter);
+			data.filters = _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, data.page_filter, selected_Filter_id);
 
 		}			
 	}
@@ -435,7 +446,7 @@ TODO - We may want to move into global class*/
 		return iconName;
 	}
 	
-	function _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, pageFilter, selected_Filter) {
+	function _loadFilters(OUsWhereIamAMember, OUsWhereIamAMemberAdmin, pageFilter, selected_Filter_id) {
 		taskerFilters = [];
 		// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 		// Get an array filled with the Filter Menu Headers to use in the Filter More options
@@ -483,6 +494,7 @@ TODO - We may want to move into global class*/
 			// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 			// Create the filter then push later
 			var filter = {
+				tasker_filter_id: gr_filters.getUniqueValue(),
 				table: gr_filters.getDisplayValue('u_table.name'),
 				// STRY0101803
 				field_list: gr_filters.getDisplayValue('u_field_list') + '',
@@ -519,7 +531,7 @@ TODO - We may want to move into global class*/
 			}
 			
 			// set flag that the selected filter is in the curent dynamic filter
-			if(filter.filter_label == selected_Filter){
+			if(filter.tasker_filter_id == selected_Filter_id){
 				data.filterInDynamicList = true;
 			}
 		}
@@ -545,14 +557,14 @@ TODO - We may want to move into global class*/
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-05-21 02:58:10</sys_created_on>
         <sys_id>0cec95e1dba9bb00bb8ee536ca961982</sys_id>
-        <sys_mod_count>333</sys_mod_count>
+        <sys_mod_count>344</sys_mod_count>
         <sys_name>Tasker Count</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0cec95e1dba9bb00bb8ee536ca961982</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-01 17:32:23</sys_updated_on>
+        <sys_updated_on>2022-07-18 23:29:45</sys_updated_on>
         <template><![CDATA[<button class="dtech-filter-btn btn"
         ng-class="{'dtech-btn-focus': c.data.isFilterSelected==true}"
         ng-click="c.selectCount()"
