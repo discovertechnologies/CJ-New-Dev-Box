@@ -172,15 +172,53 @@
 		if(saveChanges && c.data.sys_id && c.data.sys_id != -1){
 			c.data.new_task_widget_forms[0].widget.updateDraft(newObjSelected);	
 		}
+		if(c.data.view == newObjSelected.sn_view){
+			$scope.data.skipReload = true;
+		} else {
+			$scope.data.skipReload = false;
+		}
+			
 			
 		$scope.data.defaultTaskFormViewUpdated = true;
 		// newObjSelected is set in the selectType function
 		$scope.data.settings.defaultTaskFormView = undefined; // clear previous object
 		$scope.data.settings.defaultTaskFormView = newObjSelected;
 		$scope.data.sys_id = c.data.sys_id;
+		// DFCT0011069 - if no change to the view, then just update the fields, 
+		//               don't post back to reload the form
 		spUtil.update($scope).then(function(){
 			c.data.submitting = false;
 		});
+		// DFCT0011069 - if form not reloaded, still update values
+		if($scope.data.skipReload == true){
+			_setFilterFields();	
+		}
+	}
+	
+	// when the form is loaded, this event will fire from sub form
+	$rootScope.$on("spModel.gForm.rendered", function (event, params) {
+		// DFCT0011069 - tasker type was not getting set when form changed, this should reset it any other fields in the fitler
+		// wait for form to finish rendering
+		_setFilterFields();
+	});
+	
+	// DFCT0011069 - tasker type was not getting set when form changed, this should reset it any other fields in the fitler
+	function _setFilterFields(){
+		var fieldValues = [];
+		var aFields = [];
+		var fieldNameValue = [];
+		aFields = newObjSelected.filter.split("^");
+		aFields.forEach(function(fieldPair){
+			if(fieldPair && fieldPair != ""){
+				var fieldNameValuePair = {};
+				fieldNameValue = fieldPair.split("=");
+				fieldNameValuePair.field = fieldNameValue[0];
+				fieldNameValuePair.value = fieldNameValue[1];
+				fieldValues.push(fieldNameValuePair);				
+			}
+		});
+
+		c.data.new_task_widget_forms[0].widget.setFieldValues(fieldValues);	
 	}
 	
 	$scope.convertIsModalToString = function(){
@@ -319,6 +357,8 @@ move into the service portal style sheets and imported&#13;
 //											In HTML, added ng-switch when isModal use flex-child CSS; when default use position absolute, flexbox with child flex-column's
 //											In CSS, add detech-flex-shadow-25
 //											Updates in HTML and CSS
+// 2.8 | 2022-06-21 | raj | DFCT0011069 - On the New Task/sub task screens, Tasker Form fields are reverting to parent Tasker Type when a different tasker type is selected for a sub task
+//											Updates in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
@@ -396,7 +436,11 @@ move into the service portal style sheets and imported&#13;
 
 		data.query  = (input || {}).query || (options || {}).query || "";
 		_convertToBool(['isModal', 'omit_icons']);
-		_loadFormWidget();
+		// DFCT0011069 only load form widget on inital load and when the servicenow view changes
+		if(!input || !input.skipReload){
+			_loadFormWidget();
+		}
+		
 	}
 
 	function _loadFormWidget(){
@@ -436,14 +480,14 @@ move into the service portal style sheets and imported&#13;
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-05-05 20:37:54</sys_created_on>
         <sys_id>7574cf95db974190991a6154ca9619e1</sys_id>
-        <sys_mod_count>590</sys_mod_count>
+        <sys_mod_count>606</sys_mod_count>
         <sys_name>New Tasker Selection</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_7574cf95db974190991a6154ca9619e1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-12 07:43:51</sys_updated_on>
+        <sys_updated_on>2022-07-19 16:05:55</sys_updated_on>
         <template><![CDATA[<div ng-switch="convertIsModalToString()">
   <div ng-switch-when="true">
     <div class="dtech-new-task-container" >
