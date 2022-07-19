@@ -41,8 +41,9 @@
 		$scope.$on("countPanelClicked",function(evt,data){
 			// STRY0114448
 			c.data.menuChanged = true;
-			c.data.newFilterTitle = data.title;
-			
+			c.data.userDefaultMenuTitle = data.title;
+			// DFCT0011087
+			c.data.tasker_filter_id = data.tasker_filter_id;
 			c.data.table = data.table;
 			c.data.filter = data.filter;
 			c.data.sp_page_dv = data.sp_page_dv;
@@ -1126,6 +1127,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 //                             STRY0121807 - Homepage- "My Tasks" Landing Page
 //                             STRY0121811 - Homepage UI Update- Navigation Bar Revamp and add access points for "My Tasks" and "My OU's Tasks"
 //                                         Changes made in Server Scripot, Client controller, HTML and CSS
+// 2.8   | 2022-07-18 | raj  | DFCT0011087 - Colorful filters are being pulled from the incorrect filters.
+//                                         Changes in Server Script and Client controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1138,9 +1141,13 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 	
 		if(!input.userDefaultMenuTitle){
-			data.userDefaultMenuTitle = data.settings.userDefaultMainFilter;
+			// DFCT0011087
+			data.userDefaultMenuTitle = data.settings.userDefaultMainFilter.diplayValue;
+			data.tasker_filter_id = data.settings.userDefaultMainFilter.value;
 		} else {
+			// DFCT0011087
 			data.userDefaultMenuTitle = input.userDefaultMenuTitle;
+			data.tasker_filter_id = input.tasker_filter_id;
 		}
     data.userID = gs.getUserID();
     // STRY0101803 - load user preferences object for use when opening forms
@@ -1174,11 +1181,6 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 			data.getURL = false;
 			return;
 		}
-	
-		// STRY0113382
-		if(input.newFilterTitle && input.newFilterTitle != data.userDefaultMenuTitle){
-			data.userDefaultMenuTitle = input.newFilterTitle;
-		}
 
 		// 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform
     data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
@@ -1209,13 +1211,9 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     // STRY0101803
     optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments','DiscoverControllerURL']);
 	
-		// if usser preference was saved and the user has not selected a filter, load default filter
-		// if there is no user default and no input, then the option will already be loaded in data
-		// DFCT0010617
-		if(data.userDefaultMenuTitle && (input.initialLoad || input.menuChanged)) {
-			// load data with user's default menu.  The async post back and the poor structure of this code
-			// forces data to be passed in and out of the function, but this should be cleaned up
-			data = loadDefaultMenu(data.userDefaultMenuTitle, data);
+		// DFCT0011087 - changed to use id instead of title
+		if(data.tasker_filter_id && (input.initialLoad || input.menuChanged)) {
+			data = loadDefaultMenu(data.tasker_filter_id, data);
 			// DFCT0010617
 			data.initialLoad = false;
 			data.menuChanged = false;
@@ -1612,10 +1610,11 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
             data[name] = input[name] || options[name];
         });
     }
-
-	function loadDefaultMenu(menuTitle, data){
+	// DFCT0011087 - changed to use id instead of title
+	function loadDefaultMenu(filterId, data){
 		var menuFound;
-		menuFound = loadFilter(menuTitle);
+		// DFCT0011087 - changed to use id instead of title
+		menuFound = loadFilter(filterId);
 		// uddate data object with menu found
 		if(menuFound){
 			data.table = menuFound.table;
@@ -1638,16 +1637,14 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 		return data;
 	}
 	
-	function loadFilter(filter_label) {
+	// DFCT0011087 - changed to use id instead of title
+	function loadFilter(filterId) {
 		var filter;
 		// get filter from filters table
 		// STRY0101803 - had to change to glide record as some users couldn't see the Table field
 		var gr_filters = new GlideRecord('x_153465_discovert_tasker_filters');
-		gr_filters.addQuery('u_active', true);
-		gr_filters.addQuery('u_filter_label', filter_label);
-		gr_filters.query();
-
-		if (gr_filters.next()) {
+		// DFCT0011087 - changed to use id instead of title
+		if (gr_filters.get(filterId)) {
 			// STRY0099083
 			var currentFilter = gr_filters.getDisplayValue('u_filter');
 			// DFCT0010732
@@ -1664,6 +1661,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 			// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 			// Create the filter then push later
 			filter = {
+				tasker_filter_id: gr_filters.getUniqueValue(),
 				table: gr_filters.getDisplayValue('u_table.name'),
 				// STRY0101803
 				field_list: gr_filters.getDisplayValue('u_field_list') + '',
@@ -1693,14 +1691,14 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1211</sys_mod_count>
+        <sys_mod_count>1213</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-01 16:30:07</sys_updated_on>
+        <sys_updated_on>2022-07-18 23:17:53</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">

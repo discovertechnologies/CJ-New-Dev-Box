@@ -47,18 +47,6 @@
 		TREE_CONST = _loadTreeConstants();
 		$go = go.GraphObject.make; // for conciseness in defining templates
 
-		// load orientation from the header widget
-		treeOrientation = c.data.widgetTreeHeaderToolbar.data.settings.treeOrientation;
-		// set default tree orientation based on system setting (this will change when user perference is enabled)
-		if(treeOrientation == 'Horizontal'){
-			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
-			// this is handles positioning the status indicator
-			treeOrientationWithinBorder = "Vertical";
-		} else {
-			treeNodeAngle = TREE_CONST.verticalTreeAngle;
-			// this is handles positioning the status indicator
-			treeOrientationWithinBorder = "Horizontal";
-		}
 		if(!c.data.selectedId || c.data.selectedId == 'null')
 			c.data.selectedId = $location.search().sys_id;
 		$scope.page = {
@@ -69,6 +57,10 @@
 
 		// DFCT0010652 - STRY0119599
 		if (c.data.hide_accordion){
+			if(c.data.widgetTreeHeaderToolbars){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
 			// DFCT0010674
 			resetDiagram();
 		}
@@ -109,6 +101,9 @@
 			font_awesome_user_o: '\uf007',
 			font_awesome_exclamation_triangle_o: '\uf071',
 			font_awesome_pencil_square_o: '\uf044',
+			// STRY0124682
+			font_awesome_info_o: '\uf129',
+			
 			icon_font: '18px FontAwesome',
 			icon_top_margin: 2,
 			icon_right_margin: 5,
@@ -586,8 +581,8 @@
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - need to update the child widget toolbar footer
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
 
 		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
 		$rootScope.$broadcast('$sp.list.click', evt);
@@ -682,10 +677,17 @@
 			$scope.hide_accordion=c.data.hide_accordion;
 			// TREE FOOTER TOOLBAR
 			// STRY0117600 - does not like diagram posted back to server
-			c.data.widgetTreeFooterToolbar.diagram = null;
-			c.data.widgetTreeHeaderToolbar.diagram = null;
-			
+			if(c.data.widgetTreeFooterToolbars){
+				c.data.widgetTreeFooterToolbars[0].diagram = null;	
+			}
+			if(c.data.widgetTreeHeaderToolbars){
+				c.data.widgetTreeHeaderToolbars[0].diagram = null;	
+			}
 			spUtil.update($scope).then(function(data) {
+				if(c.data.widgetTreeHeaderToolbars){
+					// load orientation from the header widget
+					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+				}
 				resetDiagram();
 			});
 			// DFCT0010674
@@ -757,20 +759,31 @@
 	});
 	
 	function resetDiagram(){
-		diagramInitCompleted = false;	
-		if(diagram != undefined){
-			myOverview.div = null;
-			myOverview = null;
+		if(c.data.widgetTreeHeaderToolbars){
+			// set default tree orientation based on system setting (this will change when user perference is enabled)
+			if(treeOrientation == 'Horizontal'){
+				treeNodeAngle = TREE_CONST.horizontalTreeAngle;
+				// this is handles positioning the status indicator
+				treeOrientationWithinBorder = "Vertical";
+			} else {
+				treeNodeAngle = TREE_CONST.verticalTreeAngle;
+				// this is handles positioning the status indicator
+				treeOrientationWithinBorder = "Horizontal";
+			}
 		}
+		
+		diagramInitCompleted = false;	
 		// NOTE: this is the only tree still using data.id - need to look into this as maybe this should be drpped
 		if ($scope.data.id) {
 			drawTree();
 		}
 		_setToolbarProperties();
-		// STRY0116823
-		myOverview =  $go(go.Overview, "myOverview",
-											{ observed: diagram}); // , contentAlignment: go.Spot.Center
-		
+		// STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, no need to destroy overviewdiv
+		if (myOverview == undefined) {
+			// STRY0116823
+			myOverview =  $go(go.Overview, "myOverview",
+												{ observed: diagram}); // , contentAlignment: go.Spot.Center
+		}		
 		// DFCT0010275
 		if($scope.data.map.length > 0){	
 			// // STRY0072032 - this event handler is called when the diagram is first ready
@@ -794,8 +807,11 @@
 					// this block only runs once per diagram load
 					if(diagramInitCompleted){
 						// only need to set scale after initial load
-						// STRY0117945
-						c.data.widgetTreeFooterToolbar.scale(diagram.scale);					
+						// STRY0117945 STRY0121780 (cleared error when toolbar wasn't loaded)
+						if(c.data.widgetTreeFooterToolbars){
+							c.data.widgetTreeFooterToolbars[0].scale(diagram.scale);
+						}
+						
 					}
 	
 					var node = diagram.findNodeForKey(c.data.selectedId);
@@ -813,12 +829,12 @@
 	// BEGIN BLOCK
 	// ***************************************
 	function _initializeScale(){
-		if(c.data.widgetTreeFooterToolbar.data.isTree){
+		if(c.data.widgetTreeFooterToolbars[0].data.isTree){
 			// submit percent change back to server
 			diagram.zoomToRect(diagram.documentBounds);
 		} else {
 			// get the initial scale from the footer widget
-			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbar.data.settings.diagramScale);
+			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
 		}
 		diagramInitCompleted=true;
 	}
@@ -833,22 +849,22 @@
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
 		if(diagramInitCompleted){
 			// this is needed to reset zoom to custom when the diagram changes
-			c.data.widgetTreeFooterToolbar.resetDiagram(diagram);
+			c.data.widgetTreeFooterToolbars[0].resetDiagram(diagram);
 		} else {
-			c.data.widgetTreeFooterToolbar.diagram = diagram;
+			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
 		}
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeFooterToolbar.currentTop = c.data.topParentTask_id;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].currentTop = c.data.topParentTask_id;
 
 		// STRY0117600 - pass a reference to diagram to toolbar
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		c.data.widgetTreeHeaderToolbar.diagram = diagram;
+		c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.currentTop = c.data.topParentTask_id;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].currentTop = c.data.topParentTask_id;
 
 	}
 	
@@ -868,22 +884,23 @@
 	// - Review HTML against template
 
     function drawTree() {
-				if (diagram != undefined) {
-					diagram.div = null;
-					diagram = null;
+				if (diagram == undefined) {
+						// STRY0072032
+						diagram =
+							$go(go.Diagram, TREE_CONST.node_id, {
+							initialContentAlignment: go.Spot.Default,
+							allowZoom: true,
+							// define the layout for the diagram
+							layout: $go(go.TreeLayout, 
+													{angle:treeNodeAngle, 
+													 nodeSpacing: TREE_CONST.spacingNode,
+													 layerSpacing: TREE_CONST.spacingLayer})
+						});
+				}	else {
+					 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
+					diagram.clear();
+					diagram.layout.angle = treeNodeAngle;
 				}
-				// STRY0072032
-				diagram =
-					$go(go.Diagram, TREE_CONST.node_id, {
-					initialContentAlignment: go.Spot.Default,
-					allowZoom: true,
-					// define the layout for the diagram
-					layout: $go(go.TreeLayout, 
-											{angle:treeNodeAngle, 
-											 nodeSpacing: TREE_CONST.spacingNode,
-											 layerSpacing: TREE_CONST.spacingLayer})
-				});
-
 				diagram.model = new go.TreeModel($scope.data.map);
 				diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850, but for Task Tree set to 200
 				// Task Tree only control changing this default
@@ -1102,7 +1119,8 @@ function _createIconPanel(){
 					_createIcon('AddIcon', TREE_CONST.font_awesome_plus_o),
 					_createIcon('DurationIcon', TREE_CONST.font_awesome_calendar_o),
 					_createIcon('UserIcon', TREE_CONST.font_awesome_user_o),
-					_createIcon('OperationalIcon', TREE_CONST.font_awesome_pencil_square_o),
+					// STRY0124682
+					_createIcon('OperationalIcon', TREE_CONST.font_awesome_info_o),
 					//this binds the exclamation icon to the duration warning  property of the data mapping, 
 					//the function uses the level determine if the icon is added or not
 					_createIcon('ExclamationIcon', TREE_CONST.icon_warning_stroke)
@@ -1460,18 +1478,22 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                      In Client controller, function resizeDiagram() had all commented out code deleted and
 //                                        not calculating height since using Flexbox
 //                                      Changes made in HTML, CSS and Client controller
+// 2.8   - 2022-07-04 - raj -  STRY0124682 - Task Tree Widget- "Information Icon" matches the Task Form "Information Icon" - NOTE also updated Template Tree
+//                                         - Changes in Client Controller
+// 2.8   - 2022-07-11 - raj -  STRY0121780 - Stretch- Task Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
-	
+
 	main();
 	function main() {
 		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-recursivetasktreegraph');
 		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
 		data.messages = taskWidgetIconsAndMessage.loadMessages();
 		data.icons = taskWidgetIconsAndMessage.loadIcons();
-		
+
 		// DFCT0010684
 		data.currentUser = gs.getUserID();
 		// DFCT0010652
@@ -1493,66 +1515,72 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 		}
 		if (input) {
 			data.loadData = input.loadData;
-		} else {
-			// no need to load toolbar 2 times
-			_loadToolBars();
 		}
-		
+
 		// DFCT0010674 - STRY0119599
 		if(data.hide_accordion){
 			data.loadData = true;
 		}
-		
+
 		if(data.loadData){
 			_loadTaskTree();
+			// STRY0121780 - moved here load toolbar after loading task tree
+			_loadToolBars();
+
 		}
 	}
 
-		function _loadToolBars(){
+	function _loadToolBars(){
 		// TREE HEADER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
 		// STRY0120908 - added show separator
 		var header_widget_parameters = {
 			baseWidget: 'discovertasker-recursivetasktreegraph',
+			// STRY0121780
+			topId: data.id,
 			showSeparator: !data.hide_accordion,
 			iconGroup: 'header'
 		};
-		data.widgetTreeHeaderToolbar = $sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters); 
+		data.widgetTreeHeaderToolbars = [];
+		data.widgetTreeHeaderToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters)); 
 
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
 		var footer_widget_parameters = {
 			baseWidget: 'discovertasker-recursivetasktreegraph',
+			// STRY0121780
+			topId: data.id,
 			iconGroup: 'footer'
 		};
-		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters);
+		data.widgetTreeFooterToolbars = [];
+		data.widgetTreeFooterToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters));
 	}
 
 	function _loadTaskTree(){
-	
-    var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-    if (!grTask.get(data.selectedId)) {
-        data.id = null;
-        return;
-    }
-    var id = grTask.getValue("u_top_task");
 
-    var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-    if (!grTopTask.get(id)) {
-        data.id = null;
-        return;
-    }
-    data.id = grTopTask.getValue('sys_id');
-    data.task_tree = grTopTask.getValue('u_task_tree');
+		var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+		if (!grTask.get(data.selectedId)) {
+			data.id = null;
+			return;
+		}
+		var id = grTask.getValue("u_top_task");
+
+		var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+		if (!grTopTask.get(id)) {
+			data.id = null;
+			return;
+		}
+		data.id = grTopTask.getValue('sys_id');
+		data.task_tree = grTopTask.getValue('u_task_tree');
 
 
-    // STRY0091251 - NOTE: this uses the same data building functions as the 'Tasker List Task Tree' widget id: discovertasker-recursivetasktreelist
-    if (data.loadData) {
-				// DFCT0010674
-				var map = data.map = [];			
-        var taskWidgetData = new TaskWidgetData();
-        data.fieldsInModel = taskWidgetData.loadTaskTreeFieldsInModelAndFieldLabels(grTopTask);
-        taskWidgetData.buildTaskMap('discovertasker-recursivetasktreegraph', map, grTopTask, data.fieldsInModel);
+		// STRY0091251 - NOTE: this uses the same data building functions as the 'Tasker List Task Tree' widget id: discovertasker-recursivetasktreelist
+		if (data.loadData) {
+			// DFCT0010674
+			var map = data.map = [];			
+			var taskWidgetData = new TaskWidgetData();
+			data.fieldsInModel = taskWidgetData.loadTaskTreeFieldsInModelAndFieldLabels(grTopTask);
+			taskWidgetData.buildTaskMap('discovertasker-recursivetasktreegraph', map, grTopTask, data.fieldsInModel);
 		}
 	}
 
@@ -1567,17 +1595,15 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1838</sys_mod_count>
+        <sys_mod_count>1855</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-06-22 22:48:40</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-16 05:05:06</sys_updated_on>
         <template><![CDATA[<div class=" flex-row flex-grow panel-group" id="accordionTaskerGraphical">
   <div id="main_body" class="flex-column flex-grow panel panel-default">  
     <div id="panel_heading" class="panel-heading">
@@ -1585,8 +1611,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <!--DFCT0010652 - STRY0119599 -->
         <a class="accordion-toggle" ng-hide="data.hide_accordion" ng-click="getMap()" data-toggle="collapse" data-parent="#accordionTaskerGraphical" href="#collapseTaskerGraphical"/>
         <div ng-show ="data.isNotCollapsed">
-          <!-- TREE HEADER TOOLBAR -->
-          <sp-widget widget="data.widgetTreeHeaderToolbar"></sp-widget>
+          <div ng-repeat="headerBar in data.widgetTreeHeaderToolbars">
+            <!-- TREE HEADER TOOLBAR -->
+            <sp-widget widget="headerBar"></sp-widget>
+          </div>
         </div>
         Task Tree View
       </h4>
@@ -1640,8 +1668,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
            data-toggle="collapse" 
            data-parent="#accordionTaskerGraphical" href="#collapseTaskerGraphical">&nbsp;
         </a>
-        <!-- TREE FOOTER TOOLBAR -->
-        <sp-widget widget="data.widgetTreeFooterToolbar"></sp-widget>
+        <div ng-repeat="footerBar in data.widgetTreeFooterToolbars">
+          <!-- TREE FOOTER TOOLBAR -->
+          <sp-widget widget="footerBar"></sp-widget>
+        </div>
       </div>
     </div>
   </div>

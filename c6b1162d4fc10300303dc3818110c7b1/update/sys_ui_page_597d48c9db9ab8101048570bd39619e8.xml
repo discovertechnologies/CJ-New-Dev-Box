@@ -12,7 +12,9 @@ function onCancel() {
 function onSubmit() {
     return true;
 }]]></client_script>
-        <description>New UI Page to prompt from Platform about deleting Tasks and subtasks&#13;
+        <description>New UI Page to prompt from Platform about deleting Tasks and subtasks - this page is also used for Template and Template Task&#13;
+2.8.0 - 2022-07-09 - raj - STRY0119137 - Stretch- Template UI Clean Up- Delete Top Template Task Confirmation Modal (moved delete to new script)&#13;
+2.8.0 - 2022-07-09 - raj -  STRY0119138 - Stretch- Template UI Clean Up- Delete Template Subtask Confirmation Modal (moved delete to new script)&#13;
 &#13;
  2.7.0 | 2021-08-28 | mmcc | STRY0107404 - Draft Scheduled Tasks – UI – Delete Modal&#13;
   New UI Page to prompt about Task and subtasks when deleting from Platform&#13;
@@ -29,7 +31,7 @@ function onSubmit() {
 2.7.0 | 2021-11-17 | raj |  STRY0114416  - 'gr' as a GlideRecord variable name in custom scripts is always a bad idea&#13;
   changed gr to gr_delete_task</description>
         <direct>false</direct>
-        <endpoint>x_153465_discovert_delete_task_prompt.do</endpoint>
+        <endpoint>x_153465_discovert_tasker_delete_prompt.do</endpoint>
         <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
 <j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
 
@@ -63,31 +65,129 @@ function onSubmit() {
 		Tasker - If this task has subtask(s), they will also be deleted
 		cancel
 		Tasker - Button - Delete Task
+		
+		Tasker - You are about to permanently delete a Top Template Task
+		Tasker - This will also delete the entire template with all its {0} template tasks
+		Tasker - You are about to permanently delete this template task with all its {0} template subtasks
+		Tasker - Button - Delete Template
 	</g:messages>
 
 	<g:ui_form>
 		<!-- pass variables from the Client Script (where spModal.open is or new GlideModal is) -->
 		<j:set var="jvar_taskSysId" value="${sysparm_taskSysId}"/>
 		<j:set var="jvar_taskNumberShortDescription" value="${sysparm_taskNumberShortDescription}" />
+		
+		<j:set var="jvar_templateSysId" value="${sysparm_templateSysId}"/>
+		<j:set var="jvar_templateNumberShortDescription" value="${sysparm_templateNumberShortDescription}" />
 
+		<j:set var="jvar_templateTaskSysId" value="${sysparm_templateTaskSysId}"/>
+		<j:set var="jvar_templateTaskNumberShortDescription" value="${sysparm_templateTaskNumberShortDescription}" />
+		<j:set var="jvar_isTopTemplateTask" value="${sysparm_isTopTemplateTask}" />
+		
 		<!-- NOW protocol requires hidden input to make value accessible -->
 		<input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
 		<input type="hidden" id="task_name" value="${jvar_taskNumberShortDescription}" />
 
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<input type="hidden" id="templateSysId" name="templateSysId"  value="${jvar_templateSysId}"/>
+		<input type="hidden" id="template_name" value="${jvar_templateNumberShortDescription}" />
+
+		<!-- NOW protocol requires hidden input to make value accessible -->
+		<input type="hidden" id="templateTaskSysId" name="templateTaskSysId"  value="${jvar_templateTaskSysId}"/>
+		<input type="hidden" id="templateTask_name" value="${jvar_templateTaskNumberShortDescription}" />
+
+		<!-- Get short description for the popupto show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_shortDescription" jelly="true">
+			var messageShortDescription = '';
+			var taskId = jelly.jvar_taskSysId;
+			var templateId = jelly.jvar_templateSysId;
+			var tempTaskId = jelly.jvar_templateTaskSysId;
+
+			if(taskId){
+				messageShortDescription = jelly.jvar_taskNumberShortDescription;
+			} else if(tempTaskId){
+				messageShortDescription = jelly.jvar_templateTaskNumberShortDescription;
+			} else if(templateId){
+				messageShortDescription = jelly.jvar_templateNumberShortDescription;
+			}
+
+			messShortDescription = messageShortDescription;
+		</g:evaluate>
+
 		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
-		<g:evaluate var="jvar_messageOpenTasksCount" jelly="true">
-			var messageOpenTasksCount = '';
-			var descendantsCount = 0;
+		<g:evaluate var="jvar_messageCount" jelly="true">
+			var messageCount = '';
+			var taskCount = 0;
+			var taskId = jelly.jvar_taskSysId;
+			var templateId = jelly.jvar_templateSysId;
+			var tempTaskId = jelly.jvar_templateTaskSysId;
+			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
+			var useTempMessage = false;
+			if(taskId){
+				var details = {
+				taskSysId: taskId,
+				countType: 'ALL'
+				};
+				var taskerHelpers = new TaskerHelpers();
+				taskCount = taskerHelpers.getDescendantsCount(details);
+				messageCount = gs.getMessage('Tasker - You are about to permanently delete this task with all its {0} subtasks', [taskCount]);
+			} else if(tempTaskId) {
+				if(!isTopTemplateTask){
+					useTempMessage = false;
+					var taskTemplateHelpers = new TaskTemplateHelpers();
+					taskCount = taskTemplateHelpers.countTemplateTaskSubTasks(tempTaskId);
+					messageCount = gs.getMessage('Tasker - You are about to permanently delete this template task with all its {0} template subtasks', [taskCount]);
+				} else {
+					useTempMessage = true;
+				}
+			} else if(templateId){
+				useTempMessage = true;
+			}
+			// if using template message then, build it
+			if(useTempMessage){
+				var taskTemplateHelpers = new TaskTemplateHelpers();
+				taskCount = taskTemplateHelpers.countAllTemplateTasks(templateId);
+				messageCount = gs.getMessage('Tasker - This will also delete the entire template with all its {0} template tasks', [taskCount]);
+			}
 
-			var details = {
-			taskSysId: jelly.jvar_taskSysId,
-			countType: 'ALL'
-			};
+			messCount = messageCount;
+		</g:evaluate>
+		
+		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_deleteButtonText" jelly="true">
+			var deleteButtonText = gs.getMessage('Tasker - Button - Delete Task');
+			var templateId = jelly.jvar_templateSysId;
+			var tempTaskId = jelly.jvar_templateTaskSysId;
+			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
+			if(!tempTaskId){
+				if(templateId){
+					deleteButtonText = gs.getMessage('Tasker - Button - Delete Template');
+				}
+			}
+			messDeleteButtonText = deleteButtonText;
+		</g:evaluate>
+		
+		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_messageTopTaskInfo" jelly="true">
+			var messageTopTaskInfo = '';
+			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
+			if(isTopTemplateTask){
+				messageTopTaskInfo = gs.getMessage('Tasker - Deleting a "Top Template Task" will delete the entire Template');
+			} else {
+				messageTopTaskInfo = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
+			}
+			messTopTaskInfo = messageTopTaskInfo;
+		</g:evaluate>		
+		
+		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
+		<g:evaluate var="jvar_messageTopTemplateTask" jelly="true">
+			var messageTopTemplateTask = '';
+			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
+			if(isTopTemplateTask){
+				messageCount = gs.getMessage('You are about to permanently delete a Top Template Task');
+			}
 
-			var taskerHelpers = new TaskerHelpers();
-			descendantsCount = taskerHelpers.getDescendantsCount(details);
-
-			messDescendantsCount = gs.getMessage('Tasker - You are about to permanently delete this task with all its {0} subtasks', [descendantsCount]);
+			messCount = messageTopTemplateTask;
 		</g:evaluate>
 
 		<div class="dtech-modal-widget-body">
@@ -99,14 +199,20 @@ function onSubmit() {
 			<div class="dtech-text-center">
 				<h1 id="msgBody2" class="text-uppercase">${gs.getMessage('Warning')}!</h1>
 			</div>
-
 			<div class="dtech-text-center dtech-task-name">
-				<span id="msgBody3">${jvar_taskNumberShortDescription}</span>
+				<span id="msgBody3">${jvar_shortDescription}</span>
 			</div>
 
 			<div class="dtech-text-center dtech-standard-text-color">
+				<span id="msgBody3_5">
+					${jvar_messageTopTemplateTask}
+				</span>
+			</div>
+			<br></br>
+			
+			<div class="dtech-text-center dtech-standard-text-color">
 				<span id="msgBody4">
-					${jvar_messageOpenTasksCount}
+					${jvar_messageCount}
 				</span>
 			</div>
 			<br></br>
@@ -118,7 +224,7 @@ function onSubmit() {
 
 			<div class="dtech-text-center">
 				<img src="InfoRound24.svg"/>
-				<span id="msgBody6" class="dtech-subtasks-also-deleted">${gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted')}</span>
+				<span id="msgBody6" class="dtech-subtasks-also-deleted">${jvar_messageTopTaskInfo}</span>
 			</div>
 			<br></br>
 		</div>
@@ -137,45 +243,71 @@ function onSubmit() {
 							 type="submit"
 							 style_class="btn btn-danger dtech-max-width-fit-content dtech-push-right "
 							 onclick="return onSubmit();"
-							 >${gs.getMessage('Tasker - Button - Delete Task')}
+							 >${jvar_deleteButtonText}
 			</g:dialog_button>
 		</div>
 
 	</g:ui_form>
 </j:jelly>]]></html>
-        <name>delete_task_prompt</name>
-        <processing_script><![CDATA[deleteTask();
+        <name>tasker_delete_prompt</name>
+        <processing_script><![CDATA[taskerDelete();
 
-function deleteTask() {
-	// DFCT0010541
-	var url = 'x_153465_discovert_route_task_instance.do?sys_id=' + sysid;
-    var gr_delete_task = new GlideRecord("x_153465_discovert_route_task_instance");
-    gr_delete_task.addQuery('sys_id', sysid);
-    gr_delete_task.query();
-    if (gr_delete_task.next()) {
-		// get URL before delete
-		if(gr_delete_task.parent){
-			url = 'x_153465_discovert_route_task_instance.do?sys_id=' + gr_delete_task.getValue('parent');
-		} else {
-			url = '/discovertaskerportal';
+function taskerDelete() {
+	var url = '';
+	if(sysid){
+		// DFCT0010541
+		url = 'x_153465_discovert_route_task_instance.do?sys_id=' + sysid;
+		var gr_delete_task = new GlideRecord("x_153465_discovert_route_task_instance");
+		gr_delete_task.addQuery('sys_id', sysid);
+		gr_delete_task.query();
+		if (gr_delete_task.next()) {
+			// get URL before delete
+			if(gr_delete_task.parent){
+				url = 'x_153465_discovert_route_task_instance.do?sys_id=' + gr_delete_task.getValue('parent');
+			} else {
+				url = '/discovertaskerportal';
+			}
+			// Calls a Server function
+			new Task_uiAction().uiAction_DeleteTasks(gr_delete_task);
 		}
-        // Calls a Server function
-        new Task_uiAction().uiAction_DeleteTasks(gr_delete_task);
-    }
-
+	} else if(templateTaskSysId){
+		// delete template here
+		url = 'x_153465_discovert_route_tasks.do?sys_id=' + templateTaskSysId;
+		var gr_delete_temp_task = new GlideRecord('x_153465_discovert_route_tasks');
+		gr_delete_temp_task.addQuery('sys_id', templateTaskSysId);
+		gr_delete_temp_task.query();
+		if (gr_delete_temp_task.next()) {
+			if(gr_delete_temp_task.parent){
+				url = 'x_153465_discovert_route_tasks.do?sys_id=' + gr_delete_temp_task.getValue('parent');
+			} else {
+				url = '/discovertaskerportal?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template';
+			}
+			new Template_uiAction().uiAction_DeleteTemplateTask(gr_delete_temp_task);
+		}		
+	} else if(templateSysId){
+		// delete template here
+		url = 'x_153465_discovert_discover_routing_template.do?sys_id=' + templateSysId;
+		var gr_delete_temp = new GlideRecord('x_153465_discovert_discover_routing_template');
+		gr_delete_temp.addQuery('sys_id', templateSysId);
+		gr_delete_temp.query();
+		if (gr_delete_temp.next()) {
+			new Template_uiAction().uiAction_DeleteTemplate(gr_delete_temp);
+			url = '/discovertaskerportal?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template';
+		}
+	}
 	response.sendRedirect(url);
 }]]></processing_script>
         <sys_class_name>sys_ui_page</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-08-28 23:50:27</sys_created_on>
         <sys_id>597d48c9db9ab8101048570bd39619e8</sys_id>
-        <sys_mod_count>113</sys_mod_count>
-        <sys_name>delete_task_prompt</sys_name>
+        <sys_mod_count>141</sys_mod_count>
+        <sys_name>tasker_delete_prompt</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_page_597d48c9db9ab8101048570bd39619e8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-11-18 02:41:44</sys_updated_on>
+        <sys_updated_on>2022-07-10 23:39:20</sys_updated_on>
     </sys_ui_page>
 </record_update>

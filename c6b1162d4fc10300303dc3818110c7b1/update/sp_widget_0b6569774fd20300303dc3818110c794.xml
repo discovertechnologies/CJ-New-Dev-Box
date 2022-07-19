@@ -44,15 +44,6 @@
 		c.data.showIcons = false;
 		c.data.topOU="";
 		
-		// load orientation from the header widget
-		treeOrientation = c.data.widgetTreeHeaderToolbar.data.settings.treeOrientation;
-		// set default tree orientation based on system setting (this will change when user perference is enabled)
-		if(treeOrientation == 'Horizontal'){
-			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
-		} else {
-			treeNodeAngle = TREE_CONST.verticalTreeAngle;
-		}
-
 		// STRY0074597
 		setOUPicker();
 		if (!c.data.selectedId && c.data.currentTopOU){
@@ -78,6 +69,10 @@
 			name: 'page'
 		};
 		if ($scope.data.selectedId) {
+			if(c.data.widgetTreeHeaderToolbars){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
 			// STRY0116823
 			resetDiagram();
 		}
@@ -470,8 +465,8 @@
 		c.data.getUserGUID = value;
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - does not like diagram posted back to server
-		c.data.widgetTreeFooterToolbar.diagram = null;
-		c.data.widgetTreeHeaderToolbar.diagram = null;
+		c.data.widgetTreeFooterToolbars[0].diagram = null;
+		c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
 		c.server.update().then(function(){
 			// find the node to update again
@@ -494,8 +489,8 @@
 			// TREE FOOTER TOOLBAR
 			// STRY0117600 - does not like diagram posted back to server
 			// readd diagram when returns from server
-			c.data.widgetTreeFooterToolbar.diagram = diagram;
-			c.data.widgetTreeHeaderToolbar.diagram = diagram;
+			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
+			c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
 		});
 	}
 	// -----------------------------------------------------------------------------------------------------------------
@@ -529,8 +524,8 @@
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - need to update the child widget toolbar footer
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
 
 		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', 1);
 		$rootScope.$broadcast('$sp.list.click', evt);
@@ -582,15 +577,56 @@
 		}
 	}
 
+	// STRY0121023 - STRY0121017
+	$scope.$on("tasker-tree-footer-toolbar.changeTree",function(evt,params){
+		if(params.sys_id){
+			c.data.widgetTreeFooterToolbars[0].diagram = null;
+			c.data.widgetTreeHeaderToolbars[0].diagram = null;
+			
+			c.data.selectedId = params.sys_id;
+			// clear the top so it gets reloaded
+			c.data.topOU = undefined;
+			c.data.changeTree=true;
+			c.server.update().then(function(){
+				$scope.topOU={
+					displayValue: c.data.office_name,
+					value: c.data.currentTopOU,
+					name: 'topOU'
+				};
+				$scope.page = {
+					displayValue: $scope.data.title,
+					value: $scope.data.selectedId,
+					name: 'page'
+				};
+				// STRY0121782 - settings changed, force reload of the settings
+				if(c.data.widgetTreeHeaderToolbars){
+					// load orientation from the header widget
+					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+				}
+				// STRY0116823
+				resetDiagram();
+				broadcastTopNodeChange(c.data.currentTopOU);
+
+			});
+		}
+	});
 	$scope.$on("field.change",function(evt,params){
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - does not like diagram posted back to server
-		c.data.widgetTreeFooterToolbar.diagram = null;
-		c.data.widgetTreeHeaderToolbar.diagram = null;
+		c.data.widgetTreeFooterToolbars[0].diagram = null;
+		c.data.widgetTreeHeaderToolbars[0].diagram = null;
+		
+		// STRY0125624 - pick up new tree orientation from new top settings
+		treeOrientation=undefined;
 
 		c.data.topOU = $scope.topOU.value;
 		c.data.selectedId = c.data.topOU;
 		c.server.update().then(function(){
+			// STRY0121782 - settings changed, force reload of the settings
+			if(c.data.widgetTreeHeaderToolbars){
+				// load orientation from the header widget
+				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+			}
 			// STRY0116823
 			resetDiagram();
 		});
@@ -790,16 +826,23 @@
 	});	
 	
 	function resetDiagram(){
+		// STRY0125624 allow tree orientation to change
+		// set default tree orientation based on system setting (this will change when user perference is enabled)
+		if(treeOrientation == 'Horizontal'){
+			treeNodeAngle = TREE_CONST.horizontalTreeAngle;
+		} else {
+			treeNodeAngle = TREE_CONST.verticalTreeAngle;
+		}
+
 		diagramInitCompleted = false;	
-		if(diagram != undefined){
-			myOverview.div = null;
-			myOverview = null;
-		}		
 		drawTree();
 		_setToolbarProperties();
-		// STRY0116823
-		myOverview =  $go(go.Overview, "myOverview",
-    { observed: diagram}); // , contentAlignment: go.Spot.Center
+		 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, no need to destroy overviewdiv
+		if (myOverview == undefined) {
+			// STRY0116823
+			myOverview =  $go(go.Overview, "myOverview",
+												{ observed: diagram}); // , contentAlignment: go.Spot.Center
+		}
 		// DFCT0010275
 		if($scope.data.map.length > 0){	
 			// // STRY0072032 - this event handler is called when the diagram is first ready
@@ -823,8 +866,10 @@
 					// this block only runs once per diagram load
 					if(diagramInitCompleted){
 						// only need to set scale after initial load
-						// STRY0117945
-						c.data.widgetTreeFooterToolbar.scale(diagram.scale);					
+						// STRY0117945 STRY0125624 (cleared error when toolbar wasn't loaded)
+						if(c.data.widgetTreeFooterToolbars){
+							c.data.widgetTreeFooterToolbars[0].scale(diagram.scale);
+						}
 					}
 
 					var node = diagram.findNodeForKey(c.data.selectedId);
@@ -842,12 +887,12 @@
 	// BEGIN BLOCK
 	// ***************************************
 	function _initializeScale(){
-		if(c.data.widgetTreeFooterToolbar.data.isTree){
+		if(c.data.widgetTreeFooterToolbars[0].data.isTree){
 			// submit percent change back to server
 			diagram.zoomToRect(diagram.documentBounds);
 		} else {
 			// get the initial scale from the footer widget
-			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbar.data.settings.diagramScale);
+			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
 		}
 		diagramInitCompleted=true;
 	}
@@ -863,44 +908,30 @@
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
 		if(diagramInitCompleted){
 			// this is needed to reset zoom to custom when the diagram changes
-			c.data.widgetTreeFooterToolbar.resetDiagram(diagram);
+			c.data.widgetTreeFooterToolbars[0].resetDiagram(diagram);
 		} else {
-			c.data.widgetTreeFooterToolbar.diagram = diagram;
+			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
 		}
 		
 		//c.data.widgetTreeFooterToolbar.diagram = diagram;
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeFooterToolbar.currentTop = c.data.currentTopOU;
+		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeFooterToolbars[0].currentTop = c.data.currentTopOU;
 
 		// STRY0117600 - pass a reference to diagram to toolbar
 		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		c.data.widgetTreeHeaderToolbar.diagram = diagram;
+		c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
 		// STRY0117600 - pass selectedId to toolbar
 		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeHeaderToolbar.parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbar.currentTop = c.data.currentTopOU;
+		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
+		c.data.widgetTreeHeaderToolbars[0].currentTop = c.data.currentTopOU;
 
 	}
 
 	function resizeDiagram() {
 		// DFCT0010275
 		if($scope.data.map && $scope.data.map.length > 0){	
-			// STRY0096158 - ORG - Template Tree Min Size to avoid cutting off tool tip
-			// STRY0116823				
-			//				var diagramHeight = parseInt(diagram.documentBounds.height > TREE_CONST.diagramMinHeight ? diagram.documentBounds.height: TREE_CONST.diagramMinHeight);
-			//				var diagramHeight = 500;
-			var panelHeight = angular.element(document.getElementById('main_body')).height();
-			var headingHeight = angular.element(document.getElementById('panel_heading')).height();
-			var titleHeight = angular.element(document.getElementById('panel_title')).height();
-			var footerHeight = angular.element(document.getElementById('panel_footer')).height();
-			var map_page_Height = TREE_CONST.minHeight + panelHeight - (headingHeight + titleHeight + footerHeight);
-//			diagram.div.height(map_page_Height + 'px');
-//			diagram.requestUpdate();
-			//				jQuery("#" + TREE_CONST.node_id).height(map_page_Height);
-			angular.element(document.getElementById(TREE_CONST.node_id)).height(map_page_Height + 'px');
-			
 			// Select the node using the sys_id parameter supplied.
 			var node_select = diagram.findNodeForKey(c.data.selectedId);
 			diagram.select(node_select);
@@ -908,18 +939,19 @@
 	}
 	
 	function drawTree() {
-		if(diagram != undefined){
-			diagram.div = null;
-			diagram = null;
-		}
-		diagram =
-			$go(go.Diagram, TREE_CONST.node_id, {
-			initialAutoScale: go.Diagram.Uniform,
-			allowZoom: true,		
-			// define the layout for the diagram
-			layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
-		});
-
+			// STRY0125255 - 
+			if (diagram == undefined) {		diagram =
+					$go(go.Diagram, TREE_CONST.node_id, {
+					initialAutoScale: go.Diagram.Uniform,
+					allowZoom: true,		
+					// define the layout for the diagram
+					layout: $go(go.TreeLayout, { angle:treeNodeAngle, nodeSpacing: TREE_CONST.spacingNode, layerSpacing: TREE_CONST.spacingLayer })
+				});
+			}	else {
+				 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
+				diagram.clear();
+				diagram.layout.angle = treeNodeAngle;
+			}
 		diagram.model = new go.TreeModel($scope.data.map);
 		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
 		diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850
@@ -1632,9 +1664,11 @@
 	};
 	
 	/* 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel */
+	/* 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State - added empty  */
 	function _resetPopoverListObject() {
 		c.data.popoverListRecord = {
 			footerLink: '',
+			emptyState: '',
 			persons: [],
 			title: ''
 		};
@@ -1683,6 +1717,8 @@
 				c.data.isOuMemberListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - OU Members'];
 				c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
+				// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+				c.data.popoverListRecord.emptyState = c.data.messages['Tasker - No {0} available'].replace('{0}',c.data.popoverListRecord.title);
 				c.data.popoverListOptions.modalType = 'listModal';
 				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = 5;
@@ -1695,6 +1731,8 @@
 				c.data.isContactListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Contacts'];
 				c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
+				// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+				c.data.popoverListRecord.emptyState = c.data.messages['Tasker - No {0} available'].replace('{0}',c.data.popoverListRecord.title);
 				c.data.popoverListOptions.modalType = 'listModal';
 				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = 5;
@@ -1707,6 +1745,8 @@
 				c.data.isOuTaskManagerListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Title - TASK MANAGERS'];
 				// c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
+				// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+				c.data.popoverListRecord.emptyState = c.data.messages['Tasker - No {0} available'].replace('{0}',c.data.popoverListRecord.title);
 				c.data.popoverListOptions.modalType = 'formModal';
 				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = undefined; // show all rows
@@ -1719,6 +1759,8 @@
 				c.data.isOuHierarchyAdminListNeeded = true;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Title - OU HIERARCHY ADMINISTRATORS'];
 				// c.data.popoverListRecord.footerLink = c.data.messages['Tasker - Show More...'];
+				// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+				c.data.popoverListRecord.emptyState = c.data.messages['Tasker - No {0} available'].replace('{0}',c.data.popoverListRecord.title);
 				c.data.popoverListOptions.modalType = 'formModal';
 				c.data.popoverListOptions.isSimplePopover = false;
 				c.data.popoverListOptions.maxRowsToDisplay = undefined; // show all rows
@@ -1738,6 +1780,9 @@
 				c.data.popoverListOptions.isSpinnerShown = false;
 				c.data.popoverListRecord.title = c.data.messages['Tasker - Pending Request'];
 				c.data.popoverListRecord.footerLink = c.data.icons.ProcessRequestBadge24.alt;
+				// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+				c.data.popoverListRecord.emptyState = c.data.messages['Tasker - No {0} available'].replace('{0}',c.data.popoverListRecord.title);
+
 				c.data.popoverListRecord.contactPageHref = url;
 				popoverAdjustLeft = -80;
 				popoverAdjustTop = 94;
@@ -1770,15 +1815,15 @@
 			c.data.ouId = obj.part.data.sys_id;
 			// TREE FOOTER TOOLBAR
 			// STRY0117600 - does not like diagram posted back to server
-			c.data.widgetTreeFooterToolbar.diagram = null;
-			c.data.widgetTreeHeaderToolbar.diagram = null;
+			c.data.widgetTreeFooterToolbars[0].diagram = null;
+			c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
 			c.server.update().then(function() {
 				// TREE FOOTER TOOLBAR
 				// STRY0117600 - does not like diagram posted back to server
 				// reset to diagram after it returns from server
-				c.data.widgetTreeFooterToolbar.diagram = diagram;
-				c.data.widgetTreeHeaderToolbar.diagram = diagram;
+				c.data.widgetTreeFooterToolbars[0].diagram = diagram;
+				c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
 
 				c.data.popoverListRecord.persons = c.data.updatedOUList;
 				c.data.popoverListOptions.isSpinnerShown = false;
@@ -2145,6 +2190,8 @@
 // 2.8   - 2022-04-20 - raj -  STRY0119818 - Task Tree Widget- New Buttons modify Zoom/Structure preferences
 //                                           NOTE: also reorganized Template and OU to put all of the repeated functions in the same block of code
 //                                         - Changes in Client Controller
+// 2.8   - 2022-07-11 - raj -  STRY0125624 - Stretch- Org Tree Widget UX- Update user's "tree-view" preferences
+//                                         - Changes in ServerScript only
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2165,7 +2212,6 @@
 			_processInput();
 		} else {
 			_initialLoad();
-			_loadToolBars();
 		}
 	}
 	
@@ -2213,23 +2259,29 @@
 		// STRY0120908 - added show separator
 		var header_widget_parameters = {
 			baseWidget: 'discovertasker-officehierarchy',
+			// STRY0125624
+			topId: data.currentTopOU,
 			showSeparator: false,
 			iconGroup: 'header'
 		};
-		data.widgetTreeHeaderToolbar = $sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters); 
+		data.widgetTreeHeaderToolbars = [];
+		data.widgetTreeHeaderToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters)); 
 
 		// TREE FOOTER TOOLBAR
 		// STRY0117600 - move toolbar into separate widget to use same functionality across all
 		var footer_widget_parameters = {
 			baseWidget: 'discovertasker-officehierarchy',
+			topId: data.currentTopOU,
 			iconGroup: 'footer'
 		};
-		data.widgetTreeFooterToolbar = $sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters);
+		data.widgetTreeFooterToolbars = [];
+		data.widgetTreeFooterToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters));
 	}
 	
 	// STRY0117600 structuring code for maintainability 
 	function _processInput(){
 		if(input.topOU){
+			// STRY0125624
 			data.topOU = input.topOU;
 			_loadOUmap(input.topOU,input.topOU);
 		} else if(input.isPhotoDataNeeded){
@@ -2261,7 +2313,10 @@
 			data.isOuHierarchyAdminListNeeded = false;
 			data.updatedOUList = [];
 			data.updatedOUList = taskWidgetData.getOUHierarchyAdministratorsHoverArray(input.ouId);
-		}		
+		} else if(input.changeTree){
+			// STRY0121023 - STRY0121017
+			_loadOUmap(input.selectedId, undefined);				
+		}
 	}
 	
 	//  STRY0113883
@@ -2300,7 +2355,8 @@
 		data.fieldsInModel = taskWidgetData.loadOfficeTreeFieldsAndFieldLabels(gr_ou);
 
 		taskWidgetData.buildOUMap('discovertasker-officehierarchy', map, gr_ou, data.fieldsInModel);
-
+		// moved here, any time reload map, reload toolbar
+		_loadToolBars();
 	}
 
 	function _setSelected(){
@@ -2350,14 +2406,14 @@
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2802</sys_mod_count>
+        <sys_mod_count>2829</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-05-02 20:38:19</sys_updated_on>
+        <sys_updated_on>2022-07-16 19:57:05</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -2388,10 +2444,13 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
 </div>
 
 <!-- DFCT0010275 -->
-<div id="main_body" ng-show="data.settings.topParentNeeded==false" class="panel panel-default">
-  <div id="panel_heading" class="panel-heading">
-    <!-- TREE HEADER TOOLBAR -->
-    <sp-widget widget="data.widgetTreeHeaderToolbar"></sp-widget>
+<div id="main_body" ng-show="data.settings.topParentNeeded==false" class="dtech-topstick-posabso flex-column panel panel-default">
+  <div id="panel_heading" class="panel-heading dtech-panel-heading-height-75">
+    <div ng-repeat="headerBar in data.widgetTreeHeaderToolbars">
+      <!-- TREE HEADER TOOLBAR -->
+      <sp-widget widget="headerBar"></sp-widget>
+    </div>
+
     <div id="panel_title" >
       <div class="dtech-box" >
         <!--STRY0117949  -->
@@ -2410,10 +2469,10 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
     </div>
   </div>
 <!--  <div class="panel-body">  -->
-  <div class="page_map_wrapper">
+  <div class="flexbox">
 
-    <div> <!--class="m-t-sm"> -->
-      <div id="page_map" class="page-map" ng-show="data.currentTopOU"></div>
+    <div class="flex-column flex-grow" > <!--class="m-t-sm"> -->
+      <div id="page_map" class="flex-column flex-grow page-map" ng-show="data.currentTopOU"></div>
       <!-- STRY0116823 -->
       <div id="myOverview" ></div>   
     </div>
@@ -2431,8 +2490,10 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   
   <!-- STRY0113668 -->
   <div id="panel_footer" class="panel-footer">
-    <!-- TREE FOOTER TOOLBAR -->
-    <sp-widget widget="data.widgetTreeFooterToolbar"></sp-widget>
+    <div ng-repeat="footerBar in data.widgetTreeFooterToolbars">
+      <!-- TREE FOOTER TOOLBAR -->
+      <sp-widget widget="footerBar"></sp-widget>
+    </div>
   </div>
 </div>]]></template>
     </sp_widget>

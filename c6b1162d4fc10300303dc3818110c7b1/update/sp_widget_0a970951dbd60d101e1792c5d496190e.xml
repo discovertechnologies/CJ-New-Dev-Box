@@ -217,12 +217,6 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 
 	});
 
-	// STRY0120403
-	$scope.changeFilter = function(filterToUse){
-		$scope.data.taskFilter = filterToUse;
-		c.data.taskFilter = filterToUse;
-		spUtil.update($scope);
-	};
 	$scope.openDurationModal = function(){
 		// call common duration modal
 		var title = c.data.durationTitle + ': ' + c.data.f.title;
@@ -1002,14 +996,15 @@ Have modal fit the viewport height with its own scrollbar start
 //                                      In Server script, comment out code for setting objects data.TreeNodes16 and data.DynamicTreeView16
 //                                      In Client controller, Comment out code for openDynamicTreeView() and openTreeViewModal()
 //                                      Changes made in HTML, Server script and Client controller
-// 2.8 | 2022-05-16 | raj  |  STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
-//                                      changes in server script, client controller and html
 // 2.8 | 2022-05-20 | raj  |  STRY0122592 - Place holder:  clean up the mobile document view to remove information tab and the action buttons.
 //                                      changes in server script, and html (allow task filter to be removed from the screen)
 // 2.8 | 2022-05-23 | raj  |  DFCT0010937 - New Template DOES NOT correctly redirect to the Templates.  It is redirecting to the New Task form. 
 //                                      changes in HTML Only
+// 2.8 | 2022-07-16 | raj  |  STRY0122687 - (Stretch) Task Form- Remove tabs if only one exists on that page
+//                                      changes in Server Script and HTML
+// 2.8 | 2022-07-16 | raj  |  STRY0120159 - Task Form- New Icons to Filter "This Task or All Descendants"
+//                                      changes in Server Script and HTML
 // 
-
 //------------------------------------------------------------------------------------------------------------------------
 
 // form functionality - URL parameter driven
@@ -1019,9 +1014,6 @@ Have modal fit the viewport height with its own scrollbar start
 	var url_Properties = {};
 
 	data.loadingIndicator = false;
-
-	// STRY0120403
-	data.taskFilter = "TaskOnly";
 
 	/* "use strict"; -linter issues */
 	// populate the 'data' variable
@@ -1042,7 +1034,9 @@ Have modal fit the viewport height with its own scrollbar start
 	// STRY0108629
 	data.omit_icons=(input || {}).omit_icons || (options || {}).omit_icons || false; 
 	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;
+	// STRY0120159 
 	data.hideTaskFilter = (input || {}).hideTaskFilter || (options || {}).hideTaskFilter;
+	data.showStatesMultipleBar = (input || {}).showStatesMultipleBar || (options || {}).showStatesMultipleBar;
 	//------------------------------------------------------------------------------------------------------------------------
 	// CUSTOM
 	//------------------------------------------------------------------------------------------------------------------------
@@ -1089,13 +1083,7 @@ Have modal fit the viewport height with its own scrollbar start
 		}
 
 		if (input.sys_id == '-1')
-			data.isNewRecord = true;
-		
-		// STRY0120403
-		if(input.taskFilter){
-			data.taskFilter = input.taskFilter;
-		}
-
+			data.isNewRecord = true;		
 	} else {
 		data.table = options.table || $sp.getParameter("t") || $sp.getParameter("table") || $sp.getParameter("sl_table");
 		data.sys_id = options.sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
@@ -1362,19 +1350,23 @@ Have modal fit the viewport height with its own scrollbar start
 	data.hideDocuments = options.hideDocuments;
 	data.hideRelatedLists = options.hideRelatedLists;
 	
+	// STRY0122687 - count tabs
+	data.tabCount = 0;
+
 	// STRY0120403
-	var filterDesc = '';
-	var showDesc = false;
-	if(data.taskFilter=='TaskAndDescendents'){
-		showDesc = true;
-			filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.sys_id;
+	data.task_id = -1;
+	if(data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1){
+		data.task_id = data.sys_id;
 	}
 	if(!data.hideRelatedLists){
 		var rlParams =	{
+			// STRY0120159 
+			task_id: data.task_id,
+			hideTaskFilter: data.hideTaskFilter,
+			showStatesMultipleBar: data.showStatesMultipleBar,
 			arrRelatedLists: arrRelatedLists, 
 			f_related_lists: data.f._related_lists,
 			rec: rec, 
-			filterDesc: filterDesc,
 			table: data.table,
 			canCreateSubTask: data.canCreateSubTask, 
 			emailEnabled: data.emailEnabled,
@@ -1388,6 +1380,8 @@ Have modal fit the viewport height with its own scrollbar start
 			attachmentsON: data.SNAttachmentsON
 		};	
 		data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
+		// STRY0122687 - count tabs
+		data.tabCount += data.f._related_lists.length;
 	}
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
@@ -1409,37 +1403,28 @@ Have modal fit the viewport height with its own scrollbar start
 	data.myAttachmentWidgetCount = 0;
 	// DFCT0010343 - TUP - moved creation of attachments to client script
 
-// TODO - YOU ARE HERE - THIS SHOULD ONLY BE ON THE SUBTASK SCREEN
-// WE MAY WANT TO PASS IN A FLAG TO INDICATE IF THIS IS ON, BUT COULD JUST DO IT FOR IF TABLE TASK AND RL TASK ALSO
 	//------------------------------------------------------------------------------------------------------------------------
-	// 3. CUSTOM: N TAB: PROGRESS BAR & AUDIT WIDGET 
+	// 3. CUSTOM: N TAB: AUDIT WIDGET 
 	//------------------------------------------------------------------------------------------------------------------------
 	// 
-	// would be nice to eventually make this a boolean eventually
-	data.widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
-		table: data.table,
-		sys_id: data.sys_id,
-		showDesc: showDesc
-	});
 
 	// STRY0119587 - only load if activity requested
 	if(!data.hideActivity){
+		// STRY0122687 - count tabs
+		data.tabCount += 2;
+
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Activity Log
     //------------------------------------------------------------------------------------------------------------------------
     data.table_audit = 'x_153465_discovert_activity_view';
     var filter_audit = '';
     //filter_audit = 'taskid_u_all_ancestors_tasksLIKE'+ data.sys_id+'^journalid_valueNOT LIKERequest has been';
-
-			// STRY0120403
-		if(showDesc){
-			filter_audit = 'taskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.sys_id;
-		} else {
-			filter_audit = 'taskid_sys_id=' + data.sys_id;
-		}
+		filter_audit = 'taskid_sys_id=' + data.sys_id;
     var o_audit = "journalid_sys_created_on";
     var d_audit = "desc";
     var subTasksActivity_Options = {
+				task_id: data.task_id,
+				hideTaskFilter: data.hideTaskFilter,
         title: 'Activity Log',
         table: data.table_audit,
         filter: filter_audit,
@@ -1519,6 +1504,10 @@ Have modal fit the viewport height with its own scrollbar start
 		else data.isActive = false;
 		// STRY0111049
 		data._docint_widget = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(data.table, data.view, data.sys_id);
+		// STRY0122687 - count tabs
+		if(data._docint_widget && data._docint_widget._docint_tabs){
+			data.tabCount +=data._docint_widget._docint_tabs.length;
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------------------------------
@@ -1542,14 +1531,14 @@ Have modal fit the viewport height with its own scrollbar start
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>219</sys_mod_count>
+        <sys_mod_count>231</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-16 14:54:30</sys_updated_on>
+        <sys_updated_on>2022-07-17 23:03:43</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1719,22 +1708,9 @@ Have modal fit the viewport height with its own scrollbar start
     <!-- STRY0063505 |	NOTE: Attachment Manger is not needed on tabs with the attachment widget -->
     <div ng-if="!data.hideDocuments && data.table != 'x_153465_discovert_route_task_instance' && data.table != 'x_153465_discovert_discover_routing_template' && data.table != 'x_153465_discovert_route_tasks'">
       <sp-attachment-manager table="data.table" sys-id="data.f._attachmentGUID" omit-edit="!data.canAttach"></sp-attachment-manager>
-    </div>
-    
-		<!-- STRY0120403 - support filtering to show data for a single task or for all subtasks -->
-    <div class="flex-row">
-      <div class="dtech-push-right-flexbox" ng-if="!data.hideTaskFilter && data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1" >
-        <img src="{{data.TaskFilter24.src}}" title="{{data.TaskFilter24.title}}"
-							ng-class="{'dtech-disabled': data.taskFilter == 'TaskOnly', 'dtech-enabled': data.taskFilter != 'TaskOnly'}"
-             alt="{{data.TaskFilter24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskOnly')"/>
-        <img src="{{data.TaskFilterList24.src}}" title="{{data.TaskFilterList24.title}}"
-							ng-class="{'dtech-disabled': data.taskFilter == 'TaskAndDescendents', 'dtech-enabled': data.taskFilter != 'TaskAndDescendents'}"
-             	alt="{{data.TaskFilterList24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskAndDescendents')"/>
-      </div>
-    </div>
-
-    <!-- RELATED LIST -->
-    <div >
+    </div>  
+    <!-- RELATED LIST - STRY0122687 - hide tabs if only one displayed -->
+    <div ng-if="data.tabCount>1">
       <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
 
         <ul class="nav nav-tabs" role="tablist">
@@ -1894,10 +1870,6 @@ Have modal fit the viewport height with its own scrollbar start
             Table not defined '{{data.table_label}}'
           </div>
           <div ng-if="!data.invalid_table">
-
-            <div ng-if="!data.hideRelatedLists && rl.table == 'x_153465_discovert_route_task_instance'">
-              <sp-widget widget="data.widgetInstanceMultipleBar"></sp-widget>
-            </div>
             <!--STRY0063505 Added an if statement to avoid putting Attachments on the screen 2 times for Process Template b/c the shared is using the My Attachments label. -->
             <sp-widget ng-if="!data.hideDocuments && rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table != 'x_153465_discovert_discover_routing_template'" widget="data.myAttachmentWidget"></sp-widget>
             <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->

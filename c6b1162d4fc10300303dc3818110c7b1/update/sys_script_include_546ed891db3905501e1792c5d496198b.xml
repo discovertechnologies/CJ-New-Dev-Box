@@ -6,6 +6,16 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This script include loads the icons and text messages for Tasker Widgets.  &#13;
+2.8 | 2022-07-18 | raj  |  DFCT0011087 - Colorful filters are being pulled from the incorrect filters.&#13;
+2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State&#13;
+2.8   - 2022-07-12 - raj -  DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms&#13;
+2.8   - 2022-07-12 - raj -  STRY0117941 - Org Hierarchy- Preset Views buttons- Warning Dialogue for users without Default OU&#13;
+2.8   - 2022-07-11 - raj -  STRY0121782 - Stretch- Template Task Tree Widget UX- Update user's "tree-view" preferences&#13;
+2.8   - 2022-07-11 - raj -  STRY0121780 - Stretch- Task Tree Widget UX- Update user's "tree-view" preferences&#13;
+2.8   - 2022-07-11 - raj -  STRY0125624 - Stretch- Org Tree Widget UX- Update user's "tree-view" preferences&#13;
+&#13;
+2.8 | 2022-07-04 | raj | STRY0121023 - Org Hierarchy- Favorited OU button- Add Warning Dialogue for users in a different Top OU&#13;
+2.8 | 2022-06-28 | raj | STRY0121017 - Org Hierarchy- Default OU button- Add Warning Dialogue for users in a different Top OU&#13;
 2.8    | 2022-06-21 - raj -  STRY0116257 - System Setting- Options for limiting available views and setting default "Task Form view" for New Task Forms&#13;
 2.8   | 2022-06-04 | raj  | STRY0121797 - Banner Notification Revamp&#13;
 2.8   | 2022-06-03 | raj  | STRY0123377 - Homepage- Access Points to 'New Dashboards'&#13;
@@ -51,10 +61,15 @@ TaskerWidgetIconsAndMessages.prototype = {
     initialize: function(widgetId) {
 		this.widgetId = widgetId;
 		this.taskerFormPreferences = new tasker_User_Form_Preferences();
-		this.PREFERENCE_FAVORITE = 'DTechApps.Tasker.FavoriteOU';
-		this.PREFERENCE_PERCENT= 'DTechApps.Tasker.' + widgetId + '.diagramScale';
+		this.PREFERENCE_FAVORITE = 'DT.Tasker.FavoriteOU';
+		// STRY0121023 
+		this.PREFERENCE_FAVORITE_STOP_PROMPT = 'DT.Tasker.FavoriteOU.StopPrompt';
+		// STRY0121017 
+		this.PREFERENCE_DEFAULT_STOP_PROMPT = 'DT.Tasker.DefaultOU.StopPrompt';
+
+		this.PREFERENCE_PERCENT= 'DT.' + widgetId + '.scale';
 		// STRY0117951
-		this.PREFERENCE_TREE_ORIENTATION = 'DTechApps.Tasker.' + widgetId + '.treeOrientation';
+		this.PREFERENCE_TREE_ORIENTATION = 'DT.' + widgetId + '.direction';
 		// STRY0119569 - this constant is in tasker_User_Form_Preferences 
 		// - all of these should go into a constants script include 
 		this.PREFERENCE_DEFAULT_TASK_FORM_VIEW = this.taskerFormPreferences.PREFERENCE_DEFAULT_TASK_FORM_VIEW;
@@ -64,8 +79,19 @@ TaskerWidgetIconsAndMessages.prototype = {
 		this.USER_DEFAULT_LANDING_PAGE = "DTechApps.Tasker.user_default_landing_page";
 		// STRY0121811 - get user default filter
 		this.USER_DEFAULT_MAIN_FILTER = "DTechApps.Tasker.user_default_main_filter";
+		this.topId = "";
     },
-		
+	// STRY0121782 - STRY0121780 - STRY0125624
+	setTopId: function (topId){
+		// top id used to store tree preferences per top id
+		this.topId = topId;
+	},
+	
+	// STRY0121782 - STRY0121780 - STRY0125624
+	getTopId: function (){
+		// top id used to store tree preferences per top id
+		return this.topId;
+	},	
 	// this loads all TaskerWidgetMessage and titles that are not part of icons
 	loadMessages: function() {
 		var widgetMessages;
@@ -151,14 +177,16 @@ TaskerWidgetIconsAndMessages.prototype = {
 				icons = this._load_tasker_header_menu_icons(icons);
 				break;
 			case 'discovertasker-officehierarchy-header':
-				icons = this._load_tree_header_icons(icons);
+				icons = this._load_office_tree_header_icons(icons);
 				break;
 			case 'discovertasker-officehierarchy':
+				// DFCT0010944
 				icons = this._load_officehiearachy_icons(icons);
 				break;
 			case 'discovertasker-officehierarchy-footer':
 				icons = this._load_ORG_toolTip_footer_icons(icons);
-				icons = this._load_tree_footer_icons(icons);
+				// icons for footer are now different for task and template, moved old items into the org footer
+				// icons = this._load_tree_footer_icons(icons);
 				break;
 			case 'discovertasker_dynamic_breadcrumbs':
 				icons = this._load_breadcrumb_icons(icons);
@@ -167,7 +195,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 				icons = this._load_widgetInModal_icons(icons);
 				break;
 			case 'discovertasker-recursivetasktreegraph-header':	
-				icons = this._load_tree_header_icons(icons);
+				// DFCT0010944
+				icons = this._load_task_tree_header_icons(icons);
 				break;
 			case 'discovertasker-recursivetasktreegraph':
 				// no icons yet, all font awesome
@@ -176,7 +205,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 				icons = this._load_tree_footer_icons(icons);
 				break;
 			case 'discovertasker-processtemplatetreegraph-header':	
-				icons = this._load_tree_header_icons(icons);
+				// DFCT0010944
+				icons = this._load_template_tree_header_icons(icons);
 				break;
 			case 'discovertasker-processtemplatetreegraph':
 				// no icons yet, all font awesome
@@ -265,7 +295,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 	},
 	
 	savePreferenceUserDefaultMainFilter: function(page_filter, userDefaultMainFilter){
-		gs.getUser().savePreference(this.USER_DEFAULT_MAIN_FILTER + page_filter, userDefaultMainFilter);
+		var str_mainFilter = JSON.stringify(userDefaultMainFilter);
+		gs.getUser().savePreference(this.USER_DEFAULT_MAIN_FILTER + page_filter, str_mainFilter);
 	},
 	
 	// STRY0118963
@@ -285,15 +316,27 @@ TaskerWidgetIconsAndMessages.prototype = {
 	
 	// STRY0117951
 	savePreferenceOrientation: function(newTreeOrientation){
-		gs.getUser().savePreference(this.PREFERENCE_TREE_ORIENTATION, newTreeOrientation);	
+		var treePreference = this.PREFERENCE_TREE_ORIENTATION + "." + this.getTopId();
+		gs.getUser().savePreference(treePreference, newTreeOrientation);	
 	},
 	
 	savePreferencePercent: function(newPercent){
-		gs.getUser().savePreference(this.PREFERENCE_PERCENT, newPercent);	
+		var treePercent = this.PREFERENCE_PERCENT + "." + this.getTopId();
+		gs.getUser().savePreference(treePercent, newPercent);	
 	},
 
 	savePreferenceFavorite: function(newFavorite){
 		gs.getUser().savePreference(this.PREFERENCE_FAVORITE, JSON.stringify(newFavorite));	
+	},	
+
+	// STRY0121023 
+	savePreferenceFavoriteStopPrompt: function(){
+		gs.getUser().savePreference(this.PREFERENCE_FAVORITE_STOP_PROMPT, true);	
+	},	
+
+	// STRY0121017 
+	savePreferenceDefaultStopPrompt: function(){
+		gs.getUser().savePreference(this.PREFERENCE_DEFAULT_STOP_PROMPT, true);	
 	},	
 	
 	// load the filter page or set the default
@@ -316,22 +359,29 @@ TaskerWidgetIconsAndMessages.prototype = {
 	// load currently selected filter
 	_getSelectedFitlerTitle: function(page_filter){
 		var defaultMainFilter;
+		var oDefaultMainFilter;
 		if(page_filter == 'my_task_home_page'){
+			oDefaultMainFilter = {displayValue: "My Open Tasks", value: "c2bd318cdbadf4501e1792c5d496199b"};
 			var userDefaultTaskMainFilter = gs.getUser().getPreference(this.USER_DEFAULT_MAIN_FILTER + 'my_task_home_page');
 			if(userDefaultTaskMainFilter){
-				defaultMainFilter = userDefaultTaskMainFilter;
-			} else {
-				// leave this undefined so the default is set in control
-				defaultMainFilter = "My Active Tasks";
+				try {
+					oDefaultMainFilter = JSON.parse(userDefaultTaskMainFilter);
+				} catch (e) {
+					// do nothing, already set to a blank object above
+				}
 			}
+			defaultMainFilter = oDefaultMainFilter;
 		} else if(page_filter == 'my_ous_tasks_home_page'){
+			oDefaultMainFilter = {displayValue: "My OUs Open Tasks", value: "f89fce7fdb5db4501e1792c5d4961959"};
 			var userDefaultTaskOUMainFilter = gs.getUser().getPreference(this.USER_DEFAULT_MAIN_FILTER + 'my_ous_tasks_home_page');
 			if(userDefaultTaskOUMainFilter){
-				defaultMainFilter = userDefaultTaskOUMainFilter;
-			} else {
-				// leave this undefined so the default is set in control
-				defaultMainFilter = "My OU's Active Tasks";
-			}		
+				try {
+					oDefaultMainFilter = JSON.parse(userDefaultTaskOUMainFilter);
+				} catch (e) {
+					// do nothing, already set to a blank object above
+				}
+			}
+			defaultMainFilter = oDefaultMainFilter;
 		}
 		return defaultMainFilter;
 	},
@@ -501,8 +551,6 @@ TaskerWidgetIconsAndMessages.prototype = {
 		// load current page from URL, last saved, or default
 		settings.userDefaultLandingPage = this._getFilterPage($sp);
 		
-		// load the default filter for the current page
-		settings.userDefaultMainFilter = this._getSelectedFitlerTitle(settings.userDefaultLandingPage);		
 		return settings;
 
 	},
@@ -519,18 +567,13 @@ TaskerWidgetIconsAndMessages.prototype = {
 
 		return widgetMessages;
 	},	
-
-	_load_tree_header_icons: function(icons){
-		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Hierarchy"), alt: gs.getMessage("Tasker - View as Horizontal Hierarchy")});
-		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Hierarchy"), alt: gs.getMessage("Tasker - View as Vertical Hierarchy")});
-		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});
-		return icons;
-	},
 	
+	// DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms
+	// ORG settings were moved out of this tooltip load.
 	_load_tree_footer_icons: function(icons){
 		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});		
-		icons["ZoomEntire24"] = this._buildIcon({imageName: 'ZoomEntire24.svg', title: gs.getMessage("Tasker - View the Entire Organization"), alt: gs.getMessage("Tasker - Entire Organization")});
-		icons["ZoomSelected24"] = this._buildIcon({imageName: 'ZoomSelected24.svg', title: gs.getMessage("Tasker - Zoom into Selected OU"), alt: gs.getMessage("Tasker - Selected OU")});
+		icons["ZoomEntire24"] = this._buildIcon({imageName: 'ZoomEntire24.svg', title: gs.getMessage("Tasker - View the Entire Tree"), alt: gs.getMessage("Tasker - View the Entire Tree")});
+		icons["ZoomSelected24"] = this._buildIcon({imageName: 'ZoomSelected24.svg', title: gs.getMessage("Tasker - Zoom into Selected Task"), alt: gs.getMessage("Tasker - Selected OU")});
 		icons["Top24"] = this._buildIcon({imageName: 'TopOU24.svg', title: gs.getMessage("Tasker - Navigate to Top"), alt: gs.getMessage("Tasker - Go to Top")});
 		return icons;
 	},
@@ -538,7 +581,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 	_load_tree_header_defaultsAndSettings: function($sp){
 		settings = {};
 
-		var treeOrientation = gs.getUser().getPreference(this.PREFERENCE_TREE_ORIENTATION);
+		var treePreference = this.PREFERENCE_TREE_ORIENTATION + "." + this.getTopId();
+		var treeOrientation = gs.getUser().getPreference(treePreference);
 		if(treeOrientation){
 			settings.treeOrientation = treeOrientation;
 		} else {
@@ -555,7 +599,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 	},
 	_load_tree_footer_defaultsAndSettings: function(){
 		settings = {};
-		var diagramScale = gs.getUser().getPreference(this.PREFERENCE_PERCENT);
+		var treePercent = this.PREFERENCE_PERCENT + "." + this.getTopId();
+		var diagramScale = gs.getUser().getPreference(treePercent);
 		if(diagramScale){
 			settings.diagramScale = diagramScale;
 		} else {
@@ -570,6 +615,15 @@ TaskerWidgetIconsAndMessages.prototype = {
 	// ------------------------------------------------------------------------------------------------------------------
 	// BEGIN - Template Tree section
 	// ------------------------------------------------------------------------------------------------------------------
+	// DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms
+	_load_template_tree_header_icons: function(icons){
+		// NOTE the icons are the same inside of the template tree, but the text is diffrent
+		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Structure"), alt: gs.getMessage("Tasker - View as Horizontal Structure")});
+		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Structure"), alt: gs.getMessage("Tasker - View as Vertical Structure")});
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});
+		return icons;
+	},
+	
 	_load_template_defaultsAndSettings: function($sp){
 		settings = {};
 		settings.page_id = $sp.getParameter("id");
@@ -620,6 +674,15 @@ TaskerWidgetIconsAndMessages.prototype = {
 	// ------------------------------------------------------------------------------------------------------------------
 	// END - Task Tree section
 	// ------------------------------------------------------------------------------------------------------------------
+	// DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms
+	_load_task_tree_header_icons: function(icons){
+		// NOTE the icons are the same inside of the task tree, but the text is diffrent
+		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Structure"), alt: gs.getMessage("Tasker - View as Horizontal Structure")});
+		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Structure"), alt: gs.getMessage("Tasker - View as Vertical Structure")});
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});
+		return icons;
+	},
+	
 	_load_tasktree_defaultsAndSettings: function($sp){
 		settings = {};
 		settings.page_id = $sp.getParameter("id");
@@ -690,6 +753,14 @@ TaskerWidgetIconsAndMessages.prototype = {
 	// ------------------------------------------------------------------------------------------------------------------
 	// BEGIN - Office Hiearachy section
 	// ------------------------------------------------------------------------------------------------------------------
+	// DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms
+	_load_office_tree_header_icons: function(icons){
+		icons["OrgHierarchy24"] = this._buildIcon({imageName: 'OrgHierarchy24.svg', title: gs.getMessage("Tasker - View as Horizontal Hierarchy"), alt: gs.getMessage("Tasker - View as Horizontal Hierarchy")});
+		icons["OrgHierarchy-Vertical24"] = this._buildIcon({imageName: 'OrgHierarchy-Vertical24.svg', title: gs.getMessage("Tasker - View as Vertical Hierarchy"), alt: gs.getMessage("Tasker - View as Vertical Hierarchy")});
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});
+		return icons;
+	},
+	
 	_load_officehierarchy_defaultsAndSettings: function($sp){
 		settings = {};
 		settings.page_id = $sp.getParameter("id");
@@ -744,6 +815,8 @@ TaskerWidgetIconsAndMessages.prototype = {
 		
 		// 2.8 | 2022-03-16 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 		widgetMessages['Tasker - Show More...'] = gs.getMessage('Tasker - Show More...');
+		// 2.8 | 2022-07-16 | raj  |  STRY0119734 - All Popovers- Empty State
+		widgetMessages['Tasker - No {0} available'] = gs.getMessage('Tasker - No {0} available');
 		widgetMessages['Tasker - OU Members'] = gs.getMessage('Tasker - OU Members');
 		widgetMessages['Tasker - Contacts'] = gs.getMessage('Tasker - Contacts');
 
@@ -783,8 +856,13 @@ TaskerWidgetIconsAndMessages.prototype = {
 	
 	_load_ORG_toolTip_footer_widgetMessages: function(){
 		var widgetMessages = this._load_toolTip_footer_widgetMessages();
+		// STRY0117941
+		widgetMessages["Tasker - Error: You must be a default member to an Organizational Unit to use this feature. Please contact your Hierarchy Administrator."] = gs.getMessage('Tasker - Error: You must be a default member to an Organizational Unit to use this feature. Please contact your Hierarchy Administrator.');
+		
 		widgetMessages['Tasker - Set selected as Favorite OU'] = gs.getMessage('Tasker - Set selected as Favorite OU');
 		widgetMessages['Tasker - This is your selected Favorite OU'] = gs.getMessage('Tasker - This is your selected Favorite OU');
+		widgetMessages['Tasker - Leave Current Organization Tree?'] = gs.getMessage('Tasker - Leave Current Organization Tree?');
+		
 		return widgetMessages;
 	},
 	
@@ -804,10 +882,33 @@ TaskerWidgetIconsAndMessages.prototype = {
 			settings.favorite = {value: "",	topId: ""};
 		}
 
+
+		// STRY0121023 
+		var favoriteOUStopPrompt = gs.getUser().getPreference(this.PREFERENCE_FAVORITE_STOP_PROMPT);
+		if(favoriteOUStopPrompt){
+			settings.favoriteStopPrompt = true;
+		} else {
+			settings.favoriteStopPrompt = undefined;
+		}
+		
+		// STRY0121017 
+		var defaultOUStopPrompt = gs.getUser().getPreference(this.PREFERENCE_DEFAULT_STOP_PROMPT);
+		if(defaultOUStopPrompt){
+			settings.defaultStopPrompt = true;
+		} else {
+			settings.defaultStopPrompt = undefined;
+		}
+		
+		
 		return settings;
 	},
 	
 	_load_ORG_toolTip_footer_icons: function(icons){
+		// DFCT0010944 - "Tree Zoom Option" tooltips are incorrect on "Template", "Template Task", "Task" forms
+		icons["Divider_Black"] = this._buildIcon({imageName: 'Divider_Black.svg', title: "", alt: ""});		
+		icons["ZoomEntire24"] = this._buildIcon({imageName: 'ZoomEntire24.svg', title: gs.getMessage("Tasker - View the Entire Organization"), alt: gs.getMessage("Tasker - Entire Organization")});
+		icons["ZoomSelected24"] = this._buildIcon({imageName: 'ZoomSelected24.svg', title: gs.getMessage("Tasker - Zoom into Selected OU"), alt: gs.getMessage("Tasker - Selected OU")});
+		icons["Top24"] = this._buildIcon({imageName: 'TopOU24.svg', title: gs.getMessage("Tasker - Navigate to Top"), alt: gs.getMessage("Tasker - Go to Top")});
 		// the icons below are tree view icons, but only used in OU
 		icons["Favorite24"] = this._buildIcon({imageName: 'Favorite24.svg', title: gs.getMessage("Tasker - Navigate to Favorited OU"), alt: gs.getMessage("Tasker - Favorite OU")});
 		icons["DefaultOU24"] = this._buildIcon({imageName: 'DefaultOU24.svg', title: gs.getMessage("Tasker - Navigate to my default OU"), alt: gs.getMessage("Tasker - Default OU")});
@@ -879,13 +980,13 @@ TaskerWidgetIconsAndMessages.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-02-20 01:00:57</sys_created_on>
         <sys_id>546ed891db3905501e1792c5d496198b</sys_id>
-        <sys_mod_count>251</sys_mod_count>
+        <sys_mod_count>272</sys_mod_count>
         <sys_name>TaskerWidgetIconsAndMessages</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_546ed891db3905501e1792c5d496198b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-28 06:22:42</sys_updated_on>
+        <sys_updated_on>2022-07-18 23:26:28</sys_updated_on>
     </sys_script_include>
 </record_update>

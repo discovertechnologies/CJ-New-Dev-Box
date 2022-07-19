@@ -168,44 +168,35 @@ TaskerHelpers.prototype = {
 	// Result: Tasks (or all Active Tasks) in the OU will have Tasker Number ending with the new OU Abbreviation.
 	updateTaskerNumber: function(ou_id, activeOnly){
 		var gr_ou = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-		var ga_ouTasks = new GlideAggregate('x_153465_discovert_route_task_instance');
 		var gr_ouTasks = new GlideRecord('x_153465_discovert_route_task_instance');
 		var taskerNumber;
-		var msgOUNotFound = "The Organizational Unit provided was not found. The Organizaitonal Unit sys_id provided was: " + ou_id;
-		var msgStartActive = "Tasker is updating the Tasker Number for all active tasks for the Organizational Unit with Abbreviation: ";
-		var msgStartAll = "Tasker is updating the Tasker Number for all tasks for the Organizational Unit with Abbreviation: ";
-		var msgTasksFound = ". Tasks being updates: ";
-		var msgEnd = "The number of Tasker Numbers updated in the Organizational Unit: ";
-		var msgTasksUpdated = " was: ";
+		var msgOUNotFound = gs.getMessage('Tasker - The Organizational Unit provided was not found. The Organizaitonal Unit sys_id provided was:') + ou_id;
+		var msgAllTasks="";
+		var msgActiveTasks="";
+		var msgEnd = "";
+
 		var countTasksToUpdate = 0;
 		var countTasksUpdated = 0;
 		var updateProcessingObject = {sys_id: ou_id, ou_abbreviation:"", office_name: "", tasksToUpdate: 0, tasksUpdated: 0};
 		// only process tasks if the OU is found
 		if(gr_ou.get(ou_id)){
-			// set up the glide aggregate
-			ga_ouTasks.addQuery("primary_assignee",ou_id);
+			countTasksToUpdate = this.countTasksInOU(ou_id, activeOnly);
+
 			// set up the glide record to process the tasks
 			gr_ouTasks.addQuery("primary_assignee",ou_id);
 			
 			// add active only to the query and update the message
 			if(activeOnly){
 				gr_ouTasks.addQuery("active",true);
-				ga_ouTasks.addQuery("active",true);
 			}
-			// count the records being updated
-			ga_ouTasks.addAggregate('COUNT');
-			ga_ouTasks.query();
-			if (ga_ouTasks.next()) {
-				// Need to subtract 1 since this task is also in the list of ancestors
-				countTasksToUpdate = ga_ouTasks.getAggregate('COUNT');
-			}
-			
 			// put message to the screen givign the count
 			if(activeOnly){
-				gs.info(msgStartActive + gr_ou.getDisplayValue() + msgTasksFound + countTasksToUpdate);
+				msgActiveTasks = gs.getMessage('Tasker - Tasker is updating the Tasker Number for all active tasks for the Organizational Unit with Abbreviation [{0}]. Tasks being updated [{1}]',[gr_ou.getDisplayValue(), countTasksToUpdate]);
+				gs.info(msgActiveTasks);
 			} else{
-				gs.info(msgStartAll + gr_ou.getDisplayValue() + msgTasksFound + countTasksToUpdate);
-			}				
+				msgAllTasks =gs.getMessage('Tasker - Tasker is updating the Tasker Number for all tasks for the Organizational Unit with Abbreviation [{0}]. Tasks being updated [{1}].',[gr_ou.getDisplayValue(), countTasksToUpdate]);
+				gs.info(msgAllTasks);
+			}
 			gr_ouTasks.query();
 			while(gr_ouTasks.next()){
 				taskerNumber = gr_ouTasks.u_task_tree.u_shared_task_label + '-' + gr_ouTasks.getDisplayValue('primary_assignee');
@@ -215,16 +206,38 @@ TaskerHelpers.prototype = {
 					gr_ouTasks.update();
 				}
 			}
-			gs.info(msgEnd + gr_ou.getDisplayValue() + msgTasksUpdated + countTasksUpdated);
+			msgEnd = gs.getMessage('Tasker - The number of Tasker Numbers updated in the Organizational Unit with Abbreviation [{0}]. was [{1}]',[gr_ou.getDisplayValue(), countTasksUpdated]);
+			gs.info(msgEnd);
+			
 			updateProcessingObject.sys_id = ou_id;
-			updateProcessingObject.ou_abbreviation = gr_ou.office_abbreviation;
-			updateProcessingObject.office_name = gr_ou.office_name;
+			updateProcessingObject.ou_abbreviation = gr_ou.getDisplayValue("office_abbreviation");
+			updateProcessingObject.office_name = gr_ou.getDisplayValue("office_name");
 			updateProcessingObject.tasksToUpdate = countTasksToUpdate;
 			updateProcessingObject.tasksUpdated = countTasksUpdated;
 		} else {
 			gs.info(msgOUNotFound);
 		}
 		return updateProcessingObject;
+	},
+	// STRY0116785 
+	countTasksInOU: function (ou_id, activeOnly){
+		var countTasksToUpdate = 0;
+		// set up the glide aggregate
+		var ga_ouTasks = new GlideAggregate('x_153465_discovert_route_task_instance');
+		ga_ouTasks.addQuery("primary_assignee",ou_id);
+		// add active only to the query and update the message
+		if(activeOnly){
+			ga_ouTasks.addQuery("active",true);
+		}
+		// count the records being updated
+		ga_ouTasks.addAggregate('COUNT');
+		ga_ouTasks.query();
+		if (ga_ouTasks.next()) {
+			// Need to subtract 1 since this task is also in the list of ancestors
+			countTasksToUpdate = ga_ouTasks.getAggregate('COUNT');
+		}
+		return countTasksToUpdate;
+		
 	},
 	
 	// STRY0122882 
@@ -1089,13 +1102,13 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
-        <sys_mod_count>289</sys_mod_count>
+        <sys_mod_count>294</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-27 22:00:34</sys_updated_on>
+        <sys_updated_on>2022-07-08 22:13:42</sys_updated_on>
     </sys_script_include>
 </record_update>

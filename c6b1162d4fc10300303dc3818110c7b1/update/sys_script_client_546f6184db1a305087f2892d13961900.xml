@@ -3,17 +3,19 @@
         <active>true</active>
         <applies_extended>false</applies_extended>
         <condition/>
-        <description>2.7.2&#13;
+        <description>2.8 | 2022-07-09 | raj |  STRY0119137 - STRY0119138 (corrected platform page name while working other story)&#13;
+2.8 | 2022-07-06 | raj | STRY0116785 - ICE- Confirmation Modal: Updating OU Abbreviation updates Tasker Number &#13;
 2.7.2 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists&#13;
   Added footer style display none&#13;
 &#13;
-2.7&#13;
-STRY0108170 - DIA- Org Hierarchy– Hierarchy Request Form&#13;
-DFCT0010643 - Remove "Context Menu" from a "New" Organizational Hierarchy " Request Update" on Portal</description>
+2.7  | STRY0108170 - DIA- Org Hierarchy– Hierarchy Request Form&#13;
+2.7 | DFCT0010643 - Remove "Context Menu" from a "New" Organizational Hierarchy " Request Update" on Portal</description>
         <field>sys_created_on</field>
         <global>true</global>
         <isolate_script>true</isolate_script>
-        <messages>Tasker - Modal Save Changes Message&#13;
+        <messages>Tasker - The number of Tasker Numbers updated in the Organizational Unit with Abbreviation [{0}]. was [{1}]&#13;
+Tasker - Title - Update OU Abbreviation for&#13;
+Tasker - Modal Save Changes Message&#13;
 Tasker - Title - Request Hierarchy Update&#13;
 Tasker - There are no available Hierarchy Administrators. Please contact your Application Administrator to add Hierarchy Administrators.</messages>
         <name>OU Hierarchy-onSubmit Open Request Modal</name>
@@ -35,13 +37,25 @@ function onSubmit() {
 	var ou_parent;
 	var query;
 	var formAction = g_form.getActionName();
+	// STRY0116785 - if abbreviation changed, any other request is canceled, the prompt for confirmation will post back to
+	//               save data and submit an ajax call to  update tasks
+	//               The prompt modal is in the _checkAbbreviationChange() function, if it returns true, cancel the action
+	// NOTE: if save is added to a form the abbreviation check might not run
+	if(formAction=='save'){
+		return true;
+	}else{
+		if(_checkAbbreviationChange()){
+			return false;
+		}
 
+	}
+	
 	// STRY0088787 added if statement to check the submit is a Request submit, then doing save before continuing
 	// each form acction needs to be above save confirmation below or it never gets to any other logic and stays in a confirmation loop
 	if(formAction == 'request_organizational_update'  ||
-	   formAction == 'create_sub_ou' || 
-	   formAction == 'add_member_to_ou' || 
-	   formAction == 'add_contact_to_ou') {
+		formAction == 'create_sub_ou' || 
+		formAction == 'add_member_to_ou' || 
+		formAction == 'add_contact_to_ou') {
 		// each button needs to be added 
 		if(!saveConfirmation())
 			return false;
@@ -143,7 +157,113 @@ function onSubmit() {
 		}
 
 		return saveConfirmed;
+	}
+	
+	// STRY0116785
+	// STRY0116785 - if abbreviation changed, any other request is canceled, the prompt for confirmation will post back to
+	//               save data and update tasks the prompt modal is in the _checkAbbreviationChange() function, if it returns true, cancel the action	
+	function _checkAbbreviationChange(){
+		var abbreviationChanged = false;
+		var serializeChanges;
+		var field;
+		var title = getMessage("Tasker - Title - Update OU Abbreviation for") + " " + g_scratchpad.office_abbreviation;		
+		if(typeof spModal != 'undefined'){
+			serializeChanges = g_form.serialize(true);
+			if(serializeChanges.length>0){
+				var changeFieldList = [];
+				for (field in serializeChanges) {
+					if(serializeChanges[field].name == "office_abbreviation"){
+						abbreviationChanged = true;
+						break;
+					}
+				}
+				if(abbreviationChanged){
+					_promptChangeTaskerNumber(title);
+				}
+				
+			}
+		} else if (typeof spModal == 'undefined' && g_form.modified) {
+			// start as true, if no changes it will return true, if changes confirmation will have to set back to true
+			serializeChanges = g_form.modifiedFields;
+			var formValues = [];
+			var strFormValues = "";
+			var abbrChanged = false;
+			for (field in serializeChanges) {
+				var formValue = {};
+				formValue.name = field;
+				formValue.value = g_form.getValue(field);
+				if(field=="x_153465_discovert_discover_office_hierarchy.office_abbreviation"){
+					abbreviationChanged=true;
+				}
+				formValues.push(formValue);
+			}
+			if(abbreviationChanged){
+				strFormValues = JSON.stringify(formValues);
+				// STRY0119137 - STRY0119138 (corrected platform page name while working other story)
+				// For Platform use UI Page named: tasker_org_abbreviation_change_prompt
+				var gm = new GlideModal('x_153465_discovert_tasker_org_abbreviation_change_prompt');
+				gm.setTitle(title);
+				gm.setPreference('sysparm_ou_id', g_form.getUniqueValue());
+				gm.setPreference('sysparm_form_values', strFormValues);
+				gm.setWidth(900);
+				gm.render();
+			}
+		}
+		return abbreviationChanged;
+	}
+	function _promptChangeTaskerNumber(title){
+		var ou_id=g_form.getUniqueValue();
+		var modalSelection = {};
+		spModal.open({
+			title: title,
+			widgetInput: {
+				sys_id: ou_id
+			},
+			backdrop: 'static',
+			widget: 'tasker_organization_abbreviation_change',
+			size: 'md',
+			shared: modalSelection,
+			buttons: [],
+			footerStyle: {
+				'display': 'none'
+			}
+		}).then(function(response) {
+			// save the ou changes
+			g_form.save().then(function(){
+				var ajax  = new GlideAjax('ClientTaskInfo');
+				ajax.addParam('sysparm_name', 'ouAbbreviationupdateTaskerNumber');
+				ajax.addParam('sysparm_ou_id',ou_id);
+				// here when a primary button (Save as Draft OR Discard Changes)
+				if(modalSelection.updateType == "activeTasksOnly"){
+					ajax.addParam('sysparm_activeOnly', true);
+					ajax.getXML(f_return_ouAbbreviationupdateTaskerNumber);
+				}else if(modalSelection.updateType == "allTasks"){
+					// post action to update all tasks
+					ajax.addParam('sysparm_activeOnly', false);
+					ajax.getXML(f_return_ouAbbreviationupdateTaskerNumber);
+				}else if(modalSelection.updateType == "futureTasks"){
+					// do nothing, only updating future tasks
+				}
+			});
+		}, function() {
+			// cancel selected
+			// do nothing, as processing has moved on
+		});
+	}
+	
+	
+
+	function f_return_ouAbbreviationupdateTaskerNumber(response){
+		try{
+			var sTasksUpdated = response.responseXML.documentElement.getAttribute("answer");
+			var oTasksUpdated = JSON.parse(sTasksUpdated);
+			var msgEnd = getMessage("Tasker - The number of Tasker Numbers updated in the Organizational Unit with Abbreviation [{0}]. was [{1}]").replace('{0}',oTasksUpdated.ou_abbreviation).replace('{1}',oTasksUpdated.tasksUpdated);
+			g_form.addInfoMessage(msgEnd);
+		}catch(e){
+			jslog(e);
+		}	
 	}	
+	
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
@@ -151,15 +271,15 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>546f6184db1a305087f2892d13961900</sys_id>
-        <sys_mod_count>48</sys_mod_count>
+        <sys_mod_count>114</sys_mod_count>
         <sys_name>OU Hierarchy-onSubmit Open Request Modal</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_546f6184db1a305087f2892d13961900</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-01-14 12:22:10</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-09 12:05:46</sys_updated_on>
         <table>x_153465_discovert_discover_office_hierarchy</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>
