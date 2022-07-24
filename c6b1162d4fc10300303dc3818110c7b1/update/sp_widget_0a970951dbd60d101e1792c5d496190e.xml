@@ -10,9 +10,11 @@
 	// STRY0076291
 	//c.allowSubTask = false;
 	$scope.countRelatedListsTabs = 0;
-	if(!c.data.hideRelatedLists && c.data.f._related_lists){
-		$scope.countRelatedListsTabs = c.data.f._related_lists.length;
-	}
+	// DFCT0011062 - count the related lists including attachments that are being shown
+	$scope.countRelatedListsTabs = 
+		$scope.c.data.f._related_lists.filter(function (rl){
+			if(rl.showList) return rl
+	}).length;
 	$scope.countDocumentTabs = 0;
 	if(c.data._docint_widget && c.data._docint_widget._docint_tabs){
 		$scope.countDocumentTabs = c.data._docint_widget._docint_tabs.length;
@@ -1010,7 +1012,8 @@ Have modal fit the viewport height with its own scrollbar start
 //                                        In the panel footer, removed code forClassification; added new code for Classification above it
 //                                        so the ribbon touch the edge like do by the panel heading.
 //                                      Changes made in HTML, Style sheets for Classification and Restricted Group, Pages touched
-// 
+// 2.8 | 2022-07-24 | raj  |  DFCT0011062 - When viewing a task in the "Document Management" task form view the task does NOT display the tabs "My Attachments" and "Shared Attachments"
+//                                      Changes in Server Script, Client Controller and HTML
 //------------------------------------------------------------------------------------------------------------------------
 
 // form functionality - URL parameter driven
@@ -1364,7 +1367,8 @@ Have modal fit the viewport height with its own scrollbar start
 	if(data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1){
 		data.task_id = data.sys_id;
 	}
-	if(!data.hideRelatedLists){
+	// DFCT0011062 need to process related lists to show documents if documents are not hidden
+	if(!data.hideRelatedLists || !data.hideDocuments){
 		var rlParams =	{
 			// STRY0120159 
 			task_id: data.task_id,
@@ -1377,6 +1381,8 @@ Have modal fit the viewport height with its own scrollbar start
 			canCreateSubTask: data.canCreateSubTask, 
 			emailEnabled: data.emailEnabled,
 			hideDocuments: data.hideDocuments,
+			// DFCT0011062 improves efficiency of what is loaded to HTML
+			hideRelatedLists: data.hideRelatedLists,
 			page_id: data.page_id,
 			view: data.view, 
 			isModal: data.isModal,
@@ -1536,17 +1542,15 @@ Have modal fit the viewport height with its own scrollbar start
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>235</sys_mod_count>
+        <sys_mod_count>243</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-07-20 02:32:25</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-07-24 13:55:35</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1724,10 +1728,11 @@ Have modal fit the viewport height with its own scrollbar start
     <!-- RELATED LIST - STRY0122687 - hide tabs if only one displayed -->
     <div ng-if="data.tabCount>1">
       <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
-
+					
+        <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
         <ul class="nav nav-tabs" role="tablist">
           <li ng-switch="rl.table" 
-              ng-if="!data.hideRelatedLists"
+              ng-if="rl.showList"
               ng-repeat="rl in data.f._related_lists" 
                ng-class="{'active': isActiveTab(rl.targetId, $index)}"
                ng-click="setActiveTab(rl.targetId)">
@@ -1871,9 +1876,10 @@ Have modal fit the viewport height with its own scrollbar start
       </div>
     </div>
     <div class="tab-content">
+      <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
       <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
       <div class="tab-pane" id="{{rl.targetId}}" 
-           ng-if="!data.hideRelatedLists"
+           ng-if="rl.showList"
            ng-repeat="rl in data.f._related_lists"
            ng-class="{'active': isActiveTab(rl.targetId, $index)}"
            >
