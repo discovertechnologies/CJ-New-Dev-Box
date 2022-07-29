@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller=function ($scope, $location, $rootScope, spUtil, spModal, spAriaFocusManager) {
+        <client_script><![CDATA[api.controller=function ($scope, $location, $rootScope, spUtil, spModal, spAriaFocusManager, $timeout) {
 	
 	var c = this;
 	
+	var search = $location.search();
+	if(c.data.sys_id && c.data.sys_id != -1 &&
+		 search.sys_id != c.data.sys_id){
+		// data table is being set to row 1 by this widget.
+		// broadcast to other widgets without forcing full page reload
+		$location.search("sys_id", c.data.sys_id).search("selTab", c.data.selTab).search("page_index", c.data.page_index).search("spa",1);
+	}
 	var urlParams = new URLSearchParams(window.location.search);
 	var x = urlParams.get('table');
 	
@@ -292,26 +299,41 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //                                      Changes made in HTML, CSS and Server script
 // 2.8.0 | 2022-07-14 | raj  | STRY0125255 - Template Layout- Add "Template List Page" as an option
 // 2.8.0 | 2022-07-14 | raj  | STRY0123997 - Templates- System will remember Template Record when switching from any Template Page to the Template List
+// 2.8.0 | 2022-07-28 | raj  | DFCT0011119 - Top Template Record in the list view is NOT selected upon initial page load of the "Template page"
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
+	// STRY0074534 Template Admins can read any template
+	var UserPermissions = new UserInfoScripts();
 
+	// DFCT0011119 - set standard layout
+	main();
+	function main(){
     data.page_id = "";
     data.showInactiveProcess = false;
     if (input)
         data.showInactiveProcess = input.showInactiveProcess;
-	
+
 		// STRY0125255 - STRY0123997
 		data.selTab = $sp.getParameter("selTab");
 		data.p = $sp.getParameter("p");
     data.page_index = parseInt(data.p || 1);
+		// DFCT0011119 - get sys_id
+		data.sys_id = $sp.getParameter('sys_id');
+
+		data.window_size = $sp.getValue('maximum_entries') || 10;
+		data.window_start = (data.page_index * data.window_size);
+		data.window_end = (((data.page_index + 1) * data.window_size));
+		
+		// DFCT0011119
+		data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+
+		data.tabs = _loadTabs();
+		
+	}
 	
-    data.window_size = $sp.getValue('maximum_entries') || 10;
-    data.window_start = (data.page_index * data.window_size);
-    data.window_end = (((data.page_index + 1) * data.window_size));
-		// STRY0074534 Template Admins can read any template
-		var UserPermissions = new UserInfoScripts();
+	function _loadTabs() {
 
     var link = '';
     var widgetParams;
@@ -322,7 +344,7 @@ li.hover-effect.cm-subs-tab.active {&#13;
         // overwriting filter in here...
         if (link) {
             var tab = {};
-            widgetParams = getTabData(link);
+            widgetParams = _getTabData(link);
             // override filter calling JS
             switch (widgetParams.view) {
                 case 'MyProcess':
@@ -362,7 +384,7 @@ li.hover-effect.cm-subs-tab.active {&#13;
 									tabVisible = true;
 								}
 								tab.visible = tabVisible; // gs.hasRole(tab.role);// || UserPermissions.userHasProcessTemplateAdminRights();
-                tab.count = getTableCountbyFilter(tab.table, tab.filter);
+                tab.count = _getTableCountbyFilter(tab.table, tab.filter);
                 tab.className = '';
             }
 					tab.widgetParams = widgetParams;
@@ -371,6 +393,19 @@ li.hover-effect.cm-subs-tab.active {&#13;
 					
         }
     }
+		_findActiveTab(tabs);
+
+		// create the tabs with the page_index set
+		for (var t2 in tabs){
+			var tab3 = tabs[t2];
+			tab3.dataTableWidget = $sp.getWidget('discovertasker-widget-data-table', tab3.widgetParams); //widget-data-table	
+		}
+	
+		return tabs;
+                
+	}
+	
+  function _findActiveTab(tabs){
 		if (tabs.length > 0){
 			// STRY0125255 - STRY0123997
 			if(data.selTab){
@@ -387,81 +422,128 @@ li.hover-effect.cm-subs-tab.active {&#13;
 					}
 				}
 			} else{
-				tabs[0].className = 'active';
+				if(!_getFirstTabAndId(tabs)){
+					tabs[0].className = 'active';	
+				}
+				
 			}
 		}
+	}
 
-		// create the tabs with the page_index set
-		for (var t2 in tabs){
-			var tab3 = tabs[t2];
-			tab3.dataTableWidget = $sp.getWidget('discovertasker-widget-data-table', tab3.widgetParams); //widget-data-table	
+	function _getFirstTabAndId(tabs){
+		var foundItem = false;
+		for (var t in tabs){
+			var tab1 = tabs[t];
+			if(tab1.count > 0){
+				tab1.className = 'active';
+				tab1.selectedId = _getFirstItemByFilter(tab1);
+				data.selTab = tab1.tabName;
+				data.page_index = 1;
+				foundItem = true;
+				break;
+			}
 		}
-					
-                
-
+		return foundItem;
+	}
 	
-    data.tabs = tabs;
+	
+	function _getFirstItemByFilter(tab){
+		var table = tab.table;
+		var filter = tab.filter;
 
-    function getTabData(link) {
-        var table = getParameterByName(link, 'table');
-        var view = getParameterByName(link, 'view') || 'sp';
-        if (!table) {
-            return;
-        }
+		var foundId;
+		var gr_template = new GlideRecord(table);
+		gr_template.addEncodedQuery(filter);
+		if (tab.o) {
+			if (tab.d == "asc"){
+				gr_template.orderBy(tab.o);
+			} else {
+				gr_template.orderByDesc(tab.o);
+			}
+		}		
+		
+		// only count active processes
+		if (table == 'x_153465_discovert_discover_routing_template' && !data.showInactiveProcess) {
+			gr_template.addQuery('u_active', true);
+		}
+		gr_template.query();
+
+		if (gr_template.next()) {
+			foundId = gr_template.getUniqueValue();
+			data.sys_id = foundId;
+			data.process_level = {
+				value: gr_template.getValue("process_level"),
+				display_value: gr_template.getDisplayValue("process_level")
+			};
+			data.template_name = {
+				value: gr_template.getValue("template_name"),
+				display_value: gr_template.getDisplayValue("template_name")
+			};
+		}
+
+		return foundId;
+	}
+	
+	function _getTabData(link) {
+		var table = _getParameterByName(link, 'table');
+		var view = _getParameterByName(link, 'view') || 'sp';
+		if (!table) {
+			return;
+		}
 
 
-        var widgetParams = {
-            table: table,
-            o: getParameterByName(link, 'o') || $sp.getValue('order_by'),
-            d: getParameterByName(link, 'd') || $sp.getValue('order_direction'),
-            p: getParameterByName(link, 'p') || 1,
-            view: view,
-            fields: $sp.getListColumns(table, view),
-            page_id: getParameterByName(link, 'page') || data.page_id || 'form',
-            show_keywords: getParameterByName(link, 'show_keywords'),
-            show_breadcrumbs: getParameterByName(link, 'show_breadcrumbs'),
-            show_new: getParameterByName(link, 'show_new'),
-            filter: getParameterByName(link, 'filter'),
-            enable_filter: getParameterByName(link, 'enable_filter'),
-            window_size: data.window_size,
-			isBifold: true, // 2.8 | 2022-06-17 | mmcc | DFCT0010888 - Zoom buttons are Not always correctly displayed on the Template List page
-            title: gs.getMessage(getParameterByName(link, 'title')),
-            role: gs.getMessage(getParameterByName(link, 'role')),
-            showInactiveProcess: data.showInactiveProcess
-        };
-        return widgetParams;
-    }
+		var widgetParams = {
+			table: table,
+			o: _getParameterByName(link, 'o') || $sp.getValue('order_by'),
+			d: _getParameterByName(link, 'd') || $sp.getValue('order_direction'),
+			p: _getParameterByName(link, 'p') || 1,
+			view: view,
+			fields: $sp.getListColumns(table, view),
+			page_id: _getParameterByName(link, 'page') || data.page_id || 'form',
+			show_keywords: _getParameterByName(link, 'show_keywords'),
+			show_breadcrumbs: _getParameterByName(link, 'show_breadcrumbs'),
+			show_new: _getParameterByName(link, 'show_new'),
+			filter: _getParameterByName(link, 'filter'),
+			enable_filter: _getParameterByName(link, 'enable_filter'),
+			window_size: data.window_size,
+			bifold: data.bifold, // 2.8 | 2022-06-17 | mmcc | DFCT0010888 - Zoom buttons are Not always correctly displayed on the Template List page
+			title: gs.getMessage(_getParameterByName(link, 'title')),
+			role: gs.getMessage(_getParameterByName(link, 'role')),
+			showInactiveProcess: data.showInactiveProcess
+		};
+		return widgetParams;
+	}
 
-    function getParameterByName(url, name) {
-        name = name.replace(/[\[\]]/g, "\\$&");
-        var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-            results = regex.exec(url);
-        if (!results) return null;
-        if (!results[2]) return '';
-        return decodeURIComponent(results[2].replace(/\+/g, " "));
-    }
+	function _getParameterByName(url, name) {
+		name = name.replace(/[\[\]]/g, "\\$&");
+		var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+				results = regex.exec(url);
+		if (!results) return null;
+		if (!results[2]) return '';
+		return decodeURIComponent(results[2].replace(/\+/g, " "));
+	}
 
 
-    function getTableCountbyFilter(table, filter) {
-        var count;
-        var ga = new GlideAggregate(table);
-        ga.addEncodedQuery(filter);
-        ga.addAggregate('COUNT');
+	function _getTableCountbyFilter(table, filter) {
+		var count;
+		var ga = new GlideAggregate(table);
+		ga.addEncodedQuery(filter);
+		ga.addAggregate('COUNT');
 
-        // only count active processes
-        if (table == 'x_153465_discovert_discover_routing_template' && !data.showInactiveProcess) {
-            ga.addQuery('u_active', true);
-        }
-        ga.query();
+		// only count active processes
+		if (table == 'x_153465_discovert_discover_routing_template' && !data.showInactiveProcess) {
+			ga.addQuery('u_active', true);
+		}
+		ga.query();
 
-        if (ga.next()) {
-            count = parseInt(ga.getAggregate('COUNT'));
+		if (ga.next()) {
+			count = parseInt(ga.getAggregate('COUNT'));
 
-        }
-        if (ga == null)
-            return;
-        else return count;
-    }
+		}
+		if (ga == null)
+			return;
+		else return count;
+	}
 
 
 })($sp, input, data, options, gs);]]></script>
@@ -470,15 +552,15 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>1001</sys_mod_count>
+        <sys_mod_count>1033</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-15 20:52:10</sys_updated_on>
-        <template><![CDATA[<div>
+        <sys_updated_on>2022-07-29 15:27:03</sys_updated_on>
+        <template><![CDATA[<div >
  <div class="dtech-topstick-posabso flex-column panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane">
     <div class="flex-column justify-between dtech-panel-heading-height-75 panel-heading cm-widget-tabs" role="tabpanel">
       <div>
