@@ -8,6 +8,24 @@
 	var c = this;
 	// STRY0076291
 	//c.allowSubTask = false;
+	// STRY0122687
+	c.currentTab = null;
+	$scope.countRelatedListsTabs = 0;
+	// DFCT0011062 - count the related lists including attachments that are being shown
+	if (c.data.f._related_lists) {
+    $scope.countRelatedListsTabs =
+        c.data.f._related_lists.filter(function(rl) {
+            if (rl.showList) {
+				return rl;
+			}
+        }).length;
+	}
+
+	$scope.countDocumentTabs = 0;
+	if(c.data._docint_widget && c.data._docint_widget._docint_tabs){
+		$scope.countDocumentTabs = c.data._docint_widget._docint_tabs.length;
+	}
+	
 	$scope.submitting = false;
 	$scope.mandatory = [];
 	$scope.errorMessages = [];
@@ -26,7 +44,6 @@
 			return count;
 		}
 	};
-
 	// DFCT0011031 - Scrolling doesn't work on the "New" task form. "Advanced Task" fields don't display; set the panel-body CSS class by Page ID
 	$scope.getPanelBodyCssByPageId = function() {
 
@@ -35,6 +52,10 @@
 		switch(c.data.page_id) {
 			case 'discovertasker_processtemplatedetails':
 				panelBodyClassNames = 'dtech-overflow-auto flex-grow';
+				break;
+			case 'discovertask_tree_bifold':
+			case 'task_requests':
+				panelBodyClassNames = 'flex-column flex-grow dtech-overflow-hidden dtech-pad-right-5';
 				break;
 			case 'discovertasker_newtask':
 				panelBodyClassNames = 'dtech-overflow-auto-gutter-stable flex-grow';
@@ -45,7 +66,30 @@
 
 		return panelBodyClassNames;
 	};
-	
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the panel-heading CSS class by Page ID
+	$scope.getPanelHeadingCssByPageId = function() {
+
+		var panelHeadingClassNames = '';
+
+		switch(c.data.page_id) {
+			case 'discovertasker_processtemplatedetails':
+			case 'discovertasker_taskdetails': // Three Column
+				// panelHeadingClassNames = 'dtech-panel-heading-min-height-standard flex-column dtech-flex-grow-0';
+				panelHeadingClassNames = 'dtech-panel-heading-min-height-standard';
+				break;
+			case 'discovertask_tree_bifold':
+			case 'task_requests':
+				//panelHeadingClassNames = 'dtech-panel-heading-min-height-75px dtech-flex-grow-1-shrink-0-basis-auto';
+				panelHeadingClassNames = 'dtech-panel-heading-min-height-standard dtech-flex-grow-1-shrink-0-basis-auto';
+				break;
+			default:
+				panelHeadingClassNames = '';
+		}
+
+		return panelHeadingClassNames;
+	};
+
 	// DFCT0011031 - Scrolling doesn't work on the "New" task form. "Advanced Task" fields don't display; set the panel panel- CSS class by Page ID
 	$scope.getPanelPanelCssByPageId = function() {
 
@@ -54,6 +98,10 @@
 		switch(c.data.page_id) {
 			case 'discovertasker_processtemplatedetails':
 				panelClassNames = 'dtech-topstick-posabso flex-column';
+				break;
+			case 'discovertask_tree_bifold':
+			case 'task_requests': 
+				panelClassNames = 'dtech-topstick-posabso flex-column flex-grow';
 				break;
 			case 'discovertasker_newtask':
 				panelClassNames = 'dtech-topstick-posabso-rl-active dtech-w-100vw-40p flex-column flex-grow';
@@ -64,7 +112,7 @@
 
 		return panelClassNames;
 	};
-	
+
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
 	// Change scroll height when Required Info is displayed
 	$scope.getScrollHeight = function(mandatoryLength) {
@@ -84,8 +132,52 @@
 			scrollClassNames = 'dtech-modal-scroll-height-required-info';
 		}
 
-	return scrollClassNames;
-};
+		return scrollClassNames;
+	};
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the tab-content CSS class by Page ID
+	$scope.getTabContentCssByPageId = function() {
+
+		var tabContentClassNames = '';
+
+		switch(c.data.page_id) {
+			case 'discovertasker_processtemplatedetails':
+				tabContentClassNames = '';
+				break;
+			case 'discovertask_tree_bifold':
+			case 'task_requests':
+				tabContentClassNames = 'flex-column flex-grow dtech-overflow-hidden';
+				break;
+			default:
+				tabContentClassNames = '';
+		}
+
+		return tabContentClassNames;
+	};
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the tab-pane CSS class by Page ID
+	$scope.getTabPaneCssByPageId = function(tabName, index) {
+
+		var tabPaneClassNames = '';
+
+		switch(c.data.page_id) {
+			case 'discovertasker_processtemplatedetails':
+				tabPaneClassNames = '';
+				break;
+			case 'discovertask_tree_bifold':
+			case 'task_requests':
+				tabPaneClassNames = 'dtech-overflow-auto-pad-right-15-gutter-stable';
+				break;
+			default:
+				tabPaneClassNames = '';
+		}
+
+		if ($scope.isActiveTab(tabName, index)) {
+			tabPaneClassNames += ' active';
+		}
+		
+		return tabPaneClassNames;
+	};
 
 	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	var watcher;
@@ -116,7 +208,8 @@
 
 				$scope.server.update().then(function(){
 					var parms =  {table: c.data.table, sys_id: c.data.sys_id, view: c.data.view};
-					$rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+					// DFCT0011036 - not sure why this was being raised here
+					// $rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
 					$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
 					// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 					afterLoadFormReturns();
@@ -283,14 +376,16 @@
 
 	// STRY0119580 - toggle between advanced and quick task
 	$scope.toggleFormView = function(view_type){
-		$scope.submitting = true;
-		$scope.data.toggleForm = true;
-		$scope.data.toggle_view_type = view_type;
-		$scope.data.tasker_type = g_form.getValue('tasker_type');
-		$scope.server.update($scope).then(function () {
-			$scope.submitting = false;
-		});
-		
+		// DFCT0011041
+		if(_confirmChanges()){
+			$scope.submitting = true;
+			$scope.data.toggleForm = true;
+			$scope.data.toggle_view_type = view_type;
+			$scope.data.tasker_type = g_form.getValue('tasker_type');
+			$scope.server.update($scope).then(function () {
+				$scope.submitting = false;
+			});
+		}		
 	}
 	// 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis 
 	$scope.openTaskFullScreen = function() {
@@ -391,30 +486,21 @@
 	}
 
 
-	function addActiveCssClass() {
-		var resetActiveTabe = false;
-		if ((c.data.table == 'x_153465_discovert_discover_office_hierarchy' && 
-			 $scope.data.page_id == 'discovertasker_officehierarchy') ||
-			(c.data.table == 'x_153465_discovert_route_tasks' && 
-			 $scope.data.page_id == 'discovertasker_processtemplatedetails')) {
-			resetActiveTabe = true;
-		}
-		if ($scope.data.page_id == 'discovertasker_detailsdrilldown' || 
-			$scope.data.page_id == 'discovertasker_taskdetails') {
-			resetActiveTabe = true;
-		}
-		if(resetActiveTabe == true){
-			$(".nav-tabs li")
-				.removeClass("active");
-			$(".nav-tabs li:first-child")
-				.addClass("active");
-			$(".tab-content div")
-				.removeClass("active");
-			$(".tab-content div:first-child")
-				.addClass("active");
-		}
-	}
+	// STRY0122687 - fix active tab not working issue
+	$scope.setActiveTab = function( activeTab ){
+		c.currentTab = activeTab;
+	};
 
+	$scope.getActiveTab = function(){
+		return c.currentTab;
+	};
+
+	$scope.isActiveTab = function( tabName, index ){
+		var activeTab = $scope.getActiveTab();
+$log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - activeTab: " + activeTab + " - retrun value: " + ( activeTab === tabName || ( activeTab === null && index === 0 ) ));		
+		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
+	};
+	
 	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
 	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count
 	//     $rootScope.$on("sp.DiscoverListItem.Deleted", function(event, params) {
@@ -546,6 +632,14 @@
 		}		
 	}
 	$scope.openNewModal = function(table, title, view, query, sys_id) {
+		if(_confirmChanges()){
+				open_New_Modal(table, title, view, query, sys_id);
+		}
+	};
+
+	// DFCT0011041 - confirm changes was moved to function to be used in multiple places
+	function _confirmChanges(){
+		var confirmChanges = false;
 		// If the form is dirty, ask the user if they would like to save the record
 		var fMsg = '';
 		var serializeChanges = g_form.serialize(true);
@@ -558,14 +652,18 @@
 
 			spModal.confirm("${Tasker - Modal Save Changes Message}  "+ fMsg).then(function(confirmed) {
 				g_form.save();
-				open_New_Modal(table, title, view, query, sys_id);
+				confirmChanges = true;
 			});
 		}else{
-			open_New_Modal(table, title, view, query, sys_id);
+			confirmChanges=true;
 		}
-
-	};
-
+		// If user was prompted to save and chose to cancel, 
+		//       confirmChanges will sitll be false.
+		// If the form was not dirty or the user saved the changes, 
+		//       confirm changes will be true
+		return confirmChanges;
+	}
+		
 	// STRY0097476 New Email
 	$scope.openModalExportTask = function() {
 		g_form.submit('openModalExportTask');
@@ -1021,7 +1119,6 @@
 	function afterLoadFormReturns(){
 		loadAttachmentsWidgets();
 		loadDocIntWidgets();
-		addActiveCssClass();
 		setupAttachmentHandler();
 		// Changed from page.title to data.f.title to remove post back
 		if(c.data.sys_id != '-1'){
@@ -1085,91 +1182,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
   padding-right: 15px;&#13;
 }&#13;
 /* Have modal fit the viewport height with its own scrollbar end */&#13;
-&#13;
-/* 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis&#13;
-flexbox ellipsis start &#13;
-*/&#13;
-.container-menu-row {&#13;
-  align-items: center;&#13;
-  /* border: 2px solid pink; */&#13;
-  column-gap: 5px;&#13;
-  display: flex;&#13;
-  flex-direction: row;&#13;
-  width: 100%&#13;
-}&#13;
-&#13;
-.cell {&#13;
-  flex: 1 1 auto;&#13;
-  vertical-align: middle;&#13;
-}&#13;
-&#13;
-.col-1 {&#13;
-  flex: 0 0 auto;&#13;
-  vertical-align: middle;&#13;
-}&#13;
-&#13;
-.col-2 {&#13;
-  display: flex;&#13;
-  flex-direction: row;&#13;
-  width: 40%;&#13;
-&#13;
-  .title-ellipsised {&#13;
-    flex: 1 2 auto;&#13;
-    overflow: hidden;&#13;
-    text-overflow: ellipsis;&#13;
-    white-space: nowrap;&#13;
-  }&#13;
-}&#13;
-&#13;
-.col-3 {&#13;
-  display: flex;&#13;
-  flex-direction: row;&#13;
-  width: 45%;&#13;
-&#13;
-  .title-ellipsised {&#13;
-    flex: 1 2 auto;&#13;
-    padding: 10px 10px 10px 0;&#13;
-    overflow: hidden;&#13;
-    text-overflow: ellipsis;&#13;
-    white-space: nowrap;&#13;
-  }&#13;
-}&#13;
-&#13;
-.col-5 {&#13;
-  display: flex;&#13;
-  flex-direction: row;&#13;
-  justify-content: flex-end;&#13;
-  /*width: 44%;*/&#13;
-}&#13;
-&#13;
-.col-7 {&#13;
-  display: flex;&#13;
-  flex-direction: row;&#13;
-  justify-content: flex-end;&#13;
-  width: 44%;&#13;
-}&#13;
-&#13;
-.col-8 {&#13;
-  flex: 0 0 auto;&#13;
-  vertical-align: middle;&#13;
-  width: 30px;&#13;
-}&#13;
-/* flexbox ellipsis end */&#13;
-&#13;
-/* 2.7.1 | 2021-12-15 | mmcc | DFCT0010716 - On Tabs (OU, Task) the icons did not align correctly with text at the top of the page */&#13;
-.dtech-align-menu-text-icons {&#13;
-  padding: 10px 0;&#13;
-  vertical-align: middle;&#13;
-}&#13;
-&#13;
-.dtech-align-text-icons {&#13;
-  padding-top: 10px;&#13;
-  vertical-align: middle;&#13;
-}&#13;
-&#13;
-.dtech-align-icons-paperclip {&#13;
-  padding-top: 5px;&#13;
-}&#13;
 &#13;
 // DFCT0010657&#13;
 #loading-spinner {&#13;
@@ -1598,7 +1610,26 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      In Client controller, in getPanelBodyCssByPageId() in case discovertasker_processtemplatedetails add flex-grow;
 //                                      in getPanelPanelCssByPageId() in case discovertasker_processtemplatedetails remove justify-between.
 //                                      Changes made in Client controller
-// 
+// 2.8 | 2022-07-24 | raj  |  DFCT0011062 - When viewing a task in the "Document Management" task form view the task does NOT display the tabs "My Attachments" and "Shared Attachments"
+//                                      Changes in Server Script and HTML
+// 2.8 | 2022-07-24 | raj  |  DFCT0011041 - If the task form is NOT saved before clicking the advanced quick view icon, a warning dialogue should display to "Save Changes".
+//																			Changes in Client Controller
+// 2.8 | 2022-07-24 | raj  |  DFCT0011036 - "Change View to Quick Task Form" or "Change view to Advanced Task Form" does NOT change the Task Form View
+//																			Changes in Server Script
+// 2.8 | 2022-07-27 | raj  |  DFCT0011114 - In the "Three Column" task form page view the "Subtasks", "Requests", and "Response Log" tabs are missing items
+//																			Changes in Server Script
+// 2.8 | 2022-07-27 | raj  |  STRY0122687 - (Stretch) Task Form- Remove tabs if only one exists on that page
+//                                      changes in Server Script and HTML
+// 2.8 | 2022-07-27 | raj  |  STRY0126208 - Simple Task Form- Add Classification and Restricted Group ribbon
+//                                      changes in Server Script and HTML
+// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer
+//                                      In HTML, added flexbox
+//                                      In CSS, moved to Overall stylesheet: DFCT0010728 flexbox ellipsis start; 
+//                                      removed .dtech-align-text-icons, .dtech-align-icons-paperclip 
+//                                      In Server script, add final false data.omitHeader = (input ||; added bifold to this convertToBool(}
+//                                      In Client controller, fixed spacing, added getTabContentCssByPageId(),getTabPaneCssByPageId()
+//                                      Changes made in HTML, CSS, Server script and Client controller.
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 // form functionality - URL parameter driven
@@ -1649,7 +1680,13 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.bifold=(input || {}).bifold || (options || {}).bifold || false;
 	data.omit_icons=(input || {}).omit_icons || (options || {}).omit_icons || false; 
 	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions;
-	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; add final false
+	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;
+	
+	// STRY0120159 
+	data.hideTaskFilter = (input || {}).hideTaskFilter || (options || {}).hideTaskFilter;
+	
 	// STRY0119580
 	data.toggleForm = false;
 	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
@@ -1662,9 +1699,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	// data.isModal = (input || {}).isModal || (options || {}).isModal;
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; add omitHeader
 	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
 	// STRY0115843 - added bifold to this
-	convertToBool(['bifold','omit_icons', 'isModal']);
+	convertToBool(['bifold', 'omitHeader', 'omit_icons', 'isModal']);
 
 	// STRY0105791
 	data.baseURL = gs.getProperty('glide.servlet.uri');
@@ -1694,7 +1732,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.view = input.view;
 		// STRY0119580 - toggle of quick / advanced clicked, load other view
 		if(input.toggleForm){
-			data.taskFormView = oUserPref.getDeafultFormViewForType(input.tasker_type, input.toggle_view_type);
+			// DFCT0011036 - load for form view type and task type instead of just for task type
+			data.taskFormView = oUserPref.getDefaultFormViewForTaskTypeAndFormViewType(input.tasker_type, input.toggle_view_type);
 		}
 
 		//STRY0056591
@@ -1823,6 +1862,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
 	// moved this logic below the record get so the record state could be used in the logic
 	if(data.table == 'x_153465_discovert_route_task_instance'){
+		// STRY0126208 - Simple Task Form- Add Classification and Restricted Group ribbon
+		data.classification = rec.getDisplayValue("classification");
+		data.restrictedGroup = rec.getDisplayValue("assignment_group");
+		
 		// STRY0119580 - if data.taskFormView was not set by input above, set here
 		if(data.taskFormView){
 			data.view = data.taskFormView.sn_view;
@@ -1831,19 +1874,23 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			// set view to blank to load system default by default or the view based on view rule for the task
 			var view = '';
 
-			data.taskFormView = {sys_id: "", icon:"", description:"", title:"", sn_view: "", view_type: "", filter: "", fieldValues: []};	
+			var taskFormView;	
 
 			// new task or draft task, allow view to change
 			if(data.sys_id == -1 || rec.state == -6){
 				// for new items data.view will be set on the input for a modal, and on the url for a full page new item
 				view = data.view || (input || {}).view || (options || {}).view || $sp.getParameter("view");
+				// DFCT0011092 - Mobile - New Task form does NOT display on the Mobile 
+				// load the default tasker form view
+				taskFormView = oUserPref.getDefaultTaskerFormView(null);
 			} else {
 				// STRY0119580
-				var taskFormView = oUserPref.getDefaultTaskerFormView(rec);
-				if(taskFormView){
-					data.taskFormView = taskFormView;
-				}			
+				taskFormView = oUserPref.getDefaultTaskerFormView(rec);
 			}
+			// DFCT0011092 - Mobile - New Task form does NOT display on the Mobile 
+			if(taskFormView){
+				data.taskFormView = taskFormView;
+			}			
 
 			url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
 			data.view = url_Properties.view;
@@ -2024,25 +2071,44 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.hideActivity = options.hideActivity;
 	data.hideDocuments = options.hideDocuments;
 	
-	// STRY0120403
-	var rlParams =	{
-		arrRelatedLists: options.relatedLists_to_include, 
-		f_related_lists: data.f._related_lists,
-		rec: rec, 
-		table: data.table,
-		canCreateSubTask: data.canCreateSubTask, 
-		emailEnabled: data.emailEnabled,
-		hideDocuments: data.hideDocuments,
-		page_id: data.page_id,
-		view: data.view, 
-		isModal: data.isModal,
-		sharedAttachSys_ID: data.sharedAttachSys_ID,
-		attachmentSharedFolderON: data.AttachmentSharedFolderON, 
-		myAttachSys_ID: myAttachSys_ID,
-		attachmentsON: data.SNAttachmentsON
-	};	
-	data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
+	// STRY0122687 - count tabs (1 instead of zero b/c Tasker form with tabs always has information)
+	data.tabCount = 1;
 
+	// STRY0120403 - DFCT0011114
+	data.task_id = -1;
+	if(data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1){
+		data.task_id = data.sys_id;
+	}
+	
+	// STRY0120403 - STRY0122687
+	// DFCT0011062 need to process related lists to show documents if documents are not hidden
+	if(data.sys_id!=-1 && (!data.hideRelatedLists || !data.hideDocuments)){
+		var rlParams =	{
+			// STRY0120159 
+			task_id: data.task_id,
+			hideTaskFilter: data.hideTaskFilter,
+			showStatesMultipleBar: true,
+			arrRelatedLists: options.relatedLists_to_include, 
+			f_related_lists: data.f._related_lists,
+			rec: rec, 
+			table: data.table,
+			canCreateSubTask: data.canCreateSubTask, 
+			emailEnabled: data.emailEnabled,
+			hideDocuments: data.hideDocuments,
+			// DFCT0011062 improves efficiency of what is loaded to HTML
+			hideRelatedLists: data.hideRelatedLists,
+			page_id: data.page_id,
+			view: data.view, 
+			isModal: data.isModal,
+			sharedAttachSys_ID: data.sharedAttachSys_ID,
+			attachmentSharedFolderON: data.AttachmentSharedFolderON, 
+			myAttachSys_ID: myAttachSys_ID,
+			attachmentsON: data.SNAttachmentsON
+		};	
+		data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
+		// STRY0122687 - count tabs
+		data.tabCount += data.f._related_lists.length;		
+	}
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
 		var page = new GlideRecord('sp_page');
@@ -2065,15 +2131,18 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
 
 	//------------------------------------------------------------------------------------------------------------------------
-	// 3. CUSTOM: N TAB: PROGRESS BAR & AUDIT WIDGET 
+	// 3. CUSTOM: N TAB: AUDIT WIDGET 
 	//------------------------------------------------------------------------------------------------------------------------
-	data.widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
-		table: data.table,
-		sys_id: data.sys_id
-	});
 
+	// STRY0122687 - fixed issue with counting on new record
 	// Activity formatter is hardcoded to set specific options
-	if(!data.hideActivity){
+	if(data.sys_id!=-1 && !data.hideActivity){
+		// STRY0122687 - count tabs (tasker form with tabs only shows one activity tab)
+		// another issue with counting tabs.  Currently HTML only showing activity for task table
+		if(data.table== "'x_153465_discovert_route_task_instance"){
+			data.tabCount += 1;		
+		}
+		
 		data.widgetInstanceAuditNotes = $sp.getWidget('widget-ticket-conversation', {
 			table: data.table,
 			sys_id: data.sys_id,
@@ -2126,6 +2195,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		else data.isActive = false;
 		// STRY0111049
 		data._docint_widget = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(data.table, data.view, data.sys_id);
+		// STRY0122687 - count tabs
+		if(data._docint_widget && data._docint_widget._docint_tabs){
+			data.tabCount +=data._docint_widget._docint_tabs.length;
+		}		
 	}
 
 	//------------------------------------------------------------------------------------------------------------------------
@@ -2187,7 +2260,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4343</sys_mod_count>
+        <sys_mod_count>4396</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -2195,7 +2268,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-07-20 17:59:11</sys_updated_on>
+        <sys_updated_on>2022-08-02 04:47:27</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2216,10 +2289,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 </div>
 <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to if !data.f._view.length -->
 <div ng-if="data.isValid && !data.f._view.length" class="panel-shift">
-  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && data.emptyStateTemplate">
+  <div ng-if="!data.f._view.length && data.hideRelatedLists && data.emptyStateTemplate">
     <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
   </div>
-  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && !data.emptyStateTemplate">
+  <div ng-if="!data.f._view.length && data.hideRelatedLists && !data.emptyStateTemplate">
     <div class="panel panel-default">
       <div class="panel-heading">
         <span ng-if="data.page_id != 'discovertasker_officehierarchy' && data.sys_id.length > 2" class="panel-title">{{data.f.title}}<span ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view] </span></span>
@@ -2242,15 +2315,16 @@ Have modal fit the viewport height with its own scrollbar start&#13;
      ng-class="getPanelPanelCssByPageId()">
   <!-- 1 row Flexbox START -->
   
-  <div class="panel-heading" ng-if="data.f.title.length > 0 && data.omitHeader!='true'" 
-       ng-class="{'dtech-panel-heading-height-75 dtech-flex-grow-1-shrink-0-basis-auto': data.page_id=='discovertasker_processtemplatedetails'}"
-       sp-context-menu="getUIActionContextMenu(event)">
+  <div class="panel-heading" ng-if="data.f.title.length > 0 && data.omitHeader!='true'"
+     ng-class="getPanelHeadingCssByPageId()"
+     sp-context-menu="getUIActionContextMenu(event)">
+    
     <div ng-if="data.omitHeader != 'true'">
 
-      <div class="container-menu-row">
+      <div class="dtech-container-menu-row">
 
-        <!-- Menu section -->
-        <span class="col-1 dropdown m-r-xs" ng-if="(data.isAdmin || getUIActions('context').length > 0) && options.omitHeaderOptions != 'true'">
+        <!-- Hamburger Menu section -->
+        <span class="dtech-col-1-flex0-middle dropdown m-r-xs" ng-if="(data.isAdmin || getUIActions('context').length > 0) && options.omitHeaderOptions != 'true'">
           <button aria-label="${Form menu}" class="btn btn-form-menu dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="adminMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
           <ul class="dropdown-menu" aria-labelledby="adminMenu">
             <li ng-if="::data.hasRoleTaskerUser"><a href="/{{data.f.table}}.do?sys_id={{data.f.sys_id}}" target="_blank">${Open in platform}</a></li>
@@ -2267,17 +2341,17 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           </ul>
         </span>
 
-        <!-- panel header section option 1 -->
+        <!-- panel title section option 1 -->
         <span ng-if="data.page_id == 'discovertasker_taskdetails' || data.page_id == 'discovertasker_relatedtasks'"
-              class="col-2 cell panel-title" aria-label="{{data.f.title}}">
+              class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
           <span class="title-ellipsised" uib-tooltip="{{data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
             {{data.f.title}}
           </span>
         </span>  
 
-        <!-- panel header section option 2 -->
+        <!-- panel title section option 2 -->
         <span ng-if="data.page_id != 'discovertasker_taskdetails' && data.page_id != 'discovertasker_relatedtasks'" 
-              class="col-3 cell panel-title" aria-label="{{data.f.title}}">
+              class="dtech-col-3-flex-row-w45per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
           <span class="title-ellipsised dtech-max-width-fit-content"
                 uib-tooltip="{{data.number.length > 0 ? data.number + ': ' + data.f.title : data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
             <span ng-if="(data.number.length > 0)">&nbsp;{{data.number}}:&nbsp;
@@ -2290,9 +2364,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           </span>
         </span>
 
-        <span class="col-2 cell dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
+        <span class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
 
-        <div class="col-7 dtech-max-width-fit-content" >
+        <!-- panel icons section -->
+        <div class="dtech-col-7-flex-row-end dtech-max-width-fit-content" >
           <!-- Header Icons -->
           <div ng-switch="data.table">
             <div ng-switch-when="x_153465_discovert_route_task_instance">
@@ -2361,7 +2436,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
         <!-- paperclip icon -->
         <div ng-if="data.page_id != 'discovertasker_detailsdrilldown' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && data.isActive == 'true'" 
-             title="{{::data.addAttachmentMsg}}" class="col-8 attachment-button dtech-align-icons-paperclip">
+             title="{{::data.addAttachmentMsg}}" class="detech-col-8-flex0-middle-w30px attachment-button dtech-pad-top-5">
           <sp-attachment-button></sp-attachment-button>
         </div>
 
@@ -2381,18 +2456,22 @@ Have modal fit the viewport height with its own scrollbar start&#13;
   </div> <!-- end panel heading -->
   <!-- 1 row Flexbox END -->
   
-  <!-- Banners section start -->
-  <div ng-if="data.f.classification.length>0">
-    <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}"> 
-      <div title="Classification: {{data.f.classification}}">{{data.f.classification}}</div>
+  <!-- Ribbons section start -->
+  <div ng-if="data.classification.length>0">
+    <div class="taskform-classification-banner taskform-classification-banner-{{data.classification}}"> 
+      <div title="Classification: {{data.classification}}">
+        {{data.classification}}
+      </div>
     </div>
   </div>
-  <div ng-if="data.f.assignment_group.length>0">
+  <div ng-if="data.restrictedGroup.length>0">
     <div class="dtech-restricted-group-banner"> 
-      <div title="Restricted Group: {{data.f.assignment_group}}">{{data.f.assignment_group}}</div>
+      <div title="Restricted Group: {{data.restrictedGroup}}">
+        {{data.restrictedGroup}}
+      </div>
     </div>
   </div>
-  <!-- Banners section end -->
+  <!-- Ribbons section end -->
 
   <div class="panel-body" ng-class="getPanelBodyCssByPageId()">
 
@@ -2415,17 +2494,24 @@ Have modal fit the viewport height with its own scrollbar start&#13;
     </div>
 
 
-    <!-- RELATED LIST -->
-    <div ng-if="!data.hideRelatedLists">
+    <!-- RELATED LIST - DFCT0011062 - need to show tab content for attachments -->
+    <div ng-if="data.tabCount>1">
       <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
 
         <ul class="nav nav-tabs" role="tablist">
 
-          <li class="active">
-            <a ng-class='active' data-target="#Information" aria-controls="Information" role="tab" data-toggle="tab">Information</a> <!-- href="#Information"  -->
+          <!-- STRY0122687 fix active tab issue on reload -->
+          <li ng-class="{'active': isActiveTab('Information', 0)}"
+              ng-click="setActiveTab('Information')">
+            <a data-target="#Information" aria-controls="Information" role="tab" data-toggle="tab">Information</a> <!-- href="#Information"  -->
           </li>
-
-          <li ng-switch="rl.table" ng-repeat="rl in data.f._related_lists" >
+					<!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
+          <!-- STRY0122687 fix active tab issue on reload, add 1 to index for Active Tab -->
+          <li ng-if="rl.showList" 
+              ng-switch="rl.table" 
+              ng-class="{'active': isActiveTab(rl.targetId, $index + 1)}"
+              ng-click="setActiveTab(rl.targetId)"
+              ng-repeat="rl in data.f._related_lists" >
             <!-- REQUEST TYPE -->
             <a ng-if="data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_office_hierarchy'" ng-switch-when="x_153465_discovert_tasker_requests" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" data-toggle="tab">Requests 
               <span class="label label-as-badge label-primary" ng-if="rl.count">{{rl.count}}</span>
@@ -2502,7 +2588,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           <!-- ******************************************************************************** -->
           <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
           <!-- ******************************************************************************** -->
-          <li id="sp" ng-show="true" role="presentation" ng-repeat="rs in data._docint_widget._docint_tabs"
+          <li id="sp" ng-show="true" role="presentation" 
+              ng-repeat="rs in data._docint_widget._docint_tabs"
+              ng-class="{'active': isActiveTab(rs.id, countRelatedListsTabs + $index + 1)}"
+              ng-click="setActiveTab(rs.id)"
               ng-if="rs.table != 'sys_attachment' && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')">
             <a href="#{{rs.id}}" role="tab" data-toggle="tab"
                data-target="#{{rs.id}}" aria-controls="rs.id" title="Documents are stored in SharePoint via Doc. Integrator"
@@ -2513,7 +2602,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           <!-- ******************************************************************************** -->
 
           <!-- STRY0119587 --> 
-          <li ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'">
+          <li 
+              ng-class="{'active': isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs + 1)}"
+              ng-click="setActiveTab('TicketAudit')"
+              ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'">
             <a data-target="#TicketAudit" aria-controls="TicketAudit" data-toggle="tab">Activity</a> <!-- href="#TicketAudit"  -->
           </li>
 
@@ -2522,11 +2614,19 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
       </div>
     </div>
-    <div class="tab-content">
-      <div class="tab-pane active" id="Information">
+    
+    <div class="tab-content" ng-class="getTabContentCssByPageId()">
+      
+      <div id="Information"
+           class="tab-pane"
+           ng-class="getTabPaneCssByPageId('Information', 0)">
         <!-- 2.8 | 2022-06-29 | mmcc | DFCT0011033 - Template Tree Widget is NOT correctly displaying; add switch -->
         <div ng-switch="data.page_id">
           <div ng-switch-when="discovertasker_processtemplatedetails">
+            <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
+          </div>
+          
+          <div ng-switch-when="discovertask_tree_bifold,task_requests" ng-switch-when-separator=",">
             <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
           </div>
           <div ng-switch-default>
@@ -2538,20 +2638,16 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       </div>
 
 
-      <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
-<!-- RAJ - Test 
-      <div class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
--->      
-      <div ng-if="!data.hideRelatedLists" class="tab-pane" id="{{rl.targetId}}" ng-repeat="rl in data.f._related_lists" >
+      <!-- DFCT0011062 - need to show tab content for attachments -->
+      <div ng-if="rl.showList" class="tab-pane" id="{{rl.targetId}}" 
+           class="tab-pane"
+           ng-class="{'active': isActiveTab(rl.targetId, $index + 1)}"
+           ng-repeat="rl in data.f._related_lists" >
         <div>
           <div class="alert alert-danger" ng-if="data.invalid_table">
             Table not defined '{{data.table_label}}'
           </div>
           <div ng-if="!data.invalid_table">
-
-            <div ng-if="rl.table == 'x_153465_discovert_route_task_instance'">
-              <sp-widget widget="data.widgetInstanceMultipleBar"></sp-widget>
-            </div>
             <!--STRY0063505 Added an if statement to avoid putting Attachments on the screen 2 times for Process Template b/c the shared is using the My Attachments label. -->
             <sp-widget ng-if="rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table != 'x_153465_discovert_discover_routing_template'" widget="data.myAttachmentWidget"></sp-widget>
             <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->
@@ -2610,17 +2706,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         </div>
       </div>
 
-      <!-- Activity -->
-      <!-- STRY0119587 --> 
-      <div ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
-          class="tab-pane" id="TicketAudit">
-        <div>
-          <sp-widget widget="data.widgetInstanceAuditNotes"></sp-widget>
-        </div>
-      </div>
-
-
-
       <!-- ******************************************************************************** -->
       <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
       <!-- ******************************************************************************** -->
@@ -2628,10 +2713,23 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       <div id="{{rs.id}}" class="tab-pane"
            ng-repeat="rs in data._docint_widget._docint_tabs"
            ng-if="!data.hideDocuments && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
-           ng-class="{'dtech-modal-scroll-height-standard': data.isModal==true}">
+           ng-class="{'active': isActiveTab(rs.id, countRelatedListsTabs + $index + 1), 'dtech-modal-scroll-height-standard': data.isModal==true}">
         <sp-widget widget="rs.widget"></sp-widget>
       </div>
       <!-- ******************************************************************************** -->
+
+      <!-- Activity -->
+      <!-- STRY0119587 --> 
+      <div ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
+           ng-class="{'active': isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs + 1)}"
+           class="tab-pane" id="TicketAudit">
+        <div>
+          <sp-widget widget="data.widgetInstanceAuditNotes"></sp-widget>
+        </div>
+      </div>
+
+
+
 
     </div>
     <!-- END RELATED LISTS -->
@@ -2649,9 +2747,11 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
   </div> <!-- end panel body -->
 
-  <div ng-if="data.isModal==false && data.bifold==false && data.f.classification.length>0">
-    <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}"> 
-      <div title="Classification: {{data.f.classification}}">{{data.f.classification}}</div>
+  <div ng-if="data.isModal==false && data.bifold==false && data.classification.length>0">
+    <div class="taskform-classification-banner taskform-classification-banner-{{data.classification}}"> 
+      <div title="Classification: {{data.classification}}">
+        {{data.classification}}
+      </div>
     </div>
   </div>
 

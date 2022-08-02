@@ -9,10 +9,17 @@
 	c.currentTab = null;
 	// STRY0076291
 	//c.allowSubTask = false;
+	// STRY0122687
 	$scope.countRelatedListsTabs = 0;
-	if(!c.data.hideRelatedLists && c.data.f._related_lists){
-		$scope.countRelatedListsTabs = c.data.f._related_lists.length;
-	}
+
+	// DFCT0011062 - count the related lists including attachments that are being shown
+	$scope.countRelatedListsTabs =
+		$scope.c.data.f._related_lists.filter(function(rl) {
+		if (rl.showList) {
+			return rl;
+		}
+	}).length;
+
 	$scope.countDocumentTabs = 0;
 	if(c.data._docint_widget && c.data._docint_widget._docint_tabs){
 		$scope.countDocumentTabs = c.data._docint_widget._docint_tabs.length;
@@ -73,6 +80,42 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 
 		return scrollClassNames;
 	};
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the Tab pane position CSS class by Page ID
+	$scope.getTabPanePositionCssByPageId = function() {
+
+		var tabPanePositionClassNames = '';
+		
+		switch(c.data.page_id) {
+			case 'discovertasker_processtemplatedetails':
+				tabPanePositionClassNames = '';
+				break;
+			//case 'discovertasker_taskdetails': // Three Column
+				//tabPanePositionClassNames = '';
+				//break;
+			//case 'discovertask_tree_bifold':
+			case 'task_requests':
+				if (c.data.omitHeader) {
+					tabPanePositionClassNames = 'dtech-tabpane-no-header-stick-posabso';
+				} else {
+					tabPanePositionClassNames = 'dtech-tabpane-with-header-stick-posabso';
+					
+					if ((!!c.data.f.classification && c.data.f.classification.length > 0) &&
+							(!!c.data.f.assignment_group && c.data.f.assignment_group.length > 0)) {
+						tabPanePositionClassNames += ' dtech-tabpane-with-header-ribbon2-stick-top';
+					} else if ((!!c.data.f.classification && c.data.f.classification.length > 0 )||
+								(!!c.data.f.assignment_group && c.data.f.assignment_group.length > 0)) {
+						tabPanePositionClassNames += ' dtech-tabpane-with-header-ribbon1-stick-top';
+					}
+				}
+				
+				break;
+			default:
+				tabPanePositionClassNames = '';
+		}
+
+		return tabPanePositionClassNames;
+	};
 
 	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 	var watcher;
@@ -96,7 +139,8 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 					}
 					$scope.server.update().then(function(){
 						var parms =  {table: c.data.table, sys_id: c.data.sys_id, view: c.data.view};
-						$rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+						// DFCT0011062 - not sure why this was being raised here
+						//$rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
 						$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
 						// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
 						afterLoadFormReturns();
@@ -126,15 +170,16 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	function loadDocIntWidgets() {
 		// STRY0086644 - added check for DocId not provided
 		// STRY0119587
-		if (!c.data.hideDocuments && c.data.DocIntON && (c.data.sys_id !=-1 && c.data.sys_id !='') &&
+		if (!c.data.hideDocuments && c.data.DocIntON && (c.data.sys_id != -1 && c.data.sys_id != '') &&
 			(c.data.table == 'x_153465_discovert_route_task_instance' ||
-			 c.data.table == 'x_153465_discovert_discover_routing_template' ||
-			 c.data.table == 'x_153465_discovert_route_tasks')) {
-			loadDynamicDocIntWidgets();	
+				c.data.table == 'x_153465_discovert_discover_routing_template' ||
+				c.data.table == 'x_153465_discovert_route_tasks')) {
+			loadDynamicDocIntWidgets();
 		}
 
 
 	}
+	
 	//STRY0042748 | DI Integration: Tab Count for DocIntegrator List View provided
 	//STRY0059178 | Shared Documents Folder  YOU ARE HERE!  nEED TO FIGURE OUT HOW TO ADD ANOTHER TAB.  ALSO NEED TO FIGURE OUT HOW TO GET THE DOCUMENT COUNT BELOW
 
@@ -621,351 +666,246 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	}
 };]]></client_script>
         <controller_as>c</controller_as>
-        <css>//------------------------------------------------------------------------------------------------------------------------
-// COMPANY: DISCOVER TECHNOLOGIES
-//------------------------------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------------------------------
-// 2.5.21 | 09.10.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
-//------------------------------------------------------------------------------------------------------------------------
-
-
-//------------------------------------------------------------------------------------------------------------------------
-// CUSTOM    Some CSS selectors will be found in Tasker Overall Style Sheet
-//------------------------------------------------------------------------------------------------------------------------
-
-/* STRY0120403 - this should be in the Tasker theme, not in the widget */
-.dtech-disabled{
-  pointer-events: none;
-  cursor:default;
-  opacity:50%;
-}
-
-.dtech-enabled{
-  pointer-events: auto;
-  cursor:pointer;
-  opacity:100%;
-}
-
-/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
-Have modal fit the viewport height with its own scrollbar start
-*/
-.dtech-modal-scroll-height-omit-header-required-info {
-  max-height: calc(100vh - 352px);
-  overflow-y: auto;
-  padding-right: 15px;
-}
-
-.dtech-modal-scroll-height-omit-header-standard {
-  max-height: calc(100vh - 272px);
-  overflow-y: auto;
-  padding-right: 15px;
-}
-
-.dtech-modal-scroll-height-required-info {
-  max-height: calc(100vh - 525px);
-  overflow-y: auto;
-  padding-right: 15px;
-}
-
-.dtech-modal-scroll-height-standard {
-  max-height: calc(100vh - 471px);
-  overflow-y: auto;
-  padding-right: 15px;
-}
-/* Have modal fit the viewport height with its own scrollbar end */
-
-/* 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis
-flexbox ellipsis start 
-*/
-.container-menu-row {
-  align-items: center;
-  /* border: 2px solid pink; */
-  column-gap: 5px;
-  display: flex;
-  flex-direction: row;
-  width: 100%
-}
-
-.cell {
-  flex: 1 1 auto;
-  vertical-align: middle;
-}
-
-.col-1 {
-  flex: 0 0 auto;
-  vertical-align: middle;
-}
-
-.col-2 {
-  display: flex;
-  flex-direction: row;
-  width: 40%;
-
-  .title-ellipsised {
-    flex: 1 2 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.col-3 {
-  display: flex;
-  flex-direction: row;
-  width: 45%;
-
-  .title-ellipsised {
-    flex: 1 2 auto;
-    padding: 10px 10px 10px 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.col-5 {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  /*width: 44%;*/
-}
-
-.col-7 {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  width: 44%;
-}
-
-.col-8 {
-  flex: 0 0 auto;
-  vertical-align: middle;
-  width: 30px;
-}
-/* flexbox ellipsis end */
-
-/* 2.7.1 | 2021-12-15 | mmcc | DFCT0010716 - On Tabs (OU, Task) the icons did not align correctly with text at the top of the page */
-.dtech-align-menu-text-icons {
-  padding: 10px 0;
-  vertical-align: middle;
-}
-
-.dtech-align-text-icons {
-  padding-top: 10px;
-  vertical-align: middle;
-}
-
-.dtech-align-icons-paperclip {
-  padding-top: 5px;
-}
-
-// DFCT0010657
-#loading-spinner {
-  animation: loading 2s infinite linear;
-}
-
-@keyframes loading {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(359deg);
-  }
-}
-
-/* SECTIONS &amp; FORMS */
-//------------------------------------------------------------------------------------------------------------------------
-.ng-isolate-scope .h4.ng-binding{
-  font-weight: 400 !important;
-  font-family: "SourceSansPro", Helvetica, Arial, sans-serif; //'Lucida Sans Unicode';
-  padding-left: 5px;
-  border-left-style: solid;
-  border-left-color: $primary;
-  border-left-width: 5px;
-  color: $primary;
-  padding-top: 8px;
-  padding-bottom: 5px;
-}
-
-fieldset.ng-scope{
-  margin-top: 5px;
-}
-
-label{
-  //font-weight: 100!important;
-  color: $primary;
-}
-
-
-/* DURATION */
-//------------------------------------------------------------------------------------------------------------------------
-
-#dur-minutes,
-#dur-seconds { 
-  visibility: hidden!important;
-}
-
-#dur-days,
-#dur-hours { 
-  width: 40px!important
-}
-
-
-/*
-Set Classification color for banner (aka rectangle)
-2.7.0 | 2021-08-10 | mmcc | STRY0104983 - Stretch- Technical Debt - Update CSS to organize into proper hierarchy of CSS
-See Tasker Theme and CSS include: Classification Banner CSS Include
-.taskform-classification-banner 
-*/
-
-/*
-Set Restricted Group color for banner (aka rectangle)
-2.7.0 | 2021-08-09 | mmcc | STRY0104884 Badges do not pass 508/WCAG compliance
-See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
-.dtech-restricted-group-banner
-*/
-
-
-
-//------------------------------------------------------------------------------------------------------------------------
-// OOTB FORM WIDGET
-//------------------------------------------------------------------------------------------------------------------------
-
-/* 2.7.1 | 2021-12-15 | mmcc | DFCT0010716 - On Tabs (OU, Task) the icons did not align correctly with text at the top of the page */
-.btn-form-menu {
-  /* vertical-align: inherit;
-  padding: inherit; */
-  background: none;
-  padding: 10px 0;
-}
-
-.panel-title {
-  word-wrap: break-word;
-}
-
-.panel-heading {
-  .dropdown-menu {
-    a {
-      white-space: normal;
-    }
-  }
-}
-
-/*
-2.7.0 | 2021-10-29 | mmcc | STRY0110472 - Stretch- 508 Compliant- Delete Buttons- (ALL Red buttons)
-.dtech-field-error-label {} replaces below; Find it in Tasker Theme &gt; Tasker Form Error Overrides Style Sheet
-This widget is not using the below CSS selector
-.sc-field-error-label {
-margin-right: .5em;
-display: inline-block;
-background-color: $sc-field-error-color;
-}
-*/
-
-.comment {
-  font-weight: bold;
-  margin-top: 2px;
-  margin-bottom: 2px;
-}
-.mce-panel, .mce-btn {
-  background-image: none;
-  background-color: #f0f3f4;
-}
-
-.action-btn {
-  margin-right: 5px;
-}
-
-/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
-Have modal fit the viewport height with its own scrollbar start
-*/
-.timeline-container {
-  /* max-height: 50vh; */
-  max-height: calc(100vh - 611px);
-  height: 100%;
-  overflow-y: auto;
-}
-
-
-.panel .panel {
-  height: auto !important;
-  /* 2.7.0 | 2021-06-23 | mmcc | STRY0079333 Tasker Split View - My Documents and Shared Documents tab error */
-  position: relative;
-}
-
-.attachment-button {
-  .glyphicon-paperclip {
-    font-size: 18px;
-  }
-}
-
-.dropdown {
-  .glyphicon-menu-hamburger:focus {
-    outline: thin dotted;
-    outline: 5px auto $input-border-focus;
-    outline-offset: -2px; 
-  }
-}
-
-.empty-state-wrapper {
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  padding: 10vh 20px 20px;
-
-  .empty-state {
-    border: 1px solid #e7e9eb;
-    border-radius: 10px;
-    max-width: 700px;
-    padding: 30px 40px 20px;
-    position: relative;
-
-    .empty-state-badge {
-      top: -36px;
-      left: 50%;
-      position: absolute;
-      height: 72px;
-      width: 72px;
-      -webkit-align-items: center;
-      -ms-flex-align: center;
-      align-items: center;
-      border-radius: 100%;
-      color: #ffffff;
-      display: -webkit-flex;
-      display: -ms-flexbox;
-      display: flex;
-      font-size: 40px;
-      -webkit-justify-content: center;
-      -ms-flex-pack: center;
-      justify-content: center;
-      margin-left: -36px;
-      text-align: center;
-    }
-
-    .empty-state-header {
-      font-size: 30px;
-      text-align: center;
-      color: #343d47;
-    }
-
-    .empty-state-content {
-      ul {
-        list-style: disc outside;
-        margin: 0 0 10px 0;
-        padding: 0 0 0 30px;
-      }
-    }
-  }
-}
-
-.text-success-alt {
-  background-color: $state-success-text;
-}
-
-.text-info-alt {
-  background-color: $state-info-text;
+        <css>//------------------------------------------------------------------------------------------------------------------------&#13;
+// COMPANY: DISCOVER TECHNOLOGIES&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// 2.5.21 | 09.10.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+&#13;
+&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// CUSTOM    Some CSS selectors will be found in Tasker Overall Style Sheet&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+&#13;
+/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists&#13;
+Have modal fit the viewport height with its own scrollbar start&#13;
+*/&#13;
+.dtech-modal-scroll-height-omit-header-required-info {&#13;
+  max-height: calc(100vh - 352px);&#13;
+  overflow-y: auto;&#13;
+  padding-right: 15px;&#13;
+}&#13;
+&#13;
+.dtech-modal-scroll-height-omit-header-standard {&#13;
+  max-height: calc(100vh - 272px);&#13;
+  overflow-y: auto;&#13;
+  padding-right: 15px;&#13;
+}&#13;
+&#13;
+.dtech-modal-scroll-height-required-info {&#13;
+  max-height: calc(100vh - 525px);&#13;
+  overflow-y: auto;&#13;
+  padding-right: 15px;&#13;
+}&#13;
+&#13;
+.dtech-modal-scroll-height-standard {&#13;
+  max-height: calc(100vh - 471px);&#13;
+  overflow-y: auto;&#13;
+  padding-right: 15px;&#13;
+}&#13;
+/* Have modal fit the viewport height with its own scrollbar end */&#13;
+&#13;
+// DFCT0010657&#13;
+#loading-spinner {&#13;
+  animation: loading 2s infinite linear;&#13;
+}&#13;
+&#13;
+@keyframes loading {&#13;
+  from {&#13;
+    transform: rotate(0deg);&#13;
+  }&#13;
+  to {&#13;
+    transform: rotate(359deg);&#13;
+  }&#13;
+}&#13;
+&#13;
+/* SECTIONS &amp; FORMS */&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+.ng-isolate-scope .h4.ng-binding{&#13;
+  font-weight: 400 !important;&#13;
+  font-family: "SourceSansPro", Helvetica, Arial, sans-serif; //'Lucida Sans Unicode';&#13;
+  padding-left: 5px;&#13;
+  border-left-style: solid;&#13;
+  border-left-color: $primary;&#13;
+  border-left-width: 5px;&#13;
+  color: $primary;&#13;
+  padding-top: 8px;&#13;
+  padding-bottom: 5px;&#13;
+}&#13;
+&#13;
+fieldset.ng-scope{&#13;
+  margin-top: 5px;&#13;
+}&#13;
+&#13;
+label{&#13;
+  //font-weight: 100!important;&#13;
+  color: $primary;&#13;
+}&#13;
+&#13;
+&#13;
+/* DURATION */&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+&#13;
+#dur-minutes,&#13;
+#dur-seconds { &#13;
+  visibility: hidden!important;&#13;
+}&#13;
+&#13;
+#dur-days,&#13;
+#dur-hours { &#13;
+  width: 40px!important&#13;
+}&#13;
+&#13;
+&#13;
+/*&#13;
+Set Classification color for banner (aka rectangle)&#13;
+2.7.0 | 2021-08-10 | mmcc | STRY0104983 - Stretch- Technical Debt - Update CSS to organize into proper hierarchy of CSS&#13;
+See Tasker Theme and CSS include: Classification Banner CSS Include&#13;
+.taskform-classification-banner &#13;
+*/&#13;
+&#13;
+/*&#13;
+Set Restricted Group color for banner (aka rectangle)&#13;
+2.7.0 | 2021-08-09 | mmcc | STRY0104884 Badges do not pass 508/WCAG compliance&#13;
+See Tasker Theme and CSS include: Restricted Group Banner Style Sheet&#13;
+.dtech-restricted-group-banner&#13;
+*/&#13;
+&#13;
+&#13;
+&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// OOTB FORM WIDGET&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+&#13;
+/* 2.7.1 | 2021-12-15 | mmcc | DFCT0010716 - On Tabs (OU, Task) the icons did not align correctly with text at the top of the page */&#13;
+.btn-form-menu {&#13;
+  /* vertical-align: inherit;&#13;
+  padding: inherit; */&#13;
+  background: none;&#13;
+  padding: 10px 0;&#13;
+}&#13;
+&#13;
+.panel-title {&#13;
+  word-wrap: break-word;&#13;
+}&#13;
+&#13;
+.panel-heading {&#13;
+  .dropdown-menu {&#13;
+    a {&#13;
+      white-space: normal;&#13;
+    }&#13;
+  }&#13;
+}&#13;
+&#13;
+/*&#13;
+2.7.0 | 2021-10-29 | mmcc | STRY0110472 - Stretch- 508 Compliant- Delete Buttons- (ALL Red buttons)&#13;
+.dtech-field-error-label {} replaces below; Find it in Tasker Theme &gt; Tasker Form Error Overrides Style Sheet&#13;
+This widget is not using the below CSS selector&#13;
+.sc-field-error-label {&#13;
+margin-right: .5em;&#13;
+display: inline-block;&#13;
+background-color: $sc-field-error-color;&#13;
+}&#13;
+*/&#13;
+&#13;
+.comment {&#13;
+  font-weight: bold;&#13;
+  margin-top: 2px;&#13;
+  margin-bottom: 2px;&#13;
+}&#13;
+.mce-panel, .mce-btn {&#13;
+  background-image: none;&#13;
+  background-color: #f0f3f4;&#13;
+}&#13;
+&#13;
+.action-btn {&#13;
+  margin-right: 5px;&#13;
+}&#13;
+&#13;
+/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists&#13;
+Have modal fit the viewport height with its own scrollbar start&#13;
+*/&#13;
+.timeline-container {&#13;
+  /* max-height: 50vh; */&#13;
+  max-height: calc(100vh - 611px);&#13;
+  height: 100%;&#13;
+  overflow-y: auto;&#13;
+}&#13;
+&#13;
+.attachment-button {&#13;
+  .glyphicon-paperclip {&#13;
+    font-size: 18px;&#13;
+  }&#13;
+}&#13;
+&#13;
+.dropdown {&#13;
+  .glyphicon-menu-hamburger:focus {&#13;
+    outline: thin dotted;&#13;
+    outline: 5px auto $input-border-focus;&#13;
+    outline-offset: -2px; &#13;
+  }&#13;
+}&#13;
+&#13;
+.empty-state-wrapper {&#13;
+  width: 100%;&#13;
+  height: 100%;&#13;
+  align-items: center;&#13;
+  display: flex;&#13;
+  flex-direction: column;&#13;
+  padding: 10vh 20px 20px;&#13;
+&#13;
+  .empty-state {&#13;
+    border: 1px solid #e7e9eb;&#13;
+    border-radius: 10px;&#13;
+    max-width: 700px;&#13;
+    padding: 30px 40px 20px;&#13;
+    position: relative;&#13;
+&#13;
+    .empty-state-badge {&#13;
+      top: -36px;&#13;
+      left: 50%;&#13;
+      position: absolute;&#13;
+      height: 72px;&#13;
+      width: 72px;&#13;
+      -webkit-align-items: center;&#13;
+      -ms-flex-align: center;&#13;
+      align-items: center;&#13;
+      border-radius: 100%;&#13;
+      color: #ffffff;&#13;
+      display: -webkit-flex;&#13;
+      display: -ms-flexbox;&#13;
+      display: flex;&#13;
+      font-size: 40px;&#13;
+      -webkit-justify-content: center;&#13;
+      -ms-flex-pack: center;&#13;
+      justify-content: center;&#13;
+      margin-left: -36px;&#13;
+      text-align: center;&#13;
+    }&#13;
+&#13;
+    .empty-state-header {&#13;
+      font-size: 30px;&#13;
+      text-align: center;&#13;
+      color: #343d47;&#13;
+    }&#13;
+&#13;
+    .empty-state-content {&#13;
+      ul {&#13;
+        list-style: disc outside;&#13;
+        margin: 0 0 10px 0;&#13;
+        padding: 0 0 0 30px;&#13;
+      }&#13;
+    }&#13;
+  }&#13;
+}&#13;
+&#13;
+.text-success-alt {&#13;
+  background-color: $state-success-text;&#13;
+}&#13;
+&#13;
+.text-info-alt {&#13;
+  background-color: $state-info-text;&#13;
 }</css>
         <data_table>sp_instance</data_table>
         <demo_data/>
@@ -1010,7 +950,16 @@ Have modal fit the viewport height with its own scrollbar start
 //                                        In the panel footer, removed code forClassification; added new code for Classification above it
 //                                        so the ribbon touch the edge like do by the panel heading.
 //                                      Changes made in HTML, Style sheets for Classification and Restricted Group, Pages touched
-// 
+// 2.8 | 2022-07-24 | raj  |  DFCT0011062 - When viewing a task in the "Document Management" task form view the task does NOT display the tabs "My Attachments" and "Shared Attachments"
+//                                      Changes in Server Script, Client Controller and HTML
+// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer
+//                                      In HTML, removed ng-scope's as AngularJS should add; added flexbox
+//                                      In CSS, moved to Overall stylesheet: DFCT0010728 flexbox ellipsis start; 
+//                                      removed .dtech-align-text-icons, .dtech-align-icons-paperclip and .panel .panel
+//                                      In Server script, add bifold and in in var rlParams;
+//                                      In Client controller, fixed spacing, added getTabPanePositionCssByPageId()
+//                                      Changes made in HTML, CSS, Server script and Client controller.
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 // form functionality - URL parameter driven
@@ -1039,7 +988,10 @@ Have modal fit the viewport height with its own scrollbar start
 	data.emptyStateTemplate = options.empty_state_template;
 	// STRY0108629
 	data.omit_icons=(input || {}).omit_icons || (options || {}).omit_icons || false; 
-	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; add final false
+	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;
+	
 	// STRY0120159 
 	data.hideTaskFilter = (input || {}).hideTaskFilter || (options || {}).hideTaskFilter;
 	data.showStatesMultipleBar = (input || {}).showStatesMultipleBar || (options || {}).showStatesMultipleBar;
@@ -1051,9 +1003,14 @@ Have modal fit the viewport height with its own scrollbar start
 	// data.isModal = (input || {}).isModal || (options || {}).isModal;
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; set bifold
+	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+	data.isBottomRibbonShown = (input || {}).isBottomRibbonShown || (options || {}).isBottomRibbonShown || false;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; add omitHeader
 	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
 	// STRY0115843 - added bifold to this
-	convertToBool(['bifold','omit_icons', 'isModal']);
+	convertToBool(['bifold', 'isBottomRibbonShown', 'omitHeader', 'omit_icons', 'isModal']);
 
 
 	data.page_id = $sp.getParameter("id");
@@ -1364,7 +1321,8 @@ Have modal fit the viewport height with its own scrollbar start
 	if(data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1){
 		data.task_id = data.sys_id;
 	}
-	if(!data.hideRelatedLists){
+	// DFCT0011062 need to process related lists to show documents if documents are not hidden
+	if(!data.hideRelatedLists || !data.hideDocuments){
 		var rlParams =	{
 			// STRY0120159 
 			task_id: data.task_id,
@@ -1377,9 +1335,13 @@ Have modal fit the viewport height with its own scrollbar start
 			canCreateSubTask: data.canCreateSubTask, 
 			emailEnabled: data.emailEnabled,
 			hideDocuments: data.hideDocuments,
+			// DFCT0011062 improves efficiency of what is loaded to HTML
+			hideRelatedLists: data.hideRelatedLists,
 			page_id: data.page_id,
 			view: data.view, 
 			isModal: data.isModal,
+			// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set bifold
+			bifold: data.bifold,
 			sharedAttachSys_ID: data.sharedAttachSys_ID,
 			attachmentSharedFolderON: data.AttachmentSharedFolderON, 
 			myAttachSys_ID: myAttachSys_ID,
@@ -1538,7 +1500,7 @@ Have modal fit the viewport height with its own scrollbar start
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>235</sys_mod_count>
+        <sys_mod_count>312</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
@@ -1546,7 +1508,7 @@ Have modal fit the viewport height with its own scrollbar start
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-07-20 02:32:25</sys_updated_on>
+        <sys_updated_on>2022-08-02 03:49:47</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1574,7 +1536,7 @@ Have modal fit the viewport height with its own scrollbar start
         <span ng-if="data.page_id == 'discovertasker_officehierarchy' && !data.sys_id" class="panel-title">Organizational Unit</span>
       </div>
       <div class="panel-body wrapper-lg text-center">
-        <div ng-if="!data.sys_id && data.page_id == 'discovertasker_officehierarchy'" class="col-md-12 text-center placeholder-right-pane ng-scope">
+        <div ng-if="!data.sys_id && data.page_id == 'discovertasker_officehierarchy'" class="col-md-12 text-center placeholder-right-pane">
           <i class="fa fa-gears" aria-hidden="true"></i> 
           <p class="m-t-lg">Select an item from the left</p>
         </div>
@@ -1586,25 +1548,27 @@ Have modal fit the viewport height with its own scrollbar start
     </div>
   </div>
 </div>
-<div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists" >
+
+<div class="dtech-topstick-posabso flex-column panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists" >
+  
   <!-- 1 row Flexbox START -->
-  <div class="panel-heading" ng-if="data.f.title.length > 0 && !data.omitHeader" sp-context-menu="getUIActionContextMenu(event)">
+  <div class="dtech-panel-heading-min-height-standard dtech-flex-grow-0 panel-heading" ng-if="data.f.title.length > 0 && !data.omitHeader" sp-context-menu="getUIActionContextMenu(event)">
+    <!-- Omit Header section start -->
     <div ng-if="!data.omitHeader">
-      
-      <div class="container-menu-row">
+      <!-- Container menu row section start -->
+      <div class="dtech-container-menu-row">
 
-
-        <!-- panel header section option 1 -->
+        <!-- panel title section option 1 -->
         <span ng-if="data.page_id == 'discovertasker_taskdetails' || data.page_id == 'discovertasker_relatedtasks'"
-              class="col-2 cell panel-title" aria-label="{{data.f.title}}">
+              class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
           <span class="title-ellipsised" uib-tooltip="{{data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
             {{data.f.title}}
           </span>
         </span>  
 
-        <!-- panel header section option 2 -->
+        <!-- panel title section option 2 -->
         <span ng-if="data.page_id != 'discovertasker_taskdetails' && data.page_id != 'discovertasker_relatedtasks'" 
-              class="col-3 cell panel-title" aria-label="{{data.f.title}}">
+              class="dtech-col-3-flex-row-w45per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
           <span class="title-ellipsised dtech-max-width-fit-content"
                 uib-tooltip="{{data.number.length > 0 ? data.number + ': ' + data.f.title : data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
             <span ng-if="(data.number.length > 0)">&nbsp;{{data.number}}:&nbsp;
@@ -1617,9 +1581,10 @@ Have modal fit the viewport height with its own scrollbar start
           </span>
         </span>
 
-        <span class="col-2 cell dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
+        <span class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
 
-        <div class="col-7 dtech-max-width-fit-content" >
+        <!-- col-7 section start -->
+        <div class="dtech-col-7-flex-row-end dtech-max-width-fit-content" >
           <!-- Task Full Screen icon section -->
           <div ng-if="data.table=='x_153465_discovert_route_task_instance'">
             <div ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown'">
@@ -1673,36 +1638,43 @@ Have modal fit the viewport height with its own scrollbar start
               </div>
             </div>
           </div>
-        </div> <!-- end col-7 -->
+        </div>
+        <!-- col-7 section end -->
 
         <!-- paperclip icon -->
         <div ng-if="!data.hideDocuments && data.page_id != 'discovertasker_detailsdrilldown' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && data.isActive == 'true'" 
-             title="{{::data.addAttachmentMsg}}" class="col-8 attachment-button dtech-align-icons-paperclip">
+             title="{{::data.addAttachmentMsg}}" class="detech-col-8-flex0-middle-w30px attachment-button dtech-pad-top-5">
           <sp-attachment-button></sp-attachment-button>
         </div>
 
-      </div> <!-- end row -->
-    </div> <!-- end omitHeader -->
-
-  </div> <!-- end panel heading -->
+      </div>
+      <!-- Container menu row section start -->
+    </div>
+    <!-- Omit Header section end -->
+  </div>
   <!-- 1 row Flexbox END -->
 
-  <!-- Banners section start -->
+  <!-- Ribbons section start -->
   <div ng-if="!data.omitHeader">
     <div ng-if="data.f.classification.length>0">
       <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}"> 
-        <div title="Classification: {{data.f.classification}}">{{data.f.classification}}</div>
+        <div title="Classification: {{data.f.classification}}">
+          {{data.f.classification}}
+        </div>
       </div>
     </div>
     <div ng-if="data.f.assignment_group.length>0">
       <div class="dtech-restricted-group-banner"> 
-        <div title="Restricted Group: {{data.f.assignment_group}}">{{data.f.assignment_group}}</div>
+        <div title="Restricted Group: {{data.f.assignment_group}}">
+          {{data.f.assignment_group}}
+        </div>
       </div>
     </div>
   </div>
-  <!-- Banners section end -->
+  <!-- Ribbons section end -->
 
-  <div class="panel-body">
+  <!-- Panel Body section start -->
+  <div class="flex-column flex-grow dtech-overflow-hidden dtech-pad-right-5 panel-body">
 
     <!-- Attachments -->
     <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add div if isModal==false -->
@@ -1720,14 +1692,16 @@ Have modal fit the viewport height with its own scrollbar start
     <!-- STRY0063505 |	NOTE: Attachment Manger is not needed on tabs with the attachment widget -->
     <div ng-if="!data.hideDocuments && data.table != 'x_153465_discovert_route_task_instance' && data.table != 'x_153465_discovert_discover_routing_template' && data.table != 'x_153465_discovert_route_tasks'">
       <sp-attachment-manager table="data.table" sys-id="data.f._attachmentGUID" omit-edit="!data.canAttach"></sp-attachment-manager>
-    </div>  
+    </div>
+    
     <!-- RELATED LIST - STRY0122687 - hide tabs if only one displayed -->
     <div ng-if="data.tabCount>1">
       <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
-
+					
+        <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
         <ul class="nav nav-tabs" role="tablist">
           <li ng-switch="rl.table" 
-              ng-if="!data.hideRelatedLists"
+              ng-if="rl.showList"
               ng-repeat="rl in data.f._related_lists" 
                ng-class="{'active': isActiveTab(rl.targetId, $index)}"
                ng-click="setActiveTab(rl.targetId)">
@@ -1852,36 +1826,40 @@ Have modal fit the viewport height with its own scrollbar start
                              ng-class="{'active': isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs)}"
                ng-click="setActiveTab('TicketAudit')">
             <a data-target="#TicketAudit" 
-               aria-controls="TicketAudit" 
-               
-               
-               >Activity</a> <!-- href="#TicketAudit"  -->
+               aria-controls="TicketAudit">
+              Activity
+            </a> <!-- href="#TicketAudit"  -->
           </li>
           <li ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'"
                ng-class="{'active': isActiveTab('TaskAuditLog', countRelatedListsTabs + countDocumentTabs + 1)}"
                ng-click="setActiveTab('TaskAuditLog')"
               >
             <a data-target="#TaskAuditLog" 
-               aria-controls="TaskAuditLog" 
-               
-               >Activity Log</a>
+               aria-controls="TaskAuditLog">
+              Activity Log
+            </a>
           </li>          
         </ul>
 
       </div>
     </div>
-    <div class="tab-content">
+    
+    <!-- Tab content section start -->
+    <div class="tab-content cannot-flex">
+      <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
       <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
-      <div class="tab-pane" id="{{rl.targetId}}" 
-           ng-if="!data.hideRelatedLists"
+      <div class="tab-pane cannot-flex" id="{{rl.targetId}}" 
+           ng-if="rl.showList"
            ng-repeat="rl in data.f._related_lists"
            ng-class="{'active': isActiveTab(rl.targetId, $index)}"
            >
-        <div>
+        
+        <div class="flex-column flex-grow" ng-class="::getTabPanePositionCssByPageId()">
           <div class="alert alert-danger" ng-if="data.invalid_table">
             Table not defined '{{data.table_label}}'
           </div>
-          <div ng-if="!data.invalid_table">
+          
+          <div class="flex-column flex-grow" ng-if="!data.invalid_table">
             <!--STRY0063505 Added an if statement to avoid putting Attachments on the screen 2 times for Process Template b/c the shared is using the My Attachments label. -->
             <sp-widget ng-if="!data.hideDocuments && rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table != 'x_153465_discovert_discover_routing_template'" widget="data.myAttachmentWidget"></sp-widget>
             <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->
@@ -1890,60 +1868,65 @@ Have modal fit the viewport height with its own scrollbar start
             <!-- STRY0109183 - Remove "Tasker Email" related list/ tab when "Disable Email Task Information" is set to true -->
             <sp-widget ng-if="rl.table != 'sys_attachment' && (rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)" widget="rl.widget"></sp-widget>
           </div>
-
-          <!-- Show new button after table data -->
-          <div ng-switch="rl.table" class="pull-right" ng-if="!data.invalid_table">
+          
+          <!-- Show new button after table data start -->
+          <div ng-switch="rl.table" class="flex-row justify-end dtech-pad-all-5-15" ng-if="!data.invalid_table">
             <div ng-switch-when="x_153465_discovert_discover_office_members" 
-                 ng-if="!data.hideRelatedLists" class="pull-right"> 
+                 ng-if="!data.hideRelatedLists" > 
               <!--STRY0078258 Updating or Adding an existing Member or Sub OU the  modal SHOULD close upon clicking "update or save" to make consistent wtih contacts recently added. -->
-              <a ng-click="openNewModal('x_153465_discovert_discover_office_members','New OU Member','','discover_office_hierarchy=', data.sys_id);" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New</a>
+              <a ng-click="openNewModal('x_153465_discovert_discover_office_members','New OU Member','','discover_office_hierarchy=', data.sys_id);" 
+                 ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn" role="button">New</a>
             </div>
             <!--STRY0078258 Updating or Adding an existing Member or Sub OU the  modal SHOULD close upon clicking "update or save" to make consistent wtih contacts recently added. -->
             <div ng-switch-when="x_153465_discovert_discover_office_hierarchy" 
-                 ng-if="!data.hideRelatedLists" class="pull-right"> 
-              <a ng-click="openNewModal('x_153465_discovert_discover_office_hierarchy','New Sub OU','','	parent=', data.sys_id);" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New</a>
+                 ng-if="!data.hideRelatedLists" > 
+              <a ng-click="openNewModal('x_153465_discovert_discover_office_hierarchy','New Sub OU','','	parent=', data.sys_id);" 
+                 ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn" role="button">New</a>
             </div>
             <div ng-switch-when="x_153465_discovert_route_tasks" 
-                 ng-if="!data.hideRelatedLists" class="pull-right"> 
+                 ng-if="!data.hideRelatedLists" > 
               <!-- DFCT0010675-->
-              <div ng-if="(data.sys_id != -1) " class="pull-right"> 
-                <a ng-click="openNewModal('x_153465_discovert_route_tasks','New Template Task','Create_View','parent=',data.sys_id);" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button" >New</a>
+              <div ng-if="(data.sys_id != -1) "> 
+                <a ng-click="openNewModal('x_153465_discovert_route_tasks','New Template Task','Create_View','parent=',data.sys_id);" 
+                   ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn " role="button" >New</a>
               </div>
             </div>
             <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add if isModal==false -->
-            <!-- <div ng-switch-when="x_153465_discovert_tasker_schedule" class="pull-right"> -->
             <div ng-switch-when="x_153465_discovert_tasker_schedule" 
-                 ng-if="!data.hideRelatedLists && isModal==false" class="pull-right">
-              <a ng-click="openNewModal('x_153465_discovert_tasker_schedule','New Schedule','Create_View','tasker_process=' , data.sys_id);" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New</a>
+                 ng-if="!data.hideRelatedLists && isModal==false">
+              <a ng-click="openNewModal('x_153465_discovert_tasker_schedule','New Schedule','Create_View','tasker_process=' , data.sys_id);" 
+                 ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn" role="button">New</a>
             </div>
             <!-- STRY0074663 - CONTACTS -->
             <div ng-switch-when="x_153465_discovert_organizational_contacts" 
-                 ng-if="!data.hideRelatedLists" class="pull-right"> 
-              <a ng-click="openNewModal('x_153465_discovert_organizational_contacts','New OU Contact','','u_contact_ou=', data.sys_id);" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New</a>
+                 ng-if="!data.hideRelatedLists"> 
+              <a ng-click="openNewModal('x_153465_discovert_organizational_contacts','New OU Contact','','u_contact_ou=', data.sys_id);" 
+                 ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn" role="button">New</a>
             </div>
             <!-- REQUEST TYPE -->
             <div ng-switch-when="x_153465_discovert_tasker_requests" 
-                 ng-if="!data.hideRelatedLists" class="pull-right"><!-- no NEW --></div>
+                 ng-if="!data.hideRelatedLists"><!-- no NEW -->
+            </div>
 
             <!-- STRY0097476 - STRY0109183 New Email -->
             <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to ng-if isModal -->
-            <!-- <div ng-switch-when="x_153465_discovert_tasker_email" ng-if="data.emailEnabled==true" class="pull-right">  -->
             <div ng-switch-when="x_153465_discovert_tasker_email" 
-                 ng-if="!data.hideRelatedLists && data.isModal!=true && data.emailEnabled==true" class="pull-right"> 
-              <a ng-click="openModalExportTask();" ng-class="{disabled: data.emailEnabled==false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New Email</a>
+                 ng-if="!data.hideRelatedLists && data.isModal!=true && data.emailEnabled==true"> 
+              <a ng-click="openModalExportTask();" ng-class="{disabled: data.emailEnabled==false}" class="btn btn-primary action-btn" role="button">New Email</a>
             </div>
 
-            <div ng-if="!data.hideDocuments" ng-switch-when="sys_attachment" class="pull-right"></div>
-            <div ng-switch-default="x_153465_discovert_route_task_instance" class="pull-right"> 
+            <div ng-if="!data.hideDocuments" ng-switch-when="sys_attachment"></div>
+            <div ng-switch-default="x_153465_discovert_route_task_instance"> 
               <div ng-if="data.f.table == 'x_153465_discovert_discover_routing_template'"></div>
               <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to ng-if isModal -->
-              <!-- <div ng-if="data.f.table != 'x_153465_discovert_discover_routing_template'  "> -->
               <div ng-if="data.isModal!=true && data.f.table != 'x_153465_discovert_discover_routing_template'">
                 <!-- STRY0113838 - DFCT0010675-->
-                <a ng-click="openCreateModal()" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn pull-right ng-scope" role="button">New</a>
+                <a ng-click="openCreateModal()" ng-class="{disabled: rl.canCreate == false}" class="btn btn-primary action-btn" role="button">New</a>
               </div>
             </div>
           </div>
+          <!-- Show new button after table data end -->
+
         </div>
       </div>
       <!-- ******************************************************************************** -->
@@ -1979,6 +1962,7 @@ Have modal fit the viewport height with its own scrollbar start
       <!-- ******************************************************************************** -->
 
     </div>
+    <!-- Tab content section end -->
     <!-- END RELATED LISTS -->
 
     <!-- performance debug -->
@@ -1992,17 +1976,22 @@ Have modal fit the viewport height with its own scrollbar start
       </div>
     </div>
 
-  </div> <!-- end panel body -->
+  </div>
+  <!-- Panel Body section end -->
 
-  <div ng-if="data.isModal==false && data.bifold==true && data.f.classification.length>0">
-    <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}"> 
-      <div title="Classification: {{data.f.classification}}">{{data.f.classification}}</div>
+  <!-- Bottom Ribbon section start -->
+  <div ng-if="data.isBottomRibbonShown">
+    <div ng-if="data.isModal==false && data.bifold==false && data.f.classification.length>0">
+      <div class="taskform-classification-banner taskform-classification-banner-{{data.f.classification}}"> 
+        <div title="Classification: {{data.f.classification}}">
+          {{data.f.classification}}
+        </div>
+      </div>
     </div>
   </div>
+  <!-- Bottom Ribbon section end -->
 
-  <div class="panel-footer">
-
-    <div style="clear: both;"></div>
+  <div ng-if="false" class="panel-footer">
 
   </div>
 </div>

@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8     | 2022-07-04 | raj     |  STRY0124728 - Task Requests- Auto-close Requests when "Information Only Tasks" is auto-completed&#13;
+        <description>2.8     | 2022-07-04 | raj     |   DFCT0011050 - Closing Tasks  is NOT DELETING ALL Draft Descendants, they are moved into the "Cancelled" state&#13;
+2.8     | 2022-07-04 | raj     |  STRY0124728 - Task Requests- Auto-close Requests when "Information Only Tasks" is auto-completed&#13;
 2.8     | 2022-07-04 | raj     |  DFCT0010850 - On the acknowledgment Task, open requests are NOT moving to "Complete" when the task is completed&#13;
 &#13;
 2.8     | 2022-06-29 | raj     |  DFCT0011034 - An "Approved" ordered task should NOT cause the next task into "Closed Incomplete"&#13;
@@ -245,64 +246,67 @@ Task_uiAction.prototype = {
 	
 	// DFCT0010577 - this was moved out of the business rule and performed here
 	_closeSubTasksRecursive: function(task){
+		var draftState = -6;
 		var sRejected = 'Rejected';
 		// STRY0097131
 		// This business rule didn't process these types before.  
 		// To ensure Wait states of the next order and the parent are started, this business rule was turned on for theses types.
 		// This if statement was added to prevent closing children when a parent sees or acknowledges one of these tasks.
-		if(task.tasker_type.getDisplayValue() != "Acknowledgement"  && task.tasker_type.getDisplayValue() != "Information Only"){
-			// if any subtaskers are still open close complete, close incomplete, or cancel them
-			var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
-			grSubTasks.addQuery('parent', task.getUniqueValue());
-			grSubTasks.addQuery('state', '!=', 3);
-			grSubTasks.addQuery('state', '!=', 4);
-			grSubTasks.addQuery('state', '!=', 7);
-			grSubTasks.query();
+		// DFCT0011050 - draft tasks need to be deleted for acknowledement and information only - this check had to move inside of the loop
+		// if((task.tasker_type.getDisplayValue() != "Acknowledgement") && task.tasker_type.getDisplayValue() != "Information Only"){
+		// if any subtaskers are still open close complete, close incomplete, or cancel them
+		var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
+		grSubTasks.addQuery('parent', task.getUniqueValue());
+		grSubTasks.addQuery('state', '!=', 3);
+		grSubTasks.addQuery('state', '!=', 4);
+		grSubTasks.addQuery('state', '!=', 7);
+		grSubTasks.query();
 
-			// STRY0076598
-			// set state based on how the task was closed
-			var stateToSetSubtasks = null;
-			if (task.u_wait_for_subtasks_to_finish == true && task.decision == sRejected){   
-				// if this task was waiting for children to finish and this task was rejected and there are subtasks still open...
-				// then this task was rejected b/c a subtask was rejected.  This Tasks subtasks will be closed incomplete.
-				stateToSetSubtasks = 4; // closed incomplete this should be in an application constant
-			} else {
-				// otherwise, pass the state of this task down to its subtasks
-				stateToSetSubtasks = task.state;
-			}
-
-			while (grSubTasks.next()){
-				// STRY0122888 - if sub task is in draft state, delete instead of closing incomplete
-				if(grSubTasks.state == -6){
-					grSubTasks.deleteRecord();
-					continue;
-				}
-				
-				// STRY0076599
-				grSubTasks.state = stateToSetSubtasks;
-				grSubTasks.active = 'false';
-				
-				// DFCT0010592
-				grSubTasks.setValue('closed_at', task.getValue('closed_at'));
-				grSubTasks.closed_by = task.closed_by;
-				grSubTasks.setValue('work_end', task.getValue('work_end'));
-
-				// TODO, change text to pull from message for multi language support
-				var msg = 'Parent set to:';
-				// check to see if parent information is already in the close note.
-				// this should only be added at the top level
-				// as it flows down the chain, the top message pushes down
-				if(task.close_notes.toString().indexOf(msg)==0)
-					grSubTasks.close_notes = msg + ' (' + task.state + ') - Organizational Unit: (' + task.primary_assignee + ') - Close Note:'  + task.close_notes;
-				else
-					grSubTasks.close_notes = task.close_notes;
-				
-				grSubTasks.update();
-				// If we want to add subtask close response log entry when parent closes it, make the call right here
-				this._closeSubTasksRecursive(grSubTasks);
-			}
+		// STRY0076598
+		// set state based on how the task was closed
+		var stateToSetSubtasks = null;
+		if (task.u_wait_for_subtasks_to_finish == true && task.decision == sRejected){   
+			// if this task was waiting for children to finish and this task was rejected and there are subtasks still open...
+			// then this task was rejected b/c a subtask was rejected.  This Tasks subtasks will be closed incomplete.
+			stateToSetSubtasks = 4; // closed incomplete this should be in an application constant
+		} else {
+			// otherwise, pass the state of this task down to its subtasks
+			stateToSetSubtasks = task.state;
 		}
 
+		while (grSubTasks.next()){
+			// STRY0122888 - if sub task is in draft state, delete instead of closing incomplete
+			if(grSubTasks.state == draftState){
+				this._deleteTasks(grSubTasks);
+				continue;
+				// DFCT0011050 - draft tasks need to be deleted for acknowledement and information only - this check had to move inside of the loop
+			} else if((task.tasker_type.getDisplayValue() == "Acknowledgement") || task.tasker_type.getDisplayValue() == "Information Only"){
+				continue;
+			}
+
+			// STRY0076599
+			grSubTasks.state = stateToSetSubtasks;
+			grSubTasks.active = 'false';
+
+			// DFCT0010592
+			grSubTasks.setValue('closed_at', task.getValue('closed_at'));
+			grSubTasks.closed_by = task.closed_by;
+			grSubTasks.setValue('work_end', task.getValue('work_end'));
+
+			// TODO, change text to pull from message for multi language support
+			var msg = 'Parent set to:';
+			// check to see if parent information is already in the close note.
+			// this should only be added at the top level
+			// as it flows down the chain, the top message pushes down
+			if(task.close_notes.toString().indexOf(msg)==0)
+				grSubTasks.close_notes = msg + ' (' + task.state + ') - Organizational Unit: (' + task.primary_assignee + ') - Close Note:'  + task.close_notes;
+			else
+				grSubTasks.close_notes = task.close_notes;
+
+			grSubTasks.update();
+			// If we want to add subtask close response log entry when parent closes it, make the call right here
+			this._closeSubTasksRecursive(grSubTasks);
+		}
 	},
 	
 	// DFCT0010577 - this was moved out of the business rule and performed here
@@ -373,15 +377,24 @@ Task_uiAction.prototype = {
         try {
             cancellationReason = cancellationReason.replace(/<\/?[^>]+(>|$)/g, "");
             var grSubTasks = new GlideRecord(this.tableRouteTaskInstance);
+			var draft = -6;
+			var closeNote = gs.getMessage('Tasker - Parent task was cancelled by: {0}. brClose Note: {1}', [gs.getUserDisplayName(), task.close_notes]);
             grSubTasks.addQuery('parent', task.getUniqueValue());
             grSubTasks.addQuery('active', true);
             // find all subtasks with this parent value
             grSubTasks.query();
 
             while (grSubTasks.next()) {
-                // recursively call to cancel all descendants
-                grSubTasks.close_notes = gs.getMessage('Tasker - Parent task was cancelled by: {0}. brClose Note: {1}', [gs.getUserDisplayName(), grSubTasks.close_notes]);
-                this._cancelTasks(grSubTasks, cancellationReason, cancelDateTime);
+				// DFCT0011050 - cancel task deleting draft subotasks
+				if(grSubTasks.state == draft){
+					// delete subtasks and all descendants in draft state
+					this._deleteTasks(grSubTasks);
+				} else {
+					// recursively call to cancel all descendants
+					grSubTasks.close_notes = closeNote;
+					this._cancelTasks(grSubTasks, cancellationReason, cancelDateTime);
+				}
+                
             }
 
             task.active = false;
@@ -486,19 +499,25 @@ Task_uiAction.prototype = {
 
     // STRY0105845 
     uiAction_DeleteTasks: function(task) {
+        // DFCT0011050 - find and delete all descendants
+		this._deleteTasks(task);
+    },
 
-        // find and delete all descendants
+	// DFCT0011050 - go to the bottom and recursively delete all subtasks
+	_deleteTasks: function(task) {
+		// find and delete all descendants
         var grSubTasks = new GlideRecord('x_153465_discovert_route_task_instance');
         grSubTasks.addQuery('parent', task.getUniqueValue());
         // find all subtasks
         grSubTasks.query();
         while (grSubTasks.next()) {
             // recursively call to delete all descendants
-            this.uiAction_DeleteTasks(grSubTasks);
+            this._deleteTasks(grSubTasks);
         }
         task.deleteRecord();
     },
-
+	
+	
     // STRY0105845 - DFCT0010781 moved the info message out of this method and into the ui action so it isn't called for all sub tasks
 	// STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'
     uiAction_PublishDraftTasks: function(task, process) {
@@ -710,7 +729,8 @@ Task_uiAction.prototype = {
 		
         // TODO - multilanguage
         gs.addInfoMessage(task.number + ' Task was marked as Acknowledged.');
-
+		// DFCT0011050 - Closing Tasks  is NOT DELETING ALL Draft Descendants, they are moved into the "Cancelled" state
+		this._closeRelatedTasks(task);
     },
 	
 	// DFCT0010827 - new function so completed on time, end date and empty start date are set consistently
@@ -1554,13 +1574,13 @@ Task_uiAction.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>266</sys_mod_count>
+        <sys_mod_count>273</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-08 14:51:15</sys_updated_on>
+        <sys_updated_on>2022-07-24 23:13:25</sys_updated_on>
     </sys_script_include>
 </record_update>
