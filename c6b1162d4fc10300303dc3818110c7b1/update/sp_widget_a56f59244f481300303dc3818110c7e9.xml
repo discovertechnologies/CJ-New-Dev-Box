@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, $timeout, $http, $location, $rootScope, spModal, spUtil, $interpolate, htmlToStringService) {
+        <client_script><![CDATA[api.controller = function($scope, $timeout, $http, $location, $rootScope, amb, spModal, spUtil, $interpolate, htmlToStringService) {
 	//------------------------------------------------------------------------------------------------------------------------
 	// COMPANY: DISCOVER TECHNOLOGIES
 	// CUSTOMIZED BY: KARINA TORRES
@@ -63,6 +63,8 @@
 			}
 			// DFCT0010674
 			resetDiagram();
+			// DFCT0011129
+			initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);
 		}
 	}
 	
@@ -276,53 +278,59 @@
 	// -----------------------------------------------------------------------------------------------------------------
 	// START RECORD WATCHER BLOCK
 	// -----------------------------------------------------------------------------------------------------------------
-	// 2.5.13: 08.12.20 | KT | SEQ | STRY0076601: SEQ - Task Details page – Displays Task Tree View Indicators 
-	//if (grTask.assigned_to.getDisplayValue().toString().length > 0) nodeTitle += " (" + grTask.assigned_to.getDisplayValue().toString() + ") "; //KT: 06.09.20: Added space before (Assignee
-	spUtil.recordWatch($scope, $scope.data.table, "u_task_tree=" + $scope.data.task_tree, function(name) {
-		// STRY0099313 - Task Manager - When a Task is updated and the Task Tree Graph isn't loaded, ignore the update
-		if (diagram != undefined) {
-			var changes = name.data.changes;
-			var sys_id = name.data.sys_id;
-			switch (name.data.operation) {
-				case "update":
-					var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
-					if (nodeChangedFound) {
-						var nodeDataChanged = false;
-						for (var change in changes) {
-							if (c.data.fieldsInModel[changes[change]]) {
-								nodeDataChanged = true;
-								break;
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				var changes = name.data.changes;
+				var sys_id = name.data.sys_id;
+				switch (name.data.operation) {
+					case "update":
+						var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
+						if (nodeChangedFound) {
+							var nodeDataChanged = false;
+							for (var change in changes) {
+								if (c.data.fieldsInModel[changes[change]]) {
+									nodeDataChanged = true;
+									break;
+								}
+							}
+							if (nodeDataChanged) {
+								updateModelNodeData(nodeChangedFound, name.data.record);
 							}
 						}
-						if (nodeDataChanged) {
-							updateModelNodeData(nodeChangedFound, name.data.record);
+						break;
+					case "insert":
+						// 2.7.0 | 2021-11-02 | mmcc | DFCT0010588 - When creating a Subtask on the Task form, record watcher shows 2 subtasks created
+						// .model.findNodeDataForKey() returns null if a node data with that key cannot be found in the model...
+						var isNotFoundNodeInsert = diagram.model.findNodeDataForKey(sys_id) == null;
+						if (isNotFoundNodeInsert) {
+							if (name.data.record.parent) {
+								var newNodeData = createModelNodeData(sys_id, name.data.record);
+								diagram.startTransaction("Add new Task");
+								diagram.model.addNodeData(newNodeData);
+								diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
+								diagram.commitTransaction("Add new Task");
+								// if suspensedate changed, need to check parent and all subtasks again
+								checkDateWarnings(newNodeData);
+							}
 						}
-					}
-					break;
-				case "insert":
-					// 2.7.0 | 2021-11-02 | mmcc | DFCT0010588 - When creating a Subtask on the Task form, record watcher shows 2 subtasks created
-					// .model.findNodeDataForKey() returns null if a node data with that key cannot be found in the model...
-					var isNotFoundNodeInsert = diagram.model.findNodeDataForKey(sys_id) == null;
-					if (isNotFoundNodeInsert) {
-						if (name.data.record.parent) {
-							var newNodeData = createModelNodeData(sys_id, name.data.record);
-							diagram.startTransaction("Add new Task");
-							diagram.model.addNodeData(newNodeData);
-							diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
-							diagram.commitTransaction("Add new Task");
-							// if suspensedate changed, need to check parent and all subtasks again
-							checkDateWarnings(newNodeData);
+						break;
+					case "delete":
+						var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
+						if (nodeDeletedFound) {
+							diagram.model.removeNodeData(nodeDeletedFound);
 						}
-					}
-					break;
-				case "delete":
-					var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
-					if (nodeDeletedFound) {
-						diagram.model.removeNodeData(nodeDeletedFound);
-					}
-			}
+				}
+			});
 		}
-	});
+	}
 	
 	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
 	function createModelNodeData(sys_id, record) {
@@ -689,6 +697,8 @@
 					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
 				}
 				resetDiagram();
+				// DFCT0011129
+				initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);				
 			});
 			// DFCT0010674
 		} else {
@@ -1482,6 +1492,8 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                         - Changes in Client Controller
 // 2.8   - 2022-07-11 - raj -  STRY0121780 - Stretch- Task Tree Widget UX- Update user's "tree-view" preferences
 //                                         - Changes in ServerScript only
+//  2.8   - 2022-08-03 - raj -  DFCT0011129 - "Task Tree View"  on the "Three column" view is NOT updating  the new subtask on the load
+//                                         - Changes in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1596,14 +1608,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1855</sys_mod_count>
+        <sys_mod_count>1858</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-16 05:05:06</sys_updated_on>
+        <sys_updated_on>2022-08-04 01:52:15</sys_updated_on>
         <template><![CDATA[<div class=" flex-row flex-grow panel-group" id="accordionTaskerGraphical">
   <div id="main_body" class="flex-column flex-grow panel panel-default">  
     <div id="panel_heading" class="panel-heading">
