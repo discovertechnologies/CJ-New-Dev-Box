@@ -6,14 +6,53 @@
   var c = this;
 	// used in _switchTaskFormView to switch form 
 	var newObjSelected = {};
+		// DFCT0011124 - use this to revert when save or update canceled
+	var currentObjSelected = {};
 	main();
 	function main(){
-		c.data.submitting = false;
-		c.data.promptChangesStarted = false;
-		c.data.redirectToNew = false;
-		// currently no code in main
+		c.data.new_task_widget=undefined;
+		// DFCT0011107 - moved to client for better response times
+		_loadFormWidget();
 	}
 
+	// DFCT0011107 moved to client for better response times
+	function _loadFormWidget(){
+		if(c.data.settings.defaultTaskFormView){
+			// reset load query each time
+			var loadQuery = c.data.query + c.data.settings.defaultTaskFormView.filter;
+			// set loadID above when not advanced, then set query if an ID is set so advanced gets last selected quick type
+			c.data.selected_id = c.data.settings.defaultTaskFormView.sys_id;
+			// DFCT0011124 - use this to revert when save or update canceled
+			_getCurrentObjectSelected();
+			var form_widget_parameters = {
+				table: 'x_153465_discovert_route_task_instance',
+				sys_id: c.data.sys_id,
+				sys_id_required: false,
+				// NOTE: load based on getting user last selection
+				view: c.data.settings.defaultTaskFormView.sn_view,
+				omitHeader: c.data.omitHeader,
+				omitHeaderOptions: c.data.omitHeaderOptions,
+				query:  loadQuery,
+				bifold: c.data.bifold,
+				isModal: c.data.isModal,
+				baseWidget: "new_tasker_selection",
+				shared: {}
+			}
+			c.data.submitting=true;
+			c.data.new_task_widget = undefined;
+			c.data.new_task_widget_forms = [];
+			spUtil.get('discovertasker-formtab', form_widget_parameters).then(function(response) {
+				var new_task_widget_form = {};
+				new_task_widget_form.widget = response;
+				c.data.new_task_widget_forms.push(new_task_widget_form);
+				c.data.new_task_widget = new_task_widget_form.widget;
+				c.data.submitting = false;
+				c.data.promptChangesStarted = false;
+				c.data.redirectToNew = false;
+			});			
+		}
+	}	
+	
 	// ServiceNow dirty flag still popping up, need to figure out how to block it
 	$scope.$on('$locationChangeStart', function (event, next, current) {
 		var loc = $location.search();
@@ -26,7 +65,8 @@
 			 !c.data.promptChangesStarted && 
 			 !c.data.redirectToNew &&
 			 next && current && next != current){
-			var isDataDirty = c.data.new_task_widget_forms[0].widget.checkChanges();
+			// DFCT0011107 changed to use consistent call
+			var isDataDirty = c.data.new_task_widget && c.data.new_task_widget.checkChanges();
 			var nextURL = $location.path();
 			if(isDataDirty ){
 				_promptDiscardChanges(false, nextURL);
@@ -43,7 +83,8 @@
 		// used in _switchTaskFormView to switch form 
 		newObjSelected = undefined; // clear selected object
 		newObjSelected = objSelected;
-		var isDataDirty = c.data.new_task_widget_forms[0].widget.checkChanges();
+		// DFCT0011107 changed to use consistent call
+		var isDataDirty = c.data.new_task_widget && c.data.new_task_widget.checkChanges();
 		// if dirty, or, this is a saved task and changing the view
 		// prompt user
 		if(isDataDirty || 
@@ -54,6 +95,26 @@
 			_switchTaskFormView(true);
 		}
 	}
+	
+	// DFCT0011124 - use this to revert when save or update canceled
+	function _getCurrentObjectSelected() {
+		currentObjSelected = undefined;
+		for (var advType in c.data.advancedTaskerTypes) {
+			var objAdvType = c.data.advancedTaskerTypes[advType];
+			if(c.data.selected_id == objAdvType.sys_id){
+				currentObjSelected = objAdvType;
+				break;
+			}
+		}
+		if(!currentObjSelected){
+			for (var quickType in c.data.taskerTypes) {
+				var objQuickType = c.data.taskerTypes[quickType];
+				if(c.data.selected_id == objQuickType.sys_id){
+					currentObjSelected = objQuickType;
+				}			
+			}
+		}
+	}	
 	
 	function _promptDiscardChanges(switchTaskFormView, newURL){
 		var title = "";
@@ -85,7 +146,13 @@
 				// call here if sys_id exists, no need to wait for save to complete
 				if(!c.data.sys_id || c.data.sys_id == -1){
 					c.data.promptChangesStarted = true;
-					c.data.new_task_widget_forms[0].widget.saveAsDraft(newObjSelected);	
+					// DFCT0011107 changed to use consistent call
+					if(c.data.new_task_widget){
+						// DFCT0011124 added logic to receive true false back and set submitting flase based on that
+						if(!c.data.new_task_widget.saveAsDraft(newObjSelected)){
+							c.data.submitting = false;
+						}
+					}
 				} else {
 					if(switchTaskFormView){
 						_switchTaskFormView(true);
@@ -155,6 +222,9 @@
 	
 	// unregister all events
 	var unregister_ui_action_triggered = $rootScope.$on("sp.form.ui_action.triggered", _submitStarted);
+	// DFCT0011107
+	var unregister_gform_submit_failed = $rootScope.$on("sp.form.submit.failed", _submitFailed);
+	
 	var unregister_ui_action_complete_triggered = $rootScope.$on("sp.form.ui_action.uiActionComplete", _uiActionComplete);
 	var unregister_gform_rendered = $rootScope.$on("spModel.gForm.rendered", _formRendered);
 	
@@ -164,14 +234,27 @@
 		unregister_gform_rendered();
 	});
 	
+	// DFCT0011107
 	function _submitStarted(){
 		c.data.submitting = true;
+	}
+	
+	function _submitFailed(){
+		// submit failed.  If selected id isn't new id
+		// then save was attempted with new object selected
+		// need to revert task form data back to currently selected id
+		if(c.data.selected_id !=newObjSelected.sys_id){
+			// revert to current object
+			_getCurrentObjectSelected();
+			_setFilterFields(currentObjSelected);
+		}
 	}
 	
 	function _switchTaskFormView(saveChanges){
 		c.data.submitting = true;
 		// change selected item in HTML before post back so selection is updated quickly
 		c.data.selected_id = newObjSelected.sys_id;
+		_getCurrentObjectSelected();
 
 		if(c.data.sys_id && c.data.sys_id != -1){
 			var search = $location.search();
@@ -183,7 +266,13 @@
 		
 		// if task exists, update the saved task to switch to a different view
 		if(saveChanges && c.data.sys_id && c.data.sys_id != -1){
-			c.data.new_task_widget_forms[0].widget.updateDraft(newObjSelected);	
+			// DFCT0011107 changed to use consistent call
+			if(c.data.new_task_widget){
+				// DFCT0011124 added logic to receive true false back and set submitting flase based on that
+				if(!c.data.new_task_widget.updateDraft(newObjSelected)){
+					c.data.submitting = false;					
+				}
+			}
 		}
 		if(c.data.view == newObjSelected.sn_view){
 			$scope.data.skipReload = true;
@@ -199,12 +288,13 @@
 		$scope.data.sys_id = c.data.sys_id;
 		// DFCT0011069 - if no change to the view, then just update the fields, 
 		//               don't post back to reload the form
-		spUtil.update($scope).then(function(){
-			c.data.submitting = false;
-		});
+		
+		// DFCT0011107
+		_loadFormWidget();
+		
 		// DFCT0011069 - if form not reloaded, still update values
 		if($scope.data.skipReload == true){
-			_setFilterFields();	
+			_setFilterFields(newObjSelected);	
 		}
 	}
 	
@@ -212,16 +302,16 @@
 	function _formRendered(event, params){
 		// DFCT0011069 - tasker type was not getting set when form changed, this should reset it any other fields in the fitler
 		// wait for form to finish rendering
-		_setFilterFields();
+		_setFilterFields(newObjSelected);
 	}
 	
 	// DFCT0011069 - tasker type was not getting set when form changed, this should reset it any other fields in the fitler
-	function _setFilterFields(){
+	function _setFilterFields(objSelected){
 		var fieldValues = [];
 		var aFields = [];
 		var fieldNameValue = [];
-		if(newObjSelected && newObjSelected.filter){
-			aFields = newObjSelected.filter.split("^");
+		if(objSelected && objSelected.filter){
+			aFields = objSelected.filter.split("^");
 			aFields.forEach(function(fieldPair){
 				if(fieldPair && fieldPair != ""){
 					var fieldNameValuePair = {};
@@ -232,8 +322,10 @@
 				}
 			});
 		}
-
-		c.data.new_task_widget_forms[0].widget.setFieldValues(fieldValues);	
+		// DFCT0011107 changed to use consistent call
+		if(c.data.new_task_widget){
+			c.data.new_task_widget.setFieldValues(fieldValues);	
+		}
 	}
 	
 	$scope.convertIsModalToString = function(){
@@ -244,105 +336,118 @@
 	
 };]]></client_script>
         <controller_as>c</controller_as>
-        <css>.dtech-new-task-container {&#13;
-  display: flex;&#13;
-  width:100%;&#13;
-  height:100%&#13;
-}&#13;
-&#13;
-.flex-child {&#13;
-  flex: 1;&#13;
-  display:flex;&#13;
-  flex-direction:column;&#13;
-  /* position relative allowed flex to apply to the panel */&#13;
-  position: relative;&#13;
-  box-shadow: 0px 0px 30px 0px rgba(0, 0, 0, 0.25);&#13;
-}  &#13;
-&#13;
-.flex-child:first-child {&#13;
-  flex: .4;&#13;
-} &#13;
-&#13;
-/* 2.8 | 2022-07-10 | mmcc | DFCT0011031 - Scrolling doesn't work on the "New" task form. "Advanced Task" fields don't display */&#13;
-.detech-flex-shadow-25 {&#13;
-  box-shadow: 0px 0px 30px 0px rgba(0, 0, 0, 0.25);&#13;
-}  &#13;
-&#13;
-&#13;
-/* NOTE: below here should be updated to use dtech naming convention&#13;
-Once upddated to handle list selector with right side pointer, it should &#13;
-move into the service portal style sheets and imported&#13;
-*/&#13;
-&#13;
-.component-selector {&#13;
-  /*background: linear-gradient(to right, #F5F7F9 0%, #F5F7F9 90%, #DDD 100%);*/&#13;
-  background: #F5F7F9;&#13;
-}&#13;
-&#13;
-.component-selector-divider {&#13;
-  width: 100%;&#13;
-  height: 2px;&#13;
-  background-color: rgba(221, 221, 221, 1);&#13;
-}&#13;
-&#13;
-.component-selector-header{&#13;
-  color: rgba(117, 117, 117, 1); /*508 AA*/&#13;
-  width: 100%;&#13;
-  padding: 14px 20px 14px 20px;&#13;
-  font-size: 14px;&#13;
-  font-weight: 400;&#13;
-  text-transform: uppercase;&#13;
-}&#13;
-&#13;
-.ul-selector {&#13;
-  margin: 0px;&#13;
-  padding: 0px;&#13;
-  list-style-type: none;&#13;
-  color:#757575;&#13;
-}&#13;
-&#13;
-.li-flex-row {&#13;
-  display: flex;&#13;
-  flex-grow:0;&#13;
-  width:100%;&#13;
-  flex-direction:row;&#13;
-}&#13;
-&#13;
-.flex-text {&#13;
-  flex-grow:1;&#13;
-}&#13;
-&#13;
-.li-flex-row-child:first-child {&#13;
-  flex-grow:1;&#13;
-}&#13;
-&#13;
-.li-flex-row-left-pointer {&#13;
-  width: 0px;&#13;
-  height: 0px;&#13;
-  border-left: 10px solid transparent;&#13;
-  border-right: 10px solid  white;&#13;
-  border-top: 10px solid  transparent;&#13;
-  border-bottom: 10px solid  transparent;&#13;
-  margin: 0px auto;&#13;
-  z-index: 1000;&#13;
-}&#13;
-&#13;
-.li-selector {&#13;
-  padding: 14px 0px 14px 40px;&#13;
-  width: 100%;&#13;
-  color: rgba(0, 0, 0, 1);&#13;
-  font-size: 14px;&#13;
-  font-weight: 400;&#13;
-  cursor:pointer;&#13;
-}&#13;
-&#13;
-.li-selector:hover{&#13;
-  background-color: rgba(217, 237, 247, 1);&#13;
-}&#13;
-&#13;
-.li-selected{&#13;
-  background-color: rgba(231, 244, 253, 1);&#13;
-}&#13;
+        <css>#loading-spinner {
+  animation: loading 2s infinite linear;
+}
+
+@keyframes loading {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(359deg);
+  }
+}
+
+.dtech-new-task-container {
+  display: flex;
+  width:100%;
+  height:100%
+}
+
+.flex-child {
+  flex: 1;
+  display:flex;
+  flex-direction:column;
+  /* position relative allowed flex to apply to the panel */
+  position: relative;
+  box-shadow: 0px 0px 30px 0px rgba(0, 0, 0, 0.25);
+}  
+
+.flex-child:first-child {
+  flex: .4;
+} 
+
+/* 2.8 | 2022-07-10 | mmcc | DFCT0011031 - Scrolling doesn't work on the "New" task form. "Advanced Task" fields don't display */
+.detech-flex-shadow-25 {
+  box-shadow: 0px 0px 30px 0px rgba(0, 0, 0, 0.25);
+}  
+
+
+/* NOTE: below here should be updated to use dtech naming convention
+Once upddated to handle list selector with right side pointer, it should 
+move into the service portal style sheets and imported
+*/
+
+.component-selector {
+  /*background: linear-gradient(to right, #F5F7F9 0%, #F5F7F9 90%, #DDD 100%);*/
+  background: #F5F7F9;
+}
+
+.component-selector-divider {
+  width: 100%;
+  height: 2px;
+  background-color: rgba(221, 221, 221, 1);
+}
+
+.component-selector-header{
+  color: rgba(117, 117, 117, 1); /*508 AA*/
+  width: 100%;
+  padding: 14px 20px 14px 20px;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.ul-selector {
+  margin: 0px;
+  padding: 0px;
+  list-style-type: none;
+  color:#757575;
+}
+
+.li-flex-row {
+  display: flex;
+  flex-grow:0;
+  width:100%;
+  flex-direction:row;
+}
+
+.flex-text {
+  flex-grow:1;
+}
+
+.li-flex-row-child:first-child {
+  flex-grow:1;
+}
+
+.li-flex-row-left-pointer {
+  width: 0px;
+  height: 0px;
+  border-left: 10px solid transparent;
+  border-right: 10px solid  white;
+  border-top: 10px solid  transparent;
+  border-bottom: 10px solid  transparent;
+  margin: 0px auto;
+  z-index: 1000;
+}
+
+.li-selector {
+  padding: 14px 0px 14px 40px;
+  width: 100%;
+  color: rgba(0, 0, 0, 1);
+  font-size: 14px;
+  font-weight: 400;
+  cursor:pointer;
+}
+
+.li-selector:hover{
+  background-color: rgba(217, 237, 247, 1);
+}
+
+.li-selected{
+  background-color: rgba(231, 244, 253, 1);
+}
 </css>
         <data_table>sp_instance</data_table>
         <demo_data/>
@@ -376,6 +481,10 @@ move into the service portal style sheets and imported&#13;
 //											Updates in Client Controller
 // 2.8 | 2022-07-24 | raj | DFCT0011055 - Upon creation of subtask at "Task Tree" view,  view is changed to "Three Column" view (FOR BOTH QUICK AND ADVANCED TASKING)
 //											Updates in Client Controller
+// 2.8 | 2022-08-04 | raj | DFCT0011107 - User is unable to switch tasker types after "Some fields are missing" warning displays. Tasker Types become unclickable.
+//											Updates in Server Script, Client Controller and HTML
+// 2.8 | 2022-08-04 | raj | DFCT0011124 - New Task form does not reload to "Task form with Tabs" when user clicks "Save as a Draft" button on the "Delete form modal"
+//                      Updates in Client Script
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
@@ -453,39 +562,8 @@ move into the service portal style sheets and imported&#13;
 
 		data.query  = (input || {}).query || (options || {}).query || "";
 		_convertToBool(['isModal', 'omit_icons']);
-		// DFCT0011069 only load form widget on inital load and when the servicenow view changes
-		if(!input || !input.skipReload){
-			_loadFormWidget();
-		}
-		
 	}
 
-	function _loadFormWidget(){
-		if(data.settings.defaultTaskFormView){
-			// reset load query each time
-			var loadQuery = data.query + data.settings.defaultTaskFormView.filter;
-			// set loadID above when not advanced, then set query if an ID is set so advanced gets last selected quick type
-			data.selected_id = data.settings.defaultTaskFormView.sys_id;
-			var form_widget_parameters = {
-				table: 'x_153465_discovert_route_task_instance',
-				sys_id: data.sys_id,
-				sys_id_required: false,
-				// NOTE: load based on getting user last selection
-				view: data.settings.defaultTaskFormView.sn_view,
-				omitHeader: data.omitHeader,
-				omitHeaderOptions: data.omitHeaderOptions,
-				query:  loadQuery,
-				bifold:data.bifold,
-				isModal:data.isModal,
-				baseWidget: "new_tasker_selection",
-				shared: {}
-			}
-			data.new_task_widget_forms = [];
-			var new_task_widget_form = {};
-			new_task_widget_form.widget = $sp.getWidget('discovertasker-formtab', form_widget_parameters);
-			data.new_task_widget_forms.push(new_task_widget_form);
-		}
-	}	
 	function _convertToBool(names) {
 		names.forEach(function(name) {
 			data[name] = data[name] == true || data[name] == 'true';
@@ -497,14 +575,14 @@ move into the service portal style sheets and imported&#13;
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-05-05 20:37:54</sys_created_on>
         <sys_id>7574cf95db974190991a6154ca9619e1</sys_id>
-        <sys_mod_count>610</sys_mod_count>
+        <sys_mod_count>627</sys_mod_count>
         <sys_name>New Tasker Selection</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_7574cf95db974190991a6154ca9619e1</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-24 19:28:51</sys_updated_on>
+        <sys_updated_on>2022-08-05 04:34:48</sys_updated_on>
         <template><![CDATA[<div ng-switch="convertIsModalToString()">
   <div ng-switch-when="true">
     <div class="dtech-new-task-container" >
@@ -544,6 +622,9 @@ move into the service portal style sheets and imported&#13;
       </div>
 
       <div class="flex-child">
+        <span ng-if="data.new_task_widget_forms.length!=1">
+          <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">${Loading...       }</span>
+        </span>
         <div ng-repeat = "ntwf in data.new_task_widget_forms">
           <sp-widget widget="ntwf.widget"></sp-widget>
         </div>
