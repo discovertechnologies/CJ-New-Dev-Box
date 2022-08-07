@@ -71,6 +71,8 @@
 	});
 
 	$scope.hasAttachments = function() {
+		// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; call function in Link
+		$scope.linkFlexAttachments();
 		// RJ | STRY0059145 | Include Attachments since we dropped attachment properties
 		$scope.attachmentCount();
 		return $scope.attachments && $scope.attachments.length != 0;
@@ -138,28 +140,25 @@
 	}
 };]]></client_script>
         <controller_as>c</controller_as>
-        <css>//------------------------------------------------------------------------------------------------------------------------
-// COMPANY: DISCOVER TECHNOLOGIES
-// CUSTOMIZED BY: KARINA TORRES 
-//------------------------------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------------------------------
-// 2.5.21 | 09.03.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
-//------------------------------------------------------------------------------------------------------------------------
-// No updates needed on Tasker theme
-
-/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
-Have modal fit the viewport height with its own scrollbar start
-*/
-.dtech-modal-scroll-height-attachments {
-  max-height: calc(100vh - 550px);
-  overflow-y: auto;
-  padding-right: 15px;
-}
-/* Have modal fit the viewport height with its own scrollbar end */
-
-.padder-b-none {
-    //padding-bottom: 10px !important;
-}</css>
+        <css>//------------------------------------------------------------------------------------------------------------------------&#13;
+// COMPANY: DISCOVER TECHNOLOGIES&#13;
+// CUSTOMIZED BY: KARINA TORRES &#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// 2.5.21 | 09.03.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)&#13;
+//------------------------------------------------------------------------------------------------------------------------&#13;
+// No updates needed on Tasker theme&#13;
+&#13;
+/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists&#13;
+Have modal fit the viewport height with its own scrollbar start&#13;
+*/&#13;
+.dtech-modal-scroll-height-attachments {&#13;
+  max-height: calc(100vh - 550px);&#13;
+  overflow-y: auto;&#13;
+  padding-right: 15px;&#13;
+}&#13;
+/* Have modal fit the viewport height with its own scrollbar end */&#13;
+</css>
         <data_table>sp_instance</data_table>
         <demo_data/>
         <description>2.5.13</description>
@@ -168,7 +167,40 @@ Have modal fit the viewport height with its own scrollbar start
         <has_preview>false</has_preview>
         <id>tasker_task_attachments</id>
         <internal>false</internal>
-        <link/>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+	var $fileList;
+	var $unorderedList;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer
+	// This function gets called from the Client controller and adds CSS to the ServiceNow directive of
+	// tag <now-attachments-list> to allow it to flex and have a scrollbar when bifold == true
+	scope.linkFlexAttachments = function() {
+		if (scope.data.bifold) {
+			$fileList = element.find(".file-list-wrap");
+			$fileList.css({
+				display: 'flex',
+				'flex-flow': 'column nowrap',
+				'flex-grow': 1,
+				overflow: 'hidden',
+				position: 'relative'
+			});
+
+			$unorderedList = element.find(".list-group");
+			$unorderedList.css({
+				bottom: 0,
+				'margin-bottom': 0,
+				overflow: 'auto',
+				'padding-left': '0',
+				'padding-right': '5px',
+				position: 'absolute',
+				'scrollbar-gutter': 'stable',
+				top: 0,
+				width: '-webkit-fill-available'
+			});
+		}
+	};
+	
+}]]></link>
         <name>Tasker Attachments</name>
         <option_schema>[{"hint":"ID of referenced record","name":"record_id","section":"Data","label":"Record ID","type":"string"},{"hint":"Table name of referenced record","name":"record_table","section":"Data","label":"Record Table","type":"string"}]</option_schema>
         <public>false</public>
@@ -189,11 +221,22 @@ Have modal fit the viewport height with its own scrollbar start
 //                                      In Server script, get isModal from input/options/false
 //                                      In Client controller, change to api.controller=function.
 //                                      Changes made in HTML, CSS, Server script and Client controller
+// 2.8 | 2022-08-06 | mmcc | DFCT0010866 - Too many scroll bars are displaying  on the split view on Document Management, and Delegation View
+//                                      In HTML, use ngclass to add flex css when bifold.
+//                                      In CSS, removed .padder-b-none
+//                                      In Server script, added bifold load and convertToBool()
+//                                      In Client controller, calling linkFlexAttachments()
+//                                      Add code in Link to update CSS for Attachments directive
+//                                      Changes made in HTML, CSS, Server script, Client controller and Link.
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added bifold
+	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+	
 	//2.5.21: 08.26.20 | DTLV | KT | Set up Title
 	data.title = options.title || gs.getMessage("Attachments");
 	//data.icon = options.icon;
@@ -209,6 +252,9 @@ Have modal fit the viewport height with its own scrollbar start
 	data.attachmentSuccessMsg = gs.getMessage("Attachment successfully uploaded");  
 	data.SNAttachmentsON = 'true'; //KT | STRY0072011 | 2.5.13 | Added: & data.SNAttachmentsON == true && data.isActive == true;
 	data.isActive = false; //KT | STRY0072011 | 2.5.13 | Added: & data.SNAttachmentsON == true && data.isActive == true;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added convertToBool() call
+	convertToBool(['bifold', 'isModal']);
 	
 	if (!data.table || !data.sys_id)
 		return;
@@ -265,23 +311,34 @@ Have modal fit the viewport height with its own scrollbar start
 		}
 		return table;
 	}
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added function convertToBool()
+	function convertToBool(names) {
+		names.forEach(function(name) {
+			data[name] = data[name] == true || data[name] == 'true';
+		});
+	}
+	
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-04-22 17:25:45</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>5a5d0f5cdb81b300bb8ee536ca96193f</sys_id>
-        <sys_mod_count>167</sys_mod_count>
+        <sys_mod_count>195</sys_mod_count>
         <sys_name>Tasker Attachments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5a5d0f5cdb81b300bb8ee536ca96193f</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-01-26 17:58:27</sys_updated_on>
-        <template><![CDATA[<div ng-if="data.SNAttachmentsON == 'true'">
-  <div ng-if="data.canRead" class="panel panel-primary b">
-    <div class="panel-heading padder-b-none">
+        <sys_updated_on>2022-08-07 00:35:05</sys_updated_on>
+        <template><![CDATA[<div ng-if="data.SNAttachmentsON == 'true'" ng-class="{'flex-column flex-grow dtech-overflow-hidden' : data.bifold==true}">
+  <div ng-if="data.canRead" class="panel panel-primary b" 
+       ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-margin-bottom-0' : data.bifold==true}">
+    <div class="panel-heading">
       <h2 class="h4 sp-attachments-header panel-title pull-left">
         {{data.title}}
       </h2>
@@ -292,13 +349,17 @@ Have modal fit the viewport height with its own scrollbar start
     </div>
 
     <!-- small device - hide body unless there are attachments -->
-    <div class="panel-body" ng-class="{'hidden-xs': !hasAttachments()}">
-      <div ng-if="data.canWrite && data.canAttach" ng-file-drop="attachmentHandler.onFileSelect($files)" class="sp-attachments">
+    <div class="panel-body" 
+         ng-class="{'hidden-xs': !hasAttachments(), 'flex-column flex-grow dtech-overflow-hidden dtech-pad-right-5' : data.bifold==true}">
+      <div ng-if="data.canWrite && data.canAttach" class="sp-attachments" 
+           ng-file-drop="attachmentHandler.onFileSelect($files)" 
+           ng-class="{'flex-column flex-grow dtech-overflow-hidden' : data.bifold==true}">
         <div class="sp-no-attachments text-center text-italic text-muted" ng-show="!hasAttachments()">
           <em>${Drop files here}</em>
         </div>
         <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add wrapping <div> -->
-        <div ng-class="{'dtech-modal-scroll-height-attachments': data.isModal==true}">
+        <div ng-class="{'dtech-modal-scroll-height-attachments': data.isModal==true,
+                       'flex-column flex-grow dtech-overflow-hidden' : data.bifold==true}">
           <now-attachments-list template="sp_attachment" />
         </div>
       </div>
