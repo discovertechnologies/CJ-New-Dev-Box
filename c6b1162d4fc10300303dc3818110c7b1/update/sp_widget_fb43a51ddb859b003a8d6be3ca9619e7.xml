@@ -54,6 +54,8 @@
 				panelBodyClassNames = 'dtech-overflow-auto flex-grow';
 				break;
 			case 'discovertask_tree_bifold':
+			case 'document_management':
+			case 'task_delegation_view':
 			case 'task_requests':
 				panelBodyClassNames = 'flex-column flex-grow dtech-overflow-hidden dtech-pad-right-5';
 				break;
@@ -79,6 +81,8 @@
 				panelHeadingClassNames = 'dtech-panel-heading-min-height-standard';
 				break;
 			case 'discovertask_tree_bifold':
+			case 'document_management':
+			case 'task_delegation_view':
 			case 'task_requests':
 				//panelHeadingClassNames = 'dtech-panel-heading-min-height-75px dtech-flex-grow-1-shrink-0-basis-auto';
 				panelHeadingClassNames = 'dtech-panel-heading-min-height-standard dtech-flex-grow-1-shrink-0-basis-auto';
@@ -100,6 +104,8 @@
 				panelClassNames = 'dtech-topstick-posabso flex-column';
 				break;
 			case 'discovertask_tree_bifold':
+			case 'document_management':
+			case 'task_delegation_view':
 			case 'task_requests': 
 				panelClassNames = 'dtech-topstick-posabso flex-column flex-grow';
 				break;
@@ -145,6 +151,8 @@
 				tabContentClassNames = '';
 				break;
 			case 'discovertask_tree_bifold':
+			case 'document_management':
+			case 'task_delegation_view':
 			case 'task_requests':
 				tabContentClassNames = 'flex-column flex-grow dtech-overflow-hidden';
 				break;
@@ -165,6 +173,8 @@
 				tabPaneClassNames = '';
 				break;
 			case 'discovertask_tree_bifold':
+			case 'document_management':
+			case 'task_delegation_view':
 			case 'task_requests':
 				tabPaneClassNames = 'dtech-overflow-auto-pad-right-15-gutter-stable';
 				break;
@@ -578,8 +588,14 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 		var fieldValues = newFormObjSelected.fieldValues;
 		c._setFieldValues(fieldValues);
 		$scope.submitting = true;
+		
 		//01713ba91b538d90d6062023b24bcba4 is the 'save_as_draft' guid
-		g_form.submit('01713ba91b538d90d6062023b24bcba4');
+		// DFCT0011124 - check submit and if fails, report back failure
+		if(!g_form.submit('01713ba91b538d90d6062023b24bcba4')){
+			$scope.submitting = false;
+			$rootScope.$broadcast('sp.form.submit.failed', g_form.action);
+			return false;
+		}		
 	}	
 	// STRY0119918
 	c.widget.updateDraft = function(newFormObjSelected){
@@ -589,7 +605,12 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 		c._setFieldValues(fieldValues);
 		$scope.submitting = true;
 		// save instead of submitting 
-		g_form.save();
+		// DFCT0011124 - check submit and if fails, report back failure
+		if(!g_form.save()){
+			$scope.submitting = false;
+			$rootScope.$broadcast('sp.form.submit.failed', g_form.action);
+			return false;
+		}				
 	}		
 	// STRY0119918
 	c.widget.checkChanges = function(){
@@ -695,13 +716,13 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	}
 
 	$scope.$on("spModel.uiActionComplete", function(evt, response) {
-
 		// 2021.04.15 - Fix issue with form submit when to reload the form
 		// *************** Customization Start ***************************
 		// RAJ - Added below to close window when finished
 		// STRY0074663
 		if (c.data.isModal && 
-				c.data.baseWidget != "new_tasker_selection") {
+				c.data.baseWidget != "new_tasker_selection" &&
+			 c.data.table != "sys_user_group") {
 			$scope.$parent.$parent.$dismiss();
 			return;
 		} // 09.10
@@ -713,6 +734,12 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 		params.rec_sys_id = sysID;
 		$rootScope.$broadcast('sp.form.ui_action.uiActionComplete', params);
 
+		// after sending broadcast, if in modal close sys_user_group
+		if (c.data.isModal){
+			$scope.$parent.$parent.$dismiss();
+			return;
+		}
+		
 		// *************** Customization End ***************************
 
 		// START - RAJ Remove post back on Modals
@@ -1633,6 +1660,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 // 2.8 | 2022-08-02 | mmcc | Patch DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer.
 //                                      In Server script, format if's in 1. CUSTOM: CLASSIFICATION BAR section but no comments.
 //                                      Changes made in Server script.
+// 2.8 | 2022-08-04 | raj | DFCT0011124 - New Task form does not reload to "Task form with Tabs" when user clicks "Save as a Draft" button on the "Delete form modal"
+//                      Updates in Client Script
+// 2.8 | 2022-08-06 | mmcc | DFCT0010866 - Too many scroll bars are displaying  on the split view on Document Management, and Delegation View
+//                                      In HTML, Add CSS to put space between Tabs bottom border and related list table
+//                                      In Client controller, add case document_management and task_delegation_view to many functions
+//                                      Changes made in HTML and Client controller.
+// 2.8 | 2022-08-07 | raj | Tasker Groups Management - return sys_id to shred on a new record and add save button to main from for groups table as OOTB Servicenow puts the save button in menu instead of on screen
+//                      Updates in Client Script and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2275,17 +2310,15 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4400</sys_mod_count>
+        <sys_mod_count>4405</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-08-03 03:32:12</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-08 00:25:38</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2512,9 +2545,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
 
     <!-- RELATED LIST - DFCT0011062 - need to show tab content for attachments -->
-    <div ng-if="data.tabCount>1">
-      <div style="margin-bottom: 7px; padding-bottom: 7px; border-bottom: 1px solid #fff;">
-
+    <div ng-if="data.tabCount>1" class="dtech-tabs-min-height-standard dtech-pad-bottom-10">
+      <div>
         <ul class="nav nav-tabs" role="tablist">
 
           <!-- STRY0122687 fix active tab issue on reload -->

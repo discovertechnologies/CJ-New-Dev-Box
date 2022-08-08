@@ -1,0 +1,1559 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function($scope,$location,$rootScope,spModal,$uibModal,spUtil,amb,$timeout,$log) {
+  /* widget controller */
+  var c = this;
+	var CONST_DISABLED_ANCHOR_CLASS = "dtech-a-disabled";
+	var CONST_ENABLED_ANCHOR_CLASS = "dtech-a-enabled";
+
+	main();
+	function main(){
+		c.data.currentProperty = undefined;
+		c.currentTab = null;
+		c.countSelected=null;
+		c.allGroupsSelected = false;
+		// if no category set, loading them all, 
+		// if Groups Management, load group management
+		if(!c.data.category || 
+			 c.data.category=="" || 
+			 c.data.category == "Groups Management"){
+			c.data.groupProperties=	_loadGroupSettings();	
+			_setAllValidatingProperties(false);
+		}
+	}
+	
+	// ***********************************************************
+	// START - Gropus Management Category - properties
+	// ***********************************************************	
+	// This is used for all references properities that use groups.
+	// currently only the Groups Management categetory
+	
+	// *******************************************
+	// START WIDGET CONTROL FUNCTIONS
+	// *******************************************
+	function _getClass(enabled){
+		var className;
+		className = CONST_DISABLED_ANCHOR_CLASS;
+		if(enabled){
+			className = CONST_ENABLED_ANCHOR_CLASS;
+		}
+		return className; 
+	}	
+	$scope.changeSelectedProperty = function(property){
+		_changeSelectedProperty(property);
+	}
+	$scope.selectCount = function(countSelected){
+		_selectCount(countSelected);
+	};
+	$scope.onChange_uses_groups_for_roles = function(property){
+		_updateIsDirty();
+	}
+	
+	$scope.changeSelectedGroup = function (property){
+		$scope.validateGroup(property);
+		_updateIsDirty();		
+	}
+	
+	$scope.isCountSelected = function(countIcon){
+		var countIconSelected = countIcon == c.countSelected;
+		return countIconSelected;
+	}	
+	
+	function _replacePropertyReturned(){
+		_clearValidatingFlag($scope.data.replaceProperty);
+		$scope.data.properties = _findAndReplaceProperty($scope.data.properties, $scope.data.replaceProperty);
+		_setAllValidatingProperties(false);
+		// move the selected property and refresh the property data to what is returned from the server
+		_changeSelectedProperty($scope.data.replaceProperty);
+	}
+	// *******************************************
+	// END WIDGET CONTROL FUNCTIONS
+	// *******************************************
+
+
+	// *******************************************
+	// START SYNC ALL
+	// *******************************************
+	$scope.syncAll = function(){
+		_syncAll();
+	}
+	$scope.validateGroup = function(property){
+		$scope.data.submitting=true;
+		property.validating = true;
+		// post back to check group
+		$scope.data.validateGroup=true;
+		$scope.data.groupProperty = property;
+		spUtil.update($scope).then(function(){
+			// turned off after timer below - see _clearValidatingFlag function
+			//$scope.data.submitting=false;
+			$scope.data.validateGroup=false;
+			_replacePropertyReturned();
+		});
+	}
+	// *******************************************
+	// END SYNC ALL
+	// *******************************************
+	
+	// *******************************************
+	// START ADD GROUP MENU OPTION
+	// *******************************************
+	$scope.allowAddGroup = function(property){
+		var canAddGroup = !c.data.submitting &&
+				(!property.value ||
+				 property.value=='undefined' ||
+				 property.value.value=='');
+		return canAddGroup;
+	}
+	$scope.classAllowAddGroup = function(property){
+		var canAddGroup = $scope.allowAddGroup(property);
+		return _getClass(canAddGroup);
+	}
+	$scope.addGroup = function(property){
+		c.data.addProperty = property;
+		spModal.open({
+			title: c.data.addGroup,
+			message: '',
+			backdrop: 'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: {
+				table: "sys_user_group",
+				sys_id: -1,
+				hideRelatedLists: true,
+				// STRY0115843
+				omitHeader: false,
+				bifold: false,
+				hideAttachmentBtn: true,
+				isModal: true
+			},
+			shared: {},
+			size: 'lg',
+			buttons: [],
+			// 2.7.2 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+			footerStyle: {
+				'display': 'none'
+			}
+		});
+	}
+	
+	function _groupAdded(event, params) {
+		if(!c.data.addProperty.value){
+			c.data.addProperty.value = {};
+		}
+		// TODO - the line below does not seem to update the picker
+		c.data.addProperty.value.value = params.rec_sys_id;
+
+	}
+	var unregister_ui_action_complete_triggered = $rootScope.$on("sp.form.ui_action.uiActionComplete", _groupAdded);
+	$scope.$on("$destroy", function() {
+		unregister_ui_action_complete_triggered();
+	});
+
+	// *******************************************
+	// END ADD GROUP MENU OPTION
+	// *******************************************
+
+	// *******************************************
+	// START EDIT GROUP MENU OPTION
+	// *******************************************
+	$scope.allowEditGroup = function(property){
+		var canEditGroup = !c.data.submitting &&
+				property.value &&
+				property.value!='undefined' &&
+				property.value.value!='';
+		return canEditGroup;
+	}
+	
+	$scope.classAllowEditGroup = function(property){
+		var canEditGroup = $scope.allowEditGroup(property);
+		return _getClass(canEditGroup);
+	}
+
+	$scope.editGroup = function(property){
+		spModal.open({
+			title: c.data.editGroup,
+			message: '',
+			backdrop: 'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: {
+				table: "sys_user_group",
+				sys_id: property.value.value,
+				hideRelatedLists: false,
+				// STRY0115843
+				omitHeader: false,
+				bifold: false,
+				hideAttachmentBtn: true,
+				isModal: true
+			},
+			shared: {},
+			size: 'lg',
+			buttons: [],
+			// 2.7.2 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+			footerStyle: {
+				'display': 'none'
+			}
+		});
+	};
+	// *******************************************
+	// END EDIT GROUP MENU OPTION
+	// *******************************************
+	
+	// *******************************************
+	// START SYNC GROUP MENU OPTION
+	// *******************************************
+	$scope.allowSyncGroup = function(property){
+		var canSyncGroup = !c.data.submitting &&
+				property.value &&
+				property.value!='undefined' &&
+				property.value.value!='';
+		return canSyncGroup;
+	}
+	
+	$scope.classAllowSyncGroup = function(property){
+		var canSyncGroup = $scope.allowSyncGroup(property);
+		return _getClass(canSyncGroup);
+	}
+	// *******************************************
+	// END SYNC GROUP MENU OPTION
+	// *******************************************
+
+	// *******************************************
+	// START ENABLE GROUP ROLE MANAGEMENT
+	// *******************************************
+	$scope.is_property_uses_groups_for_roles = function(property){
+		var isPropertyUsesGroupsForRoles = property.name=='x_153465_discovert.uses_groups_for_roles';
+		return isPropertyUsesGroupsForRoles;
+	}
+	
+	$scope.aGroupSelectedUsesGroupsForRolesNotSet = function(property){
+		var showWarning = false;
+		showWarning = c.atLeastOneGroupSelected && property.value!='true' && property.value!=true;
+		return showWarning;
+	}
+	
+	$scope.allowUsesGroupsForRoles = function(property){
+		var allowChangeUsesGroupsForRoles;
+		allowChangeUsesGroupsForRoles = c.allGroupsSelected ||
+			property.value== 'true' || property.value==true;
+		return allowChangeUsesGroupsForRoles;
+	}
+	// *******************************************
+	// END ENABLE GROUP ROLE MANAGEMENT
+	// *******************************************
+
+	// *********************************
+	// START GROUP SELECTED
+	// *********************************
+	$scope.isGroupSelected = function(property){
+		var isGroupSelected = property.validation && property.validation.groupSelected;
+		return isGroupSelected;
+	}
+	
+	// this is slightly different than is group selected b/c validation needs to be complete
+	// for us to want to show the warning
+	$scope.showGroupNotSelected = function(property){
+		var showGroupSelected = property.validation && !property.validation.groupSelected;
+		return showGroupSelected;
+	}
+	// *********************************
+	// END GROUP SELECTED
+	// *********************************
+	
+	// *********************************
+	// START GROUP HAS ROLE
+	// *********************************
+	// this is slightly different than is group missing role b/c validation needs to be complete
+	// for us to want to show the warning
+	$scope.showGroupMissingRole = function(property){
+		var showGroupMissingRole = property.validating==false &&
+				property.validation && 
+				property.validation.groupSelected  &&
+				!property.validation.groupHasRole;
+		return showGroupMissingRole;
+	}
+	$scope.allowFixGroupHasRole = function(property){
+		var isGroupSelected = $scope.isGroupSelected(property);
+		var groupHasRole = property.validation && property.validation.groupHasRole;
+		var allowFixRole = !c.data.submitting && 
+				isGroupSelected && !groupHasRole;
+		return allowFixRole;
+	}	
+	$scope.classFixGroupHasRole = function(property){
+		var allowFixRole = $scope.allowFixGroupHasRole(property);
+		return _getClass(allowFixRole);		
+	}
+	$scope.onAddGroupToRole = function(property){
+		$scope.data.submitting=true;
+		$scope.data.addRoleToGroup=true;
+		$scope.data.groupProperty = property;
+		spUtil.update($scope).then(function(){
+			$scope.data.submitting=false;
+			c.data.addRoleToGroup = false;
+		});		
+	}
+	// *********************************
+	// END GROUP HAS ROLE
+	// *********************************
+	
+	// *********************************
+	// START MOVE USERS TO GROUP
+	// *********************************
+	$scope.showMigrateExplicitUsersToGroup = function(property){
+		var showMigrateMessage = property.validation.explicitRoleCount > 0;
+		return showMigrateMessage;
+	}
+	$scope.allowMigrateExplicitUsersToGroup = function(property){
+		var isGroupSelected = $scope.isGroupSelected(property);
+		var allowFixRole = !c.data.submitting && 
+				isGroupSelected && 
+				property.validation.explicitRoleCount > 0;
+		return allowFixRole;
+	}	
+	$scope.classFixMigrateExplicitUsersToGroup = function(property){
+		var allowFixMigrate = $scope.allowMigrateExplicitUsersToGroup(property);
+		return _getClass(allowFixMigrate);
+	}
+	$scope.migrateRoleUsersToGroup = function(property){
+		$scope.data.submitting=true;
+		$scope.data.migrateRoleUsersToGroup=true;
+		$scope.data.groupProperty = property;
+		spUtil.update($scope).then(function(){
+// TODO - update this to match other calls to get results back in property
+			$scope.data.submitting=false;
+			c.data.migrateRoleUsersToGroup = false;
+		});				
+	}	
+
+	// *********************************
+	// END MOVE USERS TO GROUP
+	// *********************************
+	
+	// ***********************************************
+	// START SYNC ROLE TO ORGANIZATIONAL MEMBERS TABLE
+	// ***********************************************
+	$scope.showRoleSyncWarn = function(property){
+		var showRoleSync = c.data.currentGroupMemberCount!=c.data.currentRoleMemberTableRoleCount;
+		return showRoleSync;
+	}
+	$scope.classRoleSync = function(property){
+		var allowFix = $scope.allowRoleSync(property)
+		return _getClass(allowFix);
+	}
+	$scope.allowRoleSync = function(property){
+		var allowFixRole = !c.data.submitting;
+		return allowFixRole;
+	}	
+	$scope.syncRoleMemberTable=function(property){
+		$scope.data.submitting=true;
+		$scope.data.syncMembersInMemberTableWithRole=true;
+		$scope.data.groupProperty = property;
+		spUtil.update($scope).then(function(){
+			$scope.data.submitting=false;
+			c.data.syncMembersInMemberTableWithRole = false;
+			_replacePropertyReturned();
+		});
+		
+	}
+	// ***********************************************
+	// END SYNC ROLE TO ORGANIZATIONAL MEMBERS TABLE
+	// ***********************************************
+	
+	// ***********************************************************
+	// END - Gropus Management Category - properties
+	// ***********************************************************
+	
+	// ***********************************************************
+	// START - used for all properties and categories
+	// ***********************************************************
+	// STRY0122687 - fix active tab not working issue
+	$scope.setActiveTab = function( activeTab ){
+		c.currentTab = activeTab;
+	};
+
+	$scope.getActiveTab = function(){
+		return c.currentTab;
+	};
+
+	$scope.isActiveTab = function( tabName, index ){
+		var activeTab = $scope.getActiveTab();
+		$log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - activeTab: " + activeTab + " - retrun value: " + ( activeTab === tabName || ( activeTab === null && index === 0 ) ));		
+		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
+	};
+
+	// reset all properies to the original value
+	$scope.onCancel = function(property){
+		
+		spModal.confirm(c.data.cancelChangesWillBeLost).then(function(confirmed) {
+			if (confirmed) {
+				// resetting didn't load the names back into the group
+				// for now reload from system by calling validate all again
+				/*
+						c.data.properties.forEach(function(property) {
+							if(typeof property.value == "object"){
+								property.value.value = property.originalValue;
+							} else {
+								property.value = property.originalValue;
+							}
+						});
+				*/
+				_reloadData();
+			}
+		});
+	}
+	
+	$scope.onSubmit = function() {
+		$scope.data.submitting = true;
+		$scope.data.properties = c.data.properties;
+		$scope.data.saveProperties=true;
+		// post back with loaded flase to reload data
+		$scope.data.loaded=false;
+		spUtil.update($scope).then(function(){
+			$scope.data.saveProperties=false;
+			$scope.data.submitting = false;
+			// reload client
+			main();
+			c.data.isDirty=false;
+			
+		});
+		
+	};
+	// ***********************************************************
+	// END - used for all properties and categories
+	// ***********************************************************
+
+	// ***********************************************************
+	// START - Gropus Management Category - properties
+	// ***********************************************************	
+	// This is used for all references properities that use groups.
+	// currently only the Groups Management categetory
+	function _reloadData() {
+		$scope.data.submitting=true;
+		// post back with loaded flase to reload data
+		$scope.data.loaded=false;
+		spUtil.update($scope).then(function(){
+			// turned off after timer below - see _setAllValidatingProperties function
+			$scope.data.submitting=false;
+			// reload client
+			main()
+			c.data.isDirty=false;
+		});
+	}
+	
+	function _selectCount(countSelected){
+		c.countSelected = countSelected;
+		_loadMemberData(countSelected);		
+	}	
+	
+	function _changeSelectedProperty(property){
+		c.currentTab = 'Counts';
+		c.data.currentProperty = property;
+		_setCountsAndWarningFlags(property);
+		c.data.dataTables = [];
+		loadKnowledgeArticleWidget(property);
+		_selectCount(c.data.groupMembersIcon);
+	}
+	
+	function _setCountsAndWarningFlags(property){
+		c.data.currentValidationCompleted = false;
+		c.data.currentGroupMemberCount = 0; 
+		c.data.currentExplicitRoleCount = 0; 
+		c.data.currentRoleMemberTableRoleCount = 0;
+		// set error and warning flags for selected property
+		c.data.currentValidated = false;
+		
+		if(property.validation){
+			c.data.currentValidationCompleted = true;
+		}
+		
+		// set validation flag
+		if(c.data.currentValidationCompleted){
+			// set current counts
+			c.data.currentGroupMemberCount = property.validation.groupMemberCount;
+			c.data.currentExplicitRoleCount = property.validation.explicitRoleCount;
+			c.data.currentRoleMemberTableRoleCount = property.validation.roleMemberTableRoleCount;
+		}
+    
+	}
+	function loadKnowledgeArticleWidget(property){
+		c.data.widgetInstanceKBArticles = [];
+		if(!property.KBArticle){
+			$location.search("sys_kb_id","").search("sysparm_article", "").search("spa",1);
+		} else {
+//alert("RJ - testing - property.KBArticle: " + property.KBArticle);
+			$location.search("sys_kb_id", c.data.dtech_knowledged_base_id).search("sysparm_article", property.KBArticle).search("spa",1);			
+			var widget_name = "kb-article-content"
+			var widget_parameters = { 
+			}
+			spUtil.get(widget_name, widget_parameters).then(function(response) {
+				c.data.widgetInstanceKBArticles.push(response);
+				loadKnowledgeRelatedArticleWidget(property);
+			});			
+		}
+	}
+	
+	function loadKnowledgeRelatedArticleWidget(property){
+		c.data.widgetInstanceKBRelatedArticles = [];
+		
+		var widget_name = "tasker_knowledge_list_widget_template";
+		var widget_parameters = {};
+
+
+//		var widget_name = "kb-list-widget-template";
+//		var widget_name = "kb_related_articles";
+//		var widget_name = "kb-list-widget-template";
+//		var widget_parameters = {
+//			options:{"source_id": "587d1212db8d99501e1792c5d496192e"}
+//		};
+//	var widget_parameters = {
+//				"source_id": c.data.dtech_knowledged_base_id,
+//				"sysparm_article": property.KBArticle
+//		};
+		spUtil.get(widget_name, widget_parameters).then(function(response) {
+			var widgetKBRelatedArticles = response;
+//			widgetKBRelatedArticles.options = {
+//				"sysparm_article": property.KBArticle
+//			};
+			c.data.widgetInstanceKBRelatedArticles.push(widgetKBRelatedArticles);
+		});
+/*
+
+		var widget_name = "discovertasker-widget-data-table";
+		var widget_parameters = {};
+		widget_parameters.table = 'kb_2_kb';
+//		widget_parameters.sys_id="";
+		widget_parameters.filter = "^kb_knowledge.number=" + property.KBArticle;
+		widget_parameters.bifold=true;
+		widget_parameters.open_new_in_modal=true;
+		widget_parameters.open_row_details_in_modal=true;
+		widget_parameters.enable_filter=true;
+		spUtil.get(widget_name, widget_parameters).then(function(response) {
+			c.data.widgetInstanceKBRelatedArticles.push(response);
+		});
+*/		
+	}	
+		function _syncAll() {
+		$scope.data.submitting=true;
+		// post back to validate all groups
+		$scope.data.syncAll=true;
+		spUtil.update($scope).then(function(){
+			$scope.data.submitting=false;
+			$scope.data.syncAll=false;
+			_allGroupValidationCompleted();
+		});
+	}
+	
+	function _validateAllGroups() {
+		_setAllValidatingProperties(true);
+		$scope.data.submitting=true;
+		// post back to validate all groups
+		$scope.data.validateAllGroups=true;
+		spUtil.update($scope).then(function(){
+			// turned off after timer below - see _setAllValidatingProperties function
+			//$scope.data.submitting=false;
+			$scope.data.validateAllGroups=false;
+			_allGroupValidationCompleted();
+		});
+	}
+	function _allGroupValidationCompleted(){
+		$timeout(function(){
+			// - return from server sets validating to false
+			 _setAllValidatingProperties(false);
+		},1000);
+	}
+	function _loadGroupSettings(){
+		var groupProperties = {};
+		// set up group controls
+		groupProperties.query='active=true';
+		groupProperties.displayFields='name,manager,email';
+		groupProperties.displayField='name';
+		groupProperties.valueField='sys_id';
+		groupProperties.searchFields = 'name,manager,email';		
+		groupProperties.table = "sys_user_group";
+		// set up group controls
+		return groupProperties;
+	}
+	function _loadMemberData(countSelected){
+		c.data.dataTables = [];
+		var widget_name = "discovertasker-widget-data-table"
+		var widget_parameters = {};
+
+		switch (countSelected){
+			case c.data.groupMembersIcon:
+				widget_parameters.table = 'sys_user_grmember';
+				widget_parameters.filter= '^group=' + c.data.currentProperty.value.value;
+				break;
+				// Using e here b/c explicit and role members use same icon right now
+				// this may change with better udnerstanding of Shawn's latest layouts
+			case c.data.explicitRoleUsersIcon:
+				widget_parameters.table = 'sys_user_has_role';
+				widget_parameters.filter= '^role.name=' + c.data.currentProperty.roleName +
+					'^inherited=false';
+				break;
+			case c.data.roleMembersIcon:
+				widget_parameters.table = 'sys_user_has_role';
+				widget_parameters.filter= '^role.name=' + c.data.currentProperty.roleName;
+				break;				
+			case c.data.memberTableRoleIcon:
+				widget_parameters.table = 'x_153465_discovert_discover_office_members';
+				widget_parameters.filter= '^' + c.data.currentProperty.memberTableFieldName + '=true';
+				// todo figure out if/how to do distinct list
+				break;				
+		}
+		if(widget_parameters.table){
+			widget_parameters.bifold=true;
+			widget_parameters.open_new_in_modal=true;
+			widget_parameters.open_row_details_in_modal=true;
+			widget_parameters.enable_filter=true;
+			spUtil.get(widget_name, widget_parameters).then(function(response) {
+				c.data.dataTables.push(response);
+			});
+		}
+	}	
+	function _setAllValidatingProperties(value){
+		var allGroupsSet = true;
+		var atLeastOneGroupSet = false;
+		for (var i = 0; i < c.data.properties.length; i++) {
+			var property = c.data.properties[i];
+			if (property.name != "x_153465_discovert.uses_groups_for_roles") {
+				// if no current property, then set to first property found
+				// wait until validating is finished which is when value is false
+				if(!c.data.currentProperty && value == false){
+					_changeSelectedProperty(property);
+				}
+				property.validating=value;
+				if(!property.value || 
+					 !property.value.value || 
+					 property.value.value==''){
+					allGroupsSet=false;
+				} else {
+					atLeastOneGroupSet=true;
+				}
+			}
+		}
+		c.allGroupsSelected=allGroupsSet;
+		c.atLeastOneGroupSelected=atLeastOneGroupSet;
+		$scope.data.submitting=false;
+	}
+	function _clearValidatingFlag(property){
+		$timeout(function(){
+			// - return from server sets validating to false
+			property.validating = false;
+			$scope.data.submitting=false;
+		},1000);
+	}
+	
+	function _findAndReplaceProperty(properties, replaceProperty) {
+		for (var i = 0; i < properties.length; i++) {
+			var property = properties[i];
+			if (property.name == replaceProperty.name) {
+				properties[i] = replaceProperty;
+				break;
+			}
+		}
+		return properties;
+	}
+	function _updateIsDirty(){
+		var isDirty=false;
+		// loop through properties check original value vs current
+		// set isDirty flag
+		c.data.properties.forEach(function(property) {
+			if(typeof property.value == "object"){
+				if(property.originalValue != property.value.value){
+					if(property.originalValue==null){
+						if(property.value!=null && property.value.value != ""){
+							isDirty=true;
+						}
+					} else {
+						isDirty=true;						
+					}
+				}
+			} else {
+				if(property.originalValue != property.value){
+					isDirty=true;
+				}				
+			}
+		});
+
+		c.data.isDirty=isDirty;
+	}
+	// ***********************************************************
+	// END - Gropus Management Category - Functions
+	// ***********************************************************
+
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>progress {
+  margin: 4px;
+}
+
+progress:indeterminate {
+  width:100%;
+  height:20px;
+}
+#group_properties{
+  flex-grow: .4 0 500px;
+}
+#group_information{
+  flex-grow: .6;
+}
+
+.dtech-a-disabled {
+  white-space: nowrap;
+  cursor: not-allowed;
+  opacity:.5;
+}
+.dtech-a-enabled {
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dtech-panel-bottom{
+  margin-bottom:5px;
+}
+.dtech-properties-groupsmanagement-widget-container{
+  max-height: -webkit-fill-available; 
+}
+
+.dtech-group-properties-information-tabcontent{
+  display:flex;
+  flex-direction:column;
+  flex-grow:1;
+  margin:5px;
+  overflow:auto;
+}
+.dtech-kb-container{
+  display:flex;
+  overflow:auto;
+}
+/* only in this widget used to remove grey background */
+.circle-error {
+  border: 1px solid gray;
+  color: danger;
+  border-radius: 50%;
+  margin: 9px 5px 5px 5px;
+  width: 12px;
+  height: 12px; 
+  display: inline-block;
+}
+.dtech-btn-icon {
+  background:transparent;
+}
+/* used to create space around buttons */
+.dtech-margin-all-10 {
+  margin:10px;
+}
+
+.dtech-margin-left-10{
+  margin-left:10px;
+}
+/* used for warning messages */
+.dtech-property-warning-message {
+  padding:3px;
+  background-color:#f5f5f5;
+}
+/* used to lower tabs */
+.dtech-pad-top-5 {
+  padding-top:5px;
+}
+.dtech-pad-left-5 {
+  padding-left:5px;
+}
+/* this class is used to set focus.  
+It is the same style as the servicenow btn:focus 
+TODO - We may want to move into global class*/
+.dtech-btn-focus {
+  box-shadow: 0 0 0 1.5px #66afe9;
+  outline: 4px solid transparent;
+}
+
+/* sets the width for the filter text */
+.dtech-filter-width-200 {
+    width: 200px;
+}
+
+/* set the border for the active button */
+.dtech-filter-btn:active  {
+  border: 2px solid rgba(20, 146, 230, 1);
+} 
+
+.dtech-btn:hover{
+  background-color: rgba(217, 237, 247, 1);
+  border: 2px solid rgba(217, 237, 247, 1);
+} 
+
+/* set the hover boarder and background color */
+.dtech-filter-btn:hover{
+  background-color: rgba(217, 237, 247, 1);
+  border: 2px solid rgba(217, 237, 247, 1);
+} 
+
+/* sets border for disabled button*/
+.dtech-filter-btn:disabled {
+  border: 2px solid rgba(20, 146, 230, 1);
+} 
+
+/* font to make the name bolder than the descripiton */
+.dtech-font-property-name{
+  padding-top:10px;
+  color: rgba(0, 0, 0, 1);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;  
+}
+/* font to make the count number bolder and align left */
+.dtech-font-count {
+  color: rgba(0, 0, 0, 1);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+} 
+
+/* sets disabled count */
+.dtech-font-count:disabled {
+  color: rgba(175, 188, 194, 1);
+} 
+
+/* sets the font for the text of the count */
+.dtech-font-description {
+  color: rgba(117, 117, 117, 1);
+  font-size: 14px;
+  font-weight: 400;
+} 
+
+/* this comes over from portal filter */
+.dtech-border-none {
+  border:none;
+}
+
+.dtech-dropdown-header {
+  /* color: #3A3F51; */
+  font-size: 14px;
+  font-weight: 500;
+  /* 2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Added padding */
+  padding: 10px 20px;
+}
+
+/* Bootstrap 3.3.6 default: .dropdown-menu &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; a:focus { */
+/* this overrides the defaults for dropdown items for the filter menu*/
+.dropdown-menu &gt; li &gt; ul &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; ul &gt; li &gt; a:focus {
+  text-decoration: none;
+  color: #2f3342;
+  background-color: #f5f5f5;
+}
+
+/* this sets the color for the count badge for filter items*/
+.badge {
+  background-color: $banner-count-bg;
+  color: $banner-count-text;
+  /* 2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Added height for badge */
+  height: 20px;
+}
+/* Must be a descendant of the class dtech-box */
+.dtech-box .dtech-flex-space-15px {
+  width: 15px;
+}
+.dtech-dropdown-menu-align-right{
+  right: 0;
+  left: auto;
+}
+
+.dtech-filter-menu {
+  /*
+  2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Added box-shadow
+  Note using rgba, (Red Green Blue Alpha) that controls the opacity or transparency 
+  that follows the same percentage scheme: 0% represents absolute transparency and 100% represents absolute opacity 
+  */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, .25); /* yields: box-shadow: 0 6px 12px rgb(0 0 0 / 25%); */
+  right: 45px; /* aligns with right side of the count control*/
+  left: auto; /* allows width to grow as needed */
+  
+
+}
+
+.dtech-margin-right-5px {
+  margin-right: 5px;
+}
+
+.dtech-inline-start {
+  padding-left: 15px;
+}
+
+.dtech-pad-top-5px {
+  padding: 5px 0;
+}
+
+.dtech-scrollable-menu {
+  height: auto;
+  /* 2.7.0 | 2021-08-19 | mmcc | STRY0107445 - Filter Menu – CSS Adjustments – Menu Sizing; Changed max-height, was 500 */
+  max-height: 700px;
+  overflow-x: hidden;
+}
+
+.dtech-subMenu {
+  list-style-type: none;
+  padding: 2px 0;
+}
+
+.dtech-subMenu-item {
+  color: #3A3F51;
+  font-size: 14px;
+  font-weight: normal;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tasker_properties</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Tasker Properties</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+ *  The Government's rights to use, display, or disclose this software are restricted.
+ *  Any reproduction of computer software, computer software documentation,
+ *  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+// Below is a list ot things still to do before shipping
+// ******************************************************
+// review all todo's in the code and update them
+// sync all member table is completed
+// need to put statistics about rows changed somewhere
+// sync all update sycn all of member table to process table one time
+//		- REVIEW AND ADD ERROR MESSAGES FROM FUNCTIONS
+//    - TRAP ADD CLICK FROM ADD GROUP AND LOAD GROUP ADDED INTO GROUP
+//         - Add is being trapped, but the picker is not being updated yet
+//		- BUILD AND EMBED KNOWLEDGE BASE WIDGETS
+//		- BUILD OUT STUBS FOR INITAL SET OF KNOWLEDGE ARTICLES
+// CREATE SCRIPTS TO RESET TO ROLE
+// RUN SCRIPT TO RESET ROLE
+// WALK THROUGH PROCESS TO SET UP
+// WALK THROUGH AND RECORD PROCESS TO SET UP
+// ******************************************************
+(function($sp, input, data, options, gs) {
+
+	var tsss = new tasking_System_Settings_Scripts();
+	// NOTE: add option and input for category 
+	//       add query to display only properities in category
+	//       show all categories or show just provided category
+	//  STRY0113883 - reworked code flow
+// TODO - MOVE THIS INTO TSS - tsss.DTECH_KNOWLEDGE_BASE_ID = "ddba8256db4d99501e1792c5d496195a"
+	// data.kb_sys_id = tsss.DTECH_KNOWLEDGE_BASE_ID;
+	data.dtech_knowledged_base_id = "ddba8256db4d99501e1792c5d496195a";
+	
+	main();
+	
+	function main() {
+		if(input){
+			_processInput();
+		}
+		if(!input || !input.loaded){
+			 _initialLoad();
+			data.loaded = true;
+		}
+	}
+	
+	function _initialLoad(){
+		data.category = (input || {}).category || (options || {}).category || $sp.getParameter('category');
+		data.showCatecoryHeader = (input || {}).showCatecoryHeader || (options || {}).showCatecoryHeader || $sp.getParameter('showCatecoryHeader');
+		data.properties = [];
+		// pass category here, or load all
+		data.properties = _loadProperties(data.category);
+		_buildMessages();		
+		_validateAllGroups();
+	}
+
+	function _loadProperties(categoryName){
+		return tsss.loadCategoryProperties(categoryName);
+	}
+	
+	
+	function _buildMessages() {
+		data.cancelButtonText = gs.getMessage('cancel');
+		data.submitButtonText = gs.getMessage('Tasker - Button - Save Changes');
+
+		data.addGroupToRoleButtonText = gs.getMessage('Tasker - Button - Add the role now...');
+		data.addGroupToRoleToolTip = gs.getMessage('Tasker - Add the role [{0}] to the group [{1}]');
+		
+		data.sync = gs.getMessage('Tasker - Sync');
+		data.editGroup = gs.getMessage('Tasker - Edit Group');
+		data.addGroup = gs.getMessage('Tasker - Add Group');
+		data.syncGroup = gs.getMessage('Tasker - Sync Group');
+		data.groupMissingRole = gs.getMessage('Tasker - The group is missing the role');
+		data.information = gs.getMessage('Tasker - Information');
+		data.groupMembers = gs.getMessage('Tasker - Group Members');
+		data.showGroupMembersList = gs.getMessage('Tasker - Show group members list');
+		data.syncMoveExplicitUsersToGroup = gs.getMessage('Tasker - Move users assigned explicitly to the role into the group.');
+		data.explicitRoleUsers = gs.getMessage('Tasker - Has Role Explicitly');
+		data.explicitWarningTitle = gs.getMessage('Tasker - Users explicitly assigned to role');
+		data.showExplicitRoleUsers = gs.getMessage('Tasker - Show users with role set explicitly');
+		data.usersWithExplicitRole = gs.getMessage('Tasker - ({0}) users have the role [{1}] explictly assigned to them');
+		data.addUsersToGroupRemoveRole = gs.getMessage('Tasker - Remove the explicit assignment of users with role [{0}] and add the users to the the group [{1}]');
+		data.roleMembers = gs.getMessage('Tasker - Role Members');
+		data.showRoleMembersList = gs.getMessage('Tasker - Show all role members list');
+		data.memberTableRoles = gs.getMessage('Tasker - Member Table Roles');
+		data.showMemberTableRolesList = gs.getMessage('Tasker - Show list of Organizational Members with role');
+		data.errorGroupNotSelected = gs.getMessage('Tasker - A group is not selected for the role.  Select a group to resolve.');
+		data.warningAllGroupsNotSelected = gs.getMessage('Tasker - To enable using groups for roles, a group must be selected for each system role.');
+		data.fixIt = gs.getMessage("Tasker - Let's fix it...");
+		data.memberTableRoleDescription = gs.getMessage("Tasker - Member Table Role description");
+		data.memberTableRoleCompareGroupMembers = gs.getMessage("Tasker - The 'Member Table Role' count does not match the 'Group Members' count.");
+		data.memberTableRoleCompareRoleMembers = gs.getMessage("Tasker - The 'Member Table Role' count does not match the 'Role Members' count.");		
+		data.syncRoleMembersAndMemberTableRole = gs.getMessage("Tasker - Sync the 'Role Members' with the 'Member Table Role'");
+		data.warningAGroupSelectedWarning = gs.getMessage("Tasker - warningAGroupSelectedWarning");
+		data.cancelChangesWillBeLost = gs.getMessage("Tasker - Cancelling updates will revert the changes made and reload the previously saved settings.   <br> <br> Would you like to reset to the previous values?")
+		
+		data.syncIcon = "Sync24.svg";
+		data.warningIcon = "Warning16.svg"
+		data.ellipsesIcon = "EllipsesMenu32.svg";
+		data.editGroupIcon = "EditGroup24.svg";
+		data.addGroupIcon = "AddGroup24.svg";
+		data.informationIcon = "Information16_Black.svg"		
+		data.groupMembersIcon = "GroupMembers24.svg"
+		data.explicitRoleUsersIcon = "RoleMemberExplicitly24.svg"
+		data.roleMembersIcon = "RoleMember24.svg"
+		data.memberTableRoleIcon = "TableRole24.svg"
+		data.errorIcon = "Error16.svg"
+	}
+	
+	function _processInput(){
+		if(input.saveProperties){
+			_saveProperties();
+		} else if(input.validateGroup){
+			_validateGroup();
+		} else if(input.validateAllGroups){
+			data.properties = input.properties;
+			_validateAllGroups();
+		} else if(input.addRoleToGroup){
+			_addRoleToGroup();
+		} else if(input.migrateRoleUsersToGroup){
+			_migrateRoleUsersToGrup();
+		} else if(input.syncMembersInMemberTableWithRole){
+			_syncMembersInMemberTableWithRole();
+		} else if(input.syncAll){
+			_syncAllGroupRoles();
+		}
+	}
+
+	function _validateAllGroups(){
+		for (var i = 0; i < data.properties.length; i++) {
+			var property = data.properties[i];
+			if (property.name != "x_153465_discovert.uses_groups_for_roles") {
+				property = tsss.validateGroupRole(property);
+				data.properties[i]=property;
+			}
+		}
+	}
+	
+	function _validateGroup(){
+		input.groupProperty = tsss.validateGroupRole(input.groupProperty);
+		data.replaceProperty = input.groupProperty;
+	}
+
+	function _saveProperties(){
+		tsss.saveProperties(input.properties);
+	}
+
+	function _addRoleToGroup(){
+		// TODO - add error handling in server script
+		//        remove post to form and add error to property
+		//        update html to post message to screen in group area
+		// add role to group and set return value
+		data.roleAddedToGroup = tsss.addRoleToGroup(input.groupProperty);
+		if(data.roleAddedToGroup){
+			gs.addInfoMessage(gs.getMessage("Role: [{0}] was added to Group: [{1}]",[input.groupProperty.roleName, input.groupProperty.value.displayValue ]))
+		} else {
+			gs.addErrorMessage(gs.getMessage("Role: [{0}] was not added to Group: [{1}]",[input.groupProperty.roleName, input.groupProperty.value.displayValue ]))
+		}
+	}
+	
+	function _syncMembersInMemberTableWithRole(){
+		// call script include to process sync
+		tsss.syncMembersInMemberTableWithRole(input.groupProperty);
+		// run validation again, it will set the property to pass back
+		_validateGroup();
+	}
+	
+	function _syncAllGroupRoles(){
+	 data.properties = tsss.syncAllGroupRoles(input.properties);
+		_validateAllGroups();
+	}
+	
+	function _migrateRoleUsersToGrup(){
+		// TODO - add error handling in server script
+		//        remove post to form and add error and success to property
+		//        update html to post message to screen in group area
+		// migrate users form role to group and set return value
+		data.roleAUsersAdded = tsss.migrateRoleUsersIntoGroup(input.groupProperty);
+		if(data.roleAUsersAdded >= 0){
+			gs.addInfoMessage(gs.getMessage("Role: [{0}] migrated [{1}] users to Group: [{2}]",[input.groupProperty.roleName, data.roleAUsersAdded, input.groupProperty.value.displayValue ]))
+		} else {
+			gs.addErrorMessage(gs.getMessage("Error migrating users from Role: [{0}] to Group: [{1}]",[input.groupProperty.roleName, input.groupProperty.value.displayValue ]))
+		}
+	}	
+})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-06-27 15:18:51</sys_created_on>
+        <sys_id>c5b7ba56db5c9510991a6154ca96192b</sys_id>
+        <sys_mod_count>697</sys_mod_count>
+        <sys_name>Tasker Properties</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_c5b7ba56db5c9510991a6154ca96192b</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-08 05:14:55</sys_updated_on>
+        <template><![CDATA[<div class="dtech-topstick-posabso-rl-active flexbox dtech-w-100vw-10px">
+  <div id="group_properties"
+       class="panel panel-default flex-column dtech-panel-bottom">
+    <div ng-if="data.showCatecoryHeader"
+         class="panel-heading">
+      <div class="flex-row flex-nowrap">
+        <div class="flex-grow">
+          {{data.category}}  
+        </div>
+        <div >
+          <a ng-click="syncAll();">
+            <img ng-class="{'dtech-disabled': data.submitting,
+                           'dtech-enabled': !data.submitting}"
+                 src="{{::data.syncIcon}}" title="{{::data.sync}}"
+                 alt="{{::data.sync}}" />
+            <span>{{::data.sync}}</span>
+          </a>
+
+        </div>
+      </div>
+    </div>
+    <div class="panel-body dtech-overflow-auto flex-grow
+                dtech-margin-left-10">
+      <div ng-repeat="property in data.properties" >
+        <div ng-if="is_property_uses_groups_for_roles(property)">
+          <label>
+            <!-- groups can only be set if all groups are selected.  Allow disable, but do not allow enable unless all groups are set -->
+            <input type="checkbox" 
+                   ng-disabled="!allowUsesGroupsForRoles(property)"
+                   ng-model="property.value"
+                   ng-change="onChange_uses_groups_for_roles(property);"
+                   ng-true-value="'true'" ng-false-value="'false'">
+            {{property.description}}
+          </label>
+          <div ng-if="!allowUsesGroupsForRoles(property)"
+               class="dtech-box align-items-start dtech-property-warning-message">
+            <div class="flex-column">
+              <img class="align-items-start"
+                   src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
+                   alt="{{::data.warningAllGroupsNotSelected}}" />
+            </div>            
+            <span class="flex-grow dtech-pad-left-5" >{{::data.warningAllGroupsNotSelected}}</span>
+          </div>            
+          <br/>
+          <div ng-if="aGroupSelectedUsesGroupsForRolesNotSet(property)"
+               class="flex-row dtech-property-warning-message">
+            <div class="flex-column">
+              <img class="align-items-start"
+                   src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
+                   alt="{{::data.warningAllGroupsNotSelected}}" />
+            </div>
+            <span class="flex-grow dtech-pad-left-5" >{{::data.warningAGroupSelectedWarning}}</span>
+          </div>            
+          <br/>
+        </div>
+        <div ng-if="!is_property_uses_groups_for_roles(property)"
+             class="dtech-margin-left-10"
+             title="System Name - [{{property.name}}]">
+          <div class="dtech-font-property-name">
+            {{property.description}}  
+          </div>
+          <div ng-if="property.additionalNote"
+               class="dtech-font-description">
+            {{property.additionalNote}}
+          </div>
+          <div class="dtech-box">
+            <div class="flex-column flex-grow">
+              <sn-record-picker field="property.value" 
+                                sn-disabled="data.submitting"
+                                placeholder="${Select a Group}"
+                                table="data.groupProperties.table" 
+                                value-field="data.groupProperties.valueField" 
+                                display-field="data.groupProperties.displayField"
+                                display-fields="data.groupProperties.displayFields" 
+                                search-fields="data.groupProperties.searchFields"
+                                page-size="100" 
+                                on-change="changeSelectedGroup(property);"
+                                default-query="data.groupProperties.query">
+              </sn-record-picker>
+              <div ng-if="property.validating==true"
+                   class="dtech-box">
+                <div >
+                  ${Validating Group}
+                </div>
+                <div class="flex-grow">
+                  <progress></progress>
+                </div>
+
+              </div>
+              <div ng-if="showGroupNotSelected(property)"
+                   class="dtech-box dtech-property-warning-message">
+                <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
+                     alt="{{::data.errorGroupNotSelected}}" />
+                <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
+              </div>
+              <div ng-if="showGroupMissingRole(property)"
+                   class="dtech-box dtech-property-warning-message">
+                <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
+                     alt="{{::data.groupMissingRole}}" />
+                <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
+                <a ng-class="classFixGroupHasRole(property)"
+                   id="addGroupToRole"
+                   title="{{data.addGroupToRoleToolTip.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
+                   ng-click="allowFixGroupHasRole(property) && onAddGroupToRole(property);">{{data.addGroupToRoleButtonText}}
+                </a>
+              </div>
+              <div ng-show="showMigrateExplicitUsersToGroup(property)"
+                   class="dtech-box dtech-property-warning-message">
+                <img src="{{::data.warningIcon}}" 
+                     title="{{::data.explicitWarningTitle}}"
+                     alt="{{::data.explicitWarningTitle}}" />
+                <span class="flex-grow dtech-pad-left-5" >{{data.explicitWarningTitle}}</span>
+                <a ng-class="classFixMigrateExplicitUsersToGroup(property)"
+                   id="moveUsersFromRoleToGroup"
+                   title="{{data.addUsersToGroupRemoveRole.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
+                   ng-click="allowMigrateExplicitUsersToGroup(property) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
+                </a>
+              </div>
+              
+              <div ng-show="showRoleSyncWarn(property)"
+                   class="dtech-box dtech-property-warning-message"
+                   >
+                <img src="{{::data.warningIcon}}" 
+                     title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                     alt="{{::data.syncRoleMembersAndMemberTableRole}}" />
+                <span class="flex-grow dtech-pad-left-5" >{{data.syncRoleMembersAndMemberTableRole}}</span>
+                <a ng-class="classRoleSync(property)"
+                   id="memberTableRoleCompareRoleMembers"
+                   title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                   ng-click="allowRoleSync(property) && syncRoleMemberTable(property);">{{data.fixIt}}
+                </a>
+              </div>
+            </div>
+            <div class="dtech-box">
+              <div class="ng-scope dropdown label-tab dtech-filter-ellipses">
+                <div class="dropdown-toggle dtech-border-none dtech-pad-left-5 pointer dtech-btn" 
+                     type="button" id="dropdownMenu1"
+                     data-toggle="dropdown" 
+                     aria-haspopup="true"
+                     aria-expanded="false">
+                  <img src="{{::data.ellipsesIcon}}"/>
+                </div>
+                <ul role="menu"
+                    class="dtech-inline-start" 
+                    aria-labelledby="dropdownMenu1"
+                    id="filterMenu"
+                    class="dropdown-menu dtech-dropdown-menu-align-right dtech-scrollable-menu dtech-filter-dtech-border-none">
+                  <li class="dropdown-header dtech-dropdown-header"
+                      role="presentation">
+                    <a ng-click="allowEditGroup(property) && editGroup(property);"
+                       ng-class="classAllowEditGroup(property)"                       
+                       role="menuitem" aria-haspopup="true" aria-expanded="false">
+                      <img ng-class="{'dtech-disabled': !allowEditGroup(property),
+                                     'dtech-enabled': allowEditGroup(property)}"
+                           src="{{::data.editGroupIcon}}" title="{{::data.editGroup}}"
+                           alt="{{::data.editGroup}}" class="dtech-pad-all-10" />
+                      {{::data.editGroup}}
+                    </a>
+                  </li>
+                  <li class="dropdown-header dtech-dropdown-header"
+                      role="presentation">
+                    <a ng-click="allowAddGroup(property) && addGroup(property);"
+                       ng-class="classAllowAddGroup(property)"                       
+                       role="menuitem" aria-haspopup="true" aria-expanded="false"
+                       >
+                      <img ng-class="{'dtech-disabled': !allowAddGroup(property),
+                                     'dtech-enabled': allowAddGroup(property)}"
+                           src="{{::data.addGroupIcon}}" title="{{::data.addGroup}}"
+                           alt="{{::data.addGroup}}" class="dtech-pad-all-10"/>
+                      {{::data.addGroup}}
+                    </a>
+                  </li>
+                  <li class="dropdown-header dtech-dropdown-header"
+                      role="presentation">
+                    <a ng-click="allowSyncGroup(property) && validateGroup(property);"
+                       ng-class="classAllowSyncGroup(property)"                       
+                       role="menuitem" aria-haspopup="true" aria-expanded="false"
+                       >
+                      <img ng-class="{'dtech-disabled': !allowSyncGroup(property),
+                                     'dtech-enabled': allowSyncGroup(property)}"
+                           src="{{::data.syncIcon}}" title="{{::data.syncGroup}}"
+                           alt="{{::data.syncGroup}}" class="dtech-pad-all-10"/>
+                      {{::data.syncGroup}}
+                    </a>
+                  </li>                    
+                </ul>
+              </div>  <!-- ends ellipses dropdown -->
+              <div>
+                <button class="btn dtech-btn dtech-btn-icon"
+                        ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
+                        ng-click="changeSelectedProperty(property)"
+                        >
+                    <img src="{{::data.informationIcon}}" title="{{::data.information}}"
+                         alt="{{::data.information}}"/>
+                </button>  
+              </div> <!-- informaiton icon end -->
+            </div>  <!-- ends box for ellipses and information -->
+          </div>
+        </div>  
+      </div>
+    </div>
+    <!-- Properties Footer -->
+    <div id="footer" 
+         class="panel-footer flex-row justify-between dtech-pad-all-5-15">
+      <button id="cancel" 
+              ng-disabled="!data.isDirty"
+              class="action-btn btn btn-default dtech-max-width-fit-content"
+              type="button" title="{{data.cancelButtonText}}"
+              ng-click="onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
+      </button>
+      <div>
+        <button ng-disabled="!data.isDirty || data.submitting"
+                id="submit" class="action-btn btn btn-primary dtech-max-width-fit-content dtech-push-right"
+                type="submit" title="{{::data.submitButtonText}}"
+                ng-click="onSubmit();">{{::data.submitButtonText}}
+        </button>
+      </div>
+    </div>
+  </div>
+  <div id="group_information"
+       class="flex-column"
+       ng-if="data.currentProperty">
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="dtech-pad-top-5 dtech-margin-left-10"
+          ng-class="{'active': isActiveTab('Counts', 0)}"
+          ng-click="setActiveTab('Counts')"
+          >
+        <a data-target="#Counts" aria-controls="Counts" role="tab" data-toggle="tab">${Counts}</a>
+      </li>
+      <li ng-if="data.widgetInstanceKBArticles.length>0"
+          class="dtech-pad-top-5"
+          ng-class="{'active': isActiveTab('KnowledgeBaseArticle', 1)}"
+          ng-click="setActiveTab('KnowledgeBaseArticle')"
+          >
+        <a data-target="#KnowledgeBaseArticle" aria-controls="Knowledge Base Article" role="tab" data-toggle="tab">${Knowledge Base Article}</a>
+      </li>
+      <li ng-if="data.widgetInstanceKBRelatedArticles.length>0"
+          class="dtech-pad-top-5"
+          ng-class="{'active': isActiveTab('KnowledgeBaseRelatedArticle', 2)}"
+          ng-click="setActiveTab('KnowledgeBaseRelatedArticle')"
+          >
+        <a data-target="#KnowledgeBaseRelatedArticle" aria-controls="Knowledge Base Related Articles" role="tab" data-toggle="tab">${Knowledge Base Related Article}</a>
+      </li>          
+    </ul>
+
+    <div class="dtech-group-properties-information-tabcontent">
+      <div id="Counts" 
+           ng-show="isActiveTab('Counts', 0);"
+           class="flex-column flex-grow">
+        <div class="flex-column flex-grow justify-content-start">
+          <div class="flex-row flex-nowrap">
+            <button class="dtech-filter-btn btn dtech-margin-all-10"
+                    ng-class="{'dtech-btn-focus': isCountSelected(data.groupMembersIcon)}"
+                    ng-click="selectCount(data.groupMembersIcon)"
+                    >
+              <div class="flex-row flex-nowrap" >
+                <div class="flex-row ">
+                  <img src="{{::data.groupMembersIcon}}" 
+                       title="{{::data.showGroupMembersList}}" 
+                       alt="{{::data.showGroupMembersList}}" 
+                       class="dtech-pad-all-10"
+                       />
+                  <div class="flex-column justify-content-start">
+                    <div class="dtech-font-count">{{data.currentGroupMemberCount}}</div>
+                    <div class="dtech-font-description">{{data.groupMembers}}</div>
+                  </div>                      
+                </div>
+                <img ng-if="showGroupNotSelected(data.currentProperty)"
+                     src="{{::data.errorIcon}}" 
+                     title="{{::data.errorGroupNotSelected}}"
+                     alt="{{::data.errorGroupNotSelected}}" />
+                <img ng-if="showGroupMissingRole(data.currentProperty)"
+                     src="{{::data.warningIcon}}" 
+                     title="{{::data.groupMissingRole}}"
+                     alt="{{::data.groupMissingRole}}" />
+              </div>
+            </button>
+            <button ng-show="showMigrateExplicitUsersToGroup(data.currentProperty)"
+                    class="dtech-filter-btn btn dtech-margin-all-10"
+                    ng-class="{'dtech-btn-focus': isCountSelected(data.explicitRoleUsersIcon)}"
+                    ng-click="selectCount(data.explicitRoleUsersIcon)"
+                    >
+              <div class="flex-row flex-nowrap" >
+                <div class="flex-row ">
+                  <img src="{{::data.explicitRoleUsersIcon}}" 
+                       title="{{::data.showExplicitRoleUsers}}" 
+                       alt="{{::data.showExplicitRoleUsers}}" 
+                       class="dtech-pad-all-10"
+                       />
+                  <div class="flex-column justify-content-start">
+                    <div class="dtech-font-count">{{data.currentExplicitRoleCount}}</div>
+                    <div class="dtech-font-description">{{data.explicitRoleUsers}}</div>
+                  </div>                      
+                </div>
+                <img src="{{::data.warningIcon}}" 
+                     title="{{::data.explicitWarningTitle}}" 
+                     alt="{{::data.explicitWarningTitle}}" />
+              </div>
+            </button>  
+            <button class="dtech-filter-btn btn dtech-margin-all-10"
+                    ng-class="{'dtech-btn-focus': isCountSelected(data.roleMembersIcon)}"
+                    ng-click="selectCount(data.roleMembersIcon)"
+                    >
+              <div class="flex-row flex-nowrap" >
+                <div class="flex-row ">
+                  <img src="{{::data.roleMembersIcon}}" 
+                       title="{{::data.showRoleMembersList}}" 
+                       alt="{{::data.showRoleMembersList}}" 
+                       class="dtech-pad-all-10"
+                       />
+                  <div class="flex-column justify-content-start">
+                    <div class="dtech-font-count">{{data.currentProperty.validation.inheritRoleCount}}</div>
+                    <div class="dtech-font-description">{{data.roleMembers}}</div>
+                  </div>                      
+                </div>
+              </div>  
+            </button>  
+            <button class="dtech-filter-btn btn dtech-margin-all-10"
+                    ng-class="{'dtech-btn-focus': isCountSelected(data.memberTableRoleIcon)}"
+                    ng-click="selectCount(data.memberTableRoleIcon)"
+                    >
+              <div class="flex-row flex-nowrap" >
+                <div class="flex-row ">
+                  <img src="{{::data.memberTableRoleIcon}}" 
+                       title="{{::data.showMemberTableRolesList}}" 
+                       alt="{{::data.showMemberTableRolesList}}" 
+                       class="dtech-pad-all-10"
+                       />
+                  <div class="flex-column justify-content-start">
+                    <div class="dtech-font-count">{{data.currentProperty.validation.roleMemberTableRoleCount}}</div>
+                    <div class="dtech-font-description">{{data.memberTableRoles}}</div>
+                  </div>                      
+                </div>
+                <img ng-if="showRoleSyncWarn(data.currentProperty)"
+                     src="{{::data.warningIcon}}" 
+                     title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                     alt="{{::syncRoleMembersAndMemberTableRole}}" />                
+              </div>            
+            </button>  
+          </div>
+          <div class="flex-column flex-grow">
+            <!-- COUNT WARNING AND ERROR MESSAGES -->
+            <div ng-if="showGroupNotSelected(data.currentProperty) &&
+                        isCountSelected(data.groupMembersIcon)"
+                 class="dtech-box dtech-property-warning-message">
+              <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
+                   alt="{{::data.errorGroupNotSelected}}" />
+              <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
+            </div>
+            <div ng-show="showGroupMissingRole(data.currentProperty) &&
+                          isCountSelected(data.groupMembersIcon)"
+                 class="dtech-box dtech-property-warning-message">
+              <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
+                   alt="{{::data.groupMissingRole}}" />
+              <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
+              <a ng-class="classFixGroupHasRole(data.currentProperty)"
+                 id="addGroupToRoleCount"
+                 title="{{data.addGroupToRoleToolTip.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
+                 ng-click="allowFixGroupHasRole(data.currentProperty) && onAddGroupToRole(data.currentProperty);">{{data.addGroupToRoleButtonText}}
+              </a>
+            </div>
+            <div ng-show="showMigrateExplicitUsersToGroup(data.currentProperty) &&
+                        isCountSelected(data.explicitRoleUsersIcon)"
+                 class="dtech-box dtech-property-warning-message">
+              <img src="{{::data.warningIcon}}" 
+                   title="{{::data.explicitWarningTitle}}"
+                   alt="{{::data.explicitWarningTitle}}" />
+              <span class="flex-grow dtech-pad-left-5" >{{data.usersWithExplicitRole.replace('{0}',data.currentExplicitRoleCount).replace('{1}',data.currentProperty.roleName)}}</span>
+              <a ng-class="classFixMigrateExplicitUsersToGroup(data.currentProperty)"
+                 id="moveUsersFromRoleToGroup"
+                 title="{{data.addUsersToGroupRemoveRole.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
+                 ng-click="allowMigrateExplicitUsersToGroup(data.currentProperty) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
+              </a>
+            </div>
+            <div ng-show="showRoleSyncWarn(data.currentProperty) &&
+                          isCountSelected(data.memberTableRoleIcon)"
+                 class="dtech-box dtech-property-warning-message"
+                 >
+              <img src="{{::data.warningIcon}}" 
+                   title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                   alt="{{::syncRoleMembersAndMemberTableRole}}" />
+              <span class="flex-grow dtech-pad-left-5" >{{data.memberTableRoleCompareRoleMembers}}</span>
+              <a ng-class="classRoleSync(data.currentProperty)"
+                 id="memberTableRoleCompareRoleMembers"
+                 title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                 ng-click="allowRoleSync(data.currentProperty) && syncRoleMemberTable(data.currentProperty);">{{data.fixIt}}
+              </a>
+            </div>
+            <!-- DATA TABLE FOR MEMBER INFORMATION-->
+            <div class="flex-column flex-grow" id="memberData"
+                 ng-repeat="dataTable in data.dataTables" >
+              <sp-widget widget="dataTable"></sp-widget>
+            </div>        
+          </div>
+        </div>
+
+      </div>
+<div class="dtech-kb-container"
+     ng-show="isActiveTab('KnowledgeBaseArticle', 1);">
+  
+      <div id="KnowledgeBaseArticle"
+           ng-repeat="article in data.widgetInstanceKBArticles" 
+           
+           class="dtech-kb-container">
+        <sp-widget widget="article"></sp-widget>
+      </div>
+      
+      
+      <div id="KnowledgeBaseRelatedArticle"
+           ng-repeat="relatedArticle in data.widgetInstanceKBRelatedArticles" >
+        <sp-widget widget="relatedArticle"></sp-widget>
+      </div>
+</div>            
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+<!-- this was...
+      <div id="KnowledgeBaseArticle"
+           ng-repeat="article in data.widgetInstanceKBArticles" 
+           ng-show="isActiveTab('KnowledgeBaseArticle', 1);"
+           class="dtech-kb-container">
+        <sp-widget widget="article"></sp-widget>
+      </div>
+      
+      
+      <div id="KnowledgeBaseRelatedArticle"
+           ng-repeat="relatedArticle in data.widgetInstanceKBRelatedArticles" 
+           ng-show="isActiveTab('KnowledgeBaseRelatedArticle', 2);"
+           class="flex-column flex-grow">
+        <sp-widget widget="relatedArticle"></sp-widget>
+      </div>
+-->      
+      
+      
+      
+      
+    </div>
+  </div>
+</div>    
+]]></template>
+    </sp_widget>
+</record_update>

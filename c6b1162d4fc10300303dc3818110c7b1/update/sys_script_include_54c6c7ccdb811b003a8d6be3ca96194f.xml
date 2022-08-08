@@ -6,6 +6,8 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+2.8  | 2022-06-30 | raj  |  STRY0124857 - Use Groups Toggle (Enable/Disable Groups)&#13;
+2.8  | 2022-06-30 | raj  |  STRY0124860  -Edit Group Names&#13;
 2.7.3  | 2022-04-22 | raj  | DFCT0010835 - Creating an "OU Template" with a "Restricted Group" causes the "Assignment" field filters to be incorrect&#13;
 2.7.1 | 2021-11-26 | raj  | STRY0114396 - Task Forms- Primary Assignee- Add new constraint logic&#13;
                                                  Changes made: new method added to get list of offices for a member&#13;
@@ -765,8 +767,89 @@ UserInfoScripts.prototype = {
 		}
 		return "";
 	},
-	addRole: function(user_id, role_name)
-	{
+	
+	// STRY0124860 - external function calls 2 internal functions
+	addRole: function(user_id, role_name){
+		if(tasking_System_Settings_Scripts.CONST_USES_GROUPS_FOR_ROLES){
+			return this._addUserToGroup(user_id, role_name);
+		} else {
+			return this._addUserToRole(user_id, role_name);
+		}
+	},
+	
+	// STRY0124860 - called if groups are being used to manager permissions
+	_addUserToGroup: function(user_id, role_name){
+		var userAddedToGroup = false;
+		var gr_userGroup = new GlideRecord('sys_user_grmember');
+		var group_id = '';
+		var msgUsesRoles = gs.error("The System Property [Uses Groups for Roles] is true,");
+		var msgGroupNotDefined = gs.error("but a group is not defined for the System Property ");
+		var msgUserAlreadyInGroup1 = ". The user [";
+		var msgUserAlreadyInGroup2 = "] is already in group [";
+		var msgUserAlreadyInGroup3 = "]";
+		var msgPropertyName;
+		gr_userGroup.initialize();
+		switch(role_name){
+			case "x_153465_discovert.tasker_application_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASKER_APPLICATION_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_tasker_application_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_global_Tasking_Authority_member_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASK_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_task_administrator_group]';
+				break;
+			case "x_153465_discovert.Task_Executive":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASK_EXECUTIVE_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_task_executive_group]';
+				break;
+			case "x_153465_discovert.tasker_organizational_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_HIERARCHY_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_global_hierarchy_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TEMPLATE_DESIGNER_PERMISSIONS_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_template_designer_permissioins_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_global":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_TEMPLATE_DESIGNER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_global_template_designer_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_user":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_PERSONAL_TEMPLATE_DESIGNER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_personal_template_designer_group]';
+				break;
+			case "x_153465_discovert.tasker_user":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TAKSER_USER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_tasker_user_group]';
+				break;
+		}
+		if(!group_id || group_id==""){
+			msgUsesRoles = msgUsesRoles + msgGroupNotDefined + msgPropertyName;
+			gs.error(msgUsesRoles);
+		} else {
+			// if the group id is in the system property, then add the record and return true
+			gr_userGroup.addQuery('user', user_id);
+			gr_userGroup.addQuery('group', group_id);
+			gr_userGroup.query();
+			if(gr_userGroup.next()){
+				// user in group, dispaly info message
+				msgUsesRoles = msgUsesRoles + msgUserAlreadyInGroup1 + gr_userGroup.getDisplayValue("user") +
+					msgUserAlreadyInGroup2 + gr_userGroup.getDisplayValue("group") + msgUserAlreadyInGroup3;
+				gs.info(msgUsesRoles);
+			} else {
+				// user not in group, add user to group
+				gr_userGroup.initialize();
+				gr_userGroup.user = user_id;
+				gr_userGroup.group = group_id;
+				gr_userGroup.insert();
+			}
+			userAddedToGroup = true;
+		}
+		return userAddedToGroup;
+	},
+		
+	// STRY0124860 - called if roles are being used to manager permissions
+	_addUserToRole: function(user_id, role_name){
 		var role_id = this.getRoleIdByName(role_name);
 		if(!role_id || role_id == null || role_id == '')
 			return false;
@@ -785,7 +868,16 @@ UserInfoScripts.prototype = {
 		}
 		return roleAdded;
 	},
-	removeRole: function(user_id, field, role_name, role_type)
+	
+	removeRole: function(user_id, field, role_name, role_type){
+		// the first iteration of groups only uses groups for global roles
+		if(tasking_System_Settings_Scripts.CONST_USES_GROUPS_FOR_ROLES && role_type == 'GlobalRole'){
+			return this._removeUserFromGroup(user_id, field, role_name, role_type);
+		} else {
+			return this._removeUserFromRole(user_id, field, role_name, role_type);
+		}	
+	},
+	_removeUserFromRole: function(user_id, field, role_name, role_type)
 	{
 		//KT: RoleType = GlobalRole i.e GlobalTasking Authority
 		var role_id = this.getRoleIdByName(role_name);
@@ -826,19 +918,86 @@ UserInfoScripts.prototype = {
 		return roleDeleted;
 	},
 	
+	// STRY0124860 - called if groups are being used to manager permissions
+	_removeUserFromGroup: function(user_id, field, role_name, role_type){
+		var userRemovedFromGroup = false;
+		var gr_userGroup = new GlideRecord('sys_user_grmember');
+		var group_id = '';
+		var msgUsesRoles = gs.error("The System Property [Uses Groups for Roles] is true,");
+		var msgGroupNotDefined = gs.error("but a group is not defined for the System Property ");
+		var msgUserNotFoundInGroup1 = ". The user [";
+		var msgUserNotFoundInGroup2 = "] was not found in group [";
+		var msgUserNotFoundInGroup3 = "]";
+		var msgPropertyName;
+		gr_userGroup.initialize();
+		switch(role_name){
+			case "x_153465_discovert.tasker_application_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASKER_APPLICATION_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_tasker_application_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_global_Tasking_Authority_member_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASK_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_task_administrator_group]';
+				break;
+			case "x_153465_discovert.Task_Executive":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TASK_EXECUTIVE_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_task_executive_group]';
+				break;
+			case "x_153465_discovert.tasker_organizational_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_HIERARCHY_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_global_hierarchy_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_admin":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TEMPLATE_DESIGNER_PERMISSIONS_ADMINISTRATOR_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_template_designer_permissioins_administrator_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_global":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_TEMPLATE_DESIGNER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_global_template_designer_group]';
+				break;
+			case "x_153465_discovert.tasker_process_template_user":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_PERSONAL_TEMPLATE_DESIGNER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_personal_template_designer_group]';
+				break;
+			case "x_153465_discovert.tasker_user":
+				group_id = tasking_System_Settings_Scripts.CONST_ROLE_TAKSER_USER_GROUP;
+				msgPropertyName = '[x_153465_discovert.role_tasker_user_group]';
+				break;
+		}
+		if(!group_id || group_id==""){
+			msgUsesRoles = msgUsesRoles + msgGroupNotDefined + msgPropertyName;
+			gs.error(msgUsesRoles);
+		} else {
+			// if the group id is in the system property, then add the record and return true
+			gr_userGroup.addQuery('user', user_id);
+			gr_userGroup.addQuery('group', group_id);
+			gr_userGroup.query();
+			if(gr_userGroup.next()){
+				gr_userGroup.deleteRecord();
+				userRemovedFromGroup = true;
+			} else {
+				// user not in group, dispaly info message
+				msgUsesRoles = msgUsesRoles + msgUserNotFoundInGroup1 + gr_userGroup.getDisplayValue("user") +
+					msgUserNotFoundInGroup2 + gr_userGroup.getDisplayValue("group") + msgUserNotFoundInGroup3;
+				gs.info(msgUsesRoles);
+			}
+			userRemovedFromGroup = true;
+		}
+		return userRemovedFromGroup;
+	},
 	type: 'UserInfoScripts'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>318</sys_mod_count>
+        <sys_mod_count>327</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-22 15:51:51</sys_updated_on>
+        <sys_updated_on>2022-07-01 06:02:42</sys_updated_on>
     </sys_script_include>
 </record_update>
