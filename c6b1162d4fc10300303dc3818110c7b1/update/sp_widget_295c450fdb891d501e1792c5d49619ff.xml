@@ -133,16 +133,51 @@ small{
         <public>true</public>
         <roles>x_153465_discovert.tasker_user</roles>
         <script><![CDATA[(function() {
-	
-	var kbService = new global.KBPortalServiceImpl();
-	var article_sys_id = "587d1212db8d99501e1792c5d496192e";
-	var result = kbService.getRelatedArticles(5,"short_description",[], data.dtech_knowledged_base_id,
-											  article_sys_id+'', article_sys_id+'', 
-											  "kb_2_kb", "kb_knowledge", "related_kb_knowledge","kb_article_view");
 
+	// Tasker code
+	options.source_table = _paramOptCopy('source_table') || "kb_2_kb";  // changed to support options and look for source table
+	options.source_column = _paramOptCopy('source_column') || "kb_knowledge";  // changed to support options and look for source column
+	options.target_column = _paramOptCopy('target_column') || "related_kb_knowledge";  // changed to support options and look for target column
 	
+	// **********************************************************************
+	// START - CODE FROM - Knowledge Releated Articles Widget
+	//			- Pulled out of Knowledge Releated Articles Widget
+	//			- DTech is using template instead of related to avoid an extra widget layer
+	//			- this also gives us more direct access to change style if we choose
+	// **********************************************************************
+	options.aria_label_title= options.title || gs.getMessage('Related Articles');
+	options.title = options.title || gs.getMessage('Related Articles');
+	options.display_field = options.display_field || "short_description"; 
+	options.secondary_fields = options.secondary_fields ? options.secondary_fields.split(",") : getKnowledgeFieldsfromProperties();
+	options.show_secondary_fields_label = options.show_secondary_fields_label ? options.show_secondary_fields_label == 'true' : false;
+	options.max_records = options.max_records || gs.getProperty('glide.knowman.content_block_limit')|| '5';
+	options.always_show = options.always_show ? options.always_show == 'true' : true;
+	options.reverse = false;
+	options.source_id = options.source_id || 'sys_kb_id';
+	data.isMESP = ($sp.getParameter("id") == "me_kb_view") || false;
+	var pageID = data.isMESP ? "me_kb_view" : "kb_article_view";
+	var article_sys_id = _paramOptCopy('article_sys_id');  // changed to support options and look for article sys id
+	var article_number = _paramOptCopy('sysparm_article');
+	var kbService = new global.KBPortalServiceImpl();
+	// var article_sys_id = $sp.getParameter(options.source_id) ? $sp.getParameter(options.source_id) : $sp.getParameter('sys_id');
+	// var kbService = new KBPortalService();
+	if(gs.nil(article_sys_id)) 
+		article_sys_id = kbService.getKnowledgeSysIDByNumber(article_number);
+
+	if(!gs.nil(article_sys_id)){
+		options.knowledge_base = options.knowledge_base || String(kbService.getServicePortalKnowledgeBases($sp.getPortalRecord().url_suffix)) || "";
+		var result = kbService.getRelatedArticles(options.max_records,options.display_field,options.secondary_fields, options.knowledge_base,
+																								article_sys_id+'', article_sys_id+'', options.source_table, options.source_column, options.target_column,pageID);
+
+		options.result = result;
+	}
+	// **********************************************************************
+	// END - CODE FROM - Knowledge Releated Articles Widget
+	// **********************************************************************
 	
-	options.result = result;
+	// ****************************************************
+	// START from origaional Knowledge List Widget Template
+	// ****************************************************
 	
 	/* populate the 'data' object */
 	/* e.g., data.table = $sp.getValue('table'); */
@@ -150,20 +185,66 @@ small{
 	data.externalContentLabel = gs.getMessage(gs.getProperty('sn_km_intg.glide.knowman.external.ui_label_for_external_content', 'External Content')) || gs.getMessage('External Content');
 	options.kb_rating_style = options.kb_rating_style ? options.kb_rating_style == "true" : false;
 	options.show_secondary_information = options.show_secondary_information != null ? options.show_secondary_information : true;
+
+	// ****************************************************
+	// END from origaional Knowledge List Widget Template
+	// ****************************************************	
+
+	// **********************************************************************
+	// START - CODE FROM - Knowledge Releated Articles Widget
+	// **********************************************************************
+	function getKnowledgeFieldsfromProperties(){
+
+		//Generate secondary fields based on legacy properties
+		var fields = [];
+
+		if(gs.getProperty('glide.knowman.search.show_article_number','false') == 'true'){
+			var kbMod = new global.KBViewModel();
+			if(kbMod.isVersioningEnabled()){
+				fields.push('display_number');
+			}else{
+				fields.push('number');
+			}
+		}
+		if(gs.getProperty('glide.knowman.search.show_author','false') == 'true')
+			fields.push('author');
+		if(gs.getProperty('glide.knowman.search.show_view_count','false') == 'true')
+			fields.push('sys_view_count');		
+		if(gs.getProperty('glide.knowman.search.show_last_modified','false') == 'true')
+			fields.push('sys_updated_on');
+		if(gs.getProperty('glide.knowman.search.show_published','false') == 'true')
+			fields.push('published');
+		if(gs.getProperty('glide.knowman.show_unpublished','false') == 'true')
+			fields.push('workflow_state');
+		if(gs.getProperty('glide.knowman.search.show_rating','false') == 'true')
+			fields.push('rating');
+
+		return fields;
+	}	
+	// **********************************************************************
+	// END - CODE FROM - Knowledge Releated Articles Widget
+	// **********************************************************************
+
+	// copy to data from input or options
+	function _paramOptCopy(name) {
+		var param = (input || {})[name] || (options || {})[name] || $sp.getParameter(name);
+		return param;
+	}
+
 })();]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-08-05 22:12:18</sys_created_on>
         <sys_id>295c450fdb891d501e1792c5d49619ff</sys_id>
-        <sys_mod_count>2</sys_mod_count>
+        <sys_mod_count>7</sys_mod_count>
         <sys_name>Tasker - Knowledge List Widget Template</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_295c450fdb891d501e1792c5d49619ff</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-05 22:15:38</sys_updated_on>
+        <sys_updated_on>2022-08-09 19:52:05</sys_updated_on>
         <template><![CDATA[<div class="kb-list-block" ng-if="c.options.always_show || c.options.result.length" ng-class="{'has-icon' : c.options.glyph, 'kb-mobile' : c.isNative, 'kb-desktop' : !c.isNative}">
   <div ng-class="c.isNative ? 'kb-mobile-panel' : 'panel panel-{{::c.options.color}} b'">
     <div class="panel-heading" ng-class="{'b-b': !c.options.color}"> <h3 class="panel-title" ng-bind="::options.title" aria-label="{{options.aria_label_title}}">

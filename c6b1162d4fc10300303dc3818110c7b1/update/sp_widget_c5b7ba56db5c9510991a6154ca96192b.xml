@@ -221,8 +221,12 @@
 	// START ENABLE GROUP ROLE MANAGEMENT
 	// *******************************************
 	$scope.is_property_uses_groups_for_roles = function(property){
+		return _is_property_uses_groups_for_roles(property);
+	}
+
+	function _is_property_uses_groups_for_roles(property){
 		var isPropertyUsesGroupsForRoles = property.name=='x_153465_discovert.uses_groups_for_roles';
-		return isPropertyUsesGroupsForRoles;
+		return isPropertyUsesGroupsForRoles;		
 	}
 	
 	$scope.aGroupSelectedUsesGroupsForRolesNotSet = function(property){
@@ -445,12 +449,17 @@
 	}	
 	
 	function _changeSelectedProperty(property){
-		c.currentTab = 'Counts';
 		c.data.currentProperty = property;
-		_setCountsAndWarningFlags(property);
-		c.data.dataTables = [];
 		loadKnowledgeArticleWidget(property);
-		_selectCount(c.data.groupMembersIcon);
+
+		if(_is_property_uses_groups_for_roles(property)){
+			c.currentTab = 'KnowledgeBaseArticle';			
+		} else {
+			c.currentTab = 'Counts';			
+			_setCountsAndWarningFlags(property);
+			c.data.dataTables = [];
+			_selectCount(c.data.groupMembersIcon);
+		}
 	}
 	
 	function _setCountsAndWarningFlags(property){
@@ -475,20 +484,15 @@
     
 	}
 	function loadKnowledgeArticleWidget(property){
-		c.data.widgetInstanceKBArticles = [];
-		if(!property.KBArticle){
-			$location.search("sys_kb_id","").search("sysparm_article", "").search("spa",1);
-		} else {
-//alert("RJ - testing - property.KBArticle: " + property.KBArticle);
-			$location.search("sys_kb_id", c.data.dtech_knowledged_base_id).search("sysparm_article", property.KBArticle).search("spa",1);			
-			var widget_name = "kb-article-content"
-			var widget_parameters = { 
-			}
-			spUtil.get(widget_name, widget_parameters).then(function(response) {
-				c.data.widgetInstanceKBArticles.push(response);
-				loadKnowledgeRelatedArticleWidget(property);
-			});			
-		}
+		$scope.data.widgetInstanceKBArticles = [];
+		$scope.data.widgetInstanceKBRelatedArticles = [];
+		$scope.data.getKnowledge=true;
+		$scope.data.groupProperty = property;
+		spUtil.update($scope).then(function(data){
+			$scope.data.widgetInstanceKBArticles = data.widgetInstanceKBArticles;
+			$scope.data.widgetInstanceKBRelatedArticles = data.widgetInstanceKBRelatedArticles;
+			$scope.data.getKnowledge=false;
+		});
 	}
 	
 	function loadKnowledgeRelatedArticleWidget(property){
@@ -614,12 +618,12 @@
 		var atLeastOneGroupSet = false;
 		for (var i = 0; i < c.data.properties.length; i++) {
 			var property = c.data.properties[i];
+			// if no current property, then set to first property found
+			// wait until validating is finished which is when value is false
+			if(!c.data.currentProperty && value == false){
+				_changeSelectedProperty(property);
+			}
 			if (property.name != "x_153465_discovert.uses_groups_for_roles") {
-				// if no current property, then set to first property found
-				// wait until validating is finished which is when value is false
-				if(!c.data.currentProperty && value == false){
-					_changeSelectedProperty(property);
-				}
 				property.validating=value;
 				if(!property.value || 
 					 !property.value.value || 
@@ -722,6 +726,18 @@ progress:indeterminate {
 }
 .dtech-kb-container{
   display:flex;
+  overflow:auto;
+}
+.dtech-kb-column1{
+  display:flex;
+  flex-direction:column;
+  flex-grow: .5;
+  overflow:auto;
+}
+.dtech-kb-column2{
+  display:flex;
+  flex-direction:column;
+  flex-grow: .5;
   overflow:auto;
 }
 /* only in this widget used to remove grey background */
@@ -926,8 +942,10 @@ TODO - We may want to move into global class*/
 //		- REVIEW AND ADD ERROR MESSAGES FROM FUNCTIONS
 //    - TRAP ADD CLICK FROM ADD GROUP AND LOAD GROUP ADDED INTO GROUP
 //         - Add is being trapped, but the picker is not being updated yet
-//		- BUILD AND EMBED KNOWLEDGE BASE WIDGETS
+//		- knowledge widgets built and embeded
+//				- SETUP SCROLLS TO WORK CORRECTLY
 //		- BUILD OUT STUBS FOR INITAL SET OF KNOWLEDGE ARTICLES
+//    - ADDRESS PAGE JUMPING ISSUE WHEN USER CHANGES TABS
 // CREATE SCRIPTS TO RESET TO ROLE
 // RUN SCRIPT TO RESET ROLE
 // WALK THROUGH PROCESS TO SET UP
@@ -1035,9 +1053,34 @@ TODO - We may want to move into global class*/
 			_syncMembersInMemberTableWithRole();
 		} else if(input.syncAll){
 			_syncAllGroupRoles();
+		} else if(input.getKnowledge){
+			_getKnowledgeData(input.groupProperty);
 		}
 	}
 
+	function _getKnowledgeData (property){
+		
+		data.widgetInstanceKBArticles = [];
+		data.widgetInstanceKBRelatedArticles = [];
+		if(property.KBArticle){
+			var widget_name = "tasker-kb-article-content";
+			var widget_parameters = { 
+				knowledge_base: data.dtech_knowledged_base_id,
+				sysparm_article: property.KBArticle
+			};
+			var widgetInstanceKBArticles = $sp.getWidget(widget_name, widget_parameters);
+			data.widgetInstanceKBArticles.push(widgetInstanceKBArticles);
+
+			widget_name = "tasker_knowledge_list_widget_template";
+			widget_parameters = { 
+				knowledge_base: data.dtech_knowledged_base_id,
+				sysparm_article: property.KBArticle
+			};
+			var widgetInstanceKBRelatedArticles = $sp.getWidget(widget_name, widget_parameters);
+			data.widgetInstanceKBRelatedArticles.push(widgetInstanceKBRelatedArticles);			
+		}
+	}
+	
 	function _validateAllGroups(){
 		for (var i = 0; i < data.properties.length; i++) {
 			var property = data.properties[i];
@@ -1100,14 +1143,14 @@ TODO - We may want to move into global class*/
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-06-27 15:18:51</sys_created_on>
         <sys_id>c5b7ba56db5c9510991a6154ca96192b</sys_id>
-        <sys_mod_count>697</sys_mod_count>
+        <sys_mod_count>744</sys_mod_count>
         <sys_name>Tasker Properties</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_c5b7ba56db5c9510991a6154ca96192b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-08 05:14:55</sys_updated_on>
+        <sys_updated_on>2022-08-10 03:10:16</sys_updated_on>
         <template><![CDATA[<div class="dtech-topstick-posabso-rl-active flexbox dtech-w-100vw-10px">
   <div id="group_properties"
        class="panel panel-default flex-column dtech-panel-bottom">
@@ -1133,15 +1176,32 @@ TODO - We may want to move into global class*/
                 dtech-margin-left-10">
       <div ng-repeat="property in data.properties" >
         <div ng-if="is_property_uses_groups_for_roles(property)">
-          <label>
-            <!-- groups can only be set if all groups are selected.  Allow disable, but do not allow enable unless all groups are set -->
-            <input type="checkbox" 
-                   ng-disabled="!allowUsesGroupsForRoles(property)"
-                   ng-model="property.value"
-                   ng-change="onChange_uses_groups_for_roles(property);"
-                   ng-true-value="'true'" ng-false-value="'false'">
-            {{property.description}}
-          </label>
+          <div class="dtech-box">
+            <div class="flex-grow">
+              <div ng-if="property.additionalNote"
+                   class="dtech-font-description">
+                {{property.additionalNote}}
+              </div>              <label>
+                <!-- groups can only be set if all groups are selected.  Allow disable, but do not allow enable unless all groups are set -->
+                <input type="checkbox" 
+                       ng-disabled="!allowUsesGroupsForRoles(property)"
+                       ng-model="property.value"
+                       ng-change="onChange_uses_groups_for_roles(property);"
+                       ng-true-value="'true'" ng-false-value="'false'">
+                {{property.description}}
+              </label>
+            </div>
+            <div>
+              <button class="btn dtech-btn dtech-btn-icon"
+                      ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
+                      ng-click="changeSelectedProperty(property)"
+                      >
+                <img src="{{::data.informationIcon}}" title="{{::data.information}}"
+                     alt="{{::data.information}}"/>
+              </button>  
+            </div> <!-- informaiton icon end -->
+          </div>
+
           <div ng-if="!allowUsesGroupsForRoles(property)"
                class="dtech-box align-items-start dtech-property-warning-message">
             <div class="flex-column">
@@ -1150,8 +1210,8 @@ TODO - We may want to move into global class*/
                    alt="{{::data.warningAllGroupsNotSelected}}" />
             </div>            
             <span class="flex-grow dtech-pad-left-5" >{{::data.warningAllGroupsNotSelected}}</span>
+            <br/>
           </div>            
-          <br/>
           <div ng-if="aGroupSelectedUsesGroupsForRolesNotSet(property)"
                class="flex-row dtech-property-warning-message">
             <div class="flex-column">
@@ -1160,8 +1220,8 @@ TODO - We may want to move into global class*/
                    alt="{{::data.warningAllGroupsNotSelected}}" />
             </div>
             <span class="flex-grow dtech-pad-left-5" >{{::data.warningAGroupSelectedWarning}}</span>
+            <br/>
           </div>            
-          <br/>
         </div>
         <div ng-if="!is_property_uses_groups_for_roles(property)"
              class="dtech-margin-left-10"
@@ -1332,6 +1392,7 @@ TODO - We may want to move into global class*/
        ng-if="data.currentProperty">
     <ul class="nav nav-tabs" role="tablist">
       <li class="dtech-pad-top-5 dtech-margin-left-10"
+          ng-show="!is_property_uses_groups_for_roles(data.currentProperty)"
           ng-class="{'active': isActiveTab('Counts', 0)}"
           ng-click="setActiveTab('Counts')"
           >
@@ -1344,13 +1405,6 @@ TODO - We may want to move into global class*/
           >
         <a data-target="#KnowledgeBaseArticle" aria-controls="Knowledge Base Article" role="tab" data-toggle="tab">${Knowledge Base Article}</a>
       </li>
-      <li ng-if="data.widgetInstanceKBRelatedArticles.length>0"
-          class="dtech-pad-top-5"
-          ng-class="{'active': isActiveTab('KnowledgeBaseRelatedArticle', 2)}"
-          ng-click="setActiveTab('KnowledgeBaseRelatedArticle')"
-          >
-        <a data-target="#KnowledgeBaseRelatedArticle" aria-controls="Knowledge Base Related Articles" role="tab" data-toggle="tab">${Knowledge Base Related Article}</a>
-      </li>          
     </ul>
 
     <div class="dtech-group-properties-information-tabcontent">
@@ -1505,52 +1559,24 @@ TODO - We may want to move into global class*/
         </div>
 
       </div>
-<div class="dtech-kb-container"
-     ng-show="isActiveTab('KnowledgeBaseArticle', 1);">
-  
-      <div id="KnowledgeBaseArticle"
-           ng-repeat="article in data.widgetInstanceKBArticles" 
-           
-           class="dtech-kb-container">
-        <sp-widget widget="article"></sp-widget>
-      </div>
-      
-      
-      <div id="KnowledgeBaseRelatedArticle"
-           ng-repeat="relatedArticle in data.widgetInstanceKBRelatedArticles" >
-        <sp-widget widget="relatedArticle"></sp-widget>
-      </div>
-</div>            
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-<!-- this was...
-      <div id="KnowledgeBaseArticle"
-           ng-repeat="article in data.widgetInstanceKBArticles" 
-           ng-show="isActiveTab('KnowledgeBaseArticle', 1);"
-           class="dtech-kb-container">
-        <sp-widget widget="article"></sp-widget>
-      </div>
-      
-      
-      <div id="KnowledgeBaseRelatedArticle"
-           ng-repeat="relatedArticle in data.widgetInstanceKBRelatedArticles" 
-           ng-show="isActiveTab('KnowledgeBaseRelatedArticle', 2);"
-           class="flex-column flex-grow">
-        <sp-widget widget="relatedArticle"></sp-widget>
-      </div>
--->      
-      
-      
-      
-      
+      <div class="dtech-kb-container"
+           ng-show="isActiveTab('KnowledgeBaseArticle', 1);">
+        <div class="dtech-kb-column1">
+          <div id="KnowledgeBaseArticle"
+               ng-repeat="article in data.widgetInstanceKBArticles" 
+
+               class="dtech-kb-container">
+            <sp-widget widget="article"></sp-widget>
+          </div>
+          <div class="dtech-kb-column2">
+            <div id="KnowledgeBaseRelatedArticle"
+                 ng-repeat="kb_relatedArticle in data.widgetInstanceKBRelatedArticles" >
+              <sp-widget widget="kb_relatedArticle"></sp-widget>
+            </div>
+
+          </div>
+
+        </div>            
     </div>
   </div>
 </div>    
