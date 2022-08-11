@@ -1,0 +1,1932 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function($rootScope, $scope, $window, $timeout, spUtil, $sce, spModal, $uibModal,$location,cabrillo, snAnalytics) {
+	/* widget controller */
+	var c = this;
+	if (c.data.redirect) {
+		var id = $location.search().sys_kb_id ? 'sys_kb_id' : 'sys_id';
+		if ($location.search()[id] && $location.search()[id] !== c.data.redirect) {			
+			$location.search('spa', 1);
+			$location.search(id, c.data.redirect);
+			$location.replace();
+		}
+	}
+	
+	$window.onpopstate = function (){
+		$location.search('spa',null);
+		$location.replace();
+	};
+	
+	if(c.data.isValid){
+		if(c.data.kbContentData && c.data.kbContentData.isTemplate ){
+			c.data.kbContentData.data.forEach(function(field){
+				if(field.type == 'html')
+					field.content = $sce.trustAsHtml(field.content);
+			});
+			
+			if (c.data.articleType === 'wiki')
+				c.data.kbWiki = $sce.trustAsHtml(c.data.kbWiki);
+		}
+		else if (c.data.articleType === 'wiki')
+			c.data.kbWiki = $sce.trustAsHtml(c.data.kbWiki);
+		else 
+			c.data.kbContentData.data = $sce.trustAsHtml(c.data.kbContentData.data);
+	}
+
+	$scope.submitted = false;
+	c.flagMessage = null;
+	$timeout(function(){
+		$rootScope.$broadcast("sp.update.breadcrumbs", $scope.data.breadCrumb);
+	});
+	$rootScope.properties = $scope.data.properties;
+	$rootScope.messages = $scope.data.messages;
+	$rootScope.isValid = c.data.isValid;
+	$rootScope.isKBAdmin = $scope.data.isKBAdmin;
+	$rootScope.isKBOwner = $scope.data.isKBOwner;
+	$rootScope.article_sys_id = $scope.data.article_sys_id;
+	$rootScope.attachments = $scope.data.attachments;
+	$rootScope.attachedIncidents = $scope.data.attachedIncidents;
+	$rootScope.affectedProducts = $scope.data.affectedProducts;
+	$rootScope.displayAttachments = $scope.data.displayAttachments;
+	$rootScope.hideFeedbackOptions = $scope.data.hideFeedbackOptions;
+	$rootScope.helpfulContent = $scope.data.helpfulContent;
+	$rootScope.tableName = $scope.data.tableName;
+	$rootScope.hasComments = $scope.data.hasComments;
+	$scope.data.isSubscribed = $scope.data.isArticleSubscribed || $scope.data.isArticleSubscribedAtKB;
+	$scope.data.subscribeLabel = ($scope.data.isSubscribed ? $scope.data.messages.SUBSCRIBED : $scope.data.messages.SUBSCRIBE);
+	c.createIncidentURL = c.options.create_task_url || ($scope.data.properties && $scope.data.properties.createIncidentURL);
+	c.createIncidentLabel = c.options.create_task_prompt || $scope.data.messages.CREATE_INCIDENT;
+	c.showCreateIncident = c.data.isLoggedInUser && c.options.show_create_incident_action != 'false' && c.data.properties && c.data.properties.showKBCreateIncident && c.createIncidentURL;
+	c.showFlagArticle =  c.data.properties && c.data.properties.showKBFlagArticle && c.data.properties.showRatingOptions;
+	c.showMenu = c.data.properties && (c.showFlagArticle || c.data.properties.isEditable || c.showCreateIncident);
+	$rootScope.stackUrl = window.location.pathname + '?id='+c.data.params.sysparm_article_view_page_id+'%26' +  (c.data.params.sysparm_article ? 'sysparm_article=' + c.data.params.sysparm_article : 'sys_kb_id=' + c.data.params.sys_kb_id);
+	c.stackUrl = $rootScope.stackUrl;
+	c.flagMessage = '';
+	c.task ={};
+	c.imageInstance = '';
+	$scope.data.toggleSubscribed = ($scope.data.isSubscribed ? true : false);
+	c.reasons = c.data.feedback_reasons;
+	c.data.reason = '4';
+	c.imageInstance = '';
+	c.minImageHeight = parseInt(c.options.min_image_height) || 100;
+	c.minImageWidth = parseInt(c.options.min_image_width) || 185;
+	c.readOnly = false;
+	c.isMobile = spUtil.isMobile() || cabrillo.isNative();
+	c.editUrl = c.data.wordOnlineUrl || 'kb_knowledge.do?sys_id=' + c.data.article_sys_id + '&sysparm_stack=' + c.stackUrl;
+	
+	//Use KB specific stylic for "kb" & 'mesp' portal
+	c.KBRatingStyle = c.options.kb_rating_style || ($rootScope.portal ? ($rootScope.portal.sys_id == "45d6680fdb52220099f93691f0b8f5ad" || $rootScope.portal.sys_id == "26f2fffb77322300454792718a1061e5") : false);
+
+	if(c.data.langList && c.data.langList.length > 1){
+		for(var lng in c.data.langList){
+			if(c.data.langList[lng].selected == true){
+				c.selectedLanguage = c.data.langList[lng];
+				break;
+			}
+		}
+	}
+	
+	var payload= {};
+	payload.name = "View Knowledge Article";
+	payload.data = {};
+	payload.data["Article Title"] = c.data.shortDesc;
+	payload.data["Article SysID"] = c.data.article_sys_id;
+	payload.data["Language"] = c.selectedLanguage || "en";
+	snAnalytics.addEvent(payload);
+	
+	populateBreadCrumbURLs();
+
+	function populateBreadCrumbURLs() {
+		if(c.data.breadCrumb) {
+			if(c.data.breadCrumb[0].type == 'kb_knowledge_base') {
+				if(c.data.showKbHomeLink) {
+					c.data.breadCrumb[0].url = '?id=' + c.data.kb_knowledge_page + '&kb_id=' + c.data.breadCrumb[0].values.kb_knowledge_base;
+				} else {
+					c.data.breadCrumb[0].url = '?id=kb_search&kb_knowledge_base=' + c.data.breadCrumb[0].values.kb_knowledge_base;
+				}
+			}
+
+			for(var i = 1; i < c.data.breadCrumb.length; i++) {
+				if(c.data.breadCrumb[i].type == 'kb_category') {
+					if(c.data.showKbHomeLink) {
+						if(c.data.breadCrumb[i].values.kb_category == "NULL_VALUE") {
+							c.data.breadCrumb.splice(i, 1);
+						} else {
+							c.data.breadCrumb[i].url = '?id=kb_category&kb_id=' + c.data.breadCrumb[i].values.kb_knowledge_base + '&kb_category=' +  c.data.breadCrumb[i].values.kb_category;
+						}
+					} else {
+						c.data.breadCrumb[i].url = '?id=kb_search&kb_knowledge_base=' + c.data.breadCrumb[i].values.kb_knowledge_base + '&kb_category=' + c.data.breadCrumb[i].values.kb_category;
+					}
+				}
+			}
+		}
+	}
+
+	if (c.data.page_title) {
+		// setting default page title for supporting km seo
+		$window.document.title = c.data.page_title;
+		if (c.data.article_sys_id)
+			appendKBSysIdToURL();
+	}
+	function appendKBSysIdToURL() {
+		if ($window) {
+			if (c.data.params.sys_kb_id)	// return if url already contains sys_kb_id
+				return;
+
+			// for supporting km seo, adding kb_sys_id to the url when kb is viewed using sysparm_article (kb number)
+			$timeout(function() {
+				$location.search('sys_kb_id', $scope.data.article_sys_id);
+				$location.search('spa','1');
+				$location.replace();
+			});
+		}
+	}
+
+	c.showVersions = false;
+	c.toggleVersions = function(){
+		c.showVersions = !c.showVersions;
+	};
+
+	c.selectLanguage = function(ind){
+		$window.location.replace('?id='+c.data.params.sysparm_article_view_page_id+'&sys_kb_id=' + c.data.langList[ind].sys_id);
+	};
+
+	c.showActionMenu = function(){
+		if(c.showMenu){
+			return true;
+		}
+		else{
+			if(c.data.properties && c.data.properties.isSubscriptionEnabled && $window.innerWidth < 992)
+				return true;
+			else
+				return false;
+		}
+	}
+
+	c.toggleSection = function(field) {
+		field.collapsed = !field.collapsed;
+		$('#'+field.column).slideToggle("fast");
+	};
+
+	c.handleSubscribeButtonFocus = function(){
+		if($scope.data.isSubscribed){
+			$scope.data.subscribeLabel = $rootScope.messages.UNSUBSCRIBE;
+			$scope.data.toggleSubscribed = !$scope.data.toggleSubscribed;
+		}
+
+	};
+
+	c.handleSubscribeButtonBlur = function(){
+		if($scope.data.isSubscribed){
+			$scope.data.subscribeLabel = $rootScope.messages.SUBSCRIBED;
+			$scope.data.toggleSubscribed = !$scope.data.toggleSubscribed;
+		}
+	}
+	c.closeUnsubscribeModal = function(){
+		$("#unSubscribeModal").modal('hide');
+	};
+
+	c.handleSubscription = function(confirmation){
+		c.data.actionName = null;
+		if(!$scope.data.isSubscribed){
+			c.data.actionName = 'subscribe';
+			c.data.articleSysId = $scope.data.article_sys_id;
+			c.data.articleNum = $scope.data.number;
+		}
+		else
+		{
+			if($scope.data.isArticleSubscribed && !$scope.data.isArticleSubscribedAtKB){
+				c.data.actionName = "unsubscribe";
+				c.data.articleSysId = $scope.data.article_sys_id;
+				c.data.articleNum = $scope.data.number;
+				c.data.unsubscribeKB = false;
+			}
+			else if(!confirmation){
+				//$("#unSubscribeModal").modal();
+				var unsubscribeMessage = "<p>" + c.data.messages.UNSUBSCRIBE_CONTENT + "</p><p><b>" + c.data.messages.UNSUBSCRIBE_CONFIRMATION + "</b></p>";
+				spModal.open(
+					{
+						title: c.data.messages.UNSUBSCRIBE,
+						buttons : [{label : c.data.messages.NO, cancel : true}, {label: c.data.messages.YES, primary : true}],
+						message : unsubscribeMessage
+					}).then(function(){
+					c.handleSubscription('Y');
+				}, function(){
+					c.closeUnsubscribeModal();
+				});
+
+				return;
+			}
+			else if(confirmation === 'Y'){
+				c.data.actionName = "unsubscribe";
+				c.closeUnsubscribeModal();
+				c.data.articleSysId = $scope.data.article_sys_id;
+				c.data.kbSysId = $scope.data.kbSysId;
+				c.data.articleNum = $scope.data.number;
+				c.data.kbName = $scope.data.kbName;
+				c.data.unsubscribeKB = true;
+			}
+		}
+		c.server.get({action : c.data.actionName, kbSysId : c.data.kbSysId, kbName : c.data.kbName, articleSysId : c.data.articleSysId, articleNum : c.data.articleNum, unsubscribeKB : c.data.unsubscribeKB, isArticleSubscribed: c.data.isArticleSubscribed, isKBSubscribed : c.data.isArticleSubscribedAtKB}).then(function(resp){
+			if(c.data.actionName == 'subscribe'){
+				$scope.data.isArticleSubscribed = true;
+				$scope.data.isSubscribed = true;
+				$scope.data.subscribeLabel = $rootScope.messages.SUBSCRIBED;
+			}
+			else{
+				$scope.data.isArticleSubscribed = false;
+				$scope.data.isSubscribed = false;
+				$scope.data.isArticleSubscribedAtKB = false;
+				$scope.data.subscribeLabel = $rootScope.messages.SUBSCRIBE;
+			}
+			c.showUIMessage('info', resp.data.responseMessage);
+
+		});
+	};
+
+
+
+	c.submitFlagComments = function(){
+		if(!c.data.comment){
+			c.flagMessage = "${Please provide a comment to flag the article}";
+			$("#flagComment").focus();
+			return false;
+		}
+		else{
+			$("#submitFlagComment").attr("disabled", true);
+			c.server.get({action : 'saveFlagComment', article_sys_id : c.data.article_sys_id, comment : c.data.comment}).then(function(resp){
+				if(resp.data.feedbackSuccess)
+					c.showUIMessage('info', c.data.messages.ARTICLE_FLAGGED);
+				else
+					c.showUIMessage('error', c.data.messages.RATE_LIMIT_REACHED);
+			});
+			c.clearComment();
+
+		}
+
+	};
+
+	c.copyPermalink = function(){
+		var v = document.createElement('textarea');
+		var permalink = document.location.origin + document.location.pathname + '?id='+c.data.params.sysparm_article_view_page_id+'&sysparm_article=' + $scope.data.number;
+		v.innerHTML = permalink;
+		v.className = "sr-only";
+		document.body.appendChild(v);
+		v.select();
+		var result = true;
+		try {
+			result = document.execCommand('copy');
+		}
+		catch(err){
+			result = false;
+		}
+		finally{
+			document.body.removeChild(v);
+		}
+		if(result === true){
+			c.showUIMessage('info', c.data.messages.PERMALINK_COPIED);
+		}
+		else{
+			$window.prompt("${Because of a browser limitation the URL can not be placed directly in the clipboard. Please use Ctrl-C to copy the data and escape to dismiss this dialog}", permalink);
+		}
+		$('p.kb-permalink button').focus();
+	};
+	var modal = null;
+	c.launchFlagModal = function(e){
+			c.clearComment();
+			var pageRoot = angular.element('.sp-page-root');
+			modal = $uibModal.open(
+				{
+					title : c.data.messages.FLAG_THIS_ARTICLE,
+					scope : $scope,
+					templateUrl : 'kb-flag-article-modal',
+					keyboard: true,
+		            controller: function($scope) {
+		                $scope.$on('modal.closing', function() {
+		                    pageRoot.attr('aria-hidden', 'false');
+		                    // Toggle dropdown if not already visible:
+		                    if ($('.dropdown').find('.moreActionsMenuList').is(":hidden") && !$("#submitFlagComment").attr("disabled")) {
+		                        $('.more-actions-menu').dropdown('toggle');
+		                        //Give focus to the flagArticle 
+		                        $('#flagArticleButton').focus();
+		                    }
+		                });
+		            }
+				});
+			modal.rendered.then(function() {
+				//hide the root page headings when modal is active
+				pageRoot.attr('aria-hidden', 'true');
+				$("#flagComment").focus();
+				
+			});
+		  e.stopPropagation();
+		}
+
+	var taskPopUp = $rootScope.$on("sp.kb.feedback.openTaskPopup",function(event,data){
+		c.ftask = {};
+		if(data){
+			c.launchFeedbackTaskModal();
+			c.ftask.feedback_action = data.feedback_data.action;
+			c.ftask.feedback_rating = data.feedback_data.rating
+			c.ftask.action= "createFeedbackTask";
+
+		}
+	});
+
+	c.launchFeedbackTaskModal = function(){
+		var pageRoot = angular.element('.sp-page-root');
+		c.clearFeedbackTask();
+		modal = $uibModal.open({
+			title : c.data.messages.FEEDBACK,
+			windowClass : 'app-modal-window',
+			scope : $scope,
+			templateUrl : 'kb-feedback-task-modal',
+			keyboard: true,
+            controller: function($scope) {
+                $scope.$on("modal.closing", function() {
+                    pageRoot.attr('aria-hidden', 'false');
+                    $('#useful_no').focus();
+
+                    if (!c.submitted) {
+                        c.data.reason = "4";
+                        c.data.details = "";
+                    }
+                    if (c.ftask.action == "createFeedbackTaskWithFlagComment" && !c.submitted)
+                        return;
+                    modal = null;
+                    c.server.get({
+                        action: c.ftask.action,
+                        article_sys_id: c.data.article_sys_id,
+                        reason: c.data.reason,
+                        details: c.data.details,
+                        feedback_action: c.ftask.feedback_action,
+                        rating: c.ftask.feedback_rating
+                    }).then(function(resp) {
+                        if (resp.data.responseMessage) {
+                            if (resp.data.feedbackSuccess) {
+                                c.showUIMessage('info', resp.data.responseMessage);
+                            } else {
+                                c.showUIMessage('error', resp.data.responseMessage);
+                            }
+
+                        }
+                    });
+                    c.clearFeedbackTask();
+                });
+            }
+		});
+		modal.rendered.then(function() {
+			//hide the root page headings when modal is active
+			pageRoot.attr('aria-hidden', 'true');
+		    $('.type-multiple_choice input[aria-checked="true"]').focus();
+		});
+		
+	}
+
+	c.clearComment = function(e){
+		if(e){
+			e.stopPropagation();
+			e.preventDefault();
+		}
+		$scope.data.comment = '';
+		c.flagMessage = '';
+		c.closePopup();
+	}
+	
+	c.closeTaskPopup = function(e){
+		if(e){
+			e.stopPropagation();
+			e.preventDefault();
+		}
+		modal.dismiss({$value: "dismiss"});
+		$('#useful_no').focus();
+	}
+	
+	c.selectReason = function(e, elem){
+		// space keycode to select the radio button
+		if(e.keyCode ==32){
+			$("div.type-multiple_choice").find("input[type=radio]").each(function(){
+				$(this).attr("checked", false);
+				$(this).attr("aria-checked", false);
+				$(this).find("input[type=radio]").attr("checked", false);
+				$(this).find("input[type=radio]").attr("aria-checked", false);
+			});
+			$(e.target).click(); 
+			$(e.target).find("input[type=radio]").click();
+		}
+		  
+	}
+
+	c.showUIMessage = function(type,msg){
+		if(cabrillo.isNative()){
+			cabrillo.message.showMessage(type != 'error' ? cabrillo.message.SUCCESS_MESSAGE_STYLE : cabrillo.message.ERROR_MESSAGE_STYLE, msg);
+		}else{
+			if(type == 'error')
+				spUtil.addErrorMessage(msg);
+			else
+				spUtil.addInfoMessage(msg);
+		}
+	}
+
+	c.closePopup = function(){
+		if(modal){
+			modal.dismiss();
+		}
+	}
+
+	c.clearFeedbackTask = function(){
+		c.submitted = false;
+		c.data.reason = '4';
+		c.data.details = '';
+		c.flagMessage = '';
+		c.ftask = {};
+		c.closePopup();
+	}
+
+	c.submitFeedbackTask = function(){
+		if(!c.data.reason){
+			c.flagMessage = "${Please provide the mandatory details}";
+			$("#detailsComment").focus();
+			return false;
+		}
+		else{
+			c.submitted = true;
+			c.closePopup();
+		}
+	}
+
+	c.imgModalClose = function(){
+		c.imageInstance.close();
+	}
+
+	c.getLabelForTemplateField = function(label, isCollapsed) {
+		if(isCollapsed)
+			return label + " " + c.data.messages.COLLAPSED_FIELD;
+		else
+			return label + " " + c.data.messages.EXPANDED_FIELD;
+	}
+
+	$scope.$on("$destroy", taskPopUp);
+	
+	$("#flagComment").keydown(function(ev){
+		if(ev.which ==13)
+			$("#flagComment").click();
+	});
+	
+	c.handleKeyDown = function(ev) {
+        if (ev.which == 13)
+            $(ev.target).click();
+    }
+
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.kb-language, .kb-language-block{
+  display: inline-block;
+}
+.kb-subscribe{
+  min-width : 100px;
+  margin-left : 5px;
+}
+.kb-panel-heading{
+  padding-top : 6px;
+  padding-bottom : 6px;
+}
+summary{
+  display : list-item;
+}
+.kb-dropdown-button{
+  margin-left : 5px;
+  display: inline-block;
+  height:34px
+}
+.kb-permalink-separator{
+  margin : 0px;
+}
+.kb-number-info{
+  display : inline-block;
+}
+
+.kb-article-content{
+  overflow-x:auto;
+  img{
+    cursor:pointer;
+  }
+  img:focus{
+    outline: 5px auto -webkit-focus-ring-color;
+    outline-offset: -2px;
+  }
+}
+
+.kb-article-field{
+   clear: both;
+}
+
+/*To fix contents are not shown when we created article in word add-in*/
+.word-addin-mobile{  
+  overflow-x:auto;
+  min-width:650pt;
+}
+
+.collapsible-title {
+  border-bottom: 1px solid $gray-dark;
+  margin-bottom: 10px;
+  vertical-align: middle;
+  cursor: pointer;
+  display: block;
+  color: inherit;
+
+  .fa {
+    float: right;
+    color: $gray-dark;
+  }
+}
+
+.collapsible-title:focus {
+  outline: none;
+  border: 1px solid #1f8476;
+  -webkit-box-shadow: 0px 0px 5px #1f8476;
+  box-shadow: 0px 0px 5px #1f8476;
+}
+
+header h3 {
+  outline: none;
+  margin: 0px;
+  padding-top: 18px;
+  padding-bottom: 9px;
+}
+
+header h3:focus{
+  border: none;
+  box-shadow: none;
+  -webkit-box-shadow: none;
+}
+
+header i {
+  outline: none;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+
+.rotate {
+  -ms-transition: all 0.25s linear;
+  -moz-transition: all 0.25s linear;
+  -webkit-transition: all 0.25s linear;
+  transition: all 0.25s linear;
+}
+
+.rotate.down{
+  -ms-transform: rotate(180deg);
+  -moz-transform: rotate(180deg);
+  -webkit-transform: rotate(180deg);
+  transform: rotate(180deg);
+}
+
+.kb-sub-icon{
+  //color: $brand-primary;//#428bca;
+}
+.kb-language-choice{
+  display : inline-block;
+  width : auto;
+}
+.kb-title-header{
+  margin-top : 0px;
+  line-height : 1;
+  overflow-wrap: break-word;
+}
+.kb-action-menu-padding{
+  margin-top : 2px;
+}
+.kb-panel-title-header{
+  margin-top : 6px;
+  vertical-align : middle;
+}
+.kb-version-info{
+  margin-top : -5px;
+  padding-bottom : 15px;
+}
+
+.modal-title{
+  text-align: start;
+}
+.modal-content{
+  text-align : start;
+}
+.kb-end-buttons{
+  float:right;
+}
+
+.kb-header-row{
+  margin-left : 0px;
+  margin-right : 0px;
+}
+
+.kb-version{
+  //margin-left : 15px;
+  //margin-right : 15px;
+}
+
+.kb-header-line,.kb-permalink-separator{
+  margin-top: 10px;
+  margin-left: -5px;
+  margin-right: -5px;
+  margin-bottom : 10px;
+}
+
+.kb-menu-entry{
+}
+.kb-star-on {
+  text-shadow: $fav-star-outline;
+}
+.kb-star-off {
+  color: $fav-star-color-off !important;
+  text-shadow: $fav-star-outline;
+}
+.rating-stars [role="button"] {
+  cursor: text;
+}
+
+.disabled{
+  text-decoration:none;
+  cursor:default;
+  color:$text-color;
+}
+
+.community-attribution{
+  .contributor{
+    padding-top: 10px;
+    .pre-bullet-icon::before{
+      content: '\2022';
+      padding-right: 4px;
+    }
+  }
+  .discussion-info{
+    padding: 0px 18px;
+  }
+  .pad-lr{
+    margin: 0px 2px;
+  }
+  margin-bottom: 20px;
+  margin-left: 0px;
+}
+.title-secondary-data{
+  .author .fa{
+    position:relative;
+    bottom:0.8px;
+    font-size:14px;
+  }
+  .published .fa{
+    position: relative;
+    bottom: 1.5px;
+    font-size: 12px;
+  }
+  .views .fa{
+    font-size:14px;
+  }
+  .str-rating i{
+    position:relative;
+    top:1px;
+    font-size:14px;
+  }
+}
+.kb-desktop{
+  &amp;.kb-wrapper{
+    padding : 25px 25px 0px 25px ;
+  }
+  &amp;.panel{
+    border:1px solid $panel-default-border !important;
+  }
+}
+.kb-mobile{
+  color: $text-muted;
+  .author{
+    display: block;
+    margin-top: 7px;
+  }
+  .title-secondary-data{
+    font-size: 17px !important;
+    font-weight: 400;
+    line-height: 1;
+    .str-rating{
+      font-size: 15px !important;
+    }
+  }
+  .kb-number-info{
+    font-size: 17px;
+    font-weight: 400;
+  }
+  .kb-title-header{
+    line-height: 1.2;
+    font-size: 32px !important;
+  }
+  .kb-header-line{
+    border-color: #ccc;
+    margin: 25px -25px !important;
+  }
+  &amp;.mesp-ui{
+    .kb-header-line{
+       margin: 25px -25px 25px -26px !important;
+    }
+  }
+  .kb-article-content{
+    font-size: 15px;
+  }
+  .kb-lang-dropdown-btn{
+    font-size: 17px;
+    font-weight: 400;
+    padding:11px 0px;
+    color:$primary;
+  }
+  .kb-language-block{
+    word-spacing: 3px;
+    a{
+      font-size: 17px !important;
+      font-weight: 400 !important;
+    }
+    .dropdown-menu{
+      top: 0 !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      position: fixed !important;
+      padding: 0px !important;
+      margin: 0px !important;
+
+      li{
+        width: 100% !important;
+        height: 50px !important;
+        font-size: 15px !important;
+        border-bottom: 1px solid $gray-lighter !important;
+
+        a{
+          padding: 12px 20px !important;
+          font-size: 18px !important;
+        }
+      }
+    }
+  }
+  .kb-favorite {
+     position: relative;
+     top: -10px;
+     float: right;
+	}
+}
+}
+.kb-font-color-black{
+	color:$close-color;
+}
+.transparent-button {
+    background-color: transparent;
+    background-repeat:no-repeat;
+    border: none;
+    cursor:pointer;
+    overflow: hidden;
+    color: $brand-primary-darker;
+ }
+.apply-brand-color{
+  color: $brand-primary-darker;
+}
+.moreActionsMenuList{
+  z-index: 1000 !important;
+}
+.trim-padding-right{
+  padding-right: 0px !important;
+}
+.moreActionsMenuList li a:focus,.version-menu-list li a:focus{
+     background-color:$brand-primary-dark;
+     color:$body-bg;
+}
+ .kb-version{
+     padding:0px !important;
+     margin-top:-2px !important;
+     font-size:16px !important;
+}
+ .kb-version:focus{
+     padding:0px !important;
+     margin:0px !important;
+     font-size:16px !important;
+}
+.kb-version i,.more-actions-menu i{
+  padding-left:3px;
+}
+/*used in Flag modal: to avoid horizontal resize*/
+.resize-vertical{
+    resize: vertical;
+  }
+.accordion-trigger {
+  position: relative;
+  text-align: left;
+  width: 100%;
+  color:$text-color;
+}
+.accordion-trigger:focus{
+  box-shadow: 0px 0px 5px $brand-primary-dark;
+  outline-color: $brand-primary-dark;
+  outline-offset: -2px;
+  border: 1px solid $brand-primary-dark;
+}
+.accordion-trigger:hover{
+  background-color:$breadcrumb-bg;
+}
+.kb-language .dropdown-menu button{
+  padding: .3rem 2rem;
+  width:100%;
+  text-align:left;
+}
+.kb-language .dropdown-menu button:focus,.kb-language .dropdown-menu button:hover{
+    box-shadow: 0rem 0rem 0.5rem $brand-primary-dark;
+    outline-color: $brand-primary-dark !important;
+    outline-offset: -.2rem;
+    background-color:$brand-primary-dark;
+    color:white;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description>Knowledge Article Content - only change is allow parameters to be passed into options</description>
+        <docs/>
+        <field_list>color,css</field_list>
+        <has_preview>false</has_preview>
+        <id>tasker-kb-article-content</id>
+        <internal>false</internal>
+        <link><![CDATA[function(scope,$timeout) {
+	var c = scope.c,
+			$uibModal = $injector.get('$uibModal'),
+			$rootScope = $injector.get("$rootScope");
+	var options = {
+		scope: scope,
+		keyboard: true,
+		templateUrl: 'knowledge-image-modal.html'
+	};
+	setTimeout(function(){
+		var p=$(".kb-article-content").find("img");
+		p.attr("tabindex","0");
+		p.attr("role","button");
+		var timer = 0;
+		var prevent = false;
+		var element;
+
+		$(".kb-article-content").on("click keypress","img", function() {
+			element = this;
+			timer = setTimeout(function() {
+				if (!prevent)
+					openModal(element);
+				prevent=false;
+			}, 200);
+		});
+
+		$(".kb-article-content").on("dblclick","img", function() {
+			element = this;
+			prevent = true;
+			clearTimeout(timer);
+			openModal(element);
+		});
+
+	});
+
+	function openModal(element){
+		if( c.imageInstance == '' ||  c.imageInstance.closed.$$state.status == 1 ){
+			var pageRoot = angular.element('.sp-page-root');
+			var src= element.src;
+			var title=element.title;
+			var alt=element.alt;
+			c.imageInstance = $uibModal.open(options);
+			c.imageInstance.rendered.then(function() {
+				//hide the root page headings when modal is active
+				pageRoot.attr('aria-hidden', 'true');
+				$('#modal-close').focus();
+			});
+			c.imageInstance.closed.then(function(){
+				pageRoot.attr('aria-hidden', 'false');
+			});
+			var orignalWidth = $(element).prop('naturalWidth');
+			var orignalHeight = $(element).prop('naturalHeight');
+			setTimeout(function(){
+				var modal = document.getElementById('knowledgeImageModal'),
+						modalImg = $('#modalImage')[0];
+				modal.style.display = "block";
+				modalImg.src = src;
+				modalImg.title = title;
+				modalImg.alt = alt;
+				c.imagesrc = src;
+				modalImg.width = orignalWidth > c.minImageWidth ? orignalWidth : c.minImageWidth;
+				modalImg.style.minHeight = orignalHeight > c.minImageHeight ? orignalHeight : c.minImageHeight +"px";
+				$('.modal-dialog').width(modalImg.width);
+				$('#modal-close').focus();
+
+			});
+		}
+	}
+
+	c.showAttachArticle = function(){
+		try{
+			if(window.opener && window.opener.document.getElementById("section_form_id") != null && c.data.params.sysparm_kb_search_table && c.data.isTaskTable){
+				$('.kb_container-left').removeClass('col-md-9').addClass('col-md-12');
+				if(c.data.displayAttachments == 'true' && c.data.attachments.length > 0) {
+					$('.kb_container-right').children('span').children('div').children("div:not(.kb-panel-attach)").css('display','none');
+					$('.kb_container-right').removeClass('col-md-3').addClass('col-md-12');
+				}
+				else {
+					$('.kb_container-right').css('display','none').removeClass('col-md-3');
+				}
+				$('.kb-article-content').find('a').attr("target","_blank");
+				if($rootScope.properties.readOnlyPage == "true") {
+					$rootScope.readOnly = true;
+					$("[ng-click='c.toggleVersions()']").off("click").addClass("disabled");
+				}
+				return true;
+			}
+		}catch(e){
+			return false;
+		}
+		return false;
+	};
+
+	c.attachToTask = function(){
+		self = window;
+		if (self.opener) {
+			var lastSaved = self.opener.document.getElementById("onLoad_sys_updated_on").value;
+			if (!lastSaved) {
+				self.close();
+				self.opener.g_form.addErrorMessage("Invalid action: Record needs to be saved first");
+				return false;
+			}
+			var e = self.opener.document.getElementById("sys_uniqueValue");
+			var taskID = e.value;
+
+
+			var articleID = c.data.article_sys_id;
+			var args = [];
+			args.push(articleID);
+			args.push(c.data.properties.attachFields);
+
+			c.server.get({action : 'kbAttachArticle', value : articleID + "," + taskID}).then(function(resp){
+				var fieldName = self.opener.fillField;
+				var tableName = fieldName.split('.')[0];
+				var targetFields = c.data.properties.attachFields;
+
+        var articleContent = resp.data.articleContent;
+
+				var names = [];
+				if (targetFields) {
+					var parts = targetFields.split(",");
+					for(var i=0; i<parts.length; i++)
+						names.push(parts[i]);
+				}
+				names.push('comments');
+				names.push('description');
+
+				var target = null;
+				var targetName = null;
+				for (var i=0;i<names.length; i++) {
+					targetName = names[i];
+					target = self.opener.document.getElementById(tableName + "." + targetName);
+					if (target){
+						var ed = self.opener.g_form.getGlideUIElement(targetName);
+						if (ed && ed.type == 'reference') {
+							self.opener.g_form.setValue(targetName, articleID);
+						} else {
+							var newValue = "";
+							if (target.value == "")
+								newValue = articleContent;
+							else
+									newValue = target.value + "\n" + articleContent;
+								self.opener.g_form.setValue(targetName, newValue);
+						}
+						break;
+					}
+
+				}
+				self.close();
+			})
+		}
+	};
+}]]></link>
+        <name>Tasker - Knowledge Article Content</name>
+        <option_schema>[{"hint":"Hide all article actions (Subscribe, Edit, Create Incident, Flag Article)","name":"hide_all_actions","default_value":"false","section":"other","label":"Hide All Actions","type":"boolean"},{"hint":"Show Article Versioning Information","name":"show_version_info","default_value":"true","section":"other","label":"Show Version Information","type":"boolean"},{"hint":"Show the Create Incident action","name":"show_create_incident_action","default_value":"false","section":"other","label":"Show Create Incident Action","type":"boolean"},{"hint":"Label for the Create Incident action","name":"create_task_prompt","section":"other","label":"Create Incident Action Label","type":"string"},{"hint":"Change the url for the create incident action to any custom task form (default url is populated based on glide.knowman.create_incident_link system property)","name":"create_task_url","section":"other","label":"Create Incident Action URL","type":"string"},{"hint":"If there's a new version of the article available, it will redirect to the latest version. You must have Show Article Versioning disabled","name":"redirect_latest","section":"other","default_value":"false","label":"Redirect to the latest article","type":"boolean"}]</option_schema>
+        <public>true</public>
+        <roles/>
+        <script><![CDATA[data.tsQueryId = $sp.getParameter("sysparm_tsqueryId") || "";
+var isMESP = (options.is_mobile && options.is_mobile == "true") || ($sp.getParameter("id") == "me_kb_view") || false;
+data.isMESP = isMESP;
+options.kb_rating_style = options.kb_rating_style ? options.kb_rating_style == "true" : false;
+var portalRecord = $sp.getPortalRecord();
+var portal = portalRecord.getUniqueValue();
+data.showKbHomeLink = (portal != '45d6680fdb52220099f93691f0b8f5ad');
+
+if(!input){
+	var kbViewModel = new global.KBViewModel();
+	data.isCrawlerBot = kbViewModel.checkCrawlerBot();
+	data.messages = {};
+	populateParameters();
+
+	if(data.isCrawlerBot){
+		kbViewModel.findKnowledgeById(GlideAppCache.get("articleSysId"));
+		var knowledgeRecord = kbViewModel.knowledgeRecord;
+		var isValidRecord = kbViewModel.isValid;
+		if (options.redirect_latest == 'true' && isValidRecord && knowledgeRecord && !knowledgeRecord.article_id.nil()) {
+			var latest = kbViewModel.getLatestAccessibleVersionFromId(knowledgeRecord.article_id);
+			var newVersionAvailable = !gs.nil(latest) && (latest.getValue('version')!=knowledgeRecord.getValue('version'));
+			if(newVersionAvailable){
+				data.params.sys_kb_id = latest.getValue('sys_id');
+				data.redirect = data.params.sys_kb_id;
+				kbViewModel = new global.KBViewModel();
+				kbViewModel.getInfoForSP(data.params);
+				isValidRecord = kbViewModel.isValid;
+				knowledgeRecord = kbViewModel.knowledgeRecord;
+			}
+		}	
+		data.knowledgeExists = kbViewModel.knowledgeExists;
+		if (isValidRecord && knowledgeRecord) {
+			data.isKBAdmin = kbViewModel.isAdminUser(knowledgeRecord);
+			data.isArticleExpired = kbViewModel.isArticleExpired(knowledgeRecord);
+			if (data.isArticleExpired && !data.isKBAdmin) {
+				data.messages.ARTICLE_EXPIRED = gs.getMessage("This knowledge item has expired");
+			} 
+			else {data.isKBOwner = (gs.getUserID() == knowledgeRecord.kb_knowledge_base.owner);
+				populateDataForCrawler();
+				kbViewModel.setTableName(knowledgeRecord.getTableName() + "");
+				data.attachments = kbViewModel.getAttachments();
+				populateMessages();
+				data.page_title = getPageTitle();
+
+				if(data.articleType === 'wiki'){
+					initGlideWiki();
+				}
+
+				data.shortDesc = knowledgeRecord.short_description.getDisplayValue() + "";
+			}
+		}
+		else{
+			data.messages.INSUFFICIENT_PREVILEGES = gs.getMessage("You do not have sufficient privileges to access this knowledge item");
+			data.messages.RECORD_NOT_FOUND = gs.getMessage("Knowledge record not found");
+		}
+	}
+	
+	else{
+		kbViewModel.setShowVersionHistory(options.show_version_info);
+		kbViewModel.getInfoForSP(data.params);
+		var isValidRecord = kbViewModel.isValid;
+		if (options.redirect_latest == 'true' && isValidRecord && kbViewModel.knowledgeRecord && kbViewModel.versioningInfo.newVersionAvailable) {	
+			data.params.sys_kb_id = kbViewModel.versioningInfo.newVersion.getValue('sys_id');
+			data.redirect = data.params.sys_kb_id;
+			kbViewModel = new global.KBViewModel();
+			kbViewModel.getInfoForSP(data.params);
+			isValidRecord = kbViewModel.isValid;
+		}	
+		// ***********************************
+		// START CHANGES
+		// had to change to use the scoped implementation method
+		// ***********************************
+		// var kbPortal = new KBPortalService();
+		var kbPortal = new global.KBPortalServiceImpl();
+		// ***********************************
+		// END CHANGES
+		// ***********************************
+		data.knowledgeExists = kbViewModel.knowledgeExists;
+		data.kb_knowledge_page = $sp.getDisplayValue("kb_knowledge_page") || "kb_view2";
+		data.langList = [];
+		var tsQueryId = $sp.getParameter("sysparm_tsqueryId");
+		var rank = $sp.getParameter("sysparm_rank");
+		if(tsQueryId && rank && tsQueryId != ""){
+			kbViewModel.updateTsQueryKbWithRank(tsQueryId,rank);
+		}
+
+		options.knowledge_bases = options.knowledge_bases || String(kbPortal.getServicePortalKnowledgeBases($sp.getPortalRecord().url_suffix)) || "";
+		var knowledgeRecord = kbViewModel.knowledgeRecord;
+		
+		if(options.knowledge_bases && knowledgeRecord && knowledgeRecord.kb_knowledge_base ){
+			if(options.knowledge_bases.indexOf(knowledgeRecord.kb_knowledge_base) == -1)
+				isValidRecord = false;
+		}
+		data.isArticleExpired = false;
+
+		if (isValidRecord && knowledgeRecord) {
+			data.isKBAdmin = kbViewModel.isAdminUser(knowledgeRecord);
+			data.isArticleExpired = kbViewModel.isArticleExpired(knowledgeRecord);
+			if (data.isArticleExpired && !data.isKBAdmin) {
+				data.messages.ARTICLE_EXPIRED = gs.getMessage("This knowledge item has expired");
+			} else {
+				data.isKBOwner = (gs.getUserID() == knowledgeRecord.kb_knowledge_base.owner);
+				populateDataFromKBViewModel();
+				// fetching default page title to support km seo
+				data.page_title = getPageTitle();
+				populateMessages();
+				populateCommonProperties();
+				if(!isMESP){
+				populateBreadCrumbs();
+				populateVersionInfo();
+				}
+				handleViewCountIncrement();
+				if(!isMESP)
+				populateContributorInfo();
+
+
+				if(data.articleType === 'wiki'){
+					initGlideWiki();
+				}
+
+				data.sys_updated_on = "";
+				if (kbViewModel.publishedRecord) {
+					published = kbViewModel.publishedRecord.published;
+					data.sys_updated_on = kbViewModel.publishedRecord.sys_updated_on + "";
+				}
+
+				data.shortDesc = knowledgeRecord.short_description.getDisplayValue() + "";
+
+				populateSystemProperties();
+				getFeedbackReasonValues();
+				if(data.properties.showAffectedProducts === 'true' || data.properties.showAffectedProducts === true){
+					populateAffectedProducts();
+				}
+
+				if(data.properties.showAttachedTasks === true || data.properties.showAttachedTasks === 'true'){
+					populateAttachedTasks();
+				}
+
+			data.favoriteWidget = $sp.getWidget('sp_favorite', {'table': 'kb_knowledge', 'sys_id': data.article_sys_id});
+
+				$sp.logStat('KB Article View', "kb_knowledge", knowledgeRecord.sys_id, knowledgeRecord.short_description);
+			}
+		}
+		else{
+			data.messages.INSUFFICIENT_PREVILEGES = gs.getMessage("You do not have sufficient privileges to access this knowledge item");
+			data.messages.RECORD_NOT_FOUND = gs.getMessage("Knowledge record not found");
+		}
+	}
+}
+
+if(input){
+	if(input.action === 'saveFlagComment'){
+		var kbPortal = new KBPortalService();
+		var params = {};
+		params.sysparm_id = input.article_sys_id;
+		params.feedback = input.comment;
+		params.sysparm_flag = "true";
+		params.ts_queryId = data.tsQueryId;
+		var response = kbPortal.kbWriteCommentWithParams(params);
+		var resp = new global.JSON().decode(response);
+
+		data.feedbackSuccess=resp.success;
+	}
+	if(input.action == 'createFeedbackTask'){
+		var response;
+		var kbPortal = new KBPortalService();
+		var successMessage = options.feedback_message ? options.feedback_message : gs.getMessage('Thank you, we appreciate your feedback');
+		var max_daily_comments = gs.getProperty("glide.knowman.max_comments_per_user_daily",'0');
+		var failureMessage = parseInt(max_daily_comments)>0? gs.getMessage("You have reached the daily limit for comments posted by a user."):gs.getMessage('Failed to save feedback');
+		var params = buildParams();
+		params.reason = input.reason;
+		params.comments = input.details;
+		if(input.feedback_action == "useful_no"){
+			params.useful = "no";
+			response = kbPortal.saveUsefulWithParams(params) + '';
+		}else if(input.feedback_action == "rating"){
+			params.rating = input.rating;
+			response = kbPortal.saveStarRatingWithParams(params) + '';
+		}
+		data.responseMessage = response.includes('true') ? successMessage : failureMessage;
+		var resp = new global.JSON().decode(response);
+		data.feedbackSuccess = resp.success;
+	}
+	if(input.action === 'subscribe'){
+		var subResult = subscribeObject('Article', input.articleSysId, gs.getUserID());
+		if(subResult){
+			data.responseMessage = gs.getMessage("You are now subscribed to {0}. You will be notified of any new activity according to your notification settings.", input.articleNum);
+		}
+	}
+	if(input.action === 'unsubscribe'){
+
+		var subResult = false;
+		if(input.unsubscribeKB){
+			subResult = unsubscribeObject('KB', input.articleSysId, input.kbSysId);
+			if(subResult === 'Article'){
+				data.responseMessage = gs.getMessage("Your subscriptions to {0} Knowledge Base and {1} have been removed.", [input.kbName, input.articleNum]);
+			}
+			else{
+				data.responseMessage = gs.getMessage("Your subscription to {0} Knowledge Base has been removed.", input.kbName);
+			}
+		}
+		else{
+			subResult = unsubscribeObject('Article', input.articleSysId, null);
+			if(subResult){
+				data.responseMessage = gs.getMessage("Your subscription to {0} has been removed.", input.articleNum);
+			}
+		}
+	}
+
+	 if(input.action == 'kbAttachArticle'){
+		var kAjax = new global.KnowledgeAjax();
+		data.articleContent = kAjax.kbAttachArticleImpl(input.value);
+	}
+}
+
+function buildParams(){
+	var params = {};
+	params.article = input.article_sys_id;
+	params.sysparm_id = input.article_sys_id;
+	params.ts_queryId = data.tsQueryId;
+	params.session_id = gs.getSessionID();
+	params.user = gs.getUserID();
+	return params;
+}
+
+function subscribeObject(type, sysId, userId){
+	var kAjax = new global.KnowledgeAjax();
+	return kAjax.subscribeKbArticle(sysId, "7d8f537453003200fa9bd7b08cc5872c");
+}
+
+function unsubscribeObject(type, articleSysId, kbSysId){
+	var kAjax = new global.KnowledgeAjax();
+	if(type === 'Article'){
+		return kAjax.unsubscribeKbArticle(articleSysId);
+	}
+	else{
+		return kAjax.unsubscribeKB(articleSysId, kbSysId);
+	}
+}
+
+function populateMessages(){
+
+	data.messages.REASON = gs.getMessage("Reason");
+	data.messages.DETAILS = gs.getMessage("Details");
+	data.messages.FEEDBACK = gs.getMessage("Feedback");
+	data.messages.THANKYOU_FEEDBACK = gs.getMessage("Thank you for the feedback");
+	data.messages.ADDTIONAL_DETAILS = gs.getMessage("Please provide additional details");
+	data.messages.NO_THANKS = gs.getMessage("No thanks");
+	data.messages.ADD_DETAIL = gs.getMessage("Add a Detail Comment");
+	data.messages.ARTICLE_FLAGGED = gs.getMessage("Article has been flagged");
+	data.messages.FLAG_THIS_ARTICLE = gs.getMessage("Flag this article");
+	data.messages.ADD_COMMENT = gs.getMessage("Add a comment (mandatory)");
+	data.messages.NOT_RETIRED = gs.getMessage("Article not retired");
+	data.messages.NOT_PUBLISHED = gs.getMessage("Article not published");
+	data.messages.NOT_SAVED = gs.getMessage("Article not saved");
+	data.messages.SAVED = gs.getMessage("Article saved");
+	data.messages.HOME = gs.getMessage('Home');
+	data.messages.DISCARDED = gs.getMessage("Article changes discarded");
+	data.messages.SUBMITTED = gs.getMessage("Your article has been submitted");
+	data.messages.PREVIEW = gs.getMessage(" Preview ");
+	data.messages.PREVIEW_HINT = gs.getMessage("Preview changes");
+	data.messages.DELETE = gs.getMessage("Delete");
+	data.messages.CONFIRM_DELETE = gs.getMessage("Confirm deletion of this article?");
+	data.messages.TITLE_CANCEL = gs.getMessage("Cancel changes");
+	data.messages.MESSAGE_CANCEL = gs.getMessage("Discard all changes?");
+	data.messages.TITLE_RETIRE = gs.getMessage("Retire");
+	data.messages.MESSAGE_RETIRE = gs.getMessage("Retire this article?");
+	// Status messages for the message bar.
+	data.messages.DRAFT_MSG = gs.getMessage("This knowledge item has been created");
+	data.messages.REVIEW_MSG = gs.getMessage("This knowledge item has been published");
+	data.messages.PUBLISHED_MSG = gs.getMessage("This knowledge item has been published");
+	data.messages.PEND_RETIRE_MSG = gs.getMessage("This knowledge item has been retired");
+	data.messages.RETIRED_MSG = gs.getMessage("This knowledge item has been retired");
+	data.messages.DELETE_FAIL_MSG = gs.getMessage("This article could not be deleted");
+	data.messages.TXT_PLACEHOLDER = gs.getMessage("Add content");
+	data.messages.LATEST_VERSION = gs.getMessage("Latest version");
+	data.messages.SUBSCRIBE = gs.getMessage("Subscribe");
+	data.messages.UNSUBSCRIBE = gs.getMessage("Unsubscribe");
+	data.messages.COPY_PERMALINK = gs.getMessage("Copy Permalink");
+	data.messages.SUBMIT = gs.getMessage('Submit');
+	data.messages.COMMENTS = gs.getMessage('Comments');
+	data.messages.AFFECTED_PRODUCTS = gs.getMessage('Affected Products');
+	data.messages.OUTDATED = gs.getMessage('Outdated');
+	data.messages.KNOWLEDGE_BASE = gs.getMessage('Knowledge Base');
+	data.messages.KNOWLEDGE = gs.getMessage('Knowledge');
+	data.messages.ATTACHED_INCIDENTS = gs.getMessage("Most recent tasks");
+	data.messages.THANK_YOU = gs.getMessage("Thank you");
+	data.messages.RATE_LIMIT_REACHED = gs.getMessage("You have reached the daily limit for comments posted by a user.");
+	data.messages.NO_ATTACHMENTS = gs.getMessage("No attachments found");
+	data.messages.NO_INCIDENTS = gs.getMessage("No tasks found");
+	data.messages.NO_PRODUCTS = gs.getMessage("No affected products found");
+	data.messages.EDIT = gs.getMessage("Edit Article");
+	data.messages.ATTACHMENTS = gs.getMessage('Attachments');
+	data.messages.CREATE_INCIDENT = gs.getMessage("Create Incident");
+	data.messages.FLAG_ARTICLE = gs.getMessage("Flag Article");
+	data.messages.PERMALINK_COPIED = gs.getMessage("Permalink copied successfully");
+	data.messages.SUBSCRIPTION_CONFIRMATION = gs.getMessage("You are now subscribed to {0}. You will be notified of any new activity according to your notification settings", data.number);
+	data.messages.SUBSCRIBED = gs.getMessage("Subscribed");
+	data.messages.YES = gs.getMessage("Yes");
+	data.messages.NO = gs.getMessage("No");
+	data.messages.UNSUBSCRIBE_CONTENT = gs.getMessage("In order to unsubsrcibe from this article, you will need to unsubscribe from the parent knowledge base: {0}. ", data.kbName);
+	data.messages.UNSUBSCRIBE_CONFIRMATION = gs.getMessage("Would you like to unsubscribe from {0}", data.kbName);
+	data.messages.CANCEL = gs.getMessage("Cancel");
+	data.messages.ACTION_MENU = gs.getMessage("More actions.");
+	data.messages.ACTION_MENU_LABEL = gs.getMessage("Actions");
+	data.messages.CLOSE = gs.getMessage("Close");
+	data.messages.JUST_NOW = gs.getMessage("just now");
+	data.messages.ARTICLE_RATING = gs.getMessage("Average article rating - {0} out of 5 stars", data.avgRating);
+	data.messages.EXTERNAL_CONTENT = gs.getMessage(gs.getProperty("sn_km_intg.glide.knowman.external.ui_label_for_external_content", "External Content"));
+	data.messages.DOWNLOAD_DOCUMENT = gs.getMessage('Download as Word (.docx)');
+	data.messages.COLLAPSED_FIELD = gs.getMessage('section is in collapsed mode');
+	data.messages.EXPANDED_FIELD = gs.getMessage('section is in expanded mode');
+	
+	if(data.params.sysparm_kb_search_table){
+		var label = new GlideRecord(data.params.sysparm_kb_search_table).getLabel();
+		if(label)
+			data.messages.ATTACH_TO_TASK_LABEL = gs.getMessage("Attach to {0}", label);
+		else
+			data.messages.ATTACH_TO_TASK_LABEL = gs.getMessage("Attach to record");
+	}
+}
+
+// ************************************************************
+// START - ONLY CHANGES ARE IN THIS SECTION
+// ************************************************************
+function populateParameters(){
+	data.params = {};
+/*	data.params.sysparm_article = $sp.getParameter('sysparm_article');
+	data.params.sysparm_language = $sp.getParameter('sysparm_language');
+	data.params.sys_kb_id = $sp.getParameter('sys_kb_id') || $sp.getParameter('sys_id');
+	data.params.sysparm_no_update = $sp.getParameter('sysparm_no_update');
+	data.params.sysparm_no_suggest = $sp.getParameter('sysparm_no_suggest');
+	data.params.sysparm_no_info = $sp.getParameter('sysparm_no_info');
+	data.params.sysparm_no_create_incident = $sp.getParameter('sysparm_no_create_incident');
+	data.params.sysparm_ts_queryId = $sp.getParameter('sysparm_tsqueryId');
+	data.params.sysparm_article_view_page_id = $sp.getParameter('id');
+*/
+	data.params.sysparm_article = _paramOptCopy('sysparm_article');
+	data.params.sysparm_language = _paramOptCopy('sysparm_language');
+	data.params.sys_kb_id = _paramOptCopy('sys_kb_id') || _paramOptCopy('sys_id');
+	data.params.sysparm_no_update = _paramOptCopy('sysparm_no_update');
+	data.params.sysparm_no_suggest = _paramOptCopy('sysparm_no_suggest');
+	data.params.sysparm_no_info = _paramOptCopy('sysparm_no_info');
+	data.params.sysparm_no_create_incident = _paramOptCopy('sysparm_no_create_incident');
+	data.params.sysparm_ts_queryId = _paramOptCopy('sysparm_tsqueryId');
+	data.params.sysparm_article_view_page_id = _paramOptCopy('id');
+
+}
+
+	// copy to data from input or options
+	function _paramOptCopy(name) {
+		var param = (input || {})[name] || (options || {})[name] || $sp.getParameter(name);
+		return param;
+	}
+// ************************************************************
+// END - ONLY CHANGES ARE IN THIS SECTION
+// ************************************************************
+
+function populateSystemProperties(){
+	data.properties = {};
+
+	data.properties.showStarRating = getProperty("glide.knowman.show_star_rating", "show_star_rating", true, true);
+	data.properties.showRatingOptions = getProperty("glide.knowman.show_rating_options", "show_rating_options", true, true);
+	data.properties.showYesNoRatings = getProperty("glide.knowman.show_yn_rating", "show_yn_rating", true, true);
+	//data.properties.showFlagArticle = getProperty("glide.knowman.show_flag", "show_flag", true, true);
+	//data.properties.showFlagArticle = data.properties.showFlagArticle && !params.sysparm_no_suggest && !knowledgeRecord.disable_suggesting;
+
+	data.properties.showUserComments = getProperty("glide.knowman.show_user_feedback", "show_user_feedback", 'onload');
+	data.properties.showAffectedProducts = gs.getProperty('glide.knowman.affected_products.display','true');
+	data.properties.showAttachedTasks = gs.getProperty('glide.knowman.recent_tasks.display','true');
+
+	data.properties.attachFields = gs.getProperty('glide.knowman.attach.fields');
+	if(data.properties.showAttachedTasks === 'true'){
+		data.properties.showAttachedTasks = gs.hasRole('itil') || gs.hasRole('knowledge');
+	}
+	data.properties.showCreateIncident = !kbViewModel.isInPopup && !data.params.sysparm_no_create_incident;
+	data.properties.createIncidentURL = getProperty('glide.knowman.create_incident_link', 'create_incident_link', '', false);
+	data.properties.isSubscriptionEnabled = kbViewModel.isSubscriptionEnabled;
+
+
+	data.properties.isEditable = kbViewModel.isEditable;
+	data.properties.showFeedBack = kbViewModel.showKBFeedback;
+	data.properties.showKBRatingOptions =	kbViewModel.showKBRatingOptions;
+
+	data.properties.showKBHelpfullRating =	kbViewModel.showKBHelpfullRating;
+	data.properties.showKBStarRating = kbViewModel.showKBStarRating;
+
+	data.properties.showKBCreateIncident =	kbViewModel.showKBCreateIncident;// && !kbViewModel.isInPopup && !params.sysparm_no_create_incident;
+	data.properties.showKBFlagArticle = kbViewModel.showKBFlagArticle && !data.params.sysparm_no_suggest && !knowledgeRecord.disable_suggesting;
+	data.properties.showKBUpdateAction =	kbViewModel.showKBUpdateAction;
+	
+	data.properties.readOnlyPage = gs.getProperty('glide.knowman.contextual_search.show_read_only_article','false');
+}
+function getProperty(propertyName, optionName, defaultValue, checkRoles){
+	var optionVal = options[optionName];
+	if(!optionVal || optionVal === 'use_system' || !(optionVal === 'yes' || optionVal === 'no') ){
+		var propValue = gs.getProperty(propertyName, defaultValue);
+		if(propValue && checkRoles){
+			var roles = gs.getProperty(propertyName + '.roles');
+			if (roles != null && roles != ''){
+				propValue = gs.hasRole(roles);
+			}
+		}
+		return propValue;
+	}
+	else {
+		return optionVal === 'yes' ? true : false;
+	}
+}
+
+function populateCommonProperties(){
+	data.isMobileView = ($sp.getParameter('sysparm_device') != "" && $sp.getParameter('sysparm_device') == "mobile");
+	data.isKBLanguagesNewUI = GlidePluginManager.isActive('com.glideapp.knowledge.i18n2');
+	if(data.isKBLanguagesNewUI){
+		data.langList = kbViewModel.getLanguagesToDisplay(knowledgeRecord);
+	}
+}
+
+function populateDataForCrawler(){
+	data.isValid = true;
+	data.article_sys_id = knowledgeRecord.sys_id + '';
+	data.kbContentData = kbViewModel.getArticleViewData();//.getArticleContentBySysId(data.article_sys_id);
+	data.number = knowledgeRecord.number + '';
+	data.articleType = knowledgeRecord.article_type + '';
+	data.attachments = kbViewModel.attachments;
+	data.shortDesc = knowledgeRecord.short_description.getDisplayValue() + "";
+	data.displayAttachments = knowledgeRecord.display_attachments + '';
+	data.kbSysId = knowledgeRecord.kb_knowledge_base.sys_id + '';
+	data.hasComments = false;
+	data.tableName = knowledgeRecord.sys_class_name + '';
+}
+
+function populateDataFromKBViewModel(){
+	data.isValid = true;
+	data.isLoggedInUser = gs.getSession().isLoggedIn();
+	data.canContributeToKnowledge = kbViewModel.canContributeToKnowledgeBase; //canContributeHelper.canContribute(kbViewModel.knowledgeRecord);
+	data.article_sys_id = knowledgeRecord.sys_id + '';
+	data.authorTitle = kbViewModel.authorTitle || kbViewModel.getAuthorInfo("author.title");
+	data.kbContentData = kbViewModel.getArticleViewData();
+	data.avgRating = Math.round(knowledgeRecord.rating);
+	data.number = knowledgeRecord.number + '';
+	data.articleType = knowledgeRecord.article_type + '';
+	data.permalink = kbViewModel.permalink;
+	data.category = knowledgeRecord.category;
+	data.attachments = kbViewModel.attachments;
+	data.shortDesc = knowledgeRecord.short_description.getDisplayValue() + "";
+	data.viewCount = knowledgeRecord.getDisplayValue('sys_view_count');
+	data.displayAttachments = knowledgeRecord.display_attachments + '';
+	data.tableName = knowledgeRecord.sys_class_name + '';
+	data.disableSuggesting = knowledgeRecord.disable_suggesting;
+	data.revisionString = kbViewModel.revisionString;
+	data.articleTemplate = kbViewModel.articleTemplateName;
+	data.isSubscriptionEnabled = kbViewModel.isSubscriptionEnabled;
+	data.helpfulContent = kbViewModel.helpfulText;
+	if(data.isSubscriptionEnabled === true && !isMESP){
+		data.isArticleSubscribed = (new global.ActivitySubscriptionContext().getSubscriptionService().isSubscribed(knowledgeRecord.sys_id).subscriptionId) ? true : false;//kbViewModel.isArticleSubscribed;
+		data.isArticleSubscribedAtKB = (new global.ActivitySubscriptionContext().getSubscriptionService().isSubscribed(knowledgeRecord.kb_knowledge_base).subscriptionId) ? true : false;//kbViewModel.isArticleSubsrcibedAtKB;
+	}
+	else{
+		data.isArticleSubscribed = false;
+		data.isArticleSubscribedAtKB = false;
+	}
+
+	data.kbSysId = knowledgeRecord.kb_knowledge_base.sys_id + '';
+	data.kbName = knowledgeRecord.kb_knowledge_base.getDisplayValue() + '';
+	data.externalArticle = kbViewModel.externalArticle;
+	data.hasComments = !kbViewModel.feedbackEntryInitialDisplay;
+	data.isTaskTable = data.params.sysparm_kb_search_table ? kbViewModel.isTaskTable(data.params.sysparm_kb_search_table) : false;
+	data.kbDocSysId = kbViewModel.kbDocSysId;
+	data.wordOnlineUrl = kbViewModel.wordOnlineUrl;
+
+}
+
+function populateBreadCrumbs(){
+	var breadCrumb = kbViewModel.getBreadcrumb();
+	data.breadCrumb = [];
+	data.breadCrumb.push({label: knowledgeRecord.kb_knowledge_base.title + ' (' + data.messages.KNOWLEDGE_BASE + ')', type: 'kb_knowledge_base', values: {kb_knowledge_base: knowledgeRecord.kb_knowledge_base.sys_id + ''}});
+	var ctg = '';
+	for(var i = 0; i < breadCrumb.length; i++){
+		ctg += breadCrumb[i].name;
+		if(i != breadCrumb.length - 1){
+			ctg += ' - ';
+		}
+	}
+	if(ctg !== '' && breadCrumb && breadCrumb.length > 0){
+		data.breadCrumb.push({label: ctg + '', type: 'kb_category', values: {kb_knowledge_base: breadCrumb[breadCrumb.length - 1].knowledge_base + '', kb_category:  breadCrumb[breadCrumb.length - 1].value + ''}});
+	}
+}
+
+function handleViewCountIncrement(){
+	new global.KBViewModel().increaseKBView(knowledgeRecord);
+	var viewCountGR = new GlideRecord('kb_knowledge');
+	if(viewCountGR.get(knowledgeRecord.sys_id))
+		data.viewCount = viewCountGR.getValue('sys_view_count');
+
+}
+
+function initGlideWiki(){
+	try{
+		data.kbWiki = kbViewModel.getWikiContent();
+	}
+	catch(e){
+		data.kbWiki = '';
+	}
+}
+
+function populateAttachedTasks(){
+	data.attachedIncidents = [];
+	data.attachedIncidents = kbViewModel.getAttachedTasks();
+}
+
+function populateAffectedProducts(){
+	data.affectedProducts = [];
+	data.affectedProducts = kbViewModel.getAffectedProducts();
+}
+
+function populateVersionInfo(){
+	data.isVersioningEnabled = kbViewModel.versioningInfo.isEnabled;
+	data.versionList = kbViewModel.versioningInfo.history;
+	data.version = knowledgeRecord.getDisplayValue('version');
+	data.isLatestVersion = !(kbViewModel.versioningInfo.newVersionAvailable === true);
+	data.workflowState = (knowledgeRecord.workflow_state != 'published') ? ('(' + knowledgeRecord.workflow_state.getDisplayValue() + ')') : '';
+	data.versionInfo = kbViewModel.versioningInfo.versionDisplay;//((kbViewModel.versioningInfo.newVersionAvailable === true) ? 'v' + data.version  : data.messages.LATEST_VERSION);
+	data.versionInfoLabel = kbViewModel.versioningInfo.versionDisplayLabel;
+	data.showHistory = kbViewModel.versioningInfo.showHistory;
+	data.hideFeedbackOptions = kbViewModel.hideFeedbackOptions;
+	data.versionWarningMessage = kbViewModel.versioningInfo.warningMessage;
+	if(data.versionWarningMessage){
+		data.versionWarningMessage = data.versionWarningMessage.replace('kb_view.do?', '?id='+data.params.sysparm_article_view_page_id+'&');
+	}
+}
+
+
+function populateContributorInfo(){
+	if(!GlidePluginManager.isActive('com.sn_communities')) return;
+	if(sn_communities.CommunityKnowledgeHarvest){
+		var h = new sn_communities.CommunityKnowledgeHarvest();
+		var res = h.getHarvestedContentInfo(''+knowledgeRecord.sys_id);
+		if(res && res.status == 200){
+			data.hInfo = res.data;
+			if(data.hInfo){
+				var message = gs.getMessage("Created from the Community by {0}");
+				var contributor = data.hInfo.contributor;
+				var profile = gs.getMessage('Community user');
+				if(contributor){
+					profile = contributor.name.length > 0 ? contributor.name : profile;
+					if(contributor.userId)
+						profile = '<a href="?id=community_user_profile&user='+contributor.userId+'" target="_blank_cm1" >'+profile+'</a>';
+				}
+				message = message.replace('{0}', profile);
+				data.hInfo.profileMessage = message;
+			}
+		}
+	}
+}
+
+
+function getFeedbackReasonValues(){
+	data.feedback_reasons=[];
+	var kbFbTask = new global.KBFeedbackTask();
+	var response = kbFbTask.getReasonValues();
+	if(response){
+		data.feedback_reasons = new global.JSON().decode(response);
+	}
+}
+
+function getPageTitle() {
+
+	var title = gs.getMessage("Knowledge Article View");
+
+	if (!gs.nil(data.article_sys_id)) // kb record found
+		title = knowledgeRecord.kb_knowledge_base.getDisplayValue() + " - " + data.shortDesc; // kb name - kb short_desc
+	else if (!gs.nil(data.params.sysparm_article_view_page_id)) {
+		// kb record NOT found - fetching the kb_article_view portal page title
+		var kbPage = new GlideRecord('sp_page');
+		kbPage.addQuery("id",data.params.sysparm_article_view_page_id+"");
+		kbPage.query();
+		if(kbPage.next())
+			title = kbPage.getValue('title');
+	}
+
+	return title;
+}]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-08-09 13:14:18</sys_created_on>
+        <sys_id>7b873344dbd9dd501e1792c5d4961983</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>Tasker - Knowledge Article Content</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_7b873344dbd9dd501e1792c5d4961983</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-09 14:28:56</sys_updated_on>
+        <template><![CDATA[<div class="kb-article-wrapper">
+  <div ng-if="data.versionWarningMessage && c.options.show_version_info != 'false'" class="alert alert-info alert-dismissible" role="alert">
+    <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    <div ng-bind-html="data.versionWarningMessage">
+    </div>
+  </div>
+  <div ng-if="::data.isValid" ng-class="{'kb-mobile' : c.isMobile, 'panel panel-default kb-desktop' : !c.isMobile, 'mesp-ui' : c.data.isMESP}">
+    <div class="kb-panel-heading" ng-class="{'panel-heading' : !c.isMobile}">
+      <span ng-class="{'panel-title' : !c.isMobile}">
+        <div class="row">
+          <span class="col-md-5 kb-panel-title-header">
+            <div class="kb-number-info">
+              <span>{{data.number}}</span>
+              <span ng-if="data.isKBAdmin && data.isArticleExpired">${(Expired)}</span>
+              <span ng-if="!c.isMobile && data.showHistory && c.options.show_version_info != 'false'"> - 
+                <div class="dropdown inline" role="list">
+                  <button id="kbVersionButton" aria-expanded="{{!c.showVersions}}" class="btn btn-default kb-version dropdown-toggle kb-dropdown-button transparent-button" data-toggle="dropdown" ng-click="c.toggleVersions()" aria-label="{{data.versionInfoLabel}}"> {{data.versionInfo}}
+                    <i class="fa fa-chevron-down" aria-hidden="true"></i>
+                  </button>
+              <span ng-if="!c.isMobile && data.workflowState">{{data.workflowState}}</span>
+                  
+                  <ul id="kbVersionMenuList" class="dropdown-menu dropdown-menu-left version-menu-list">
+                    <li class="kb-version" ng-repeat="version in data.versionList">
+                      <a ng-if="!version.isCurrent" href="?id=kb_article_view&sys_kb_id={{version.sysId}}" 
+                         aria-label="${{{version.versionLabel}} - {{version.versionText}}}">{{version.versionNumber}} - {{version.versionText}}</a>
+                      <span ng-if="version.isCurrent"><b>{{version.versionNumber}} - {{version.versionText}}</b></span>
+                    </li>
+                  </ul>
+                </div>
+			  </span>
+            </div>
+          </span>
+          <span ng-if="c.isMobile" class="kb-favorite m-r">
+	          	<sp-widget widget="data.favoriteWidget"></sp-widget>
+         	</span>
+          <div ng-if="!c.isMobile && !$root.hideFeedbackOptions && c.options.hide_all_actions != 'true'" class="col-md-7 kb-end-buttons">
+            <div class="dropdown kb-end-buttons">
+              <span class="hidden-sm hidden-xs" ng-if="!data.externalArticle">
+                <button ng-mouseover="c.handleSubscribeButtonFocus()"
+                   ng-if="data.properties.isSubscriptionEnabled"
+                   ng-mouseleave="c.handleSubscribeButtonBlur()"
+                   ng-focus="c.handleSubscribeButtonFocus()"
+                   ng-blur="c.handleSubscribeButtonBlur()"
+                   class="btn btn-default kb-subscribe kb-sub-icon apply-brand-color" ng-click="c.handleSubscription()">
+                    {{data.subscribeLabel}}
+                </button>
+              </span>
+              <button ng-if="c.showAttachArticle()" class="btn btn-default" type="button" ng-click="c.attachToTask()" aria-label="{{::data.messages.ATTACH_TO_TASK_LABEL}}">{{::data.messages.ATTACH_TO_TASK_LABEL}}</button>
+              <button id="actionMenuLabel" ng-if="c.showActionMenu() && !$root.readOnly" 
+                      class="btn btn-default dropdown-toggle kb-dropdown-button more-actions-menu apply-brand-color" type="button" data-toggle="dropdown" aria-label="{{::data.messages.ACTION_MENU}}">
+                {{::data.messages.ACTION_MENU_LABEL}}
+                <i class="fa fa-chevron-down" aria-hidden="true"></i>
+              </button>
+              <ul id="kbActionMenuList" class="dropdown-menu dropdown-menu-right moreActionsMenuList">
+                <li class="kb-menu-entry hidden-md hidden-lg visible-sm visible-xs" ng-if="data.properties.isSubscriptionEnabled && !data.externalArticle">
+                  <a ng-mouseover="c.handleSubscribeButtonFocus()"
+                     ng-if="data.properties.isSubscriptionEnabled && c.options.hide_subscription != 'true'"
+                     ng-mouseleave="c.handleSubscribeButtonBlur()"
+                     ng-focus="c.handleSubscribeButtonFocus()"
+                     ng-blur="c.handleSubscribeButtonBlur()"
+                     href="javascript:void(6)"
+                     ng-click="c.handleSubscription()">
+                    <span  class="kb-sub-icon" aria-label="{{data.subscribeLabel}}">
+                      {{data.subscribeLabel}}
+                    </span>
+                  </a>
+                </li>
+                <li class="kb-menu-entry" ng-if="c.showFlagArticle"><a id="flagArticleButton" href="javascript:void(1)" data-toggle="modal" ng-click="c.launchFlagModal($event)">{{data.messages.FLAG_ARTICLE}}</a></li>
+                <li class="kb-menu-entry" ng-if="c.showCreateIncident"><a target="_blank" href="{{c.createIncidentURL}}">{{c.createIncidentLabel}}</a></li>
+                <li class="kb-menu-entry" ng-if="data.properties.isEditable" ><a target="_blank" href="{{c.editUrl}}">{{data.messages.EDIT}}</a></li>
+								<li class="kb-menu-entry" ng-if="data.kbDocSysId"><a target="_blank" href="sys_attachment.do?sys_id={{data.kbDocSysId}}">{{data.messages.DOWNLOAD_DOCUMENT}}</a></li>
+              </ul>
+            </div>
+            <span class="kb-end-buttons">
+	          	<sp-widget widget="data.favoriteWidget"></sp-widget>
+         		</span>
+            <!-- Flag article modal -->
+          </div>
+        </div>
+      </span>
+    </div>
+    <div class="kb-wrapper" ng-class="c.isMobile ? 'kb-mobile' : 'panel-body kb-desktop'">
+      <h2 class="widget-header kb-title-header">{{::data.shortDesc}}</h2>
+      <div class="kb-language-block pad-right text-nowrap" ng-if="data.langList.length > 1" ng-cloak>
+        <div class="kb-language">
+          <div class="dropdown">
+            <button class="dropdown-toggle transparent-button trim-padding-right kb-lang-dropdown-btn" aria-label="${Language: {{c.selectedLanguage.label}}}. Select to choose other available languages to view this article." aria-haspopup="true" data-toggle="dropdown">
+              <span class="lang-icon" aria-hidden="true"><i class="fa fa-globe"></i></span>
+              <span class="lang-data" ng-class="{'hidden-xs':!c.isMobile}">${{{c.selectedLanguage.label}}}</span>
+            </button>
+            <ul class="dropdown-menu dd-right-menu" role="list">
+              <li ng-repeat="item in data.langList" role="listitem">
+                 <button ng-click="c.selectLanguage($index)" class="transparent-button">${{{item.label}}}</button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <span class="title-secondary-data">
+        <span ng-if="!c.isMobile" class="sr-only">Article metadata.</span>
+        <span ng-if="data.revisionString" class="author pad-right text-nowrap">
+          <span ng-if="!c.isMobile && data.langList.length > 1" class="pad-right" aria-hidden="true">&#8226;</span>
+          <i class="fa fa-user pad-right" aria-hidden="true"/>
+          {{data.revisionString}}
+        </span>
+        <span ng-if="!c.isMobile && data.externalArticle" class="pad-right text-nowrap">
+          {{data.messages.EXTERNAL_CONTENT}}
+        </span>
+        <br class="visible-xs"/>
+        <span class="published pad-right text-nowrap">
+          <span class="sr-only">This article was updated</span>
+          <span class="pad-right hidden-xs" ng-if="!c.isMobile" aria-hidden="true">&#8226;</span> <i class="fa fa-calendar pad-right" aria-hidden="true"/>
+          <sn-time-ago timestamp="data.sys_updated_on"/>
+        </span>
+        <span ng-if="data.viewCount == 1" class="views pad-right text-nowrap">
+          <span class="sr-only">This article has {{::data.viewCount}} view.</span>
+          <span class="pad-right" aria-hidden="true">&#8226;</span> <i class="fa fa-eye pad-right" aria-hidden="true"/>
+          <span aria-hidden="true">${{{::data.viewCount}} View}</span>
+        </span>
+        <span ng-if="data.viewCount > 1" class="views pad-right text-nowrap">
+          <span class="sr-only">This article has {{::data.viewCount}} views.</span>
+          <span class="pad-right" aria-hidden="true">&#8226;</span> <i class="fa fa-eye pad-right" aria-hidden="true"/>
+          <span aria-hidden="true">${{{::data.viewCount}} Views}</span>
+        </span>
+        <span class="text-nowrap str-rating" ng-if="data.properties.showKBStarRating && data.properties.showKBRatingOptions && data.avgRating >= 0">
+          <span class="sr-only">${This article has average rating: {{::data.avgRating}} out of 5 stars}</span>
+          <span class="pad-right" aria-hidden="true">&#8226;</span> 
+          <span class="kb-rating-stars" ng-if="::c.KBRatingStyle" aria-hidden="true">
+            <uib-rating sp-rating ng-model="::data.avgRating" max="5" aria-label="{{::data.messages.ARTICLE_RATING}}" aria-hidden="true" readonly="true"/>
+          </span>
+          <span class="sp-stars" ng-if="!c.KBRatingStyle" aria-hidden="true">
+            <span uib-rating sp-rating ng-model="::data.avgRating" max="5" readonly="true" aria-label="{{::data.messages.ARTICLE_RATING}}" aria-hidden="true" state-on="'fa fa-star kb-star-on'" state-off="'fa fa-star kb-star-off'" />
+          </span>
+        </span>
+      </span>
+      <div class="row community-attribution" ng-if="!c.isMobile && data.hInfo">
+        <div class="contributor pad-right" ng-if="data.hInfo.contributor && data.hInfo.contributor.userId">
+          <i class="fa fa-globe" aria-hidden="true"></i>
+          <span class="pad-lr pad-right" ng-bind-html="data.hInfo.profileMessage"></span>
+          <span class="discussion-published pad-right pre-bullet-icon text-nowrap" ng-if="data.hInfo.postedOn">
+            ${Posted}<sn-day-ago date="data.hInfo.postedOn"/>
+          </span>
+          <span class="discussion-link pad-right pre-bullet-icon text-nowrap" ng-if="data.hInfo.title">
+            <a href="?id=community_question&sys_id={{data.hInfo.sourceRoot}}" target="_blank_cm1">${Link to Discussion}</a>
+          </span>
+        </div>
+      </div>
+      <hr class="kb-header-line" aria-hidden="true"/>
+      <article class="kb-article-content" ng-if="::data.articleType != 'wiki'">
+        <section ng-if="::!c.data.kbContentData.isTemplate" ng-bind-html="::c.data.kbContentData.data" ng-class="{'word-addin-mobile' : c.data.wordOnlineUrl && c.data.wordOnlineUrl.length>0}"/>
+        <section class="kb-article-field" ng-if="::c.data.kbContentData.isTemplate" ng-repeat="field in c.data.kbContentData.data track by $index" ng-attr-style="{{field.field_style}}">
+          <h3 ng-if="::!field.collapsible" ng-attr-style="{{field.heading_style}}">{{field.label}}</h3>
+          <header class="collapsible-title" ng-if="::field.collapsible">
+            <h3 ng-attr-style="{{::field.heading_style}}">
+              <button aria-expanded="{{!field.collapsed}}"
+                      aria-controls="{{::field.column}}"
+                      class="transparent-button accordion-trigger"
+                      ng-click="c.toggleSection(field)">    
+                        {{field.label}}
+                        <i class="fa fa-chevron-up rotate" ng-class="{'down': field.collapsed}" aria-hidden="true"/>
+              </button> 
+             </h3>
+          </header>
+          <p id="{{::field.column}}" ng-if="::field.type != 'html' && field.collapsed" style="display:none;">{{field.content}}</p>
+          <p id="{{::field.column}}" ng-if="::field.type != 'html' && !field.collapsed">{{field.content}}</p>
+          <section id="{{::field.column}}" ng-if="::field.type == 'html' && field.collapsed" style="display:none;" ng-bind-html="::field.content"/>
+          <section id="{{::field.column}}" ng-if="::field.type == 'html' && !field.collapsed" ng-bind-html="::field.content"/>
+        </section>
+      </article>
+      <article class="kb-article-content" ng-if="::data.articleType == 'wiki'" ng-bind-html="::data.kbWiki"></article>
+      <hr class="kb-permalink-separator" ng-if="::!c.isMobile" aria-hidden="true"/>
+      <p class="pull-right kb-permalink" ng-if="::!c.isMobile">
+        <button class="transparent-button" ng-click="c.copyPermalink()">{{::data.messages.COPY_PERMALINK}}</button>
+      </p>
+    </div>
+  </div>
+  <div ng-if="!data.isValid && !data.knowledgeExists" class="col-sm-12 panel-danger">
+    <div class="panel-heading">{{data.messages.RECORD_NOT_FOUND}}</div>
+  </div>
+  <div ng-if="!data.isValid && data.knowledgeExists && !data.isArticleExpired" class="col-sm-12 panel-warning">
+    <div class="panel-heading kb-font-color-black">{{data.messages.INSUFFICIENT_PREVILEGES}}</div>
+  </div>
+  <div ng-if="!data.isKBAdmin && data.isArticleExpired" class="col-sm-12 panel-warning">
+    <div class="panel-heading kb-font-color-black">{{data.messages.ARTICLE_EXPIRED}}</div>
+  </div>
+</div>
+<style>
+  #uiNotificationContainer{
+    top : 10px;
+  }
+  .kb-article-wrapper .kb-desktop .kb-panel-title-header{
+    padding-left: 25px;
+  }
+  .kb-article-wrapper .app-modal-window .modal-dialog {
+    margin-top: 110px;
+  }
+  .kb-article-wrapper .kb-mobile{
+    letter-spacing: .6px;
+  }
+  .kb-article-wrapper .kb-mobile .title-secondary-data{
+    word-spacing:1px;
+  }
+  .kb-article-wrapper .kb-mobile .author{
+    margin-bottom: 17px;
+  }
+  .kb-article-content dl {
+    margin-top: .2em;
+    margin-bottom: .5em;
+  }
+  .kb-article-content dd { 
+    line-height: 1.5em;
+    margin-left: 2em;
+    margin-bottom: .1em;
+  }
+  @media only screen and (max-width :992px){
+    .kb-article-wrapper .kb-desktop{
+      margin-top:15px;
+    }
+    .kb-article-wrapper .kb-wrapper{
+      padding : 10px !important;
+    }
+    .kb-article-wrapper .kb-menu-entry{
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    .kb-article-wrapper .kb-version-info{
+      margin-top : 5px !important;
+    }
+    .kb-article-wrapper .kb-desktop .kb-number-info{
+      margin-top : 6px !important;
+      padding-left: 10px;
+    }
+    .kb-article-wrapper .kb-mobile .kb-panel-title-header{
+      padding-left: 16px;
+    }
+    .kb-article-wrapper .kb-desktop .kb-panel-title-header{
+      padding-left: 0px;
+    }
+  }
+  @media only screen and (max-width :768px){
+    .kb-article-wrapper .right-col-padding{
+      padding-left : 25px !important;
+    }
+  }
+  @media only screen and (max-width: 750px) {
+    .kb-article-wrapper .kb-mobile .author{
+      margin-bottom: 0px;
+    }
+  }
+  @media only screen and (min-width: 992px) {
+    .kb-article-wrapper .app-modal-window .modal-dialog {
+      width: 750px;
+    }
+    .kb-article-wrapper .control-label{
+      float :right;
+    }
+    .kb-article-wrapper .left-col-padding{
+      padding-right : 30px !important;
+    }
+    .kb-article-wrapper .right-col-padding{
+      padding-left : 5px !important;
+    }
+  }
+  @media only screen and (min-width:768px) and (max-width: 992px) {
+    .kb-article-wrapper .app-modal-window .modal-dialog {
+      width: 600px;
+    }
+    .kb-article-wrapper .control-label{
+      float :right;
+    }
+    .kb-article-wrapper .left-col-padding{
+      padding-right : 5px !important;
+    }
+    .kb-article-wrapper .right-col-padding{
+      padding-left : 5px !important;
+    }
+  }
+  @media only screen and (max-width: 400px) {
+    .pad-right{
+      padding-right:0px !important;
+    }
+  }
+
+  @media only screen and (max-width: 376px) {
+    .kb-article-wrapper .kb-mobile{
+      letter-spacing: 0px;
+    }
+    .kb-article-wrapper .kb-mobile .title-secondary-data{
+      word-spacing:0px;
+    }
+    .kb-article-wrapper .kb-mobile .title-secondary-data .str-rating{
+      margin-top: 17px;
+      display: block;
+    }
+    .kb-article-wrapper .kb-mobile .title-secondary-data .str-rating .pad-right{
+      display: none;
+    }
+  }
+  /*Versions dropdown screen width adjustment*/
+  @media only screen and (min-width: 500px) {
+     .version-menu-list li,.version-menu-list{
+         font-size: 14px !important;
+         margin: auto;
+         min-width: 410px !important;
+    }
+     .version-menu-list li a,.version-menu-list li span{
+         display:block;
+         padding: 3px 10px !important;
+         white-space: normal !important;
+    }
+  }
+  @media only screen and (max-width: 500px) {
+     .version-menu-list li,.version-menu-list{
+         font-size: 14px !important;
+         margin: auto;
+         min-width: 200px !important;
+         width:100% !important;
+    }
+     .version-menu-list li a, .version-menu-list li span{
+         display:block;
+         padding: 3px 10px !important;
+         white-space: normal !important;
+    }
+  }
+}
+</style>]]></template>
+    </sp_widget>
+</record_update>
