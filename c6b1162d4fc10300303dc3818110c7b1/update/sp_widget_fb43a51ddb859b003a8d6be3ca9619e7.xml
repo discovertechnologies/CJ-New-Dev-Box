@@ -512,7 +512,6 @@
 
 	$scope.isActiveTab = function( tabName, index ){
 		var activeTab = $scope.getActiveTab();
-$log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - activeTab: " + activeTab + " - retrun value: " + ( activeTab === tabName || ( activeTab === null && index === 0 ) ));		
 		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
 	};
 	
@@ -721,19 +720,23 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	}
 
 	$scope.$on("spModel.uiActionComplete", function(evt, response) {
+		var sysID = (response && response.isInsert) ? response.sys_id : $scope.data.sys_id;
 		// 2021.04.15 - Fix issue with form submit when to reload the form
 		// *************** Customization Start ***************************
 		// RAJ - Added below to close window when finished
-		// STRY0074663
+		// STRY0074663 - STRY0127096
 		if (c.data.isModal && 
 				c.data.baseWidget != "new_tasker_selection" &&
 			 c.data.table != "sys_user_group") {
-			$scope.$parent.$parent.$dismiss();
+			var shared = c.widget.options.shared;
+			if(shared && shared.fields){
+				shared.fields.sys_id.value = sysID;
+			}
+			$scope.$parent.$parent.buttonClicked($scope.$parent.$parent.options.buttons[0]);			
 			return;
 		} // 09.10
 
 		// this was added to tell New task form the uiaction has finished
-		var sysID = (response && response.isInsert) ? response.sys_id : $scope.data.sys_id;
 		var params = {};
 		params.action = c.data.currentAction;
 		params.rec_sys_id = sysID;
@@ -944,8 +947,12 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 				}
 
 				// STRY0074663
+				// STRY0127096 - added a few more conditions that require getting ID back to caller
+				// RAJ - a mistake was madde removing a line important for dismiss
 				if ($scope.submitting == true && c.data.isModal &&
-					 c.data.baseWidget != "new_tasker_selection") {
+						c.data.baseWidget != "new_tasker_selection" &&
+						c.data.table != "sys_user_group" && 
+						c.data.table != "x_153465_discovert_discover_routing_template") {
 					$scope.$parent.$parent.$dismiss();
 				} // 09.10
 			} 
@@ -1681,6 +1688,13 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      In HTML, renamed getInfoTabPaneCssByPageId()
 //                                      In Client controller, add case 'task_activity' to getPanel*, getTabContent* and renamed getInfoTabPane*
 //                                      Changes made in HTML and Client controller.
+// 2.8.0 | 2022-08-12 | raj  | STRY0127096 - Stretch- New Template page- Remove messaging "Click here to build your Template" after creating Template - added an action name to be used later
+//																			Changes in Client Script, updated uiActionComplete to send broadcast before closing when modal and template table
+// 2.8 | 2022-08-12 | mmccune | STRY0127100 - Existing Task Form- New Ribbon Colors for Classification
+//                                      In HTML, Classification CSS will replace // with a space to yield a CSS selector found in the Classification Banner Style Sheet
+//                                      Changes made in HTML
+// 2.8.0 | 2022-08-13 | raj  | STRY0126024 - Templates- Add Classification/Restricted Group Ribbons on Template Forms
+//																			Changes in Server Script
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1912,6 +1926,18 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	if (!data.isValid)
 		return;
 	
+	// STRY0126024 set classification and restricted group for Template
+	if(data.table == 'x_153465_discovert_discover_routing_template' ||
+		data.table == 'x_153465_discovert_route_tasks' ||
+		data.table == 'x_153465_discovert_discover_routing_runtime'){
+		// STRY0126208 - Simple Task Form- Add Classification and Restricted Group ribbon
+		data.classification = rec.getDisplayValue("classification");
+		if(data.table == 'x_153465_discovert_route_tasks'){
+			data.restrictedGroup = rec.getDisplayValue("assigned_to_group");
+		} else {
+			data.restrictedGroup = rec.getDisplayValue("u_restricted_group");
+		}
+	}
 	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
 	// moved this logic below the record get so the record state could be used in the logic
 	if(data.table == 'x_153465_discovert_route_task_instance'){
@@ -2323,17 +2349,15 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4409</sys_mod_count>
+        <sys_mod_count>4420</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-08-10 02:50:33</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-15 03:33:27</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2523,7 +2547,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
   
   <!-- Ribbons section start -->
   <div ng-if="data.classification.length>0">
-    <div class="taskform-classification-banner taskform-classification-banner-{{data.classification}}"> 
+    <div class="taskform-classification-banner taskform-classification-banner-{{data.classification.replace('//', ' ')}}"> 
       <div title="Classification: {{data.classification}}">
         {{data.classification}}
       </div>

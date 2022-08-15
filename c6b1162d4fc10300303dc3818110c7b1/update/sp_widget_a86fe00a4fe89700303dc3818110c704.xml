@@ -32,6 +32,19 @@
 	
 	$scope.openModalNewPocessTemplate = function (sys_id_Modal) {
 		var table = 'x_153465_discovert_discover_routing_template';
+		
+		var shared = { 
+			fields: {
+				sys_id: {
+					value: -1, 
+					displayValue: "", 
+					sys_mandatory: false, 
+					mandatory: false, 
+					placeholder: "", 
+					readonly: false
+				}
+			}
+		};
 		spModal.open({
 			title: 'New Template',
 			backdrop:'static',
@@ -47,14 +60,25 @@
 				// DFCT0010771
 				query: ""
 			},
+			shared: shared,
 			size: 'lg',
-			buttons: [],
+			buttons: [''],
 			// 2.8 | 2022-01-13 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
 			footerStyle: {
 				'display': 'none'
 			}
+		}).then(function() {
+			// STRY0127096 - create_template
+			$scope.data.getTemplateInfo = true;
+			$scope.data.templateId = shared.fields.sys_id.value;
+			spUtil.update($scope).then(function(data) {
+				spUtil.addInfoMessage(data.newTemplateMessage);
+				$scope.data.getTemplateInfo = false;
+			});
+			
 		});
 	};
+	
 	c.showTab = function (tab, e) {
 		c.activeTab = tab.tabName;
 		target = e.target;
@@ -64,16 +88,16 @@
 	};
 
 	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
-	$scope.$on('sp.DiscoverListItem', function(event, params) {
+	function _onDiscoverListItem (event, params) {
 		c.data.tabs.forEach(function(tab) {
 			if(tab.table == params.table && tab.filter == params.filter ) {
 				tab.count = params.rowCount;
 			}
 		});
-	});
+	}
 	
 	// STRY0125255 - STRY0123997 - item selected, update url with selected tab and page index
-	$rootScope.$on('dataTableClick', function(e, parms) {
+	function _onDataTableClick(e, parms) {
 		var page_index = 1;
 		for (var i in $scope.data.tabs) {
 			
@@ -85,10 +109,10 @@
 				$location.search("p", page_index).search("selTab", c.activeTab).search("spa",1);
 			}
 		}
-	});
+	}
 	
 	// STRY0125255 - STRY0123997
-	$scope.$on("discovertasker-widget-data-table-update_page_index", function (event, e) {
+	function _pageIndexUpdated(event, e) {
 		if (e && e.title) {
 			for (var i in $scope.data.tabs) {
 				var tab = $scope.data.tabs[i];
@@ -97,10 +121,10 @@
 				}
 			}
 		}
-	});	
+	}	
 	
 	// STRY0120403 if filter changed, then record count will change and we will need to receive an updated count
-	$scope.$on("discovertasker-widget-data-table-update_count", function (event, e) {
+	function _countUpdated(event, e) {
 		if (e && e.title) {
 			for (var i in $scope.data.tabs) {
 				var tab = $scope.data.tabs[i];
@@ -109,7 +133,23 @@
 				}
 			}
 		}
+	}
+	
+	// STRY0127096 - unregister all event watchers
+	var unregister_discovertasker_widget_data_table_update_count = $scope.$on("discovertasker-widget-data-table-update_count", _countUpdated);
+	var unregister_discovertasker_widget_data_table_update_page_index = $scope.$on("discovertasker-widget-data-table-update_page_index", _pageIndexUpdated);
+	var unregister_dataTableClick = $rootScope.$on('dataTableClick', _onDataTableClick);
+	var unregister_sp_DiscoverListItem = $scope.$on('sp.DiscoverListItem', _onDiscoverListItem);
+	
+	// STRY0127096 - unregister all event watchers
+	$scope.$on("$destroy", function() {
+		unregister_discovertasker_widget_data_table_update_count();
+		unregister_discovertasker_widget_data_table_update_page_index();
+		unregister_dataTableClick();
+		unregister_sp_DiscoverListItem();
 	});	
+	
+	
 };]]></client_script>
         <controller_as>c</controller_as>
         <css>/*&#13;
@@ -310,6 +350,8 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //                                      In CSS, added .dtech-border-bottom-1px-solid-ddd.
 //                                      In Server script, added convertToBool().
 //                                      Changes made in HTML, CSS and Server script.
+// 2.8.0 | 2022-08-12 | raj  | STRY0127096 - Stretch- New Template page- Remove messaging "Click here to build your Template" after creating Template - added an action name to be used later
+//																			Changes in Client Script, also updated all $on events to destroy them on close of widget
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -322,8 +364,15 @@ li.hover-effect.cm-subs-tab.active {&#13;
 	function main(){
     data.page_id = "";
     data.showInactiveProcess = false;
-    if (input)
-        data.showInactiveProcess = input.showInactiveProcess;
+    if (input){
+			data.showInactiveProcess = input.showInactiveProcess;
+			if(input.getTemplateInfo==true){
+				// set template name and parent task def
+				_getTemplateInfo();
+				return;
+			}
+		}
+        
 
 		// STRY0125255 - STRY0123997
 		data.selTab = $sp.getParameter("selTab");
@@ -557,6 +606,14 @@ li.hover-effect.cm-subs-tab.active {&#13;
 			return;
 		else return count;
 	}
+	
+	function _getTemplateInfo(){
+		var gr_template = new GlideRecord("x_153465_discovert_discover_routing_template");
+		if(gr_template.get(input.templateId)){
+			data.newTemplateMessage = gs.getMessage("Tasker - Template created message with Template Name {0} and Top Template Task id {1}",
+											[gr_template.template_name, gr_template.parent_task_def]);
+		}
+	}
 
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
 	function convertToBool(names) {
@@ -570,17 +627,15 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>1040</sys_mod_count>
+        <sys_mod_count>1056</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-08-02 02:36:48</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-13 18:08:58</sys_updated_on>
         <template><![CDATA[<div >
  <div class="panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane dtech-topstick-posabso flex-column">
     <div class="panel-heading cm-widget-tabs flex-column justify-between dtech-panel-heading-min-height-standard dtech-border-bottom-1px-solid-ddd" role="tabpanel">

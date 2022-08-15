@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>Includes Task related server scripts:&#13;
+2.8.0 | 2022-08-14 | raj  |  STRY0125927 - All Mark Complete modals- Add info message "Marking complete will delete Draft Tasks"&#13;
 2.8     | 2022-07-24 | raj     | DFCT0011046 - "Rejection for Approval" Modal is NOT displaying any data and the buttons label names.  Should display Data and the UI actions.&#13;
 2.8     | 2022-06-26 | raj     | DFCT0011050 - state of a task was being changed back from closed while deleting draft tasks &#13;
 2.8     | 2022-06-26 | raj     |  STRY0111263 - Rejecting an Approval Task- Enhance cascade closing tasks to 'Descendants of Parent Approval' and 'Task Order'&#13;
@@ -61,8 +62,16 @@ TaskerHelpers.prototype = {
 		this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
 	},
 
+	getActiveApprovalDependantsCount: function (task_id){
+		return this._getApprovalDependantsCount(task_id, true);
+	},
+	
+	getDraftApprovalDependantsCount: function (task_id){
+		return this._getApprovalDependantsCount(task_id, false);
+	},
+	
 	// STRY0111263 - count the dependent tasks for this review task type
-	getApprovalDependantsCount: function(task_id){
+	_getApprovalDependantsCount: function(task_id, active){
 		// DFCT0011046 - added to make eaiser to debug
 		var descendantCount = 0;
 		var descendantApprovalCount = 0;
@@ -89,25 +98,39 @@ TaskerHelpers.prototype = {
 			}
 
 			// if a top task was set, then an ancestor task of this task was a review type, so all tasks under that will close, so count everything below it
+			// STRY0125927
 			if(topTaskId) {
 				details.taskSysId = topTaskId;
-				// DFCT0011046 - added to make eaiser to debug
-				descendantCount = parseInt(this.getDescendantsCount(details));
-				taskDescendants = descendantCount + 1; // add one to account for the top task
-			} else {
-				// count active tasks under the given task
-				// DFCT0011046 - added to make eaiser to debug
-				descendantCount = parseInt(this.getDescendantsCount(details));
-				taskDescendants = descendantCount;
-				// count other dependent tasks based on review type rules
-				// rule: find the next non-review type under this parent, count all of the tasks that will close until we find a non-reviewtype that is active
+				if(active){
+					// DFCT0011046 - added to make eaiser to debug
+					descendantCount = parseInt(this.getDescendantsCount(details));
+					taskDescendants = descendantCount + 1; // add one to account for the top task
+				}else {
+					// STRY0125927
+					taskDescendants = parseInt(this.getDraftDescendantsCount(details.taskSysId));
+				}
 
+			} else {
+				if(active){
+					// DFCT0011046 - added to make eaiser to debug
+					descendantCount = parseInt(this.getDescendantsCount(details));
+					taskDescendants = descendantCount;
+					// count other dependent tasks based on review type rules
+					// rule: find the next non-review type under this parent, 
+					// count all of the tasks that will close until we find a non-reviewtype that is active
+				}else {
+					// STRY0125927
+					taskDescendants = parseInt(this.getDraftDescendantsCount(details.taskSysId));
+				}
+				
 			}
+				
 			// if the parentId has a value, then the task represented by the parentId is not a review type
 			// so, check the children of this task to see if there are active tasks in a task order that are not review type
 			if(parentId){
 				// DFCT0011046 - added to make eaiser to debug
-				descendantApprovalCount = parseInt(this._countDependentApprovalTasks(parentId, grTask.getValue("task_order")));
+				// STRY0125927 - added active to the end
+				descendantApprovalCount = parseInt(this._countDependentApprovalTasks(parentId, grTask.getValue("task_order")), active);
 				// the current task being rejected is an active review task in the current order.  So, subtract 1 from the total
 				descendantApprovalCount = descendantApprovalCount - 1;
 				dependentTasks = descendantApprovalCount;
@@ -117,7 +140,8 @@ TaskerHelpers.prototype = {
 	},
 
 	// STRY0111263 - count the dependent tasks for this review task type
-	_countDependentApprovalTasks: function(parentId, taskOrder){
+	// STRY0125927 - added active to the end
+	_countDependentApprovalTasks: function(parentId, taskOrder, active){
 		// DFCT0011046 - added to make eaiser to debug
 		var descendantApprovalCount = 0;
 		var countActiveInOrder = 0;
@@ -127,6 +151,7 @@ TaskerHelpers.prototype = {
 		taskOrder = parseInt(taskOrder);
 		var nextOrder = taskOrder + 1;
 
+		var gaDraftInOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
 		var gaActiveReviewTypeInOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
 		var gaActiveInOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
 		var gaActiveInLaterOrder = new GlideAggregate('x_153465_discovert_route_task_instance');
@@ -142,11 +167,28 @@ TaskerHelpers.prototype = {
 			countActiveReviewInOrder = parseInt(gaActiveReviewTypeInOrder.getAggregate('COUNT'));
 		}
 		
+		// STRY0125927 - get count of draft in this order
+		var draftCountInOrder = 0;
+		if(!active){
+			gaDraftInOrder.addQuery("parent", parentId);
+			gaDraftInOrder.addQuery("task_order", taskOrder);
+			gaDraftInOrder.addQuery("active", true);
+			// STRY0125927 - don't count a draft task as active
+			gaDraftInOrder.addQuery("state", -6);
+			gaDraftInOrder.addAggregate('COUNT');
+			gaDraftInOrder.query();
+			if (gaDraftInOrder.next()){
+				draftCountInOrder = gaDraftInOrder.getAggregate('COUNT');
+			}
+		}
+		
 		// count non-approval tasks in the current order, if one is found, stop the recursion
 		gaActiveInOrder.addQuery("parent", parentId);
 		gaActiveInOrder.addQuery("task_order", taskOrder);
 		gaActiveInOrder.addQuery("work_item_type", "!=", "review_item");
 		gaActiveInOrder.addQuery("active", true);
+		// STRY0125927 - don't count a draft task as active
+		gaActiveReviewTypeInOrder.addQuery("state", "!=", -6);
 		gaActiveInOrder.addAggregate('COUNT');
         gaActiveInOrder.query();
         if (gaActiveInOrder.next()){
@@ -154,7 +196,12 @@ TaskerHelpers.prototype = {
 		}
 		// return the count of items that are dependent
 		if(countActiveInOrder > 0){
-			return countActiveReviewInOrder;
+			// STRY0125927
+			if(active){
+				return countActiveReviewInOrder;
+			} else {
+				return draftCountInOrder;
+			}
 		} else {
 			// if no active task that are not review type in current order, move to next order
 			gaActiveInLaterOrder.addQuery("parent", parentId);
@@ -169,9 +216,14 @@ TaskerHelpers.prototype = {
 			// type in the next order
 			if(countActiveInLaterOrder>0){
 				// DFCT0011046 - added to make eaiser to debug
-				descendantApprovalCount = parseInt(this._countDependentApprovalTasks(parentId, nextOrder));
-				// recurse this function to move to the next task order
-				return countActiveReviewInOrder + descendantApprovalCount;
+				descendantApprovalCount = parseInt(this._countDependentApprovalTasks(parentId, nextOrder, active));
+				// STRY0125927
+				if(active){
+					// recurse this function to move to the next task order
+					return countActiveReviewInOrder + descendantApprovalCount;
+				} else {
+					return draftCountInOrder + descendantApprovalCount;
+				}
 			} else {
 				// DFCT0011046 - no active tasks in orders after this, return the active reviews in this order
 				return countActiveReviewInOrder;
@@ -1140,13 +1192,13 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
-        <sys_mod_count>300</sys_mod_count>
+        <sys_mod_count>305</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-24 18:44:36</sys_updated_on>
+        <sys_updated_on>2022-08-15 04:55:31</sys_updated_on>
     </sys_script_include>
 </record_update>
