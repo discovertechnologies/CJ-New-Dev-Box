@@ -19,7 +19,9 @@
 
 	c.onSubmit = function() {
 		c.data.submit = true;
+		$scope.data.newRejectionReason = c.data.newRejectionReason;
 		$scope.server.update().then(function() {
+			$scope.$broadcast("spModel.uiActionComplete",null);
 			$scope.$parent.$parent.$dismiss();
 		});
 
@@ -57,6 +59,8 @@
 //                      New Widget
 // 2.8.0 | 2022-07-23 | raj  | DFCT0011029 - The decimal point  "." should NOT display on the  count in the "Rejection for Approval Task " modal 
 //
+// 2.8.0 | 2022-08-14 | raj  |  STRY0125927 - All Mark Complete modals- Add info message "Marking complete will delete Draft Tasks"
+//                                          Changes in Server script and HTML
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options) {
@@ -83,14 +87,20 @@
 	}
 
 	function _buildMessages() {
-		data.dependentCount = _getApprovalDependantsCount();
+		// STRY0125927
+		_getApprovalDependantsCount();
 		data.cancelButtonText = gs.getMessage('cancel');
 		data.submitButtonText = gs.getMessage('Tasker - Button - Reject');
 		data.submitButtonTitle = gs.getMessage('Tasker - Rejects the Approval and closes dependent approval task');
 
 		data.msgBody2 = gs.getMessage('Warning');
 		data.msgBody3 = gs.getMessage('Tasker - You are about to reject an Approval Subtask');
-		data.msgBody4 = gs.getMessage('Tasker - This will also close all {0} Approval Tasks dependent on this task', [data.dependentCount]);
+		// STRY0125927
+		data.msgBody4 = gs.getMessage('Tasker - This will also close all {0} Approval Tasks dependent on this task', [data.approvalDependantsCount.toString()]);
+		// STRY0125927
+		data.msgDraftCount = gs.getMessage('Tasker - You have {0} draft tasks', [data.approvalDraftDependantsCount.toString()]);
+		data.msgDraftInfo = gs.getMessage('Tasker - This will automatically delete ALL draft subtasks as well');
+		
 		data.msgBody5 = gs.getMessage('Tasker - Approval Parent Tasks are dependent on Approval Subtasks. Approval Next-Task Orders are dependent on Previous-Task Orders');
 		data.msgBody6 = gs.getMessage('Tasker - Rejection Reason');
 		data.msgBody7 = gs.getMessage('Tasker - Type your rejection reason here');
@@ -100,11 +110,14 @@
 	function _getApprovalDependantsCount() {
 		var strCount = "";
 		var approvalDependantsCount = 0;
+		var approvalDraftDependantsCount = 0;
 		var taskerHelpers = new TaskerHelpers();
-		approvalDependantsCount = taskerHelpers.getApprovalDependantsCount(data.taskSysId);
-		// DFCT0011029 - The decimal point  "." should NOT display on the  count in the "Rejection for Approval Task " modal 
-		strCount = approvalDependantsCount.toString();
-		return strCount;
+		// STRY0125927
+		approvalDependantsCount = taskerHelpers.getActiveApprovalDependantsCount(data.taskSysId);
+		approvalDraftDependantsCount = taskerHelpers.getDraftApprovalDependantsCount(data.taskSysId);
+		data.approvalDraftDependantsCount = approvalDraftDependantsCount;
+		data.approvalDependantsCount = approvalDependantsCount - approvalDraftDependantsCount;
+		
 	}
 
 
@@ -131,14 +144,14 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-06-27 12:46:22</sys_created_on>
         <sys_id>93c4dadadbd89510991a6154ca96192b</sys_id>
-        <sys_mod_count>20</sys_mod_count>
+        <sys_mod_count>29</sys_mod_count>
         <sys_name>Reject Approval Confirmation</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_93c4dadadbd89510991a6154ca96192b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-24 18:49:20</sys_updated_on>
+        <sys_updated_on>2022-08-15 05:00:27</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
   <div class="dtech-text-center">
     <img id="msgBody1" src="Warning64.svg"/>
@@ -156,14 +169,15 @@
   <br>
 
   <div
-       ng-if="data.dependentCount>0"
+       ng-if="data.approvalDependantsCount>0"
        class="dtech-text-center dtech-standard-text-color">
     <span>
       {{data.msgBody4}}
     </span>
   </div>
   <br>
-  <div ng-if="data.dependentCount>0"
+  
+  <div ng-if="data.approvalDependantsCount>0"
        class="dtech-text-center">
     <img src="InfoRound24.svg"/>
     <span class="dtech-subtasks-also-deleted">{{data.msgBody5}}</span>
@@ -171,6 +185,21 @@
 
   <br>
 
+  <!-- STRY0125927 -->
+  <div ng-if="data.approvalDraftDependantsCount>0">
+    <div class="dtech-text-center dtech-standard-text-color">
+      <span>
+        {{data.msgDraftCount}}
+      </span>
+    </div>
+    <br>
+    <div class="dtech-text-center">
+      <img src="InfoRound24.svg"/>
+      <span class="dtech-subtasks-also-deleted">{{data.msgDraftInfo}}</span>
+    </div>
+    <br>
+  </div>
+  
   <div class="dtech-text-center dtech-standard-text-color">
     <span>
       {{data.msgBody8}}
