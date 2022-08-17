@@ -72,7 +72,9 @@
 	function _loadTreeConstants() {
 		var oTREE_CONST = {
 			// STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
-			fontStyle: "13px Segoe UI",
+			fontStyle: "14px Segoe UI",
+			fontStyleTaskerNumber: "10px Segoe UI",
+			fontStyleNodeDetails: "12px Segoe UI",
 			node_id: "page_map",
 			minHeight: 12,
 			diagramMinHeight: 150,
@@ -88,6 +90,7 @@
 			nodeOuterRectangelWidth: 310,
 			nodeOuterRectangelHeight: 80,
 			nodeTextPanelMargin:5,
+			numberPanelWidth: 90,
 			textPanelMinWidth:290,
 			textPanelMinHeight:35,
 			textPanelMaxWidth:290,
@@ -119,7 +122,7 @@
 			toolTipBackgroundColor: '#FFFFFF', // "#C5C5C5"
 			toolTipNormalMargin : 3,
 			toolTipWarningNoteMargin : 6,
-			toolTipColumnWidth: "auto",
+			toolTipColumnWidth: 600, // "auto",
 			toolTipWarningMessageColumnWidth: 600,
 	    // -------------------------------------------------------------------	
 
@@ -375,7 +378,10 @@
 		}
 
 
+		// DFCT0011078
 		newNodeData.name = getTaskTitleNode(newNodeData);
+		newNodeData.nodeDetails = getTaskNodeDetails(newNodeData);
+		
 		newNodeData.warning = {};
 
 		// DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
@@ -451,6 +457,12 @@
 			diagram.model.setDataProperty(nodeData, 'name', nameValue);
 		}
 
+		// DFCT0011078
+		var nodeDetails = getTaskNodeDetails(nodeData);
+		if (nodeData.nodeDetails != nodeDetails) {
+			diagram.model.setDataProperty(nodeData, 'nodeDetails', nodeDetails);
+		}
+
 		// DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
 		var canCreateSubTask = ((nodeData.state != 3  && nodeData.state != 4 && nodeData.state != 7) &&
 														(c.data.currentUser == nodeData.assigned_to || c.data.currentUser == nodeData.u_task_requester));
@@ -497,7 +509,18 @@
 	}
 
 	function getTaskTitleNode(nodeData) {
-		var nodeTitle = nodeData.task_name;
+		var nodeTitle = nodeData.short_description;
+		if (nodeData.parent != '') nodeTitle = nodeOrder + nodeTitle; // NEW
+		// DFCT0011078 - STRY0127737 - updated name and details and separated number
+		if(nodeTitle.length > 43){
+			nodeTitle = nodeTitle.substring(0,43) + "...";
+		}
+		return nodeTitle;
+	}
+		
+	function getTaskNodeDetails(nodeData) {
+		// DFCT0011078
+		var nodeDetails = "";
 		var active_subtasks = 0;
 		if(nodeData.u_active_subtasks != null && nodeData.u_active_subtasks != "null" &&
 			 nodeData.u_active_subtasks != undefined && nodeData.u_active_subtasks != "undefined" ){
@@ -507,31 +530,31 @@
 		if(nodeData.order != null && nodeData.order != "null"){
 			nodeOrder = nodeData.order + ". ";
 		}
-		if (nodeData.parent != '') nodeTitle = nodeOrder + nodeTitle; // NEW
+		
 		switch (nodeData.state_DisplayValue) {
 			case 'Waiting':
 				if (nodeData.calchaschildren == '0')
-					nodeTitle += " - " + nodeData.state_DisplayValue + " on creating Subtasks ";
+					nodeDetails += nodeData.state_DisplayValue + " on creating Subtasks ";
 				else
-					nodeTitle += " - " + nodeData.state_DisplayValue + " on " + active_subtasks + " out of " + nodeData.calchaschildren + " Subtasks";
+					nodeDetails += nodeData.state_DisplayValue + " on " + active_subtasks + " out of " + nodeData.calchaschildren + " Subtasks";
 				break;
 			case 'Assigned':
-				nodeTitle += " - " + nodeData.state_DisplayValue + " to " + nodeData.assigned_to_DisplayValue;
+				nodeDetails += nodeData.state_DisplayValue + " to " + nodeData.assigned_to_DisplayValue;
 				break;
 			// DFCT0011179
 			case 'Accepted':
 			case 'Work in Progress':
 			case 'Completed':
-				nodeTitle += " - " + nodeData.state_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
+				nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
 				break;
 			case 'In Review':
-				nodeTitle += " - " + nodeData.state_DisplayValue + " by " + nodeData.u_reviewer + ", Worked by " + nodeData.assigned_to_DisplayValue;
+				nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.u_reviewer + ", Worked by " + nodeData.assigned_to_DisplayValue;
 				break;
 			default:
-				nodeTitle += " - " + nodeData.state_DisplayValue;
+				nodeDetails += nodeData.state_DisplayValue;
 				break;
 		}
-		return nodeTitle;
+		return nodeDetails;
 	}
 
 	function checkDateWarnings(changedNodeData) {
@@ -719,24 +742,24 @@
 	//       If we replace spModal everywhere with this function we can change style of modals in one place.
 	openDurationModal = function(obj) {
 		// call common duration modal
-		var title = c.data.messages["Tasker - Title - Duration Modal"] + ': ' + obj.part.data.name;
+		var title = c.data.messages["Tasker - Title - Duration Modal"] + ': ' + obj.part.data.task_name;
 		twjs.openDurationModal(spModal, title, c.data.table, obj.part.data.key);
 	};
 
 	openAssignmentModal = function(obj) {
-		var title = c.data.messages["Tasker - Title - Assignment Modal"] + ': ' + obj.part.data.name;
+		var title = c.data.messages["Tasker - Title - Assignment Modal"] + ': ' + obj.part.data.task_name;
 		twjs.openAssignmentModal(spModal, title, c.data.table, obj.part.data.key);
 	};
 
 	// STRY0109208 - Add Create Icon
 	openCreateModal = function(obj) {
-		var title = c.data.messages["Tasker - Add a Subtask"] + ': ' + obj.part.data.name;
+		var title = c.data.messages["Tasker - Add a Subtask"] + ': ' + obj.part.data.task_name;
 		var query = 'parent=' + obj.part.data.key;
 		twjs.openCreateModal(spModal, title, c.data.table, c.data.view, query);
 	};
 
 	openOperationalModal = function(obj) {
-		var title = c.data.messages["Tasker - Title - Operational Modal"] + ': ' + obj.part.data.name;
+		var title = c.data.messages["Tasker - Title - Operational Modal"] + ': ' + obj.part.data.task_name;
 		twjs.openOperationalModal(spModal, title, c.data.table, obj.part.data.key);
 	};	
 	// -----------------------------------------------------------------------------------------------------------------
@@ -1005,7 +1028,12 @@
 		var mainPanel = 
 				$go(go.Panel, "Auto", 
 						$go(go.Panel, "Vertical",
-								_createIconPanel(),
+								// DFCT0011134 - STRY0127737 - change name and number display
+								$go(go.Panel, "Horizontal",
+
+										_createNumberHeader(),
+										_createIconPanel()
+									 ),
 								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
 								$go(go.Panel,  "Vertical", {alignment: go.Spot.Left, margin: TREE_CONST.nodeTextPanelMargin, 
 																						minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight), 
@@ -1021,6 +1049,17 @@
 													return getStateColors(t, "text");
 												}),
 												new go.Binding("text", "name")
+											 ),
+										$go(go.TextBlock, {alignment: go.Spot.Left,
+																			 text: "verticalAlignment: Center",
+																			 textAlign:"left", 
+																			 wrap: go.TextBlock.WrapFit,
+																			 font: TREE_CONST.fontStyleNodeDetails, 
+																			 stroke: TREE_CONST.textStrokeColor},
+												new go.Binding("stroke", "state", function(t) {
+													return getStateColors(t, "text");
+												}),
+												new go.Binding("text", "nodeDetails")
 											 )
 									 )
 							 )
@@ -1045,6 +1084,25 @@
 		}
 	};	
 
+	function _createNumberHeader(){
+		var numberHeader = 
+				$go(go.TextBlock, 
+						{alignment: go.Spot.Left,
+						 width:TREE_CONST.numberPanelWidth
+						},						
+
+						
+					{font: TREE_CONST.fontStyleTaskerNumber},
+					new go.Binding("text", "", function(data) {
+						return data.taskernumber;
+					}),
+						new go.Binding("stroke", "", function(data) {
+							var iconStroke = getStateColors(data.state, "text");
+							return iconStroke;
+						})
+				);
+		return numberHeader;
+	}
 function _createIcon(iconName, iconText){
 		var icon = 
 				$go(go.TextBlock, 
@@ -1127,6 +1185,7 @@ function _createIconPanel(){
 			$go(go.Panel, "Horizontal",
 					// removing width allows the width to be size of text.
 					{alignment: go.Spot.Right, width: TREE_CONST.icon_panel_width, isOpposite: true },
+
 					_createIcon('AddIcon', TREE_CONST.font_awesome_plus_o),
 					_createIcon('DurationIcon', TREE_CONST.font_awesome_calendar_o),
 					_createIcon('UserIcon', TREE_CONST.font_awesome_user_o),
@@ -1239,20 +1298,23 @@ function _createIconPanel(){
 							var hasClassification = (nodeData.classification_DisplayValue != 'null');
 							toolTip = 
 								$go(go.Panel, "Table",
-										// Row 1
-										_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
-										_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
+										// Row 1 - DFCT0011078 - STRY0127737 - added name to the table to enable seeing the full longer name
+										_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.task_name.fieldLabel + ": "),
+										_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.task_name),
 										// Row 2
-										_createTableColumn(hasClassification, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
-										_createTableColumn(hasClassification, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
+										_createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
+										_createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
 										// Row 3
-										_createTableColumn(true, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.priority.fieldLabel + ": "),
-										_createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.priority_DisplayValue),
+										_createTableColumn(hasClassification, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
+										_createTableColumn(hasClassification, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
 										// Row 4
-										_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.risk_flag.fieldLabel + ": "),
-										_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.risk_flag_DisplayValue),
+										_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.priority.fieldLabel + ": "),
+										_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.priority_DisplayValue),
 										// Row 5
-										_createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
+										_createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.risk_flag.fieldLabel + ": "),
+										_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.risk_flag_DisplayValue),
+										// Row 6
+										_createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
 										// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
 										// strip HTML Tags
 										// new go.Binding("text", "", function(data) {
@@ -1263,9 +1325,9 @@ function _createIconPanel(){
 										// return _convertHtmlToSimpleString(data.instructions); // function was removed
 										// Need to call below to have <, >, and & show as that character and not an ALT code
 										// return htmlToStringService.convertHtmlToString(data.instructions);															
-										_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
-										// Row 6
-										_createTableColumn(hasSignatureInstructions, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
+										_createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
+										// Row 7
+										_createTableColumn(hasSignatureInstructions, 6, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
 										// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
 										// strip HTML Tags
 										// new go.Binding("text", "", function(data) {
@@ -1276,10 +1338,10 @@ function _createIconPanel(){
 										// return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
 										// Need to call below to have <, >, and & show as that character and not an ALT code
 										// return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
-										_createTableColumn(hasSignatureInstructions, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions)),
-										// Row 7
-										_createTableColumn(hasDecision, 6, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.decision.fieldLabel + ": "),
-										_createTableColumn(hasDecision, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, decisionText)
+										_createTableColumn(hasSignatureInstructions, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions)),
+										// Row 8
+										_createTableColumn(hasDecision, 7, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.decision.fieldLabel + ": "),
+										_createTableColumn(hasDecision, 7, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, decisionText)
 									 );
                 break;
             case 'UserIcon':
@@ -1499,7 +1561,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                         - Changes in Client Controller
 //  2.8   - 2022-08-16 - raj -  DFCT0011096 - Task Tree view- "Navigate to Top Task" button does NOT send users to Top Task 
 //                                           Changes in Server Script, Client Controller and HTML.  replaced data.id with data.topParentTask_id everywhere
-//
+//  2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View
+//  2.8   - 2022-08-16 - raj - STRY0127737 - Task Tree/Template Task Tree- New Design for Overflow Text 
+//																						Changes in Client Controller
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1614,14 +1678,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1862</sys_mod_count>
+        <sys_mod_count>1907</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-16 16:12:00</sys_updated_on>
+        <sys_updated_on>2022-08-17 22:43:26</sys_updated_on>
         <template><![CDATA[<div class=" flex-row flex-grow panel-group" id="accordionTaskerGraphical">
   <div id="main_body" class="flex-column flex-grow panel panel-default">  
     <div id="panel_heading" class="panel-heading">

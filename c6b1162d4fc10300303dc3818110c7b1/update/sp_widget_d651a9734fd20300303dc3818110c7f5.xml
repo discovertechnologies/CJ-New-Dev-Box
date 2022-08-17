@@ -102,7 +102,9 @@
 	function _loadTreeConstants() {
 		var oTREE_CONST = {
 			// STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
-			fontStyle: "16px Segoe UI",
+			fontStyle: "14px Segoe UI",
+			fontStyleTaskerNumber: "10px Segoe UI",
+			fontStyleNodeDetails: "12px Segoe UI",
 			textStrokeColor: "white",
 			node_id: "page_map_new",
 			minHeight: 435, // DFCT0010887 & DFCT0010911 was 12
@@ -119,6 +121,7 @@
 			nodeOuterRectangelWidth: 310,
 			nodeOuterRectangelHeight: 80,
 			nodeTextPanelMargin:5,
+			numberPanelWidth: 90,
 			textPanelMinWidth:290,
 			textPanelMinHeight:35,
 			textPanelMaxWidth:290,
@@ -151,7 +154,7 @@
 			tooltipTextColor: '#3A3F51',
 			toolTipNormalMargin : 3,
 			toolTipWarningNoteMargin : 6,
-			toolTipColumnWidth: "auto",
+			toolTipColumnWidth: 600, // "auto",
 			toolTipWarningMessageColumnWidth: 600			
 		};
 		return oTREE_CONST;
@@ -401,6 +404,9 @@
 			} //if field wasn't found do nothing
 		}
 		newNodeData.name = getTaskTitleNode(newNodeData);
+		// DFCT0011078 - STRY0127737 - updated name and details and separated number
+		newNodeData.nodeDetails = getTaskNodeDetails(newNodeData);
+		
 		newNodeData.warning = {};
 		newNodeData.warning.waitStatewithNoSubtasks = (newNodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(newNodeData.calchaschildren) == 0));
 		newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
@@ -502,6 +508,13 @@
 		if (nodeData.name != nameValue) {
 			diagram.model.setDataProperty(nodeData, 'name', nameValue);
 		}
+		
+		// DFCT0011078 - STRY0127737 - updated name and details and separated number
+		var nodeDetails = getTaskNodeDetails(nodeData);
+		if (nodeData.nodeDetails != nodeDetails) {
+			diagram.model.setDataProperty(nodeData, 'nodeDetails', nodeDetails);
+		}
+		
 		var newWaitState = (nodeData.u_wait_for_subtasks_to_finish == 'true' && (parseInt(nodeData.calchaschildren) == 0));
 		if (nodeData.warning.waitStatewithNoSubtasks != newWaitState) {
 			diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
@@ -533,10 +546,22 @@
 	}
 
 	function getTaskTitleNode(nodeData) {
-		var nodeTitle = nodeData.number + ' - ' + nodeData.short_description + ' (' + nodeData.primary_assignee_DisplayValue + ')';
+		var nodeTitle = nodeData.short_description;
 		if (nodeData.route_order != null && nodeData.route_order != 0)
 			nodeTitle = nodeData.route_order + ". " + nodeTitle;
+		// DFCT0011078 - STRY0127737 - updated name and details and separated number
+		if(nodeTitle.length > 43){
+			nodeTitle = nodeTitle.substring(0,43) + "...";
+		}
 		return nodeTitle;
+	}
+	
+	// DFCT0011078 - STRY0127737 - updated name and details and separated number
+	function getTaskNodeDetails(nodeData) {
+		// DFCT0011078
+		var nodeDetails = "";
+		nodeDetails = '(' + nodeData.primary_assignee_DisplayValue + ')';
+		return nodeDetails;
 	}
 
 	// STRY0117609
@@ -929,7 +954,20 @@
 		return nodeTemplate;
 		
 	}
-	
+	function _createNumberHeader(){
+		var numberHeader = 
+				$go(go.TextBlock, 
+						{alignment: go.Spot.Left,
+						 width:TREE_CONST.numberPanelWidth,
+						 stroke: TREE_CONST.textStrokeColor,
+						 font: TREE_CONST.fontStyleTaskerNumber
+						},						
+						new go.Binding("text", "", function(data) {
+							return data.number;
+						})
+					 );
+		return numberHeader;
+	}	
 	function _createIcon(iconName, iconText){
 		var icon = $go(go.TextBlock, {
 			name: iconName,
@@ -1013,7 +1051,12 @@
 		var mainPanel = 
 				$go(go.Panel, "Auto", 
 						$go(go.Panel, "Vertical",
-								_createIconPanel(),
+								// DFCT0011134 - STRY0127737 - change name and number display
+								$go(go.Panel, "Horizontal",
+
+										_createNumberHeader(),
+										_createIconPanel()
+									 ),								
 								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
 								$go(go.Panel,  "Vertical", {alignment: go.Spot.Left, margin: TREE_CONST.nodeTextPanelMargin, 
 																						minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight), 
@@ -1026,6 +1069,14 @@
 																			 font: TREE_CONST.fontStyle, 
 																			 stroke: TREE_CONST.textStrokeColor},
 												new go.Binding("text", "name")
+											 ),
+										$go(go.TextBlock, {alignment: go.Spot.Left,
+																			 text: "verticalAlignment: Center",
+																			 textAlign:"left", 
+																			 wrap: go.TextBlock.WrapFit,
+																			 font: TREE_CONST.fontStyleNodeDetails, 
+																			 stroke: TREE_CONST.textStrokeColor},
+												new go.Binding("text", "nodeDetails")
 											 )
 									 )
 							 )
@@ -1145,20 +1196,24 @@
 				var hasSignatureInstructions = (nodeData.u_signature_instructions != 'null');
 				toolTip = 
 					$go(go.Panel, "Table",
-							// Row 1
-							_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
-							_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
+							// Row 1 - DFCT0011078 - STRY0127737 - added name to the table to enable seeing the full longer name
+							_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.short_description.fieldLabel + ": "),
+							_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.short_description),
+							
 							// Row 2
-							_createTableColumn(hasClassification, 1, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
-							_createTableColumn(hasClassification, 1, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
+							_createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
+							_createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
 							// Row 3
-							_createTableColumn(true, 2, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_priority.fieldLabel + ": "),
-							_createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_priority_DisplayValue),
+							_createTableColumn(hasClassification, 2, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
+							_createTableColumn(hasClassification, 2, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
 							// Row 4
-							_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_risk_flag.fieldLabel + ": "),
-							_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_risk_flag_DisplayValue),
+							_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_priority.fieldLabel + ": "),
+							_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_priority_DisplayValue),
 							// Row 5
-							_createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
+							_createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_risk_flag.fieldLabel + ": "),
+							_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_risk_flag_DisplayValue),
+							// Row 6
+							_createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
 							// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
 							// strip HTML Tags
 							// new go.Binding("text", "", function(data) {
@@ -1167,9 +1222,9 @@
 							// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
 							// return _convertHtmlToSimpleString(data.instructions); // function was removed
 							// Need to call below to have <, >, and & show as that character and not an ALT code
-							_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
-							// Row 6
-							_createTableColumn(hasSignatureInstructions, 5, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
+							_createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
+							// Row 7
+							_createTableColumn(hasSignatureInstructions, 6, 0, 1, TREE_CONST.toolTipColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
 							// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
 							// strip HTML Tags
 							// new go.Binding("text", "", function(data) {
@@ -1177,7 +1232,7 @@
 							// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
 							// return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
 							// Need to call below to have <, >, and & show as that character and not an ALT code
-							_createTableColumn(hasSignatureInstructions, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions))
+							_createTableColumn(hasSignatureInstructions, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth,  TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions))
 						 );
 				break;
 			case 'UserIcon':
@@ -1404,6 +1459,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //
 // 2.8 | 2022-08-03 | raj | DFCT0011130 - On the Template updating any fields on the "General Information" modal should NOT update all the Template fields
 //                                         - Changes in Client Controller
+//  2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View
+//  2.8   - 2022-08-16 - raj - STRY0127737 - Task Tree/Template Task Tree- New Design for Overflow Text 
+//																						Changes in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1558,14 +1616,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>2361</sys_mod_count>
+        <sys_mod_count>2375</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-04 04:10:40</sys_updated_on>
+        <sys_updated_on>2022-08-17 22:43:30</sys_updated_on>
         <template><![CDATA[<div id="main_body" class="dtech-topstick-posabso flex-column panel panel-default">
   <div id="panel_heading" class="panel-heading dtech-panel-heading-min-height-standard">
     <div class="modal-body text-right" ng-if="data.selectedId" class="pull-right">
