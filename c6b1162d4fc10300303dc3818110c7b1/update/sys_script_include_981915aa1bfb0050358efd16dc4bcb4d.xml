@@ -173,7 +173,6 @@ tasking_System_Settings_Scripts.prototype = {
 		}
 		return properties;
 	},
-	
 	syncAllGroupRoles:function(properties) {
 		for (var i = 0; i < properties.length; i++) {
 			var property = properties[i];
@@ -250,7 +249,6 @@ tasking_System_Settings_Scripts.prototype = {
 				if(userHasRole != grOfficeMembers.getValue(fieldName)){
 					currentUserUpdated=true;
 					// no need to update any groups or roles, changing table to match group or roles
-// test run without on					
 					grOfficeMembers.setWorkflow(false);
 					grOfficeMembers.setValue(fieldName,userHasRole);
 					grOfficeMembers.update("Member Sycn performed by user: " + gs.getUserDisplayName() + "[ User Id: "+ gs.getUserName() + "]");
@@ -287,6 +285,172 @@ tasking_System_Settings_Scripts.prototype = {
 
 	},
 	
+	TEST_RESET_Group_Management_Roles: function(RESET){
+		if(RESET != "RESET"){
+			gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+			return;
+		}
+		var properities;
+		properties = this.loadCategoryProperties("Groups Management");
+		properties = this.validateAllGroups(properties);
+		this.TEST_RESET_AllGroupRoles(RESET, properties);
+		this.TEST_RESET_clear_Group_Management_Properties(RESET, properties);
+		
+	},
+	TEST_RESET_clear_Group_Management_Properties: function(RESET, properties){
+		if(RESET != "RESET"){
+			gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+			return;
+		}		
+		for (var i = 0; i < properties.length; i++) {
+			var property = properties[i];
+			if (property.name == "x_153465_discovert.uses_groups_for_roles") {
+				gs.setProperty(property.name, false);
+			} else {
+				gs.setProperty(property.name, "");
+			}
+		}
+	},
+	TEST_RESET_AllGroupRoles:function(RESET, properties) {
+		try{
+			if(RESET != "RESET"){
+				gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+				return;
+			}		
+
+			for (var i = 0; i < properties.length; i++) {
+				var property = properties[i];
+				if (property.name != "x_153465_discovert.uses_groups_for_roles") {
+					this.TEST_RESET_Group(RESET, property);
+				}
+			}
+		} catch(e){
+			gs.addErrorMessage(gs.getMessage("Error resetting all groups in function [{0}] item with property name [{1}] - Error: [{3}]", ["tasking_System_Settings_Scripts.TEST_RESET_AllGroupRoles", property.name, e]));
+		}			
+	},
+
+	TEST_RESET_Group: function(RESET, groupProperty){
+		try{
+			if(RESET != "RESET"){
+				gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+				return;
+			}		
+
+			var groupId = "";
+			var roleName = "";
+			var groupName = "Not Selected";
+
+			// Add Group to Role
+			if(groupProperty.validation.groupSelected){
+				if(groupProperty.validation.groupHasRole){
+					groupName = groupProperty.value.displayValue;
+					this.TEST_RESET_removeRoleFromGroup(RESET, groupProperty);
+				}
+			}
+			roleName = groupProperty.roleName;
+			// if explicit role members exist move to group
+			if(groupProperty.validation.groupSelected){
+				groupId = groupProperty.value.value;
+				roleName = groupProperty.roleName;
+				this.TEST_RESET_Only_migrateGroupUsersIntoRole(RESET, roleName, groupId);
+			}
+			gs.info("Tasker - Test - Role [{0}] with Group [{1}} was reset in a test script run by user[{2}].", [roleName, groupName, gs.getUserDisplayName() ]);
+		} catch(e){
+
+			gs.addErrorMessage(gs.getMessage("Error resetting group in function [{0}] unable to reset group [{1}] with role [{2}] - Error: [{3}]", 
+										["tasking_System_Settings_Scripts.TEST_RESET_Group", groupId, roleName, e]));
+		}							
+
+	},
+	
+	TEST_RESET_removeRoleFromGroup: function (RESET, groupProperty){
+		try{
+			if(RESET != "RESET"){
+				gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+				return;
+			}		
+
+			var groupId = "";
+			var roleName = "";
+			var roleId = "";
+			var roleAdded = false;
+			if(groupProperty.roleName && groupProperty.roleName != ""){
+				roleName = groupProperty.roleName;
+				roleId = this._getRoleIdForRoleName(RESET, roleName);
+			}
+			if (groupProperty.value && groupProperty.value.value){
+				groupId = groupProperty.value.value;
+			}
+			// roleName should always be populated
+			if( roleId != "" && groupId != ""){
+				var grGroupRole = new GlideRecord('sys_group_has_role');
+				grGroupRole.addQuery('role',roleId);
+				grGroupRole.addQuery('group',groupId);
+				grGroupRole.query();
+				if(grGroupRole.next()){
+					grGroupRole.deleteRecord();
+					gs.info("Tasker - Test - Role [{0}] was removed from Group [{1}} in a test script run by user[{2}].", [roleName, grGroupRole.getDisplayValue("group"), gs.getUserDisplayName() ]);
+				}
+			}
+		} catch(e){
+
+			gs.addErrorMessage(gs.getMessage("Error removing group from role in function [{0}] unable to remove group [{1}] from role [{2}] - Error: [{3}]", 
+											["tasking_System_Settings_Scripts.TEST_RESET_removeRoleFromGroup", groupId, roleName, e]));
+		}				
+	},
+	
+	TEST_RESET_Only_migrateGroupUsersIntoRole: function(RESET, roleName, groupId){
+		try{
+			if(RESET != "RESET"){
+				gs.info("Tasker - Test - you must pass 'RESET' into the parameter RESET for this to execute.");
+				return;
+			}			
+			var grRole = new GlideRecord('sys_user_role');
+			var roleId = "";
+			var grGroupMember = new GlideRecord('sys_user_grmember');
+			var grRoleUsers = new GlideRecord('sys_user_has_role');
+			var countUsersMigrated = 0;
+
+			// get role name
+			grRole.addQuery("name", roleName);
+			grRole.query();
+			if(grRole.next()){
+				roleId = grRole.getUniqueValue();
+			} else {
+				gs.addErrorMessage(gs.getMessage("Error in test script to move group users back to role. Role Name [{0}]not found. ",[roleName]));
+				return;
+			}
+			
+			
+			grGroupMember.addQuery("group", groupId);
+			grGroupMember.query();
+			// process group membrs
+			while (grGroupMember.next()) {
+				grRoleUsers.addQuery('role.name', roleName);
+				grRoleUsers.addQuery('user', grGroupMember.user);
+				grRoleUsers.addQuery("inherited", false);
+				grRoleUsers.query();
+				// if user doesn't have role explicitly, give the user the role explicitly
+				if(!grRoleUsers.next()){
+					grRoleUsers.initialize();
+					grRoleUsers.user = grGroupMember.user;
+					grRoleUsers.role = roleId;
+					grRoleUsers.inherited = false;
+					grRoleUsers.insert();
+					gs.info("Tasker - Test - User [{0}] added explicitly to a role [{1}] in a test script run by user[{2}].", [grGroupMember.getDisplayValue("user"), roleName, gs.getUserDisplayName() ]);
+				}
+				// remove the user form the group as this is used for test only, we are just removing them here
+				grGroupMember.deleteRecord();
+				gs.info("Tasker - Test - User [{0}] was removed from group [{1}] in a test script run by user[{2}].", [grGroupMember.getDisplayValue("user"), grGroupMember.getDisplayValue("group"), gs.getUserDisplayName() ]);
+				countUsersMigrated++;
+			}
+			gs.info("Tasker - Test - User[{0} ran a test script that migrated [{1}]].", [grGroupMember.getDisplayValue("user"), grGroupMember.getDisplayValue("group"), gs.getUserDisplayName() ]);
+		} catch(e){
+
+			gs.addErrorMessage(gs.getMessage("Error migrating users in roles into a group in function [{0}] unable to migrate users from role with name: [{1}] into group with GroupId: [{2}]  - Error: [{3}]", ["tasking_System_Settings_Scripts.TEST_RESET_Only_migrateGroupUsersIntoRole",roleName, groupId, e]));
+		}	
+	},
+	
 	// move all users from Role to Group
 	_migrateRoleUsersIntoGroup: function(property, roleName, groupId){
 		try{
@@ -298,7 +462,7 @@ tasking_System_Settings_Scripts.prototype = {
 			// by checking inheritted, we will find all users with the role and we can add just those users to the group
 			// this will avoid unintentionally adding users inherting the role to this group.
 			// if the user lost he inheritted role, they would still be in this group and we want to avoid that
-			grGroupMember.addQuery("inherited", false);
+			grRoleUsers.addQuery("inherited", false);
 			grRoleUsers.query();
 			while (grRoleUsers.next()) {
 				var roleUserId = grRoleUsers.getValue("user"); 
@@ -377,6 +541,17 @@ tasking_System_Settings_Scripts.prototype = {
 			roleId = grRole.getUniqueValue();
 		}
 		return roleId;
+	},
+	
+	validateAllGroups: function(properties){
+		for (var i = 0; i < properties.length; i++) {
+			var property = properties[i];
+			if (property.name != "x_153465_discovert.uses_groups_for_roles") {
+				property = this.validateGroupRole(property);
+				properties[i]=property;
+			}
+		}
+		return properties;
 	},
 	
 	validateGroupRole: function(groupProperty){
@@ -1187,13 +1362,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>305</sys_mod_count>
+        <sys_mod_count>313</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-07 06:03:09</sys_updated_on>
+        <sys_updated_on>2022-08-18 19:40:35</sys_updated_on>
     </sys_script_include>
 </record_update>
