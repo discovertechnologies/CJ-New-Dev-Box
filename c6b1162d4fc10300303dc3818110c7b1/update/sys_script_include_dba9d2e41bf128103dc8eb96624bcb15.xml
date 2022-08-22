@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer&#13;
+        <description>2.8   - 2022-08-20 - raj - DFCT0011140 - Record watcher: "Warning Icon" &amp;  "Duration icon"  should NOT trigger the visual warning indicator on load. (Taker Type "Approval)&#13;
+2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View&#13;
+2.8   - 2022-08-16 - raj - STRY0127737 - Task Tree/Template Task Tree- New Design for Overflow Text &#13;
+2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer&#13;
 Add a bifold in loadRelatedLists: function(rlParms) after isModal: rlParms.isModal.&#13;
 update _getTabTitle() to check if plural exists use it else use label&#13;
 2.8 | 2022-07-27 | raj  | DFCT0011118 - "Respond to Org Hierarchy icon" is NOT displaying for OUHAs (except GHA) in the "Org Hierarchy Tree page"&#13;
@@ -66,6 +69,8 @@ STRY0113084 - Templates- Duration Fields- Update Label and Info Text&#13;
 // 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
 //											loadProfileInfo() var userProfile deleted unused fields
 //											_setStyleBackgroundImage(photo) as calling with 2nd param asBackgroundImage
+//  2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View
+//  2.8   - 2022-08-20 - raj - DFCT0011140 - Record watcher: "Warning Icon" &  "Duration icon"  should NOT trigger the visual warning indicator on load. (Taker Type "Approval)
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -361,6 +366,16 @@ TaskWidgetData.prototype = {
                 hasDiplayValue: true,
                 maxChars: 0
             },
+			// DFCT0011134 - STRY0127737 - change name and number display
+            'short_description': {
+                fieldName: 'short_description',
+                fieldLabel: gr.short_description.getLabel(),
+                type: 'string',
+                hasValue: false,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
             'state': {
                 fieldName: 'state',
                 fieldLabel: gr.state.getLabel(),
@@ -400,6 +415,16 @@ TaskWidgetData.prototype = {
             'task_name': {
                 fieldName: 'task_name',
                 fieldLabel: gr.task_name.getLabel(),
+                type: 'string',
+                hasValue: false,
+                keyUsesDisplayOnly: true,
+                hasDiplayValue: false,
+                maxChars: 0
+            },
+			// DFCT0011134 - STRY0127737 - change name and number display
+            'taskernumber': {
+                fieldName: 'taskernumber',
+                fieldLabel: gr.taskernumber.getLabel(),
                 type: 'string',
                 hasValue: false,
                 keyUsesDisplayOnly: true,
@@ -966,6 +991,13 @@ TaskWidgetData.prototype = {
 			switch (field.type){
 				case 'date':
 					var date_number = record[key].dateNumericValue();
+					if(date_number>0){
+						// DFCT0011140  - get date in user's timezone
+						var localTimeString = record.getDisplayValue(key);
+						var localDate = new GlideDateTime(localTimeString);
+						var local_number =localDate.getNumericValue();
+						date_number = local_number;
+					}
 					newNodeData[key] = date_number;
 					break;
 				case 'time':
@@ -1038,6 +1070,7 @@ TaskWidgetData.prototype = {
 				// Load the name value for the Task Tree Graph
 				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; combined Task and Template widget data code
 				newNodeData.name = this.getTaskTitleNode(record);
+				newNodeData.nodeDetails = this.getTaskNodeDetails(record);
 				newNodeData.warning = {};
 				newNodeData.isInboundExternalOU = !record.parent && record.tasking_authority && (record.tasking_authority.u_external_flag == true);
 				newNodeData.warning.isTopSuspenseDateAfterExternalInboundDate = newNodeData.isInboundExternalOU && (record.suspense_date > record.u_external_due_date);
@@ -1047,6 +1080,7 @@ TaskWidgetData.prototype = {
 			case 'discovertasker-processtemplatetreegraph':
 				// Load the name value for the Template Task Tree Graph
 				newNodeData.name = this.getTemplateTitleNode(record);
+				newNodeData.nodeDetails = this.getTemplateNodeDetails(record);
 				newNodeData.warning = {};
 				// STRY0110317 calculate the due date to be set using days and Time
 				newNodeData.actualTime = 0;
@@ -1193,11 +1227,11 @@ TaskWidgetData.prototype = {
     // re-write function to use local var's; remove badgeclass and taskText.state
     getTaskTreeListTitleNode: function(newNodeData) {
         var assignedTo = '';
-        var taskNameNumber = newNodeData.task_name;
+		var taskNameNumber = newNodeData.task_name;
         var taskText = {};
 
         if (newNodeData.parent != null) {
-            taskNameNumber = newNodeData.order + ". " + newNodeData.task_name;
+			taskNameNumber = newNodeData.order + ". " + newNodeData.task_name;
         }
 
         if (!!newNodeData.assigned_to && newNodeData.assigned_to != '') {
@@ -1214,52 +1248,71 @@ TaskWidgetData.prototype = {
 
         return taskText;
     },
-    // SEQ - Task Details page – Displays Task Tree View Indicators
-    getTaskTitleNode: function(grTask) {
-        var nodeTitle = grTask.task_name.toString();
+	//DFCT0011078
+	getTaskTitleNode: function(grTask) {
+		// DFCT0011134 - STRY0127737 - change name and number display
+        var nodeTitle = grTask.short_description.toString();
         if (grTask.parent != '') {
             nodeTitle = grTask.order.toString() + ". " + nodeTitle; // NEW
         }
-
-        // 2.5.13: 08.12.20 | KT | SEQ | STRY0076601: SEQ - Task Details page – Displays Task Tree View Indicators 
-        //if (grTask.assigned_to.getDisplayValue().toString().length > 0) nodeTitle += " (" + grTask.assigned_to.getDisplayValue().toString() + ") "; //KT: 06.09.20: Added space before (Assignee
+		if(nodeTitle.length > 43){
+			nodeTitle = nodeTitle.substring(0,43) + "...";
+		}
+        return nodeTitle;
+	},
+	
+    // SEQ - Task Details page – Displays Task Tree View Indicators
+	// DFCT0011078
+	// DFCT0011134 - STRY0127737 - change name and number display
+    getTaskNodeDetails: function(grTask) {
+        var nodeDetails = "";
         switch (grTask.state.getDisplayValue().toString()) {
             case 'Waiting':
                 if (grTask.calchaschildren.getDisplayValue().toString() == '0'
                     //grTask.u_active_subtasks.getDisplayValue().toString() == grTask.calchaschildren.getDisplayValue().toString() && 
                 )
-                    nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " on creating Subtasks ";
+                    nodeDetails += grTask.state.getDisplayValue().toString() + " on creating Subtasks ";
                 else
-                    nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " on " + grTask.u_active_subtasks.getDisplayValue().toString() + " out of " + grTask.calchaschildren.getDisplayValue().toString() + " Subtasks";
+                    nodeDetails += grTask.state.getDisplayValue().toString() + " on " + grTask.u_active_subtasks.getDisplayValue().toString() + " out of " + grTask.calchaschildren.getDisplayValue().toString() + " Subtasks";
                 break;
             case 'Assigned':
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " to " + grTask.assigned_to.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString() + " to " + grTask.assigned_to.getDisplayValue().toString();
                 break;
             case 'Accepted':
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
                 break;
             case 'Work in Progress':
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
                 break;
             case 'In Review':
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " by " + grTask.u_reviewer.getDisplayValue().toString() + ", Worked by " + grTask.assigned_to.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString() + " by " + grTask.u_reviewer.getDisplayValue().toString() + ", Worked by " + grTask.assigned_to.getDisplayValue().toString();
                 break;
             case 'Completed':
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString() + " by " + grTask.assigned_to.getDisplayValue().toString();
                 break;
             default:
-                nodeTitle += " - " + grTask.state.getDisplayValue().toString();
+                nodeDetails += grTask.state.getDisplayValue().toString();
                 break;
         }
-        return nodeTitle;
+        return nodeDetails;
     },
-    // Template has to set the name a little differently than task
+	
+	// DFCT0011134 - STRY0127737 - change name and number display
+	getTemplateNodeDetails: function(grTemplateTask) {
+        var nodeDetails = '(' + grTemplateTask.primary_assignee.getDisplayValue().toString() + ')';
+        return nodeDetails;	
+	},
+
+	// Template has to set the name a little differently than task
     getTemplateTitleNode: function(grTemplateTask) {
-        var nodeTitle = grTemplateTask.number.toString() + ' - ' + grTemplateTask.short_description.toString() + ' (' + grTemplateTask.primary_assignee.getDisplayValue().toString() + ')';
+		// DFCT0011134 - STRY0127737 - change name and number display
+        var nodeTitle = grTemplateTask.short_description.toString();
         if ((grTemplateTask.parent != '') && (parseInt(grTemplateTask.route_order.getDisplayValue().toString()) > 0)) {
             nodeTitle = grTemplateTask.route_order.getDisplayValue().toString() + ". " + nodeTitle;
         }
-
+		if(nodeTitle.length > 43){
+			nodeTitle = nodeTitle.substring(0,43) + "...";
+		}
         return nodeTitle;
     },
 	
@@ -1544,16 +1597,14 @@ TaskWidgetData.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>308</sys_mod_count>
+        <sys_mod_count>330</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-08-03 18:38:02</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-21 00:26:11</sys_updated_on>
     </sys_script_include>
 </record_update>
