@@ -19,12 +19,63 @@
     $scope.printPreviewToggle = function() {
 
         c.data.isPrint = !c.data.isPrint;
+// reload print view
+_loadDynamicDocIntWidgets();			
     };
 
     $scope.previewPrint = function() {
 
         window.print();
     };
+	
+	
+	_loadDynamicDocIntWidgets();
+
+	function _loadDynamicDocIntWidgets() {
+		if(c.data.DocIntON && $scope.data._dtlv_docint_widget_container){
+			for (var i in $scope.data._dtlv_docint_widget_container._docint_tabs) {
+				var _tab = $scope.data._dtlv_docint_widget_container._docint_tabs[i];
+				_loadDocIntWidget($scope.data._dtlv_docint_widget_container._docint_tabs[i]);
+			}
+		}
+	}
+	
+	function _loadDocIntWidget(_docFolder){
+		_docFolder.widget=null;
+		var widget_name = _docFolder.widget_name;
+		var widget_parameters = _docFolder.widgetParameter;
+		if(widget_name == 'docint-list-items') {
+			if(c.data.isPrint){
+				widget_parameters = {
+					vw: _docFolder.config["docintegrator_view-refValue"],
+					mapRowSysId: c.data.sys_id + "",
+					readonly_flag: !c.data.isActive,
+					lw_name: _docFolder.id + _docFolder.caption,
+					window_size: c.data.rowSize,
+					config_sys_id: _docFolder.id,
+					// STRY0115311
+					siblings : _docFolder.siblings,
+					color: 'primary'
+				};				
+			} else {
+				widget_parameters = {
+					vw: _docFolder.config["docintegrator_view-refValue"],
+					mapRowSysId: c.data.sys_id + "",
+					readonly_flag: true,
+					lw_name: _docFolder.id + _docFolder.caption,
+					config_sys_id: _docFolder.id,
+					// STRY0115311
+					siblings : _docFolder.siblings,
+					color: 'primary'
+				};
+			}
+		}
+		// STRY0111049 - moved outside the IF statement and also set to use widgetname 
+		spUtil.get(widget_name, widget_parameters).then(function(response) {
+			_docFolder.widget = response;
+		});
+
+	}	
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>/*------------------------------------------------------------------------------------------------------------------------*/&#13;
@@ -582,34 +633,14 @@ WIDGET BASE: N/A&#13;
     //------------------------------------------------------------------------------------------------------------------------
     // Box 7: Shared Documents
     //------------------------------------------------------------------------------------------------------------------------
-    var DocIntSharedDocsViewSysID = gs.getProperty('x_153465_discovert.DocIntSharedDocumentsViewSysIDTasks');
-    data.isActive = true;
-
-    var sharedDocumentsWidget_options = {
-        title: 'Shared Documents',
-        vw: DocIntSharedDocsViewSysID,
-        mapRowSysId: data.sys_id.toString(),
-        readonly_flag: data.isActive,
-        lw_name: 'widgetDocIntegrationSharedDocs',
-        color: 'primary'
-    };
-
-    data.sharedDocuments = $sp.getWidget('docint-list-items', sharedDocumentsWidget_options);
+		if (data.DocIntON) {
+			if (data.isActive == "true" || data.isActive == true) data.isActive = true;
+			else data.isActive = false;
+			var docInt_table = "x_153465_discovert_route_task_instance";
+			var docInt_view = "DTLView";
+			data._dtlv_docint_widget_container = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(docInt_table, docInt_view, data.sys_id);
+		}
 	
-		// DFCT0010773
-    var printSharedDocumentsWidget_options = {
-        title: 'Shared Documents',
-        vw: DocIntSharedDocsViewSysID,
-        mapRowSysId: data.sys_id.toString(),
-        readonly_flag: data.isActive,
-        // RAJ DFCT0010773 - Default row size to Admin settable value
-        window_size: data.rowSize,
-        lw_name: 'widgetPrintDocIntegrationSharedDocs',
-        color: 'primary'
-    };
-
-    data.printSharedDocuments = $sp.getWidget('docint-list-items', printSharedDocumentsWidget_options);
-
     data.isActive = true;
 
 })($sp, input, data, options, gs);]]></script>
@@ -618,14 +649,14 @@ WIDGET BASE: N/A&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-05-28 16:13:02</sys_created_on>
         <sys_id>98db49751bc99410358efd16dc4bcb97</sys_id>
-        <sys_mod_count>848</sys_mod_count>
+        <sys_mod_count>867</sys_mod_count>
         <sys_name>Dynamic Tree Level Summary</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_98db49751bc99410358efd16dc4bcb97</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-22 04:51:14</sys_updated_on>
+        <sys_updated_on>2022-08-23 03:57:41</sys_updated_on>
         <template><![CDATA[<div id='dtlv' ng-show="!data.isPrint">
 
   <nav id="navbar-dtlv" class="navbar navbar-light bg-light hidden-print">
@@ -658,9 +689,13 @@ WIDGET BASE: N/A&#13;
       <li class="nav-item" ng-if="::(data.SNAttachmentsON)">
         <a class="nav-link" href="#SharedAttachments">${Shared Attachments}</a>
       </li>
-      <li class="nav-item" ng-if="::(data.DocIntON)">
-        <a class="nav-link" href="#SharedDocuments">${Shared Documents}</a>
+            
+      <li class="nav-item" ng-if="::(data.DocIntON)"
+           ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs">
+        <a class="nav-link" href="#{{rs.id}}">{{rs.caption}}</a>
       </li>
+      
+      
       <li class="nav-item">
         <a class="nav-link" href="#ActivityLog">${Activity Log}</a>
       </li>
@@ -785,16 +820,22 @@ WIDGET BASE: N/A&#13;
             <sp-widget widget="data.sharedAttachment"></sp-widget>
           </div>
         </div>
-        <h4 id="SharedDocuments"></h4>
-        <div class="row">
-          <div class="col-md-12" ng-if="::(data.DocIntON)">
-            <div class="panel-heading bg-primary"> 
-              <i class="glyphicon glyphicon-file"></i>${Shared Documents} 
+
+        <div id="{{rs.id}}"
+             ng-if="::(data.DocIntON)"
+             ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs">
+          <h4 id="{{rs.id}}"></h4>
+          <div class="row">
+            <div class="col-md-12" >
+              <div class="panel-heading bg-primary"> 
+                <i class="glyphicon glyphicon-file"></i>{{rs.caption}}
+              </div>
+              <div class="clearfix"></div>
+              <sp-widget widget="rs.widget"></sp-widget>
             </div>
-            <div class="clearfix"></div>
-            <sp-widget widget="data.sharedDocuments"></sp-widget>
           </div>
         </div>
+        
         <h4 id="ActivityLog"></h4>
         <div class="row">
           <div class="col-md-12">
@@ -982,17 +1023,19 @@ WIDGET BASE: N/A&#13;
             <sp-widget widget="data.sharedAttachment"></sp-widget>
           </div>
         </div>
-        <h4 id="SharedDocuments"></h4>
-        <div class="row">
-          <div class="col-md-12 print-better" ng-if="::(data.DocIntON)">
-            <div class="panel-heading bg-primary"> 
-              <i class="glyphicon glyphicon-file"></i>${Shared Documents} 
+
+        <div id="{{rs.id}}"
+             ng-if="::(data.DocIntON)"
+             ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs"
+             class="dtech-force-column-grow">
+          <h4 id="{{rs.id}}"></h4>
+          <div class="row">
+            <div class="col-md-12 print-better" >
+              <sp-widget widget="rs.widget"></sp-widget>
             </div>
-            <div class="clearfix"></div>
-            <!-- DFCT0010773 - changed to use the new print widget -->
-            <sp-widget widget="data.printSharedDocuments"></sp-widget>
           </div>
         </div>
+          
         <h4 id="ActivityLog"></h4>
         <div class="row">
           <div class="col-md-12 print-better">
