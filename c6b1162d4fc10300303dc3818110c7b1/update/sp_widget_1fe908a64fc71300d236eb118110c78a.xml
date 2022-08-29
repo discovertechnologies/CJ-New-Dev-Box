@@ -167,12 +167,19 @@
     //             c.server.update();
     //         });
     //     };
-
     function confirmAndSave() {
+			var continueParent = true;
+			if(c.widget.parent_form){
+				continueParent = _checkFormChanges(c.widget.parent_form);
+			}
+			return continueParent;
+		}
+	
+		function _checkFormChanges(check_g_form) {			
         // If the form is dirty, ask the user if they would like to save the record
         var continueOpen = false;
         var fMsg = '';
-        var serializeChanges = g_form.serialize(true);
+        var serializeChanges = check_g_form.serialize(true);
         if (serializeChanges.length > 0) {
             var changeFieldList = [];
             for (var field in serializeChanges) {
@@ -181,8 +188,9 @@
             fMsg = changeFieldList.join(', ');
 
             spModal.confirm("${Tasker - Modal Save Changes Message}  " + fMsg).then(function(confirmed) {
-                g_form.save();
-                continueOpen = true;
+                check_g_form.save();
+								// after confirmation and save, continue to open
+								_continueToOpen();
             });
         } else {
             continueOpen = true;
@@ -242,26 +250,69 @@
         }
     }
 
-    $scope.newRecord = function() {
-        // check for save or cancel
-        if (!confirmAndSave)
-            return false;
-        // open in modal if set
-        if (c.data.open_new_in_modal) {
-            open_New_Modal(c.data.table, 'New ' + c.data.table_label, $scope.data.view, $scope.data.filter);
+		// This needed to be a separate function so it could be called after the change prompt modal
+		// and also called if no prompt was necessary
+		function _continueToOpen(){
+				if(c.data.table=="x_153465_discovert_tasker_email"){
+					$scope.openModalExportTask();
+				// open in modal if set
+				} else if (c.data.open_new_in_modal) {
+						var title = 'New ' + c.data.table_label;
+						if(c.data.newModalTitle){
+							title = c.data.newModalTitle;
+						}
+						var view = $scope.data.view;
+						if(c.data.newModalView){
+							view = c.data.newModalView;
+						}
+						var filter = $scope.data.filter;
+						if(c.data.newModalQuery){
+							view = c.data.newModalQuery;
+						}
+            open_New_Modal(c.data.table, title, view, filter);
             return;
-        }
-        var parms = {
-            id: 'form',
-            table: $scope.data.table,
-            view: $scope.data.view,
-            sys_id: '-1'
-        };
-        if ($scope.data.filter != '')
-            parms.query = $scope.data.filter;
+        } else {
+					var parms = {
+						id: 'form',
+						table: $scope.data.table,
+						view: $scope.data.view,
+						sys_id: '-1'
+					};
+					if ($scope.data.filter != '')
+						parms.query = $scope.data.filter;
 
-        $location.search(parms);
-    };
+					$location.search(parms);
+				}
+
+    }
+    $scope.newRecord = function() {
+        // check for save or cancel, call continue to open
+        if (confirmAndSave())
+            _continueToOpen();
+		}
+	
+		// STRY0097476 New Email
+		$scope.openModalExportTask = function() {
+			if(c.widget.parent_form){
+				c.widget.parent_form.submit('openModalExportTask');				
+			}
+		};
+		// STRY0109208 - Add Create Icon
+		$scope.openCreateModal = function() {
+						var title = 'New ' + c.data.table_label;
+						if(c.data.newModalTitle){
+							title = c.data.newModalTitle;
+						}
+						var view = $scope.data.view;
+						if(c.data.newModalView){
+							view = c.data.newModalView;
+						}
+						var filter = $scope.data.filter;
+						if(c.data.newModalQuery){
+							view = c.data.newModalQuery;
+						}
+			x_153465_discovert.twJS.openCreateModal(spModal, title, c.data.table, view, filter);
+		};	
     //------------------------------------------------------------------------------------------------------------------------
     // END CUSTOM
     //------------------------------------------------------------------------------------------------------------------------
@@ -1057,6 +1108,10 @@ tbody tr:last-child {&#13;
 //                                      In CSS, removed .table-containe
 //                                      Changes made in HTML and CSS
 //
+// 2.8 | 2022-08-25 | raj  | DFCT0010949 - Subtasks tab should Not display a "New" button at the top of the page. (Three column view, Delegation View, Tree Bi-Fold View)
+//													STRY0128070 - Existing Task Form- All Content Tabs- "New" Button displays next to Header
+//                                        Changes in Server Script and HTML
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1085,6 +1140,15 @@ tbody tr:last-child {&#13;
 		}
 		data.TaskFilterList24 = {"src":'TaskFilterList24.svg', "title": msgTaskFilterList24, "alt": msgTaskFilterList24};
 
+		// STRY0128070
+		data.Divider = {"src":'Divider_Black.svg', "title": "", "alt": ""};
+		data.newModalTitle = (input || {}).newModalTitle || (options || {}).newModalTitle || undefined;
+		data.newModalView = (input || {}).newModalView || (options || {}).newModalView || undefined;
+		data.newModalQuery = (input || {}).newModalQuery || (options || {}).newModalQuery || undefined;
+	
+		data.newIconName = options.newIconName || input.newIconName || 'GenericAdd16.svg';
+		data.addIcon = {"src":data.newIconName, "title": data.newModalTitle, "alt": ""};
+	
     data.title = options.title || input.title;
     data.fromModal = input.fromModal || '';
 
@@ -1112,7 +1176,9 @@ tbody tr:last-child {&#13;
 		optCopy(['show_breadcrumbs', 'showStatesMultipleBar', 'hideTaskFilter', 'parentField', 'task_id' , 'originalFilter']);
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
-	
+	// STRY0128070
+	data.parentWidget = (input || {}).parentWidget || (options || {}).parentWidget || undefined;
+
 	// save the oringal filter for the switch from task to all descendants
 	if(!data.originalFilter){
 		data.originalFilter=data.filter;
@@ -1391,17 +1457,15 @@ tbody tr:last-child {&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1366</sys_mod_count>
+        <sys_mod_count>1387</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-08-25 20:36:53</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-08-29 02:34:51</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b" ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-margin-bottom-0':data.bifold==true||data.isModal==true}">
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
     <div class="dtech-container-menu-row">
@@ -1423,19 +1487,36 @@ tbody tr:last-child {&#13;
         <span class="title-ellipsised" uib-tooltip="{{data.title || data.table_plural}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
           <i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>
           {{data.title || data.table_plural}}
+          <!-- STRY0128070 - new is not using an icon
           <button name="new" role="link" class="btn btn-primary btn-sm m-l-xs" ng-click="newRecord()" ng-if="data.show_new && !data.newButtonUnsupported" aria-label="${Create new record}">${New}</button>
+					-->
         </span>
       </span>
       
       <!-- panel icons section -->
       <div class="dtech-col-7-flex-row-end dtech-max-width-fit-content" >
-        <div class="dtech-push-right-flexbox" ng-if="!data.hideTaskFilter && data.task_id && data.task_id != -1" >
+        <div class="dtech-push-right-flexbox flex-nowrap" 
+             ng-if="!data.hideTaskFilter && data.task_id && data.task_id != -1" >
           <img src="{{data.TaskFilter24.src}}" title="{{data.TaskFilter24.title}}"
                ng-class="{'dtech-disabled': data.taskFilter == 'TaskOnly', 'dtech-enabled': data.taskFilter != 'TaskOnly'}"
                alt="{{data.TaskFilter24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskOnly')"/>
           <img src="{{data.TaskFilterList24.src}}" title="{{data.TaskFilterList24.title}}"
                ng-class="{'dtech-disabled': data.taskFilter == 'TaskAndDescendents', 'dtech-enabled': data.taskFilter != 'TaskAndDescendents'}"
                alt="{{data.TaskFilterList24.alt}}" class="dtech-pad-all-10" ng-click="changeFilter('TaskAndDescendents')"/>
+        </div>
+          
+        <!-- STRY0128070 -->
+        <div class="dtech-push-right-flexbox flex-nowrap" 
+             ng-if="data.show_new" >
+
+          <!-- only show divider if Task All Filter is on and new is on -->
+          <img ng-if="data.show_new && !data.newButtonUnsupported && 
+                      !data.hideTaskFilter && data.task_id && data.task_id != -1"
+               src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+               alt="{{data.Divider.alt}}" class="dtech-enabled dtech-pad-all-10" />
+          <img ng-if="data.show_new && !data.newButtonUnsupported"
+               src="{{data.addIcon.src}}" title="{{data.addIcon.title}}"
+               alt="{{data.addIcon.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="newRecord()" />
         </div>
       </div>
       
@@ -1467,7 +1548,7 @@ tbody tr:last-child {&#13;
       <fa name="spinner" spin="true"></fa> ${Loading data}...
     </div>
     <!-- STRY0120403 -->
-    <div ng-if="data.showStatesMultipleBar && data.table == 'x_153465_discovert_route_task_instance'">
+    <div ng-if="data.showStatesMultipleBar && data.table == 'x_153465_discovert_route_task_instance' && data.row_count>0">
       <sp-widget widget="data.widgetInstanceMultipleBar"></sp-widget>
     </div>
 
