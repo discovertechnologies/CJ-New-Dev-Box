@@ -19,8 +19,9 @@
     $scope.printPreviewToggle = function() {
 
         c.data.isPrint = !c.data.isPrint;
-// reload print view
-_loadDynamicDocIntWidgets();			
+			// reload on toggle.  NOTE: currently it is not reloading.  There is a javascript error somewhere on reload.
+			// DFCT0011169
+			_loadDynamicDocIntWidgets();			
     };
 
     $scope.previewPrint = function() {
@@ -28,54 +29,59 @@ _loadDynamicDocIntWidgets();
         window.print();
     };
 	
-	
-	_loadDynamicDocIntWidgets();
+		// DFCT0011169
+		_loadDynamicDocIntWidgets();
 
-	function _loadDynamicDocIntWidgets() {
-		if(c.data.DocIntON && $scope.data._dtlv_docint_widget_container){
-			for (var i in $scope.data._dtlv_docint_widget_container._docint_tabs) {
-				var _tab = $scope.data._dtlv_docint_widget_container._docint_tabs[i];
-				_loadDocIntWidget($scope.data._dtlv_docint_widget_container._docint_tabs[i]);
+		// DFCT0011169
+		function _loadDynamicDocIntWidgets() {
+			if(c.data.DocIntON && 
+				 $scope.data._dtlv_docint_widget_container){
+				for (var i in $scope.data._dtlv_docint_widget_container._docint_tabs) {
+					var _tab = $scope.data._dtlv_docint_widget_container._docint_tabs[i];
+					_loadDocIntWidget($scope.data._dtlv_docint_widget_container._docint_tabs[i]);
+				}
 			}
 		}
-	}
 	
-	function _loadDocIntWidget(_docFolder){
-		_docFolder.widget=null;
-		var widget_name = _docFolder.widget_name;
-		var widget_parameters = _docFolder.widgetParameter;
-		if(widget_name == 'docint-list-items') {
-			if(c.data.isPrint){
-				widget_parameters = {
-					vw: _docFolder.config["docintegrator_view-refValue"],
-					mapRowSysId: c.data.sys_id + "",
-					readonly_flag: !c.data.isActive,
-					lw_name: _docFolder.id + _docFolder.caption,
-					window_size: c.data.rowSize,
-					config_sys_id: _docFolder.id,
-					// STRY0115311
-					siblings : _docFolder.siblings,
-					color: 'primary'
-				};				
-			} else {
-				widget_parameters = {
-					vw: _docFolder.config["docintegrator_view-refValue"],
-					mapRowSysId: c.data.sys_id + "",
-					readonly_flag: true,
-					lw_name: _docFolder.id + _docFolder.caption,
-					config_sys_id: _docFolder.id,
-					// STRY0115311
-					siblings : _docFolder.siblings,
-					color: 'primary'
-				};
+		// DFCT0011169
+		function _loadDocIntWidget(_docFolder){
+			_docFolder.widget=null;
+			var widget_name = _docFolder.widget_name;
+			var widget_parameters = _docFolder.widgetParameter;
+			if(widget_name == 'docint-list-items') {
+				if(c.data.isPrint){
+					c.data.docInt_print_loaded=true;
+					widget_parameters = {
+						vw: _docFolder.config["docintegrator_view-refValue"],
+						mapRowSysId: c.data.sys_id + "",
+						readonly_flag: !c.data.isActive,
+						lw_name: _docFolder.id + _docFolder.caption,
+						window_size: c.data.rowSize,
+						config_sys_id: _docFolder.id,
+						// STRY0115311
+						siblings : _docFolder.siblings,
+						color: 'primary'
+					};				
+				} else {
+					c.data.docInt_view_loaded=true;
+					widget_parameters = {
+						vw: _docFolder.config["docintegrator_view-refValue"],
+						mapRowSysId: c.data.sys_id + "",
+						readonly_flag: true,
+						lw_name: _docFolder.id + _docFolder.caption,
+						config_sys_id: _docFolder.id,
+						// STRY0115311
+						siblings : _docFolder.siblings,
+						color: 'primary'
+					};
+				}
 			}
-		}
-		// STRY0111049 - moved outside the IF statement and also set to use widgetname 
-		spUtil.get(widget_name, widget_parameters).then(function(response) {
-			_docFolder.widget = response;
-		});
+			// STRY0111049 - moved outside the IF statement and also set to use widgetname 
+			spUtil.get(widget_name, widget_parameters).then(function(response) {
+				_docFolder.widget = response;
+			});
 
-	}	
+		}	
 }]]></client_script>
         <controller_as>c</controller_as>
         <css>/*------------------------------------------------------------------------------------------------------------------------*/&#13;
@@ -204,11 +210,18 @@ WIDGET BASE: N/A&#13;
 // 2.8.0 | 2022-08-22 | raj  |  DFCT0010862 - DTLV page is displaying, "Go to Task Details Page to edit Task" button 
 //																					Changes in HTML only, removed edit button
 //
+// 2.8.0 | 2022-08-24 | raj  | DFCT0011211 - DTLV page should NOT display white color widgets for the "On Time", "Warning" & "Critical" under the Subtasks by Status section header
+//                                         Changes made in Server Script, Client Controller and HTML
+// 2.8.0 | 2022-08-24 | raj  | DFCT0011169 - Stretch: Empty data displays under "Activity Log" modal
+//                                         Changes made in Server Script, Client Controller and HTML
+// 
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
     /* populate the 'data' object */
     /* e.g., data.table = $sp.getValue('table'); */
+		// DFCT0011211
+		var OOTB_COUNT_WIDGET_ID = "tasker_simple_count";
 
     data.sys_id = $sp.getParameter("sys_id");
     data.table = $sp.getParameter("table");
@@ -585,8 +598,9 @@ WIDGET BASE: N/A&#13;
         color: 'success',
         glyph: 'bell-o'
     };
-
-    data.countStatusOnTime = $sp.getWidget('tasker_count', countStatusOnTime_Options);
+	
+		// DFCT0011211 - use OOTB widget instead of Tasker count
+	data.countStatusOnTime = $sp.getWidget(OOTB_COUNT_WIDGET_ID, countStatusOnTime_Options);
 
 
     var countStatusWarning_Options = {
@@ -597,7 +611,8 @@ WIDGET BASE: N/A&#13;
         glyph: 'calendar-o'
     };
 
-    data.countStatusWarning = $sp.getWidget('tasker_count', countStatusWarning_Options);
+		// DFCT0011211 - use OOTB widget instead of Tasker count
+    data.countStatusWarning = $sp.getWidget(OOTB_COUNT_WIDGET_ID, countStatusWarning_Options);
 
 
     var countStatusCritical_Options = {
@@ -608,7 +623,8 @@ WIDGET BASE: N/A&#13;
         glyph: 'bell-slash-o'
     };
 
-    data.countStatusCritical = $sp.getWidget('tasker_count', countStatusCritical_Options);
+		// DFCT0011211 - use OOTB widget instead of Tasker count
+    data.countStatusCritical = $sp.getWidget(OOTB_COUNT_WIDGET_ID, countStatusCritical_Options);
 
     //------------------------------------------------------------------------------------------------------------------------
     // Box 6: Shared Attachments
@@ -640,7 +656,7 @@ WIDGET BASE: N/A&#13;
 			var docInt_view = "DTLView";
 			data._dtlv_docint_widget_container = new x_dtll2_contentint.SFWHelper().getWidgetFormConfigurationTabs(docInt_table, docInt_view, data.sys_id);
 		}
-	
+		
     data.isActive = true;
 
 })($sp, input, data, options, gs);]]></script>
@@ -649,14 +665,14 @@ WIDGET BASE: N/A&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-05-28 16:13:02</sys_created_on>
         <sys_id>98db49751bc99410358efd16dc4bcb97</sys_id>
-        <sys_mod_count>867</sys_mod_count>
+        <sys_mod_count>890</sys_mod_count>
         <sys_name>Dynamic Tree Level Summary</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_98db49751bc99410358efd16dc4bcb97</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-23 03:57:41</sys_updated_on>
+        <sys_updated_on>2022-08-25 00:32:20</sys_updated_on>
         <template><![CDATA[<div id='dtlv' ng-show="!data.isPrint">
 
   <nav id="navbar-dtlv" class="navbar navbar-light bg-light hidden-print">
@@ -689,8 +705,8 @@ WIDGET BASE: N/A&#13;
       <li class="nav-item" ng-if="::(data.SNAttachmentsON)">
         <a class="nav-link" href="#SharedAttachments">${Shared Attachments}</a>
       </li>
-            
-      <li class="nav-item" ng-if="::(data.DocIntON)"
+      <!-- DFCT0011169 - update to make DTLV folders configurable -->
+      <li class="nav-item" ng-if="data.DocIntON"
            ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs">
         <a class="nav-link" href="#{{rs.id}}">{{rs.caption}}</a>
       </li>
@@ -820,9 +836,8 @@ WIDGET BASE: N/A&#13;
             <sp-widget widget="data.sharedAttachment"></sp-widget>
           </div>
         </div>
-
-        <div id="{{rs.id}}"
-             ng-if="::(data.DocIntON)"
+        <!-- DFCT0011169 - update to make DTLV folders configurable -->
+        <div ng-if="data.DocIntON && !data.isPrint"
              ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs">
           <h4 id="{{rs.id}}"></h4>
           <div class="row">
@@ -835,7 +850,7 @@ WIDGET BASE: N/A&#13;
             </div>
           </div>
         </div>
-        
+  
         <h4 id="ActivityLog"></h4>
         <div class="row">
           <div class="col-md-12">
@@ -1024,18 +1039,22 @@ WIDGET BASE: N/A&#13;
           </div>
         </div>
 
-        <div id="{{rs.id}}"
-             ng-if="::(data.DocIntON)"
+        <!-- DFCT0011169 - update to make DTLV folders configurable -->
+        <div ng-if="data.DocIntON && data.isPrint"
              ng-repeat="rs in data._dtlv_docint_widget_container._docint_tabs"
              class="dtech-force-column-grow">
           <h4 id="{{rs.id}}"></h4>
           <div class="row">
-            <div class="col-md-12 print-better" >
+            <div class="col-md-12 print-better" 
+                 ng-if="data.DocIntON">
+              <div class="panel-heading bg-primary"> 
+                <i class="glyphicon glyphicon-file"></i>{{rs.caption}}
+              </div>
               <sp-widget widget="rs.widget"></sp-widget>
             </div>
           </div>
         </div>
-          
+
         <h4 id="ActivityLog"></h4>
         <div class="row">
           <div class="col-md-12 print-better">
