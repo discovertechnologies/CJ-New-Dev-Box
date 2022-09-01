@@ -169,7 +169,6 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	}
 
 	function loadDocIntWidget(tab) {
-		tab.widget=null;
 		var widget_name = tab.widget_name;
 		var widget_parameters = tab.widgetParameter;
 		
@@ -194,11 +193,11 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 				// STRY0115311
 				siblings : tab.siblings
 			};
+			// STRY0111049 - moved outside the IF statement and also set to use widgetname 
+			spUtil.get(widget_name, widget_parameters).then(function(response) {
+				tab.widget = response;
+			});
 		}
-		// STRY0111049 - moved outside the IF statement and also set to use widgetname 
-		spUtil.get(widget_name, widget_parameters).then(function(response) {
-			tab.widget = response;
-		});
 
 	}
 	// STRY0120403 if filter changed, then record count will change and we will need to receive an updated count
@@ -349,46 +348,6 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	// *******************************************************************************************************************************************************
 	// for now, copy everything in this code block into widgets that want to use DocInt
 	// *******************************************************************************************************************************************************
-
-	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-	function loadAttachmentsWidgets() {
-		if (c.data.SNAttachmentsON == true) {
-			// STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the Process Tree
-			if (c.data.table != "x_153465_discovert_discover_routing_template" || c.data.AttachmentSharedFolderON == true) {
-				// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-				c.data.myAttachmentWidget = null;
-
-				spUtil.get('tasker_task_attachments', {
-					// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
-					isModal: c.data.isModal,
-					// 2.8 | 2022-08-06 | mmcc | DFCT0010866 - Too many scroll bars are displaying  on the split view on Document Management, and Delegation View; add bifold
-					bifold: c.data.bifold,
-					table: c.data.table,
-					sys_id: c.data.sys_id,
-					name: 'myAttachmentWidget'
-				}).then(function(response) {
-					c.data.myAttachmentWidget = response;
-				});
-			}
-		}
-		if ((c.data.AttachmentSharedFolderON == true) && (c.data.SNAttachmentsON == true)) {
-			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-			c.data.sharedAttachmentWidget = null;
-			spUtil.get('tasker_task_attachments', {
-				// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isMOdal
-				isModal: c.data.isModal,
-				// 2.8 | 2022-08-06 | mmcc | DFCT0010866 - Too many scroll bars are displaying  on the split view on Document Management, and Delegation View; add bifold
-				bifold: c.data.bifold,
-				table: c.data.sharedAttachTableName,
-				sys_id: c.data.sharedAttachSys_ID + "",
-				name: 'sharedAttachmentWidget'
-			}).then(function(response) {
-				c.data.sharedAttachmentWidget = response;
-			});
-		}
-
-	}
-
 
 	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
 	$scope.$on("sp.DiscoverListItem", function(event, params) {
@@ -619,7 +578,6 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 	}
 
 	function afterLoadFormReturns(){
-		loadAttachmentsWidgets();
 		loadDocIntWidgets();
 		setupAttachmentHandler();
 		// Changed from page.title to data.f.title to remove post back
@@ -971,6 +929,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      In Server script, add isFlexboxUsed, set from input or options, 
 //                                      In Client controller, remove getTabPanePositionCssByPageId(); pass to DocInt List when to flex
 //                                      Changes made in HTML, Server script and Client controller.
+// 2.8 | 2022-08-31 | raj  | DFCT0011162 - "Document Management": view should NOT hide the tabs "Shared Attachment", & "My Attachments' when uploading files in the My Attachment tab
+//																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
+// 2.8 | 2022-08-31 | raj  |  DFCT0011236 - Click on any banner notification > My Task > Awaiting Acceptance, click "My Attachments", 'tab', that should NOT go away other tabs
+//																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1374,6 +1336,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set bifold
 			bifold: data.bifold,
 			sharedAttachSys_ID: data.sharedAttachSys_ID,
+			sharedAttachTableName: data.sharedAttachTableName,
 			attachmentSharedFolderON: data.AttachmentSharedFolderON, 
 			myAttachSys_ID: myAttachSys_ID,
 			attachmentsON: data.SNAttachmentsON
@@ -1532,14 +1495,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>363</sys_mod_count>
+        <sys_mod_count>372</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-29 02:48:55</sys_updated_on>
+        <sys_updated_on>2022-09-01 19:11:44</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1833,13 +1796,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           </div>
           
           <div ng-if="!data.invalid_table" class="flex-column flex-grow">
-            <!--STRY0063505 Added an if statement to avoid putting Attachments on the screen 2 times for Process Template b/c the shared is using the My Attachments label. -->
-            <sp-widget ng-if="!data.hideDocuments && rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table != 'x_153465_discovert_discover_routing_template'" widget="data.myAttachmentWidget"></sp-widget>
-            <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->
-            <sp-widget ng-if="!data.hideDocuments && rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table == 'x_153465_discovert_discover_routing_template' && data.AttachmentSharedFolderON == true" widget="data.myAttachmentWidget"></sp-widget>
-            <sp-widget ng-if="!data.hideDocuments && rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Shared Attachment' && data.AttachmentSharedFolderON == true" widget="data.sharedAttachmentWidget"></sp-widget>
-            <!-- STRY0109183 - Remove "Tasker Email" related list/ tab when "Disable Email Task Information" is set to true -->
-            <sp-widget ng-if="rl.table != 'sys_attachment' && (rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)" widget="rl.widget"></sp-widget>
+            <sp-widget ng-if="(rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)" widget="rl.widget"></sp-widget>
           </div>
         </div>
       </div>
