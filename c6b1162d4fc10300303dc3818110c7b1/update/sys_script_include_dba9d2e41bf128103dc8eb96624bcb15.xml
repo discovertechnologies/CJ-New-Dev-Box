@@ -5,7 +5,12 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8   - 2022-08-29 - raj - STRY0128732 Task Tree- Improved Messaging for Decision Made on Approval and Concurrence Tasker Types&#13;
+        <description>2.8 | 2022-09-02 | raj  | DFCT0011268 - When hovering over the email icon, does NOT display the tooltip "Create new Tasker Email" &#13;
+2.8 | 2022-09-02 | raj  | DFCT0011271 - New Task form loads Parent Tasker Type, but shows the last selection of the user&#13;
+2.8 | 2022-08-31 | raj  | DFCT0011162 - "Document Management": view should NOT hide the tabs "Shared Attachment", &amp; "My Attachments' when uploading files in the My Attachment tab&#13;
+2.8 | 2022-08-31 | raj  |  DFCT0011236 - Click on any banner notification &gt; My Task &gt; Awaiting Acceptance, click "My Attachments", 'tab', that should NOT go away other tabs&#13;
+&#13;
+2.8   - 2022-08-29 - raj - STRY0128732 Task Tree- Improved Messaging for Decision Made on Approval and Concurrence Tasker Types&#13;
 2.8   - 2022-08-26 - raj - STRY0128070 - Existing Task Form- All Content Tabs- "New" Button displays next to Header&#13;
 2.8   - 2022-08-23 - raj - DFCT0011227 -  Long Task name should NOT impact the  "Task Name", "state" and  "user" name in any "State"&#13;
 2.8   - 2022-08-20 - raj - DFCT0011140 - Record watcher: "Warning Icon" &amp;  "Duration icon"  should NOT trigger the visual warning indicator on load. (Taker Type "Approval)&#13;
@@ -482,6 +487,15 @@ TaskWidgetData.prototype = {
                 hasDiplayValue: false,
                 maxChars: 0
             },
+            'u_servicenow_form_view': {
+                fieldName: 'u_servicenow_form_view',
+                fieldLabel: gr.u_servicenow_form_view.getLabel(),
+                type: 'reference',
+                hasValue: true,
+                keyUsesDisplayOnly: false,
+                hasDiplayValue: true,
+                maxChars: 0
+            },			
             'u_signature_instructions': {
                 fieldName: 'u_signature_instructions',
                 fieldLabel: gr.u_signature_instructions.getLabel(),
@@ -1360,10 +1374,11 @@ TaskWidgetData.prototype = {
 			var showRL = true;
 			// if documents not included, don't show attachments
 			if(rl.table == "sys_attachment" ){
+				// there was an issue where the Shared Attachment label was not plural
 				// DFCT0011062 improves efficiency of what is loaded to HTML and removes all related lists except attachments if attachment is on
 				if(rlParms.hideDocuments || 
 					rlParms.attachmentsON == false ||
-					((rl.label == "Shared Attachments") && (rlParms.attachmentSharedFolderON == false)) ||
+					((rl.label == "Shared Attachment") && (rlParms.attachmentSharedFolderON == false)) ||
 					((rl.label == "Attachments") &&
 						(rlParms.table == "x_153465_discovert_discover_routing_template") &&
 						(rlParms.attachmentSharedFolderON == false))
@@ -1401,7 +1416,7 @@ TaskWidgetData.prototype = {
 			//------------------------------------------------------------------------------------------------------------------------
 			var filter = rl.field + "=" + rlParms.rec.sys_id;
 			// STRY0059424 | Include Attachments since we dropped attachment properties
-			if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachments") && (rlParms.attachmentSharedFolderON == true)) {
+			if ((rl.table == "sys_attachment") && (rl.label == "Shared Attachment") && (rlParms.attachmentSharedFolderON == true)) {
 				// STRY0063505 |	Modified to set this above based on table
 				filter = 'table_sys_id' + "=" + rlParms.sharedAttachSys_ID;
 			} else {
@@ -1543,6 +1558,8 @@ TaskWidgetData.prototype = {
 							rl.newModalTitle = gs.getMessage('Create Subtask')  + ': ' + rlParms.rec.task_name;
 							rl.newModalView = rlParms.view;
 							rl.newModalQuery = 'parent=' + rlParms.rec.sys_id;
+							// DFCT0011268
+							rl.addIconTitle = gs.getMessage('Create Subtask');
 							open_row_details_in_modal = true;
 							break;
 						case "x_153465_discovert_discover_office_hierarchy":
@@ -1570,6 +1587,7 @@ TaskWidgetData.prototype = {
 					rl.newModalTitle = "N/A for email";
 					rl.newModalView = "N/A for email";
 					rl.newModalQuery = "N/A for email";
+					rl.addIconTitle = gs.getMessage("Tasker - Create new Tasker Email");
 					newIconName = 'NewMail24.svg';
 					break;
 				default:
@@ -1589,43 +1607,87 @@ TaskWidgetData.prototype = {
 				open_row_details_in_modal = true;
 			}			
 
-			//------------------------------------------------------------------------------------------------------------------------
-			// 2.5. CUSTOM: WIDGET PARAMETERS
-			//------------------------------------------------------------------------------------------------------------------------
-			// NOTE: moved below the setting of canCreate so that can be used in the show_new
-			var params = {
-				// STRY0120159 
-				showStatesMultipleBar: rlParms.showStatesMultipleBar,
-				hideTaskFilter: rlParms.hideTaskFilter,
-				task_id: rlParms.task_id,
-				parentField: rl.field,
-				o: o,
-				d: d,
-				table: rl.table,
-				filter: filter,
-				// STRY0107408
-				show_new: rl.canCreate,
-				open_new_in_modal: true,
-				//STRY0092475: 04/01/2020
-				view: rlView,
-				title: rl.title,
-				// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added 
-				isModal: rlParms.isModal,
-				// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; add bifold
-				// STRY0128070 - updates for new button
-				newModalTitle: rl.newModalTitle,
-				newIconName: newIconName,
+			// DFCT0011162 -  DFCT0011236
+			var params;
+			if(rl.table == "sys_attachment"){
+				// determining if the rl is shown, is handled above
+				if(rl.showList == true){
+					if((rl.label == "Shared Attachment")){
+						params = {
+							isModal: rlParms.isModal,
+							bifold: rlParms.bifold,
+							/* this is what you need to load widget from client						
+							table: rlParms.sharedAttachTableName,
+							sys_id: rlParms.sharedAttachSys_ID + "",
+							name: 'sharedAttachmentWidget'
+							*/
+							record_table: rlParms.sharedAttachTableName,
+							record_id: rlParms.sharedAttachSys_ID + "",
+							record_name: 'sharedAttachmentWidget'
+								
+							};
+						rl.widget = $sp.getWidget('tasker_task_attachments', params);
+						tab_widget_related_lists.push(rl);						
+					} else {
+						params = {
+							isModal: rlParms.isModal,
+							bifold: rlParms.bifold,
+							/* this is what you need to load widget from client													
+							table: rlParms.table,
+							sys_id: rlParms.rec.sys_id,
+							name: 'myAttachmentWidget'
+							*/							
+							record_table: rlParms.table,
+							record_id: rlParms.rec.sys_id + '',
+							record_name: 'myAttachmentWidget'
+						};
+						rl.widget = $sp.getWidget('tasker_task_attachments', params);
+						tab_widget_related_lists.push(rl);
+					}
+				}
+			} else {
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.5. CUSTOM: WIDGET PARAMETERS
+				//------------------------------------------------------------------------------------------------------------------------
+				// NOTE: moved below the setting of canCreate so that can be used in the show_new
+				params = {
+					// STRY0120159 
+					showStatesMultipleBar: rlParms.showStatesMultipleBar,
+					hideTaskFilter: rlParms.hideTaskFilter,
+					task_id: rlParms.task_id,
+					// DFCT0011271
+					u_servicenow_form_view: rlParms.u_servicenow_form_view,
+					parentField: rl.field,
+					o: o,
+					d: d,
+					table: rl.table,
+					filter: filter,
+					// STRY0107408
+					show_new: rl.canCreate,
+					open_new_in_modal: true,
+					//STRY0092475: 04/01/2020
+					view: rlView,
+					title: rl.title,
+					// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added 
+					isModal: rlParms.isModal,
+					// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; add bifold
+					// STRY0128070 - updates for new button
+					newModalTitle: rl.newModalTitle,
+					newIconName: newIconName,
+					// DFCT0011268
+					addIconTitle: rl.addIconTitle || rl.newModalTitle,
 
-				bifold: rlParms.bifold,
-				open_row_details_in_modal: open_row_details_in_modal
-				//show_breadcrumbs: true
-			};
+					bifold: rlParms.bifold,
+					open_row_details_in_modal: open_row_details_in_modal
+					//show_breadcrumbs: true
+				};
 
-			//------------------------------------------------------------------------------------------------------------------------
-			// 2.5. CUSTOM: RELATED LIST CALL WIDGET 
-			//------------------------------------------------------------------------------------------------------------------------
-			rl.widget = $sp.getWidget('discovertasker-widget-data-table', params);
-			tab_widget_related_lists.push(rl);
+				//------------------------------------------------------------------------------------------------------------------------
+				// 2.5. CUSTOM: RELATED LIST CALL WIDGET 
+				//------------------------------------------------------------------------------------------------------------------------
+				rl.widget = $sp.getWidget('discovertasker-widget-data-table', params);
+				tab_widget_related_lists.push(rl);
+			}
 		}
 		return tab_widget_related_lists;
 	},
@@ -1644,13 +1706,13 @@ TaskWidgetData.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>382</sys_mod_count>
+        <sys_mod_count>397</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-29 19:56:21</sys_updated_on>
+        <sys_updated_on>2022-09-02 05:46:01</sys_updated_on>
     </sys_script_include>
 </record_update>

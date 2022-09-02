@@ -255,7 +255,6 @@
 	}
 
 	function loadDocIntWidget(tab) {
-		tab.widget=null;
 		var widget_name = tab.widget_name;
 		var widget_parameters = tab.widgetParameter;
 		
@@ -280,11 +279,11 @@
 				// STRY0115311
 				siblings : tab.siblings
 			};
+			// STRY0111049 - moved outside the IF statement and also set to use widgetname 
+			spUtil.get(widget_name, widget_parameters).then(function(response) {
+				tab.widget = response;
+			});
 		}
-		// STRY0111049 - moved outside the IF statement and also set to use widgetname 
-		spUtil.get(widget_name, widget_parameters).then(function(response) {
-			tab.widget = response;
-		});
 
 	}
 	//extension
@@ -329,7 +328,8 @@
 	$scope.openCreateModal = function() {
 		var title= c.data.createTaskTitle + ': ' + c.data.f.title;
 		var query = 'parent=' + c.data.sys_id;
-		x_153465_discovert.twJS.openCreateModal(spModal, title, c.data.table, c.data.view, query);
+		// DFCT0011271
+		x_153465_discovert.twJS.openCreateModal(spModal, title, c.data.table, c.data.view, query, c.data.u_servicenow_form_view);
 	};
 	
 	// 2.8 | 2022-04-14 | mmcc | STRY0119578 - Existing Task Form- Remove DTLV icon and Task Tree View icon
@@ -363,6 +363,7 @@
 
 	// STRY0119580 - toggle between advanced and quick task
 	$scope.toggleFormView = function(view_type) {
+		var activeTab = c.currentTab;
 		// DFCT0011041
 		if(_confirmChanges()){
 			$scope.submitting = true;
@@ -370,6 +371,10 @@
 			$scope.data.toggle_view_type = view_type;
 			$scope.data.tasker_type = g_form.getValue('tasker_type');
 			$scope.server.update($scope).then(function () {
+				
+				// DFCT0011263 need to reload other client widgets on the switch
+				afterLoadFormReturns();
+				c.currentTab = activeTab;
 				$scope.submitting = false;
 			});
 		}		
@@ -438,46 +443,6 @@
 	// for now, copy everything in this code block into widgets that want to use DocInt
 	// *******************************************************************************************************************************************************
 
-	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-	function loadAttachmentsWidgets() {
-		if (c.data.SNAttachmentsON == true) {
-			// STRY0063505 The Process Template is using "Attachments" as the "Shared Attachments" for the Process Tree
-			if (c.data.table != "x_153465_discovert_discover_routing_template" || c.data.AttachmentSharedFolderON == true) {
-				// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-				c.data.myAttachmentWidget = null;
-
-				spUtil.get('tasker_task_attachments', {
-					// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
-					isModal: c.data.isModal,
-					// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to flex; add bifold
-					bifold: c.data.bifold,
-					table: c.data.table,
-					sys_id: c.data.sys_id,
-					name: 'myAttachmentWidget'
-				}).then(function(response) {
-					c.data.myAttachmentWidget = response;
-				});
-			}
-		}
-		if ((c.data.AttachmentSharedFolderON == true) && (c.data.SNAttachmentsON == true)) {
-			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-			c.data.sharedAttachmentWidget = null;
-			spUtil.get('tasker_task_attachments', {
-				// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isMOdal
-				isModal: c.data.isModal,
-				// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to flex; add bifold; add bifold
-				bifold: c.data.bifold,
-				table: c.data.sharedAttachTableName,
-				sys_id: c.data.sharedAttachSys_ID + "",
-				name: 'sharedAttachmentWidget'
-			}).then(function(response) {
-				c.data.sharedAttachmentWidget = response;
-			});
-		}
-
-	}
-
-
 	// STRY0122687 - fix active tab not working issue
 	$scope.setActiveTab = function( activeTab ){
 		c.currentTab = activeTab;
@@ -532,7 +497,6 @@
 
 	// STRY0059178 | Shared Documents Folder
 	$scope.$on("tasker_task_attachments.count", function(event, e) {
-
 		if (e) {
 			if (e.source == 'sharedAttachmentWidget') {
 				if (e.count) {
@@ -1161,7 +1125,6 @@
 	}
 
 	function afterLoadFormReturns(){
-		loadAttachmentsWidgets();
 		loadDocIntWidgets();
 		setupAttachmentHandler();
 		// Changed from page.title to data.f.title to remove post back
@@ -1736,6 +1699,12 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      and getInfoTabPaneCssByPageId() work with isModal, bifold, baseWidget and New Task view; 
 //                                      removed getPanelHeadingCssByPageId() and getScrollHeight();
 //                                      Changes made in HTML and Client controller.
+// 2.8 | 2022-08-31 | raj  | DFCT0011162 - "Document Management": view should NOT hide the tabs "Shared Attachment", & "My Attachments' when uploading files in the My Attachment tab
+//																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
+// 2.8 | 2022-08-31 | raj  |  DFCT0011236 - Click on any banner notification > My Task > Awaiting Acceptance, click "My Attachments", 'tab', that should NOT go away other tabs
+//																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
+// 2.8 | 2022-09-02 | raj  |  DFCT0011271 - New Task form loads Parent Tasker Type, but shows the last selection of the user
+//                                      Changes in Server Script
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2220,6 +2189,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.task_id = -1;
 	if(data.table=='x_153465_discovert_route_task_instance' && data.sys_id!=-1){
 		data.task_id = data.sys_id;
+		// DFCT0011271 - pass form view from parent into new subtask window
+		data.u_servicenow_form_view = rec.getValue("u_servicenow_form_view");
 	}
 	
 	// STRY0120403 - STRY0122687
@@ -2228,6 +2199,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		var rlParams =	{
 			// STRY0120159 
 			task_id: data.task_id,
+			// DFCT0011271
+			u_servicenow_form_view: data.u_servicenow_form_view,
 			hideTaskFilter: data.hideTaskFilter,
 			showStatesMultipleBar: true,
 			arrRelatedLists: options.relatedLists_to_include, 
@@ -2245,6 +2218,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add bifold
 			bifold: data.bifold,
 			sharedAttachSys_ID: data.sharedAttachSys_ID,
+			sharedAttachTableName: data.sharedAttachTableName,
 			attachmentSharedFolderON: data.AttachmentSharedFolderON, 
 			myAttachSys_ID: myAttachSys_ID,
 			attachmentsON: data.SNAttachmentsON
@@ -2403,14 +2377,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4522</sys_mod_count>
+        <sys_mod_count>4547</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-31 03:28:40</sys_updated_on>
+        <sys_updated_on>2022-09-02 06:05:55</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2737,13 +2711,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
               Table not defined '{{data.table_label}}'
             </div>
             <div ng-if="!data.invalid_table" ng-class="{'flex-column flex-grow':data.bifold==true||data.isModal==true}">
-              <!--STRY0063505 Added an if statement to avoid putting Attachments on the screen 2 times for Process Template b/c the shared is using the My Attachments label. -->
-              <sp-widget ng-if="rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table != 'x_153465_discovert_discover_routing_template'" widget="data.myAttachmentWidget"></sp-widget>
-              <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->
-              <sp-widget ng-if="rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Attachments' && data.table == 'x_153465_discovert_discover_routing_template' && data.AttachmentSharedFolderON == true" widget="data.myAttachmentWidget"></sp-widget>
-              <sp-widget ng-if="rl.table == 'sys_attachment' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && rl.label == 'Shared Attachment' && data.AttachmentSharedFolderON == true" widget="data.sharedAttachmentWidget"></sp-widget>
-              <!-- STRY0109183 - Remove "Tasker Email" related list/ tab when "Disable Email Task Information" is set to true -->
-              <sp-widget ng-if="rl.table != 'sys_attachment' && (rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)" widget="rl.widget"></sp-widget>
+              <sp-widget ng-if="(rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)" widget="rl.widget"></sp-widget>
             </div>
           </div>
         </div>
