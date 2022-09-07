@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller=function ($scope, $rootScope, spAriaFocusManager, $http, amb, $timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
+        <client_script><![CDATA[api.controller=function ($scope, $rootScope, spAriaFocusManager, $http, amb, $timeout, spUtil, $location, $window, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
 	// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
 	// Script Continued Below
 	//------------------------------------------------------------------------------------------------------------------------
@@ -13,12 +13,14 @@
 	$scope.countRelatedListsTabs = 0;
 
 	// DFCT0011062 - count the related lists including attachments that are being shown
-	$scope.countRelatedListsTabs =
-		$scope.c.data.f._related_lists.filter(function(rl) {
-		if (rl.showList) {
-			return rl;
-		}
-	}).length;
+	if(!c.data.hideRelatedLists){
+		$scope.countRelatedListsTabs =
+			$scope.c.data.f._related_lists.filter(function(rl) {
+			if (rl.showList) {
+				return rl;
+			}
+		}).length;		
+	}
 
 	$scope.countDocumentTabs = 0;
 	if(c.data._docint_widget && c.data._docint_widget._docint_tabs){
@@ -54,7 +56,6 @@
 
 	$scope.isActiveTab = function( tabName, index ){
 		var activeTab = $scope.getActiveTab();
-$log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - activeTab: " + activeTab + " - retrun value: " + ( activeTab === tabName || ( activeTab === null && index === 0 ) ));		
 		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
 	};
 
@@ -113,20 +114,6 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 			});
 		}
 	}	
-	var tableId = $scope.data.sys_id != -1 ? $scope.data.sys_id : ($scope.data.f ? $scope.data.f._attachmentGUID : -1);
-	spUtil.recordWatch($scope, "sys_attachment", "table_sys_id=" + tableId, function (response, data) {
-		$scope.attachmentHandler.getAttachmentList();
-		if (response.data) {
-			var options = {};
-			options.operation = response.data.operation;
-			options.filename = response.data.display_value;
-			options.sys_id = tableId;
-			options.table = $scope.data.table;
-			options.state = (response.data.record && response.data.record.state) ? response.data.record.state.value : "";
-			if (options.operation === 'update' && options.state === 'not_available')
-				$rootScope.$broadcast("attachment.updated", options);
-		}
-	});
 	
 	afterLoadFormReturns();
 
@@ -565,22 +552,8 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 		$scope.status = "";
 	}
 
-	function setupAttachmentHandler() {
-		$scope.attachmentHandler = new nowAttachmentHandler(appendDone, appendError);
-
-		$scope.$evalAsync(function() {
-			$scope.attachmentHandler.setParams($scope.data.table, $scope.data.f._attachmentGUID, 1024 * 1024 * $scope.data.maxAttachmentSize);
-		});
-
-		$scope.$on('dialog.upload_too_large.show', function(e) {
-			$log.error($scope.data.largeAttachmentMsg);
-			spUtil.addErrorMessage($scope.data.largeAttachmentMsg);
-		});
-	}
-
 	function afterLoadFormReturns(){
 		loadDocIntWidgets();
-		setupAttachmentHandler();
 		// Changed from page.title to data.f.title to remove post back
 		if(c.data.sys_id != '-1'){
 			top.document.title = c.data.f.title;
@@ -588,17 +561,7 @@ $log.debug("RJ - testing - tabName: " + tabName + " - index: " + index + " - act
 		}
 
 	}
-
-	function appendDone() {
-		$scope.$broadcast("sp.attachments.update", $scope.data.f._attachmentGUID);
-		spAriaUtil.sendLiveMessage($scope.data.attachmentSuccessMsg);
-	}
-
-	function appendError(error) {
-		$scope.errorMessages.push(error);
-		spUtil.addErrorMessage(error.msg + error.fileName);
-	}
-
+	
 	if ($scope.data.f.title) {
 		$scope.$emit('sp.widget-modal.set-aria-label', $scope.data.f.title);
 	}
@@ -1502,14 +1465,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
-        <sys_mod_count>373</sys_mod_count>
+        <sys_mod_count>376</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-09-02 05:20:21</sys_updated_on>
+        <sys_updated_on>2022-09-06 00:38:43</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1642,13 +1605,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
           </div>
         </div>
         <!-- col-7 section end -->
-
-        <!-- paperclip icon -->
-        <div ng-if="!data.hideDocuments && data.page_id != 'discovertasker_detailsdrilldown' && attachmentHandler && data.canAttach == true && data.SNAttachmentsON == true && data.isActive == 'true'" 
-             title="{{::data.addAttachmentMsg}}" class="detech-col-8-flex0-middle-w30px attachment-button dtech-pad-top-5">
-          <sp-attachment-button></sp-attachment-button>
-        </div>
-
       </div>
       <!-- Container menu row section start -->
     </div>
@@ -1678,24 +1634,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
   <!-- Panel Body section start -->
   <div class="panel-body" ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-pad-right-5':data.bifold==true}">
 
-    <!-- Attachments -->
-    <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add div if isModal==false -->
-    <div ng-if="!data.hideDocuments && data.isModal==false">
-      <!-- 2.5.13: 08.05.20 | ATTACH | KT | STRY0072011: Users should not upload attachments (Platform or Portal), Task "State" Inactive, (Doc.Int and Attachments enabled) -->
-      <div ng-if="data.table == 'x_153465_discovert_route_task_instance' && 
-                  data.page_id != 'discovertasker_taskdetails' && 
-                  data.page_id != 'discovertasker_newtask' && 
-                  data.page_id != 'discovertasker_newtemplate' &&
-                  data.canAttach == true && data.SNAttachmentsON == true && data.isActive == 'true' ">
-        <sp-attachment-manager table="data.table" sys-id="data.f._attachmentGUID" omit-edit="!data.canAttach"></sp-attachment-manager>
-      </div>
-    </div>
-
-    <!-- STRY0063505 |	NOTE: Attachment Manger is not needed on tabs with the attachment widget -->
-    <div ng-if="!data.hideDocuments && data.table != 'x_153465_discovert_route_task_instance' && data.table != 'x_153465_discovert_discover_routing_template' && data.table != 'x_153465_discovert_route_tasks'">
-      <sp-attachment-manager table="data.table" sys-id="data.f._attachmentGUID" omit-edit="!data.canAttach"></sp-attachment-manager>
-    </div>
-    
     <!-- RELATED LIST - STRY0122687 - hide tabs if only one displayed -->
     <div ng-if="data.tabCount>1" class="dtech-tabs-min-height-standard dtech-pad-bottom-10 dtech-flex-shrink-0 dtech-pad-right-10">
       <div>
@@ -1793,7 +1731,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
     <div class="tab-content flex-column flex-grow dtech-overflow-hidden">
       <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
       <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
-      <div id="{{rl.targetId}}" ng-if="rl.showList" class="tab-pane" 
+      <div id="{{rl.targetId}}" ng-if="rl.showList" 
+           ng-if="isActiveTab(rl.targetId, $index)"
            ng-class="{'dtech-force-column-grow active': isActiveTab(rl.targetId, $index)}"
            ng-repeat="rl in data.f._related_lists">
         
@@ -1812,9 +1751,13 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
       <!-- ******************************************************************************** -->
       <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added ng-class -->
-      <div id="{{rs.id}}" class="tab-pane"
+      <div id="{{rs.id}}"
            ng-repeat="rs in data._docint_widget._docint_tabs"
-           ng-if="!data.hideDocuments && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
+           ng-if="!data.hideDocuments && 
+                  data.DocIntON == true && 
+                  (data.sys_id !=-1 && data.sys_id !='') && 
+                  (data.DocIntShareFolderON || rs.caption != 'Shared Documents') &&
+                  isActiveTab(rs.id, countRelatedListsTabs + $index)"
            ng-class="{'dtech-force-column-grow active': isActiveTab(rs.id, countRelatedListsTabs + $index), 'dtech-modal-scroll-height-standard': data.isModal==true}">
         <div class="flex-column flex-grow">
           <sp-widget widget="rs.widget"></sp-widget>
@@ -1824,8 +1767,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
       
       <!-- Activity -->
       <div id="TicketAudit"
-           ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
-           class="tab-pane"
+           ng-if="!data.hideActivity && 
+                  data.table == 'x_153465_discovert_route_task_instance' &&
+                  isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs)" 
            ng-class="{'dtech-force-column-grow active': isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs)}">
         <div class="flex-column flex-grow ">
           <sp-widget widget="data.widgetInstanceAuditNotes"></sp-widget>
@@ -1834,8 +1778,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
       <!-- Activity Log -->
       <div id="TaskAuditLog"
-           ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
-           class="tab-pane"
+           ng-if="!data.hideActivity && 
+                  data.table == 'x_153465_discovert_route_task_instance' &&
+                  isActiveTab('TaskAuditLog', countRelatedListsTabs + countDocumentTabs + 1)" 
            ng-class="{'dtech-force-column-grow active': isActiveTab('TaskAuditLog', countRelatedListsTabs + countDocumentTabs + 1)}"
            ng-repeat = "al in data.activityLogs">
         <div class="flex-column flex-grow ">
