@@ -5,7 +5,9 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8    | 2022-08-24 - raj -  DFCT0011207 - Groups: TAA is unable to perform any actions, Groups Management" display an empty screen&#13;
+        <description>2.8    | 2022-09-08 - raj -  STRY0129041 - Block Search for User if Groups are Selected but aren't Configured&#13;
+2.8    | 2022-09-08 - raj -  STRY0129039 - OU Hierarchy Group Not Configured for Role Warning&#13;
+2.8    | 2022-08-24 - raj -  DFCT0011207 - Groups: TAA is unable to perform any actions, Groups Management" display an empty screen&#13;
 2.8    | 2022-06-29 - raj -  STRY0124857 - Use Groups Toggle (Enable/Disable Groups)&#13;
 2.8    | 2022-06-29 - raj -  STRY0124860  -Edit Group Names&#13;
 2.8    | 2022-06-21 - raj -  STRY0116257 - System Setting- Options for limiting available views and setting default "Task Form view" for New Task Forms&#13;
@@ -41,7 +43,12 @@ Make all of these items client callable&#13;
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
+// STRY0129039 - added a global to avoid loading on every screen load
+g_taskRoleGroups = {};
 var tasking_System_Settings_Scripts = Class.create();
+// TASKER PRROPERTY CATEGORIES
+tasking_System_Settings_Scripts.CONST_CATEGORY_GROUP_MANAGEMENT = "Groups Management";
+
 // TASKER ROLES
 tasking_System_Settings_Scripts.CONST_ROLE_TASKER_APPLICATION_ADMINISTRATOR = "x_153465_discovert.tasker_application_admin";
 tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_HIERARCHY_ADMINISTRATOR = "x_153465_discovert.tasker_organizational_admin";
@@ -51,6 +58,17 @@ tasking_System_Settings_Scripts.CONST_ROLE_TEMPLATE_ADMINISTRATOR = "x_153465_di
 tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_TEMPLATE_DESIGNER = "x_153465_discovert.tasker_process_template_global";
 tasking_System_Settings_Scripts.CONST_ROLE_PERSONAL_TEMPLATE_DESIGNER = "x_153465_discovert.tasker_process_template_user";
 tasking_System_Settings_Scripts.CONST_ROLE_TASKER_USER = "x_153465_discovert.tasker_user";
+// STRY0129041
+tasking_System_Settings_Scripts.CONST_ARRAY_ALL_GLOBAL_ROLES = ['x_153465_discovert.tasker_user', 
+																'x_153465_discovert.tasker_process_template_user',
+																'x_153465_discovert.Task_Executive',
+																'x_153465_discovert.tasker_global_Tasking_Authority_member_admin',
+																'x_153465_discovert.tasker_process_template_global',
+																'x_153465_discovert.tasker_process_template_admin',
+																'x_153465_discovert.tasker_organizational_admin',
+																'x_153465_discovert.tasker_application_admin',
+																'admin'
+																];
 
 // SYSTEM PROPERTIES NAMES
 tasking_System_Settings_Scripts.CONST_PROPERTY_NAME_ROLE_TASKER_APPLICATION_ADMINISTRATOR_GROUP = "x_153465_discovert.role_tasker_application_administrator_group";
@@ -97,6 +115,35 @@ tasking_System_Settings_Scripts.prototype = {
 	SUSPENSE_DEFAULT_END_OF_DAY: 1,
 	SUSPENSE_DEFAULT_CUSTOM_TIME: 2,
 	
+	// STRY0129039 - STRY0129041 - load Groups for Roles and reset when properties are saved
+	loadGlobalRolesForGroupsSettings: function(){
+		// if the base setting isn't defined, the object has not been loaded yet, load it
+		if(g_taskRoleGroups.uses_groups_for_roles == undefined){
+			var properties = {};
+			properties = this.loadCategoryProperties(tasking_System_Settings_Scripts.CONST_CATEGORY_GROUP_MANAGEMENT);
+			properties = this.validateAllGroups(properties);
+			for (var i = 0; i < properties.length; i++) {
+				var property = properties[i];		
+				var objProperty = {name:"", displayValue:"",value:""};
+				switch(property.name){
+					case 'x_153465_discovert.uses_groups_for_roles': // skip this, may do something differnt here when category has the group filter
+						g_taskRoleGroups.uses_groups_for_roles = property.value=="true" || property.value==true;
+						break;
+					default:
+						g_taskRoleGroups[property.roleName] = property;
+				}
+			}
+		}
+		return g_taskRoleGroups;
+	},
+	
+	resetGlobalRolesForGroupsSettings: function(){
+		// reset the global object
+		g_taskRoleGroups = {};
+		// reload global object
+		this.loadGlobalRolesForGroupsSettings();
+	},
+	
 	// STRY0124860
 	saveProperties: function(properties){
 		properties.forEach(function(property) {
@@ -108,6 +155,8 @@ tasking_System_Settings_Scripts.prototype = {
 			}
 			gs.setProperty(property.name, propertyValue);
 		});
+		// reload global object with updated values
+		this.resetGlobalRolesForGroupsSettings();
 	},
 
 	// STRY0124860
@@ -969,7 +1018,8 @@ tasking_System_Settings_Scripts.prototype = {
 			allFilter = 'none';
 		
 		templateFilters.allTemplateFilter = allFilter;
-gs.info("User is: " + gs.getUserDisplayName() + " filter is: " + JSON.stringify(templateFilters));
+// RAJ - this is in here for testing mobile issue
+// gs.info("User is: " + gs.getUserDisplayName() + " filter is: " + JSON.stringify(templateFilters));
 		return templateFilters;
 	},
 
@@ -1366,13 +1416,13 @@ gs.info("User is: " + gs.getUserDisplayName() + " filter is: " + JSON.stringify(
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>317</sys_mod_count>
+        <sys_mod_count>327</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-30 15:17:19</sys_updated_on>
+        <sys_updated_on>2022-09-10 15:22:22</sys_updated_on>
     </sys_script_include>
 </record_update>

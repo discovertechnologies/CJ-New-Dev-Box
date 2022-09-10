@@ -6,6 +6,8 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+2.8    | 2022-09-08 - raj -  STRY0129041 - Block Search for User if Groups are Selected but aren't Configured&#13;
+2.8    | 2022-09-08 - raj -  STRY0129039 - OU Hierarchy Group Not Configured for Role Warning&#13;
 2.8  | 2022-06-30 | raj  |  STRY0124857 - Use Groups Toggle (Enable/Disable Groups)&#13;
 2.8  | 2022-06-30 | raj  |  STRY0124860  -Edit Group Names&#13;
 2.7.3  | 2022-04-22 | raj  | DFCT0010835 - Creating an "OU Template" with a "Restricted Group" causes the "Assignment" field filters to be incorrect&#13;
@@ -39,8 +41,67 @@ v 2.5.16 P2&#13;
 //  RAJ new functions called by client and server events.
 // this keeps all of the code and logic in one place
 var UserInfoScripts = Class.create();
+// STRY0129041 - format for this is "rolename = key and field name in the member table is value"
+UserInfoScripts.CONST_ARRAY_GLOBAL_ROLES_MEMBER_TABLE_MAPPING = {
+	'x_153465_discovert.tasker_user': '',
+	'x_153465_discovert.tasker_process_template_user': 'has_personal_process_rights',
+	'x_153465_discovert.Task_Executive': 'is_task_executive',
+	'x_153465_discovert.tasker_global_Tasking_Authority_member_admin' : 'is_global_tasking_authority',
+	'x_153465_discovert.tasker_process_template_global': 'can_manage_global_processes',
+	'x_153465_discovert.tasker_process_template_admin': 'can_manage_process_permissions',
+	'x_153465_discovert.tasker_organizational_admin': 'user_is_organization_admin',
+	'x_153465_discovert.tasker_application_admin': 'is_tasker_application_admin',
+	'admin': ''
+	}
+;
 UserInfoScripts.prototype = {
 	initialize: function() {
+	},
+	
+	// STRY0129039 -  STRY0129041
+	getUserGlobalRolesAndMessages: function(userId){
+		var tsss = new tasking_System_Settings_Scripts();
+		var l_taskRoleGroups = tsss.loadGlobalRolesForGroupsSettings();
+
+		var lUserId = "";
+		var grRole;
+		var role;
+		var hasRole = false;
+		var arrRoles = [];
+		var arrUserPermissions = [];
+		// if passed use the user id, if not use the current user
+		lUserId = userId? userId : gs.getUserID();
+		arrRoles = tasking_System_Settings_Scripts.CONST_ARRAY_ALL_GLOBAL_ROLES;
+		for(var i=0; i<arrRoles.length; i++){
+			role = arrRoles[i];
+			var taskRoleGroup = l_taskRoleGroups[role];
+			var objUserRole = {"role": role,
+								"fieldName": UserInfoScripts.CONST_ARRAY_GLOBAL_ROLES_MEMBER_TABLE_MAPPING[role],
+								"groupName": "",
+								"hasRole": false,
+								"hasRoleExplicitly": false,
+								"usesGroupsForRoles": l_taskRoleGroups.uses_groups_for_roles};
+			grRole = new GlideRecord('sys_user_has_role');
+			grRole.addQuery('user', lUserId);
+			grRole.addQuery('role.name', role);
+			grRole.query();
+			if (grRole.next()) {
+				objUserRole.hasRole = true;
+				if(!grRole.inherited){
+					objUserRole.hasRoleExplicitly = true;
+				}
+			}
+			if(l_taskRoleGroups.uses_groups_for_roles && taskRoleGroup){
+				objUserRole.groupSelected = taskRoleGroup.validation.groupSelected;
+				objUserRole.groupHasRole = taskRoleGroup.validation.groupHasRole;
+				if(taskRoleGroup.validation.groupSelected){
+					objUserRole.groupName = taskRoleGroup.value.displayValue;
+				}
+
+			}
+			arrUserPermissions.push(objUserRole);
+		}
+		return arrUserPermissions;
 	},
 	
 	// DFCT0010296 - if the member was removed from thier default OU, set another default OU
@@ -991,13 +1052,13 @@ UserInfoScripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>327</sys_mod_count>
+        <sys_mod_count>354</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-01 06:02:42</sys_updated_on>
+        <sys_updated_on>2022-09-10 15:23:18</sys_updated_on>
     </sys_script_include>
 </record_update>
