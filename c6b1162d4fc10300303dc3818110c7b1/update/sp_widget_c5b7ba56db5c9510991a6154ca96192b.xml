@@ -4,6 +4,7 @@
         <client_script><![CDATA[api.controller=function($scope,$location,$rootScope,spModal,$uibModal,spUtil,amb,$timeout,$log, $sce) {
   /* widget controller */
   var c = this;
+	
 	var CONST_DISABLED_ANCHOR_CLASS = "dtech-a-disabled";
 	var CONST_ENABLED_ANCHOR_CLASS = "dtech-a-enabled";
 
@@ -294,7 +295,8 @@
 	$scope.allowFixGroupHasRole = function(property){
 		var isGroupSelected = $scope.isGroupSelected(property);
 		var groupHasRole = property.validation && property.validation.groupHasRole;
-		var allowFixRole = !c.data.submitting && 
+		var allowFixRole = c.data.currentScopeIsTasker &&
+				!c.data.submitting && 
 				isGroupSelected && !groupHasRole;
 		return allowFixRole;
 	}	
@@ -324,7 +326,8 @@
 	}
 	$scope.allowMigrateExplicitUsersToGroup = function(property){
 		var isGroupSelected = $scope.isGroupSelected(property);
-		var allowFixRole = !c.data.submitting && 
+		var allowFixRole = c.data.currentScopeIsTasker &&
+				!c.data.submitting && 
 				isGroupSelected && 
 				property.validation.explicitRoleCount > 0;
 		return allowFixRole;
@@ -360,7 +363,8 @@
 		return _getClass(allowFix);
 	}
 	$scope.allowRoleSync = function(property){
-		var allowFixRole = !c.data.submitting;
+		var allowFixRole = c.data.currentScopeIsTasker &&
+				!c.data.submitting;
 		return allowFixRole;
 	}	
 	$scope.syncRoleMemberTable=function(property){
@@ -951,6 +955,8 @@ TODO - We may want to move into global class*/
 //																			Changes in CSS only
 // 2.8 | 2022-09-08 | raj  | DFCT0011290 - On Groups Management, the  Counts" tabs do NOT have a hover state (Background color change) display
 //																			Changes in CSS only
+// 2.8 | 2022-09-08 | raj  | STRY0129356 - Save Changes - Tasker Scope
+//																			Changes in Server Script, Client Script and HTML
 // 
 // ******************************************************
 (function($sp, input, data, options, gs) {
@@ -967,12 +973,30 @@ TODO - We may want to move into global class*/
 	main();
 	
 	function main() {
+		// STRY0129356
+		_checkApplicationScope();
+		
 		if(input){
 			_processInput();
 		}
 		if(!input || !input.loaded){
 			 _initialLoad();
 			data.loaded = true;
+		}
+	}
+	
+	// STRY0129356
+	function _checkApplicationScope(){
+		var currentAppId = gs.getCurrentApplicationId();
+		
+		data.currentScopeIsTasker = true;
+		// Tasker application sys_id = c6b1162d4fc10300303dc3818110c7b1
+		if(currentAppId != "c6b1162d4fc10300303dc3818110c7b1"){
+			data.currentScopeIsTasker = false;
+
+			data.appScopeMessage = 
+				gs.getMessage("Tasker - Group Management for Tasker can only be configured from the [Tasker] application scope  You must change the application scope to [Tasker] to change the Group Management settings.");
+
 		}
 	}
 	
@@ -1139,446 +1163,457 @@ TODO - We may want to move into global class*/
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-06-27 15:18:51</sys_created_on>
         <sys_id>c5b7ba56db5c9510991a6154ca96192b</sys_id>
-        <sys_mod_count>777</sys_mod_count>
+        <sys_mod_count>809</sys_mod_count>
         <sys_name>Tasker Properties</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_c5b7ba56db5c9510991a6154ca96192b</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-09-08 04:44:44</sys_updated_on>
-        <template><![CDATA[<div class="dtech-topstick-posabso-rl-active flexbox dtech-w-100vw-10px">
-  <div id="group_properties"
-       class="panel panel-default flex-column dtech-panel-bottom">
-    <div ng-if="data.showCatecoryHeader"
-         class="panel-heading">
-      <div class="flex-row flex-nowrap">
-        <div class="flex-grow">
-          {{data.category}}  
-        </div>
-        <div >
-          <a ng-click="syncAll();">
-            <img ng-class="{'dtech-disabled': data.submitting,
-                           'dtech-enabled': !data.submitting}"
-                 src="{{::data.syncIcon}}" title="{{::data.sync}}"
-                 alt="{{::data.sync}}" />
-            <span>{{::data.sync}}</span>
-          </a>
-
-        </div>
-      </div>
-    </div>
-    <div class="panel-body dtech-overflow-auto flex-grow
-                dtech-margin-left-10">
-      <div ng-repeat="property in data.properties" >
-        <div ng-if="is_property_uses_groups_for_roles(property)">
-          <div class="dtech-box">
+        <sys_updated_on>2022-09-11 19:56:07</sys_updated_on>
+        <template><![CDATA[  <div class="flex-column">
+    <div class="alert alert-warning" role="alert" ng-if="!data.currentScopeIsTasker"><small>{{data.appScopeMessage}}</small></div>
+    <div ng-class="{'dtech-topstick-posabso':data.currentScopeIsTasker==true}"
+         class="flexbox dtech-w-100vw-10pxx">
+      <div id="group_properties"
+           class="panel panel-default flex-column dtech-panel-bottom">
+        <div ng-if="data.showCatecoryHeader"
+             class="panel-heading">
+          <div class="flex-row flex-nowrap">
             <div class="flex-grow">
-              <label>
-                <!-- groups can only be set if all groups are selected.  Allow disable, but do not allow enable unless all groups are set -->
-                <input type="checkbox" 
-                       ng-disabled="!allowUsesGroupsForRoles(property)"
-                       ng-model="property.value"
-                       ng-change="onChange_uses_groups_for_roles(property);"
-                       ng-true-value="'true'" ng-false-value="'false'">
-                {{property.description}}
-              </label>
-              <div ng-if="property.additionalNote"
-                   class="dtech-font-description dtech-margin-left-10">
-                {{property.additionalNote}}
-              </div>              
+              {{data.category}}  
             </div>
-            <div>
-              <button class="btn dtech-btn dtech-btn-icon"
-                      ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
-                      ng-click="changeSelectedProperty(property)"
-                      >
-                <img src="{{::data.informationIcon}}" title="{{::data.information}}"
-                     alt="{{::data.information}}"/>
-              </button>  
-            </div> <!-- informaiton icon end -->
-          </div>
+            <div >
+              <a ng-disabled="!data.currentScopeIsTasker"
+                 ng-click="data.currentScopeIsTasker && syncAll();">
+                <img ng-class="{'dtech-disabled': !data.currentScopeIsTasker || data.submitting,
+                               'dtech-enabled': data.currentScopeIsTasker &&  !data.submitting}"
+                     src="{{::data.syncIcon}}" title="{{::data.sync}}"
+                     alt="{{::data.sync}}" />
+                <span ng-class="{'dtech-disabled': !data.currentScopeIsTasker || data.submitting,
+                               'dtech-enabled': data.currentScopeIsTasker &&  !data.submitting}">{{::data.sync}}</span>
+              </a>
 
-          <div ng-if="!allowUsesGroupsForRoles(property)"
-               class="dtech-box align-items-start dtech-property-warning-message">
-            <div class="flex-column">
-              <img class="align-items-start"
-                   src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
-                   alt="{{::data.warningAllGroupsNotSelected}}" />
-            </div>            
-            <span class="flex-grow dtech-pad-left-5" >{{::data.warningAllGroupsNotSelected}}</span>
-            <br/>
-          </div>            
-          <div ng-if="aGroupSelectedUsesGroupsForRolesNotSet(property)"
-               class="flex-row dtech-property-warning-message">
-            <div class="flex-column">
-              <img class="align-items-start"
-                   src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
-                   alt="{{::data.warningAllGroupsNotSelected}}" />
             </div>
-            <span class="flex-grow dtech-pad-left-5" >{{::data.warningAGroupSelectedWarning}}</span>
-            <br/>
-          </div>            
+          </div>
         </div>
-        <div ng-if="!is_property_uses_groups_for_roles(property)"
-             class="dtech-margin-left-10"
-             title="System Name - [{{property.name}}]">
-          <div class="dtech-font-property-name">
-            {{property.description}}  
-          </div>
-          <div ng-if="property.additionalNote"
-               class="dtech-font-description">
-            {{property.additionalNote}}
-          </div>
-          <div class="dtech-box">
-            <div class="flex-column flex-grow">
-              <sn-record-picker field="property.value" 
-                                sn-disabled="data.submitting"
-                                placeholder="${Select a Group}"
-                                table="data.groupProperties.table" 
-                                value-field="data.groupProperties.valueField" 
-                                display-field="data.groupProperties.displayField"
-                                display-fields="data.groupProperties.displayFields" 
-                                search-fields="data.groupProperties.searchFields"
-                                page-size="100" 
-                                on-change="changeSelectedGroup(property);"
-                                default-query="data.groupProperties.query">
-              </sn-record-picker>
-              <div ng-if="property.validating==true"
-                   class="dtech-box">
-                <div >
-                  ${Validating Group}
-                </div>
+        <div class="panel-body dtech-overflow-auto flex-grow
+                    dtech-margin-left-10">
+          <div ng-repeat="property in data.properties" >
+            <div ng-if="is_property_uses_groups_for_roles(property)">
+              <div class="dtech-box">
                 <div class="flex-grow">
-                  <progress></progress>
+                  <label>
+                    <!-- groups can only be set if all groups are selected.  Allow disable, but do not allow enable unless all groups are set -->
+                    <input type="checkbox" 
+                           ng-disabled="!data.currentScopeIsTasker || !allowUsesGroupsForRoles(property)"
+                           ng-model="property.value"
+                           ng-change="onChange_uses_groups_for_roles(property);"
+                           ng-true-value="'true'" ng-false-value="'false'">
+                    {{property.description}}
+                  </label>
+                  <div ng-if="property.additionalNote"
+                       class="dtech-font-description dtech-margin-left-10">
+                    {{property.additionalNote}}
+                  </div>              
                 </div>
-
-              </div>
-              <div ng-if="showGroupNotSelected(property)"
-                   class="dtech-box dtech-property-warning-message">
-                <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
-                     alt="{{::data.errorGroupNotSelected}}" />
-                <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
-              </div>
-              <div ng-if="showGroupMissingRole(property)"
-                   class="dtech-box dtech-property-warning-message">
-                <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
-                     alt="{{::data.groupMissingRole}}" />
-                <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
-                <a ng-class="classFixGroupHasRole(property)"
-                   id="addGroupToRole"
-                   title="{{data.addGroupToRoleToolTip.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
-                   ng-click="allowFixGroupHasRole(property) && onAddGroupToRole(property);">{{data.addGroupToRoleButtonText}}
-                </a>
-              </div>
-              <div ng-if="showMigrateExplicitUsersToGroup(property)"
-                   class="dtech-box dtech-property-warning-message">
-                <img src="{{::data.warningIcon}}" 
-                     title="{{::data.explicitWarningTitle}}"
-                     alt="{{::data.explicitWarningTitle}}" />
-                <span class="flex-grow dtech-pad-left-5" >{{data.explicitWarningTitle}}</span>
-                <a ng-class="classFixMigrateExplicitUsersToGroup(property)"
-                   id="moveUsersFromRoleToGroup"
-                   title="{{data.addUsersToGroupRemoveRole.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
-                   ng-click="allowMigrateExplicitUsersToGroup(property) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
-                </a>
-              </div>
-              
-              <div ng-if="showRoleSyncWarn(property)"
-                   class="dtech-box dtech-property-warning-message"
-                   >
-                <img src="{{::data.warningIcon}}" 
-                     title="{{::data.syncRoleMembersAndMemberTableRole}}"
-                     alt="{{::data.syncRoleMembersAndMemberTableRole}}" />
-                <span ng-bind-html="data.syncRoleMembersAndMemberTableRole"
-                      class="flex-grow dtech-pad-left-5" ></span>
-                <a ng-class="classRoleSync(property)"
-                   id="memberTableRoleCompareRoleMembers"
-                   title="{{::data.syncRoleMembersAndMemberTableRole}}"
-                   ng-click="allowRoleSync(property) && syncRoleMemberTable(property);">{{data.fixIt}}
-                </a>
-              </div>
-            </div>
-            <div class="dtech-box">
-              <div class="ng-scope dropdown label-tab dtech-pad-right-2">
-                <div class="dropdown-toggle dtech-border-none dtech-pad-left-5 pointer dtech-btn" 
-                     type="button" id="dropdownMenu1"
-                     data-toggle="dropdown" 
-                     aria-haspopup="true"
-                     aria-expanded="false">
-                  <img src="{{::data.ellipsesIcon}}"/>
-                </div>
-                <ul role="menu"
-                    class="dtech-inline-start" 
-                    aria-labelledby="dropdownMenu1"
-                    id="filterMenu"
-                    class="dropdown-menu dtech-dropdown-menu-align-right dtech-scrollable-menu dtech-filter-dtech-border-none">
-                  <li class="dropdown-header dtech-dropdown-header"
-                      role="presentation">
-                    <a ng-click="allowEditGroup(property) && editGroup(property);"
-                       ng-class="classAllowEditGroup(property)"                       
-                       role="menuitem" aria-haspopup="true" aria-expanded="false">
-                      <img ng-class="{'dtech-disabled': !allowEditGroup(property),
-                                     'dtech-enabled': allowEditGroup(property)}"
-                           src="{{::data.editGroupIcon}}" title="{{::data.editGroup}}"
-                           alt="{{::data.editGroup}}" class="dtech-pad-all-10" />
-                      {{::data.editGroup}}
-                    </a>
-                  </li>
-                  <li class="dropdown-header dtech-dropdown-header"
-                      role="presentation">
-                    <a ng-click="allowAddGroup(property) && addGroup(property);"
-                       ng-class="classAllowAddGroup(property)"                       
-                       role="menuitem" aria-haspopup="true" aria-expanded="false"
-                       >
-                      <img ng-class="{'dtech-disabled': !allowAddGroup(property),
-                                     'dtech-enabled': allowAddGroup(property)}"
-                           src="{{::data.addGroupIcon}}" title="{{::data.addGroup}}"
-                           alt="{{::data.addGroup}}" class="dtech-pad-all-10"/>
-                      {{::data.addGroup}}
-                    </a>
-                  </li>
-                  <li class="dropdown-header dtech-dropdown-header"
-                      role="presentation">
-                    <a ng-click="allowSyncGroup(property) && validateGroup(property);"
-                       ng-class="classAllowSyncGroup(property)"                       
-                       role="menuitem" aria-haspopup="true" aria-expanded="false"
-                       >
-                      <img ng-class="{'dtech-disabled': !allowSyncGroup(property),
-                                     'dtech-enabled': allowSyncGroup(property)}"
-                           src="{{::data.syncIcon}}" title="{{::data.syncGroup}}"
-                           alt="{{::data.syncGroup}}" class="dtech-pad-all-10"/>
-                      {{::data.syncGroup}}
-                    </a>
-                  </li>                    
-                </ul>
-              </div>  <!-- ends ellipses dropdown -->
-              <div>
-                <button class="btn dtech-btn dtech-btn-icon"
-                        ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
-                        ng-click="changeSelectedProperty(property)"
-                        >
+                <div>
+                  <button class="btn dtech-btn dtech-btn-icon"
+                          ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
+                          ng-click="changeSelectedProperty(property)"
+                          >
                     <img src="{{::data.informationIcon}}" title="{{::data.information}}"
                          alt="{{::data.information}}"/>
-                </button>  
-              </div> <!-- informaiton icon end -->
-            </div>  <!-- ends box for ellipses and information -->
-          </div>
-        </div>  
-      </div>
-    </div>
-    <!-- Properties Footer -->
-    <div id="footer" 
-         class="panel-footer flex-row justify-between dtech-pad-all-5-15">
-      <button id="cancel" 
-              ng-disabled="!data.isDirty"
-              class="action-btn btn btn-default dtech-max-width-fit-content"
-              type="button" title="{{data.cancelButtonText}}"
-              ng-click="onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
-      </button>
-      <div>
-        <button ng-disabled="!data.isDirty || data.submitting"
-                id="submit" class="action-btn btn btn-primary dtech-max-width-fit-content dtech-push-right"
-                type="submit" title="{{::data.submitButtonText}}"
-                ng-click="onSubmit();">{{::data.submitButtonText}}
-        </button>
-      </div>
-    </div>
-  </div>
-  <div id="group_information"
-       class="flex-column"
-       ng-if="data.currentProperty">
-    <ul class="nav nav-tabs" role="tablist">
-      <li class="dtech-pad-top-5 dtech-margin-left-10"
-          ng-if="!is_property_uses_groups_for_roles(data.currentProperty)"
-          ng-class="{'active': isActiveTab('Counts', 0)}"
-          ng-click="setActiveTab('Counts')"
-          >
-        <a data-target="#Counts" aria-controls="Counts" role="tab" data-toggle="tab">${Counts}</a>
-      </li>
-      <li ng-if="data.widgetInstanceKBArticles.length>0"
-          class="dtech-pad-top-5"
-          ng-class="{'active': isActiveTab('KnowledgeBaseArticle', 1)}"
-          ng-click="setActiveTab('KnowledgeBaseArticle')"
-          >
-        <a data-target="#KnowledgeBaseArticle" aria-controls="Knowledge Base Article" role="tab" data-toggle="tab">${Knowledge Base Article}</a>
-      </li>
-    </ul>
+                  </button>  
+                </div> <!-- informaiton icon end -->
+              </div>
 
-    <div class="dtech-group-properties-information-tabcontent">
-      <div id="Counts" 
-           ng-if="!is_property_uses_groups_for_roles(property) && isActiveTab('Counts', 0)"
-           class="flex-column flex-grow">
-        <div class="flex-column flex-grow justify-content-start">
-          <div class="flex-row flex-nowrap">
-            <button class="dtech-filter-btn btn dtech-margin-all-10"
-                    ng-class="{'dtech-btn-focus': isCountSelected(data.groupMembersIcon)}"
-                    ng-click="selectCount(data.groupMembersIcon)"
-                    >
-              <div class="flex-row flex-nowrap" >
-                <div class="flex-row dtech-filter-width-200">
-                  <img src="{{::data.groupMembersIcon}}" 
-                       title="{{::data.showGroupMembersList}}" 
-                       alt="{{::data.showGroupMembersList}}" 
-                       class="dtech-pad-all-10"
-                       />
-                  <div class="flex-column justify-content-start">
-                    <div class="dtech-font-count">{{data.currentGroupMemberCount}}</div>
-                    <div class="dtech-font-description">{{data.groupMembers}}</div>
-                  </div>                      
-                </div>
-                <img ng-if="showGroupNotSelected(data.currentProperty)"
-                     src="{{::data.errorIcon}}" 
-                     title="{{::data.errorGroupNotSelected}}"
-                     alt="{{::data.errorGroupNotSelected}}" />
-                <img ng-if="showGroupMissingRole(data.currentProperty)"
-                     src="{{::data.warningIcon}}" 
-                     title="{{::data.groupMissingRole}}"
-                     alt="{{::data.groupMissingRole}}" />
-              </div>
-            </button>
-            <button ng-if="showMigrateExplicitUsersToGroup(data.currentProperty)"
-                    class="dtech-filter-btn btn dtech-margin-all-10"
-                    ng-class="{'dtech-btn-focus': isCountSelected(data.explicitRoleUsersIcon)}"
-                    ng-click="selectCount(data.explicitRoleUsersIcon)"
-                    >
-              <div class="flex-row flex-nowrap" >
-                <div class="flex-row dtech-filter-width-200">
-                  <img src="{{::data.explicitRoleUsersIcon}}" 
-                       title="{{::data.showExplicitRoleUsers}}" 
-                       alt="{{::data.showExplicitRoleUsers}}" 
-                       class="dtech-pad-all-10"
-                       />
-                  <div class="flex-column justify-content-start">
-                    <div class="dtech-font-count">{{data.currentExplicitRoleCount}}</div>
-                    <div class="dtech-font-description">{{data.explicitRoleUsers}}</div>
-                  </div>                      
-                </div>
-                <img src="{{::data.warningIcon}}" 
-                     title="{{::data.explicitWarningTitle}}" 
-                     alt="{{::data.explicitWarningTitle}}" />
-              </div>
-            </button>  
-            <button class="dtech-filter-btn btn dtech-margin-all-10"
-                    ng-class="{'dtech-btn-focus': isCountSelected(data.roleMembersIcon)}"
-                    ng-click="selectCount(data.roleMembersIcon)"
-                    >
-              <div class="flex-row flex-nowrap" >
-                <div class="flex-row dtech-filter-width-200">
-                  <img src="{{::data.roleMembersIcon}}" 
-                       title="{{::data.showRoleMembersList}}" 
-                       alt="{{::data.showRoleMembersList}}" 
-                       class="dtech-pad-all-10"
-                       />
-                  <div class="flex-column justify-content-start">
-                    <div class="dtech-font-count">{{data.currentProperty.validation.inheritRoleCount}}</div>
-                    <div class="dtech-font-description">{{data.roleMembers}}</div>
-                  </div>                      
-                </div>
-              </div>  
-            </button>  
-            <button class="dtech-filter-btn btn dtech-margin-all-10"
-                    ng-class="{'dtech-btn-focus': isCountSelected(data.memberTableRoleIcon)}"
-                    ng-click="selectCount(data.memberTableRoleIcon)"
-                    >
-              <div class="flex-row flex-nowrap" >
-                <div class="flex-row dtech-filter-width-200">
-                  <img src="{{::data.memberTableRoleIcon}}" 
-                       title="{{::data.showMemberTableRolesList}}" 
-                       alt="{{::data.showMemberTableRolesList}}" 
-                       class="dtech-pad-all-10"
-                       />
-                  <div class="flex-column justify-content-start">
-                    <div class="dtech-font-count">{{data.currentProperty.validation.roleMemberTableRoleCount}}</div>
-                    <div class="dtech-font-description">{{data.memberTableRoles}}</div>
-                  </div>                      
-                </div>
-                <img ng-if="showRoleSyncWarn(data.currentProperty)"
-                     src="{{::data.warningIcon}}" 
-                     title="{{::data.syncRoleMembersAndMemberTableRole}}"
-                     alt="{{::syncRoleMembersAndMemberTableRole}}" />                
+              <div ng-if="!allowUsesGroupsForRoles(property)"
+                   class="dtech-box align-items-start dtech-property-warning-message">
+                <div class="flex-column">
+                  <img class="align-items-start"
+                       src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
+                       alt="{{::data.warningAllGroupsNotSelected}}" />
+                </div>            
+                <span class="flex-grow dtech-pad-left-5" >{{::data.warningAllGroupsNotSelected}}</span>
+                <br/>
               </div>            
-            </button>  
-          </div>
-          <div class="flex-column flex-grow">
-            <!-- COUNT WARNING AND ERROR MESSAGES -->
-            <div ng-if="showGroupNotSelected(data.currentProperty) &&
-                        isCountSelected(data.groupMembersIcon)"
-                 class="dtech-box dtech-property-warning-message">
-              <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
-                   alt="{{::data.errorGroupNotSelected}}" />
-              <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
+              <div ng-if="aGroupSelectedUsesGroupsForRolesNotSet(property)"
+                   class="flex-row dtech-property-warning-message">
+                <div class="flex-column">
+                  <img class="align-items-start"
+                       src="{{::data.warningIcon}}" title="{{::data.warningAllGroupsNotSelected}}"
+                       alt="{{::data.warningAllGroupsNotSelected}}" />
+                </div>
+                <span class="flex-grow dtech-pad-left-5" >{{::data.warningAGroupSelectedWarning}}</span>
+                <br/>
+              </div>            
             </div>
-            <div ng-if="showGroupMissingRole(data.currentProperty) &&
-                          isCountSelected(data.groupMembersIcon)"
-                 class="dtech-box dtech-property-warning-message">
-              <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
-                   alt="{{::data.groupMissingRole}}" />
-              <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
-              <a ng-class="classFixGroupHasRole(data.currentProperty)"
-                 id="addGroupToRoleCount"
-                 title="{{data.addGroupToRoleToolTip.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
-                 ng-click="allowFixGroupHasRole(data.currentProperty) && onAddGroupToRole(data.currentProperty);">{{data.addGroupToRoleButtonText}}
-              </a>
-            </div>
-            <div ng-if="showMigrateExplicitUsersToGroup(data.currentProperty) &&
-                        isCountSelected(data.explicitRoleUsersIcon)"
-                 class="dtech-box dtech-property-warning-message">
-              <img src="{{::data.warningIcon}}" 
-                   title="{{::data.explicitWarningTitle}}"
-                   alt="{{::data.explicitWarningTitle}}" />
-              <span class="flex-grow dtech-pad-left-5" >{{data.usersWithExplicitRole.replace('{0}',data.currentExplicitRoleCount).replace('{1}',data.currentProperty.roleName)}}</span>
-              <a ng-class="classFixMigrateExplicitUsersToGroup(data.currentProperty)"
-                 id="moveUsersFromRoleToGroup"
-                 title="{{data.addUsersToGroupRemoveRole.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
-                 ng-click="allowMigrateExplicitUsersToGroup(data.currentProperty) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
-              </a>
-            </div>
-            <div ng-if="showRoleSyncWarn(data.currentProperty) &&
-                          isCountSelected(data.memberTableRoleIcon)"
-                 class="dtech-box dtech-property-warning-message"
-                 >
-              <img src="{{::data.warningIcon}}" 
-                   title="{{::data.syncRoleMembersAndMemberTableRole}}"
-                   alt="{{::syncRoleMembersAndMemberTableRole}}" />
-              <span ng-bind-html= "data.memberTableRoleCompareRoleMembers"
-                    class="flex-grow dtech-pad-left-5" >{{data.memberTableRoleCompareRoleMembers}}</span>
-              <a ng-class="classRoleSync(data.currentProperty)"
-                 id="memberTableRoleCompareRoleMembers"
-                 title="{{::data.syncRoleMembersAndMemberTableRole}}"
-                 ng-click="allowRoleSync(data.currentProperty) && syncRoleMemberTable(data.currentProperty);">{{data.fixIt}}
-              </a>
-            </div>
-            <!-- DATA TABLE FOR MEMBER INFORMATION-->
-            <div class="flex-column flex-grow" id="memberData"
-                 ng-repeat="dataTable in data.dataTables" >
-              <sp-widget widget="dataTable"></sp-widget>
-            </div>        
+            <div ng-if="!is_property_uses_groups_for_roles(property)"
+                 class="dtech-margin-left-10"
+                 title="System Name - [{{property.name}}]">
+              <div class="dtech-font-property-name">
+                {{property.description}}  
+              </div>
+              <div ng-if="property.additionalNote"
+                   class="dtech-font-description">
+                {{property.additionalNote}}
+              </div>
+              <div class="dtech-box">
+                <div class="flex-column flex-grow">
+                  <sn-record-picker field="property.value" 
+                                    sn-disabled="!data.currentScopeIsTasker || data.submitting"
+                                    placeholder="${Select a Group}"
+                                    table="data.groupProperties.table" 
+                                    value-field="data.groupProperties.valueField" 
+                                    display-field="data.groupProperties.displayField"
+                                    display-fields="data.groupProperties.displayFields" 
+                                    search-fields="data.groupProperties.searchFields"
+                                    page-size="100" 
+                                    on-change="changeSelectedGroup(property);"
+                                    default-query="data.groupProperties.query">
+                  </sn-record-picker>
+                  <div ng-if="property.validating==true"
+                       class="dtech-box">
+                    <div >
+                      ${Validating Group}
+                    </div>
+                    <div class="flex-grow">
+                      <progress></progress>
+                    </div>
+
+                  </div>
+                  <div ng-if="showGroupNotSelected(property)"
+                       class="dtech-box dtech-property-warning-message">
+                    <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
+                         alt="{{::data.errorGroupNotSelected}}" />
+                    <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
+                  </div>
+                  <div ng-if="showGroupMissingRole(property)"
+                       class="dtech-box dtech-property-warning-message">
+                    <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
+                         alt="{{::data.groupMissingRole}}" />
+                    <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
+                    <a ng-class="classFixGroupHasRole(property)"
+                       id="addGroupToRole"
+                       title="{{data.addGroupToRoleToolTip.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
+                       ng-click="allowFixGroupHasRole(property) && onAddGroupToRole(property);">{{data.addGroupToRoleButtonText}}
+                    </a>
+                  </div>
+                  <div ng-if="showMigrateExplicitUsersToGroup(property)"
+                       class="dtech-box dtech-property-warning-message">
+                    <img src="{{::data.warningIcon}}" 
+                         title="{{::data.explicitWarningTitle}}"
+                         alt="{{::data.explicitWarningTitle}}" />
+                    <span class="flex-grow dtech-pad-left-5" >{{data.explicitWarningTitle}}</span>
+                    <a ng-class="classFixMigrateExplicitUsersToGroup(property)"
+                       id="moveUsersFromRoleToGroup"
+                       title="{{data.addUsersToGroupRemoveRole.replace('{0}', property.roleName).replace('{1}',property.value.displayValue)}}"
+                       ng-click="allowMigrateExplicitUsersToGroup(property) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
+                    </a>
+                  </div>
+
+                  <div ng-if="showRoleSyncWarn(property)"
+                       class="dtech-box dtech-property-warning-message"
+                       >
+                    <img src="{{::data.warningIcon}}" 
+                         title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                         alt="{{::data.syncRoleMembersAndMemberTableRole}}" />
+                    <span ng-bind-html="data.syncRoleMembersAndMemberTableRole"
+                          class="flex-grow dtech-pad-left-5" ></span>
+                    <a ng-class="classRoleSync(property)"
+                       id="memberTableRoleCompareRoleMembers"
+                       title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                       ng-click="allowRoleSync(property) && syncRoleMemberTable(property);">{{data.fixIt}}
+                    </a>
+                  </div>
+                </div>
+                <div class="dtech-box">
+                  <div class="ng-scope dropdown label-tab dtech-pad-right-2">
+                    <div class="dropdown-toggle dtech-border-none dtech-pad-left-5 pointer dtech-btn" 
+                         ng-class="{'dtech-disabled': !data.currentScopeIsTasker || data.submitting,
+                                   'dtech-enabled': data.currentScopeIsTasker &&  !data.submitting}"
+                         type="button" id="dropdownMenu1"
+                         data-toggle="dropdown" 
+                         aria-haspopup="true"
+                         aria-expanded="false">
+                      <img ng-disabled="!data.currentScopeIsTasker"
+                           src="{{::data.ellipsesIcon}}"/>
+                    </div>
+                    <ul role="menu"
+                        aria-labelledby="dropdownMenu1"
+                        id="filterMenu"
+                        class="dtech-inline-start dropdown-menu dtech-dropdown-menu-align-right dtech-scrollable-menu dtech-filter-dtech-border-none">
+                      <li class="dropdown-header dtech-dropdown-header"
+                          role="presentation">
+                        <a ng-click="allowEditGroup(property) && editGroup(property);"
+                           ng-class="classAllowEditGroup(property)"                       
+                           role="menuitem" aria-haspopup="true" aria-expanded="false">
+                          <img ng-class="{'dtech-disabled': !data.currentScopeIsTasker || !allowEditGroup(property),
+                                         'dtech-enabled': data.currentScopeIsTasker && allowEditGroup(property)}"
+                               src="{{::data.editGroupIcon}}" title="{{::data.editGroup}}"
+                               alt="{{::data.editGroup}}" class="dtech-pad-all-10" />
+                          {{::data.editGroup}}
+                        </a>
+                      </li>
+                      <li class="dropdown-header dtech-dropdown-header"
+                          role="presentation">
+                        <a ng-click="allowAddGroup(property) && addGroup(property);"
+                           ng-class="classAllowAddGroup(property)"                       
+                           role="menuitem" aria-haspopup="true" aria-expanded="false"
+                           >
+                          <img ng-class="{'dtech-disabled': !data.currentScopeIsTasker || !allowAddGroup(property),
+                                         'dtech-enabled': data.currentScopeIsTasker && allowAddGroup(property)}"
+                               src="{{::data.addGroupIcon}}" title="{{::data.addGroup}}"
+                               alt="{{::data.addGroup}}" class="dtech-pad-all-10"/>
+                          {{::data.addGroup}}
+                        </a>
+                      </li>
+                      <li class="dropdown-header dtech-dropdown-header"
+                          role="presentation">
+                        <a ng-click="allowSyncGroup(property) && validateGroup(property);"
+                           ng-class="classAllowSyncGroup(property)"                       
+                           role="menuitem" aria-haspopup="true" aria-expanded="false"
+                           >
+                          <img ng-class="{'dtech-disabled': !data.currentScopeIsTasker || !allowSyncGroup(property),
+                                         'dtech-enabled': data.currentScopeIsTasker && allowSyncGroup(property)}"
+                               src="{{::data.syncIcon}}" title="{{::data.syncGroup}}"
+                               alt="{{::data.syncGroup}}" class="dtech-pad-all-10"/>
+                          {{::data.syncGroup}}
+                        </a>
+                      </li>                    
+                    </ul>
+                  </div>  <!-- ends ellipses dropdown -->
+                  <div>
+                    <button class="btn dtech-btn dtech-btn-icon"
+                            ng-class="{'dtech-btn-focus': data.currentProperty.roleName==property.roleName}"
+                            ng-click="changeSelectedProperty(property)"
+                            >
+                      <img src="{{::data.informationIcon}}" title="{{::data.information}}"
+                           alt="{{::data.information}}"/>
+                    </button>  
+                  </div> <!-- informaiton icon end -->
+                </div>  <!-- ends box for ellipses and information -->
+              </div>
+            </div>  
           </div>
         </div>
-
-      </div>
-      <div class="dtech-kb-container"
-           ng-if="isActiveTab('KnowledgeBaseArticle', 1);">
-        <div class="dtech-kb-column1">
-          <div id="KnowledgeBaseArticle"
-               ng-repeat="article in data.widgetInstanceKBArticles" 
-
-               class="dtech-kb-container">
-            <sp-widget widget="article"></sp-widget>
+        <!-- Properties Footer -->
+        <div id="footer" 
+             class="panel-footer flex-row justify-between dtech-pad-all-5-15">
+          <button id="cancel" 
+                  ng-disabled="!data.currentScopeIsTasker || !data.isDirty"
+                  class="action-btn btn btn-default dtech-max-width-fit-content"
+                  type="button" title="{{data.cancelButtonText}}"
+                  ng-click="onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
+          </button>
+          <div>
+            <button ng-disabled="!data.currentScopeIsTasker || !data.isDirty || data.submitting"
+                    id="submit" class="action-btn btn btn-primary dtech-max-width-fit-content dtech-push-right"
+                    type="submit" title="{{::data.submitButtonText}}"
+                    ng-click="onSubmit();">{{::data.submitButtonText}}
+            </button>
           </div>
-          <div class="dtech-kb-column2">
-            <div id="KnowledgeBaseRelatedArticle"
-                 ng-repeat="kb_relatedArticle in data.widgetInstanceKBRelatedArticles" >
-              <sp-widget widget="kb_relatedArticle"></sp-widget>
+        </div>
+      </div>
+      <div id="group_information"
+           class="flex-column"
+           ng-if="data.currentProperty">
+        <ul class="nav nav-tabs" role="tablist">
+          <li class="dtech-pad-top-5 dtech-margin-left-10"
+              ng-if="!is_property_uses_groups_for_roles(data.currentProperty)"
+              ng-class="{'active': isActiveTab('Counts', 0)}"
+              ng-click="setActiveTab('Counts')"
+              >
+            <a data-target="#Counts" aria-controls="Counts" role="tab" data-toggle="tab">${Counts}</a>
+          </li>
+          <li ng-if="data.widgetInstanceKBArticles.length>0"
+              class="dtech-pad-top-5"
+              ng-class="{'active': isActiveTab('KnowledgeBaseArticle', 1)}"
+              ng-click="setActiveTab('KnowledgeBaseArticle')"
+              >
+            <a data-target="#KnowledgeBaseArticle" aria-controls="Knowledge Base Article" role="tab" data-toggle="tab">${Knowledge Base Article}</a>
+          </li>
+        </ul>
+
+        <div class="dtech-group-properties-information-tabcontent">
+          <div id="Counts" 
+               ng-if="!is_property_uses_groups_for_roles(property) && isActiveTab('Counts', 0)"
+               class="flex-column flex-grow">
+            <div class="flex-column flex-grow justify-content-start">
+              <div class="flex-row flex-nowrap">
+                <button class="dtech-filter-btn btn dtech-margin-all-10"
+                        ng-class="{'dtech-btn-focus': isCountSelected(data.groupMembersIcon)}"
+                        ng-click="selectCount(data.groupMembersIcon)"
+                        >
+                  <div class="flex-row flex-nowrap" >
+                    <div class="flex-row dtech-filter-width-200">
+                      <img src="{{::data.groupMembersIcon}}" 
+                           title="{{::data.showGroupMembersList}}" 
+                           alt="{{::data.showGroupMembersList}}" 
+                           class="dtech-pad-all-10"
+                           />
+                      <div class="flex-column justify-content-start">
+                        <div class="dtech-font-count">{{data.currentGroupMemberCount}}</div>
+                        <div class="dtech-font-description">{{data.groupMembers}}</div>
+                      </div>                      
+                    </div>
+                    <img ng-if="showGroupNotSelected(data.currentProperty)"
+                         src="{{::data.errorIcon}}" 
+                         title="{{::data.errorGroupNotSelected}}"
+                         alt="{{::data.errorGroupNotSelected}}" />
+                    <img ng-if="showGroupMissingRole(data.currentProperty)"
+                         src="{{::data.warningIcon}}" 
+                         title="{{::data.groupMissingRole}}"
+                         alt="{{::data.groupMissingRole}}" />
+                  </div>
+                </button>
+                <button ng-if="showMigrateExplicitUsersToGroup(data.currentProperty)"
+                        class="dtech-filter-btn btn dtech-margin-all-10"
+                        ng-class="{'dtech-btn-focus': isCountSelected(data.explicitRoleUsersIcon)}"
+                        ng-click="selectCount(data.explicitRoleUsersIcon)"
+                        >
+                  <div class="flex-row flex-nowrap" >
+                    <div class="flex-row dtech-filter-width-200">
+                      <img src="{{::data.explicitRoleUsersIcon}}" 
+                           title="{{::data.showExplicitRoleUsers}}" 
+                           alt="{{::data.showExplicitRoleUsers}}" 
+                           class="dtech-pad-all-10"
+                           />
+                      <div class="flex-column justify-content-start">
+                        <div class="dtech-font-count">{{data.currentExplicitRoleCount}}</div>
+                        <div class="dtech-font-description">{{data.explicitRoleUsers}}</div>
+                      </div>                      
+                    </div>
+                    <img src="{{::data.warningIcon}}" 
+                         title="{{::data.explicitWarningTitle}}" 
+                         alt="{{::data.explicitWarningTitle}}" />
+                  </div>
+                </button>  
+                <button class="dtech-filter-btn btn dtech-margin-all-10"
+                        ng-class="{'dtech-btn-focus': isCountSelected(data.roleMembersIcon)}"
+                        ng-click="selectCount(data.roleMembersIcon)"
+                        >
+                  <div class="flex-row flex-nowrap" >
+                    <div class="flex-row dtech-filter-width-200">
+                      <img src="{{::data.roleMembersIcon}}" 
+                           title="{{::data.showRoleMembersList}}" 
+                           alt="{{::data.showRoleMembersList}}" 
+                           class="dtech-pad-all-10"
+                           />
+                      <div class="flex-column justify-content-start">
+                        <div class="dtech-font-count">{{data.currentProperty.validation.inheritRoleCount}}</div>
+                        <div class="dtech-font-description">{{data.roleMembers}}</div>
+                      </div>                      
+                    </div>
+                  </div>  
+                </button>  
+                <button class="dtech-filter-btn btn dtech-margin-all-10"
+                        ng-class="{'dtech-btn-focus': isCountSelected(data.memberTableRoleIcon)}"
+                        ng-click="selectCount(data.memberTableRoleIcon)"
+                        >
+                  <div class="flex-row flex-nowrap" >
+                    <div class="flex-row dtech-filter-width-200">
+                      <img src="{{::data.memberTableRoleIcon}}" 
+                           title="{{::data.showMemberTableRolesList}}" 
+                           alt="{{::data.showMemberTableRolesList}}" 
+                           class="dtech-pad-all-10"
+                           />
+                      <div class="flex-column justify-content-start">
+                        <div class="dtech-font-count">{{data.currentProperty.validation.roleMemberTableRoleCount}}</div>
+                        <div class="dtech-font-description">{{data.memberTableRoles}}</div>
+                      </div>                      
+                    </div>
+                    <img ng-if="showRoleSyncWarn(data.currentProperty)"
+                         src="{{::data.warningIcon}}" 
+                         title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                         alt="{{::syncRoleMembersAndMemberTableRole}}" />                
+                  </div>            
+                </button>  
+              </div>
+              <div class="flex-column flex-grow">
+                <!-- COUNT WARNING AND ERROR MESSAGES -->
+                <div ng-if="showGroupNotSelected(data.currentProperty) &&
+                            isCountSelected(data.groupMembersIcon)"
+                     class="dtech-box dtech-property-warning-message">
+                  <img src="{{::data.errorIcon}}" title="{{::data.errorGroupNotSelected}}"
+                       alt="{{::data.errorGroupNotSelected}}" />
+                  <span class="flex-grow dtech-pad-left-5" >{{::data.errorGroupNotSelected}}</span>
+                </div>
+                <div ng-if="showGroupMissingRole(data.currentProperty) &&
+                            isCountSelected(data.groupMembersIcon)"
+                     class="dtech-box dtech-property-warning-message">
+                  <img src="{{::data.warningIcon}}" title="{{::data.groupMissingRole}}"
+                       alt="{{::data.groupMissingRole}}" />
+                  <span class="flex-grow dtech-pad-left-5" >{{::data.groupMissingRole}}</span>
+                  <a ng-class="classFixGroupHasRole(data.currentProperty)"
+                     id="addGroupToRoleCount"
+                     title="{{data.addGroupToRoleToolTip.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
+                     ng-click="allowFixGroupHasRole(data.currentProperty) && onAddGroupToRole(data.currentProperty);">{{data.addGroupToRoleButtonText}}
+                  </a>
+                </div>
+                <div ng-if="showMigrateExplicitUsersToGroup(data.currentProperty) &&
+                            isCountSelected(data.explicitRoleUsersIcon)"
+                     class="dtech-box dtech-property-warning-message">
+                  <img src="{{::data.warningIcon}}" 
+                       title="{{::data.explicitWarningTitle}}"
+                       alt="{{::data.explicitWarningTitle}}" />
+                  <span class="flex-grow dtech-pad-left-5" >{{data.usersWithExplicitRole.replace('{0}',data.currentExplicitRoleCount).replace('{1}',data.currentProperty.roleName)}}</span>
+                  <a ng-class="classFixMigrateExplicitUsersToGroup(data.currentProperty)"
+                     ng-disabled="!data.currentScopeIsTasker"
+                     id="moveUsersFromRoleToGroup"
+                     title="{{data.addUsersToGroupRemoveRole.replace('{0}', data.currentProperty.roleName).replace('{1}',data.currentProperty.value.displayValue)}}"
+                     ng-click="allowMigrateExplicitUsersToGroup(data.currentProperty) && migrateRoleUsersToGroup(data.currentProperty);">{{data.fixIt}}
+                  </a>
+                </div>
+                <div ng-if="showRoleSyncWarn(data.currentProperty) &&
+                            isCountSelected(data.memberTableRoleIcon)"
+                     class="dtech-box dtech-property-warning-message"
+                     >
+                  <img src="{{::data.warningIcon}}" 
+                       title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                       alt="{{::syncRoleMembersAndMemberTableRole}}" />
+                  <span ng-bind-html= "data.memberTableRoleCompareRoleMembers"
+                        class="flex-grow dtech-pad-left-5" >{{data.memberTableRoleCompareRoleMembers}}</span>
+                  <a ng-class="classRoleSync(data.currentProperty)"
+                     ng-disabled="!data.currentScopeIsTasker"
+                     id="memberTableRoleCompareRoleMembers"
+                     title="{{::data.syncRoleMembersAndMemberTableRole}}"
+                     ng-click="allowRoleSync(data.currentProperty) && syncRoleMemberTable(data.currentProperty);">{{data.fixIt}}
+                  </a>
+                </div>
+                <!-- DATA TABLE FOR MEMBER INFORMATION-->
+                <div class="flex-column flex-grow" id="memberData"
+                     ng-repeat="dataTable in data.dataTables" >
+                  <sp-widget widget="dataTable"></sp-widget>
+                </div>        
+              </div>
             </div>
 
           </div>
+          <div class="dtech-kb-container"
+               ng-if="isActiveTab('KnowledgeBaseArticle', 1);">
+            <div class="dtech-kb-column1">
+              <div id="KnowledgeBaseArticle"
+                   ng-repeat="article in data.widgetInstanceKBArticles" 
 
-        </div>            
+                   class="dtech-kb-container">
+                <sp-widget widget="article"></sp-widget>
+              </div>
+              <div class="dtech-kb-column2">
+                <div id="KnowledgeBaseRelatedArticle"
+                     ng-repeat="kb_relatedArticle in data.widgetInstanceKBRelatedArticles" >
+                  <sp-widget widget="kb_relatedArticle"></sp-widget>
+                </div>
+
+              </div>
+
+            </div>            
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-</div>    
 ]]></template>
     </sp_widget>
 </record_update>
