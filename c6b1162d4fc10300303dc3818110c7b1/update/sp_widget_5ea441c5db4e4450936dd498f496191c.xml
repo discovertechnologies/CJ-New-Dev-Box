@@ -1,605 +1,614 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>standard</category>
-        <client_script><![CDATA[api.controller = function ($scope,spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager) {
-	
-	// 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML
-	// 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Tasker Modern Portal - Task Name Hover needs a short delay before showing the popup
+        <client_script><![CDATA[api.controller = function($scope, spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager) {
+
+    // 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML
+    // 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Tasker Modern Portal - Task Name Hover needs a short delay before showing the popup
     //------------------------------------------------------------------------------------------------------------------------
 
-	var c = this;
-	var watcher;
-	/*
- 	* options:
- 	* hide_footer (bool) = true to remove the data table footer contents
- 	* hide_header (bool) = true to remove the data table header contents
- 	* show_new (bool) = true to show the "New" record button
- 	* show_keywords (bool) = true to show the keyword search field
- 	* table (string) = the table name to query
- 	* filter (string) = the encoded query
- 	* o (string) = the order by column
- 	* d (string) = The order by direction: asc or desc
- 	* p (int) = the page to jump to
- 	* fields (string) = comma seperated list of fields that become the list columns
- 	* view (string) = the default view to load for columns, overrides fields
- 	*/
-	$scope.exportTypes = [{label:'PDF', value: 'PDF'}, {label:'Excel', value:'EXCEL'}, {label:'CSV', value:'CSV'}];
-		var keys = ['table', 'filter', 'p', 'o', 'd'];
+    var c = this;
+    var watcher;
+    /*
+     * options:
+     * hide_footer (bool) = true to remove the data table footer contents
+     * hide_header (bool) = true to remove the data table header contents
+     * show_new (bool) = true to show the "New" record button
+     * show_keywords (bool) = true to show the keyword search field
+     * table (string) = the table name to query
+     * filter (string) = the encoded query
+     * o (string) = the order by column
+     * d (string) = The order by direction: asc or desc
+     * p (int) = the page to jump to
+     * fields (string) = comma seperated list of fields that become the list columns
+     * view (string) = the default view to load for columns, overrides fields
+     */
+    $scope.exportTypes = [{
+        label: 'PDF',
+        value: 'PDF'
+    }, {
+        label: 'Excel',
+        value: 'EXCEL'
+    }, {
+        label: 'CSV',
+        value: 'CSV'
+    }];
+	
+    var keys = ['table', 'filter', 'p', 'o', 'd'];
+
+    var eventNames = {
+        click: 'data_table.click',
+        setFilter: 'data_table.setFilter',
+        setKeywords: 'data_table.setKeywords'
+    };
+
+    // Custom Starts here
+    //-----------------------------------------------------------------------------
+    $scope.$on("countPanelClicked", function(evt, data) {
+        // STRY0114448
+        c.data.menuChanged = true;
+        c.data.userDefaultMenuTitle = data.title;
+        // DFCT0011087
+        c.data.tasker_filter_id = data.tasker_filter_id;
+        c.data.table = data.table;
+        c.data.filter = data.filter;
+        c.data.sp_page_dv = data.sp_page_dv;
+        c.data.title = data.title;
+        c.data.d = data.d;
+        c.data.o = data.o;
+
+        // 2.8 | 2022-09-13 | mmcc | DFCT0011301 - On the "Modern Portal" when clicking on the "Title" widget rows are jacked up (Rows do NOT display)
+        c.data.p = 1; // reset to first page
+		c.data.row_count = 0;  // hide the pager control
 		
-		var eventNames = {
-			click: 'data_table.click',
-			setFilter: 'data_table.setFilter',
-			setKeywords: 'data_table.setKeywords'
-		};
-		// AAlzyoud Custom Starts here
-		//-----------------------------------------------------------------------------
-		c.getData = function(data){
-			$scope.setPageNum(1);
-			$rootScope.$broadcast("dropdownMenuClicked",data);
-			initRecordWatcher(data.table, data.filter);
-		};	
+        // use defaults as counts are all tasks
+        c.data.modal_title_field_separator = '';
+        c.data.modal_title_fields = '';
+        c.data.DiscoverControllerURL = false;
+        c.data.include_comments = true;
+        if (data.field_list != undefined && data.field_list != '') {
+            c.data.field_list = data.field_list;
+        } else {
+            c.data.field_list = undefined;
+        }
+        $scope.loadingData = true;
+        $scope.server.update().then(function() {
+            $scope.loadingData = false;
+            // DFCT0010566
+            loadFilterWidget();
+        });
+    });
+
+    function updateRowFromRW(message) {
+        if (message.data && message.data.sys_id && $scope.data.list) {
+            var row, field;
+            for (var i = 0; i < $scope.data.list.length; i++) {
+                row = $scope.data.list[i];
+                if (row.sys_id == message.data.sys_id) {
+                    var fields = Object.getOwnPropertyNames(message.data.record);
+                    for (var f in fields) {
+                        field = fields[f];
+                        if (typeof row[field] !== 'undefined') {
+                            row[field].display_value = message.data.record[field].display_value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function initRecordWatcher(table, filter) {
+        if (watcher)
+            watcher.unsubscribe();
+
+        if (table && filter) {
+            var watcherChannel = amb.getChannelRW(table, filter);
+            amb.connect();
+            watcher = watcherChannel.subscribe(function(message) {
+                if (!message.data)
+                    return;
+                switch (message.data.action) {
+                    case "change":
+                        updateRowFromRW(message);
+                        break;
+                    case "exit":
+                        // A record was removed
+                    case "enter":
+                    case "entry":
+                        // A record was added
+                    default:
+                        spUtil.update($scope);
+                        break;
+                }
+            });
+        }
+    }
+
+    // STRY0101803 added this call so the data table is reset on the filter every time
+    function loadFilterWidget() {
+        initRecordWatcher($scope.data.table, $scope.data.filter);
+        c.data.filterBreadcrumbs = null;
+        spUtil.get('widget-filter-breadcrumbs', {
+            table: c.data.table,
+            query: c.data.filter,
+            enable_filter: c.data.enable_filter
+        }).then(function(response) {
+            c.data.filterBreadcrumbs = response;
+        });
+    }
+
+    // 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Make sure all other tooltips are closed except for the 1 passed in, no stuck open tooltips
+    c.closeOtherTooltips = function(tooltipItem) {
+        c.data.list.forEach(function(rowItem) {
+            if (tooltipItem.sys_id !== rowItem.sys_id) {
+                rowItem.isTooltipOpened = false;
+            }
+        });
+    };
+
+    c.openNewPage = function(table, sys_id, item) {
+        // TODO, LOOK UP PAGE AND VIEWS SOMEHOW MAYBE A CLIENT SCRIPT CALLBACK
+        // NOTE: remove item when calling server
+        // STRY0113838
+        var portal_url_ref = '../' + $scope.portal.url_suffix;
+        var pageId;
+        var url;
+        var pageTable;
+        var view = 'sp';
+        // STRY0108629
+        var ref_field_name = item.dcu_ref;
+        switch (table) {
+            case 'x_153465_discovert_tasker_requests':
+                // STRY0108629
+                if (item.parentType == 'Organizational Unit') {
+                    pageId = 'discover_simple_processing_form';
+                    pageTable = 'x_153465_discovert_tasker_requests';
+                } else {
+                    pageId = 'discovertasker_taskdetails';
+                    pageTable = 'x_153465_discovert_route_task_instance';
+                }
+                break;
+            case 'x_153465_discovert_tasker_schedule':
+                pageTable = 'x_153465_discovert_tasker_schedule';
+                pageId = 'scheduled_task_graphic';
+                break;
+            case 'x_153465_discovert_route_task_instance':
+                pageId = 'discovertasker_taskdetails';
+                pageTable = table;
+                c.data.getURL = true;
+                c.data.sys_id = sys_id;
+                c.data.view = view;
+                $scope.server.update().then(function(data) {
+                    url = data.portal_url_ref + '?id=' + data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+                    openTaskInNewWindow(url);
+                });
+
+                // the page to go to is being loaded by the post back, so don't complete below
+                // might be a better way to organize this code...
+                return;
+                break;
+            default:
+                pageId = 'discovertasker_taskdetails';
+                pageTable = table;
 
 
-		$scope.$on("countPanelClicked",function(evt,data){
-			// STRY0114448
-			c.data.menuChanged = true;
-			c.data.userDefaultMenuTitle = data.title;
-			// DFCT0011087
-			c.data.tasker_filter_id = data.tasker_filter_id;
-			c.data.table = data.table;
-			c.data.filter = data.filter;
-			c.data.sp_page_dv = data.sp_page_dv;
-			c.data.title = data.title;
-			c.data.d = data.d;
-			c.data.o = data.o;
-			// use defaults as counts are all tasks
-			c.data.modal_title_field_separator = '';
-			c.data.modal_title_fields = '';
-			c.data.DiscoverControllerURL = false;
-			c.data.include_comments = true;
-			if(data.field_list != undefined && data.field_list != ''){
-				c.data.field_list = data.field_list;
-			} else {
-				c.data.field_list = undefined;
-			}
-			$scope.loadingData = true;
-			$scope.server.update().then(function() {
-				$scope.loadingData = false;
-				// DFCT0010566
-				loadFilterWidget();
-			});
-		});
+                break;
+        }
+        // STRY0108629
+        if (c.data.DiscoverControllerURL) {
+            // TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
+            url = portal_url_ref + '?id=' + pageId + '&dcu_sys_id=' + sys_id + '&dcu_table=' + pageTable + '&dcu_ref=' + ref_field_name + '&dcu_view=' + view + '&query=' + c.data.filter + '&o=' + c.data.o + "&d=" + c.data.d;
+        } else {
+            // TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
+            url = portal_url_ref + '?id=' + pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
+        }
+        openTaskInNewWindow(url);
+    };
 
-		function updateRowFromRW(message) {
-			if (message.data && message.data.sys_id && $scope.data.list) {
-				var row, field;
-				for(var i=0;i<$scope.data.list.length; i++) {
-					row = $scope.data.list[i];
-					if (row.sys_id == message.data.sys_id) {
-						var fields = Object.getOwnPropertyNames(message.data.record);
-						for(var f in fields) {
-							field = fields[f];
-							if(typeof row[field] !== 'undefined') {
-								row[field].display_value = message.data.record[field].display_value;
-							}
-						}
-					}
-				}
-			}
-		}
+    function openTaskInNewWindow(url) {
+        window.open(url, '_blank');
+    }
 
-		function initRecordWatcher(table, filter){
-					if (watcher)
-						watcher.unsubscribe();
+    // open quickview modal
+    c.quickView = function(table, sys_id, widgetId, item) {
+        var title;
+        var omitIcons;
+        // STRY0101803 - if user didn't set the title fields, use a default setting
+        // account for original hard coded settings on rows that don't get updated
+        if (c.data.modal_title_fields_array.length == 0) {
+            if (table == 'x_153465_discovert_route_task_instance') {
+                // this is here to cover the default settings
+                if (widgetId == 'discovertasker-formtab') {
+                    title = item.taskernumber.display_value + ': ' + item.short_description.display_value;
+                    // 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
+                    omitIcons = false; // false to show header icons
+                } else if (widgetId == 'tasker_stream_widget') {
+                    title = c.data.popOverRecord[item.sys_id].number + ': ' + c.data.popOverRecord[item.sys_id].short_description;
+                }
+            } else {
+                title = c.data.title + c.data.modal_title_fields_not_set;
+            }
+        } else {
+            title = item[c.data.modal_title_fields_array[0]].display_value;
+            for (i = 1; i < c.data.modal_title_fields_array.length; i++) {
+                title += c.data.modal_title_field_separator + item[c.data.modal_title_fields_array[i]].display_value;
+            }
+        }
 
-					if (table && filter) {
-						var watcherChannel = amb.getChannelRW(table, filter);
-						amb.connect();
-						watcher = watcherChannel.subscribe(function(message) {
-							if (!message.data)
-								return;
-							switch(message.data.action) {
-								case "change":
-								updateRowFromRW(message);
-								break;
-								case "exit":
-								// A record was removed
-								case "enter":
-								case "entry":
-								// A record was added
-								default:
-								spUtil.update($scope);
-								break;
-							}
-						});
-					}
-				}
-	
-		// STRY0101803 added this call so the data table is reset on the filter every time
-		function loadFilterWidget() {	
-			initRecordWatcher($scope.data.table, $scope.data.filter);		
-			c.data.filterBreadcrumbs = null;
-			spUtil.get('widget-filter-breadcrumbs', {
-				table: c.data.table,
-				query: c.data.filter,
-				enable_filter: c.data.enable_filter
-			}).then(function(response) {
-				c.data.filterBreadcrumbs = response;
-			});
-		}
-	
-	// 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Make sure all other tooltips are closed except for the 1 passed in, no stuck open tooltips
-	c.closeOtherTooltips = function(tooltipItem) {
-		c.data.list.forEach(function(rowItem) {
-			if (tooltipItem.sys_id !== rowItem.sys_id) {
-				rowItem.isTooltipOpened = false;
-			}
-		});
-	};
-	
-		c.openNewPage = function(table, sys_id, item){
-			// TODO, LOOK UP PAGE AND VIEWS SOMEHOW MAYBE A CLIENT SCRIPT CALLBACK
-			// NOTE: remove item when calling server
-			// STRY0113838
-			var portal_url_ref = '../' + $scope.portal.url_suffix;
-			var pageId; 
-			var url;
-			var pageTable;
-			var view = 'sp';
-			// STRY0108629
-			var ref_field_name = item.dcu_ref;
-			switch (table) {
-				case 'x_153465_discovert_tasker_requests':
-					// STRY0108629
-					if(item.parentType == 'Organizational Unit'){
-						pageId = 'discover_simple_processing_form';
-						pageTable = 'x_153465_discovert_tasker_requests';
-					} else {
-						pageId = 'discovertasker_taskdetails';	
-						pageTable = 'x_153465_discovert_route_task_instance';
-					}
-					break;
-				case 'x_153465_discovert_tasker_schedule':
-					pageTable = 'x_153465_discovert_tasker_schedule';
-					pageId = 'scheduled_task_graphic';
-					break;
-				case 'x_153465_discovert_route_task_instance':
-					pageId = 'discovertasker_taskdetails';
-					pageTable = table;
-					c.data.getURL=true;
-					c.data.sys_id=sys_id;
-					c.data.view =view;
-					$scope.server.update().then(function(data) {
-						url = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
-						openTaskInNewWindow(url);
-					});
-					
-					// the page to go to is being loaded by the post back, so don't complete below
-					// might be a better way to organize this code...
-					return;
-					break;
-				default:
-					pageId = 'discovertasker_taskdetails';
-					pageTable = table;
-					
-					
-					break;
-			}
-			// STRY0108629
-			if(c.data.DiscoverControllerURL){
-				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
-				url = portal_url_ref + '?id=' +  pageId + '&dcu_sys_id=' + sys_id + '&dcu_table=' + pageTable + '&dcu_ref=' + ref_field_name + '&dcu_view=' + view + '&query=' + c.data.filter + '&o=' + c.data.o + "&d=" + c.data.d;
-			} else {
-				// TODO, LOOK UP TABLE (for request, will look up task, but others might use data table.  So, keep that in mind)
-				url = portal_url_ref + '?id=' +  pageId + '&sys_id=' + sys_id + '&table=' + pageTable + '&view=' + view;
-			}
-			openTaskInNewWindow(url);
-		};
+        // // DFCT0010720 - get view based on form preferences
+        // set default view to service portal
+        var view = 'sp';
+        if (table == 'x_153465_discovert_route_task_instance') {
+            pageId = 'discovertasker_taskdetails';
+            pageTable = table;
+            c.data.getURL = true;
+            c.data.sys_id = sys_id;
+            c.data.view = view;
+            $scope.server.update().then(function(data) {
+                // url = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+                view = data.view;
+                openModalView(title, widgetId, omitIcons, table, sys_id, view);
+            });
+        } else {
+            openModalView(title, widgetId, omitIcons, table, sys_id, view);
+        }
+    };
 
-		function openTaskInNewWindow(url) {
-			window.open(url, '_blank');
-		}
+    // DFCT0010720
+    function openModalView(title, widgetId, omitIcons, table, sys_id, view) {
+        spModal.open({
+            title: title,
+            backdrop: 'static',
+            widget: widgetId,
+            // 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
+            // Added isModal and omit_icons
+            widgetInput: {
+                isModal: true,
+                omit_icons: omitIcons,
+                table: table,
+                sys_id: sys_id,
+                view: view
+            },
+            size: 'lg',
+            buttons: [],
+            // 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
+            footerStyle: {
+                'display': 'none'
+            }
 
-		// open quickview modal
-		c.quickView = function(table, sys_id, widgetId, item) {
-			var title;
-			var omitIcons;
-			// STRY0101803 - if user didn't set the title fields, use a default setting
-			// account for original hard coded settings on rows that don't get updated
-			if (c.data.modal_title_fields_array.length == 0){
-				if (table == 'x_153465_discovert_route_task_instance') {
-					// this is here to cover the default settings
-					if (widgetId == 'discovertasker-formtab') {
-						title = item.taskernumber.display_value + ': ' + item.short_description.display_value;
-						// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
-						omitIcons = false; // false to show header icons
-					} else if (widgetId == 'tasker_stream_widget') {
-						title = c.data.popOverRecord[item.sys_id].number + ': ' + c.data.popOverRecord[item.sys_id].short_description;
-					}
-				} else {
-					title = c.data.title + c.data.modal_title_fields_not_set;
-				}				
-			} else {
-				title = item[c.data.modal_title_fields_array[0]].display_value;
-				for (i = 1; i < c.data.modal_title_fields_array.length; i++) {
-					title += c.data.modal_title_field_separator + item[c.data.modal_title_fields_array[i]].display_value;
-				}
-			}
-			
-			// // DFCT0010720 - get view based on form preferences
-			// set default view to service portal
-			var view = 'sp';
-			if(table == 'x_153465_discovert_route_task_instance'){
-				pageId = 'discovertasker_taskdetails';
-				pageTable = table;
-				c.data.getURL=true;
-				c.data.sys_id=sys_id;
-				c.data.view =view;
-				$scope.server.update().then(function(data) {
-					// url = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
-					view = data.view;
-					openModalView(title, widgetId, omitIcons, table, sys_id, view);
-				});
-			} else {
-				openModalView(title, widgetId, omitIcons, table, sys_id, view);
-			}
-		};
+        }).then(function() {
+            /* update model after return from modal */
+        });
 
-		// DFCT0010720
-		function openModalView(title, widgetId, omitIcons, table, sys_id, view) {
-			spModal.open({
-				title: title,
-				backdrop:'static',
-				widget: widgetId,
-				// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
-				// Added isModal and omit_icons
-				widgetInput: {
-					isModal: true,
-					omit_icons: omitIcons, 
-					table: table,
-					sys_id: sys_id,
-					view: view
-				},
-				size: 'lg',
-				buttons: [],
-				// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added
-				footerStyle: {
-					'display': 'none'
-				}
+    }
 
-			}).then( function(){
-				/* update model after return from modal */
-			});
 
-		}
-	
-			
-			// AAlzyoud custom ends here
-			//-----------------------------------------------------------------------------
-			$scope.go = function(table, item) {
-				spNavStateManager.onRecordChange(table).then(function() {
-					var parms = {};
-						parms.table = table;
-						parms.sys_id = item.sys_id;
-						parms.record = item;
-						$scope.ignoreLocationChange = true;
-						for (var x in c.data.list) {
-							c.data.list[x].selected = false;
-						}
-						item.selected = true;
-						$scope.$emit(eventNames.click, parms);
-					}, function() {
-						// do nothing in case of closing the modal by clicking on x
-					});
-				};
+    // AAlzyoud custom ends here
+    //-----------------------------------------------------------------------------
+    $scope.go = function(table, item) {
+        spNavStateManager.onRecordChange(table).then(function() {
+            var parms = {};
+            parms.table = table;
+            parms.sys_id = item.sys_id;
+            parms.record = item;
+            $scope.ignoreLocationChange = true;
+            for (var x in c.data.list) {
+                c.data.list[x].selected = false;
+            }
+            item.selected = true;
+            $scope.$emit(eventNames.click, parms);
+        }, function() {
+            // do nothing in case of closing the modal by clicking on x
+        });
+    };
 
-				$scope.newRecord = function(){
-					var parms = {
-						id: 'form',
-						table: $scope.data.table,
-						view: $scope.data.view,
-						sys_id: '-1'
-					};
-					if ($scope.data.filter != '')
-						parms.query = $scope.data.filter;
-					
-					$location.search(parms);
-				};
-				
-				function recoverStateFromUrl() {
-					$scope.data.fields_array = [];
-					var s = $location.search();
-					for (var x in keys) {
-						if (s[keys[x]]) {
-							$scope.data[keys[x]] = s[keys[x]];
-						}
-					}
-					$scope.server.update().then(function(data) {
-						if (s.sys_id) {
-							for (var x in data.list) {
-								if (data.list[x].sys_id == s.sys_id) {
-									$scope.go(s.table, data.list[x]);
-								}
-							}
-							// DFCT0010566
-							loadFilterWidget();
-						}
-					});
-				}
-				
-				if ($scope.options.fromUrl) {
-					var origSearch = $location.search();
-					$scope.$on('$locationChangeSuccess', function(e) {
-						var s = $location.search();
-						if (origSearch.id !== s.id)
-							return;
-						
-						if ($scope.ignoreLocationChange){
-							$scope.ignoreLocationChange = false;
-							return;
-						}
-						
-						// Helps to recover state when using the browser's back button
-						recoverStateFromUrl();
-					});
-				}
-				
-				$scope.getNumber = function(num) {
-					return new Array(num);
-				};
-				
-				$scope.mathMin = function(v1,v2) {
-					return Math.min(v1,v2);
-				};
-				
-				function getData(updateUrl) {
-					var f = $scope.data;
-					spUtil.update($scope).then(function(data) {
-						f.view = data.view;
-						if ($scope.options.fromUrl && updateUrl)
-							setPermalink(f.table, f.filter, f.o, f.d, f.p);
+    $scope.newRecord = function() {
+        var parms = {
+            id: 'form',
+            table: $scope.data.table,
+            view: $scope.data.view,
+            sys_id: '-1'
+        };
+        if ($scope.data.filter != '')
+            parms.query = $scope.data.filter;
 
-						// DFCT0010547
-						loadFilterWidget();
-					});
-				}
-				
-				function setPermalink(table, filter, orderBy, orderDirection, page){
-					$scope.ignoreLocationChange = true;
-					var search = $location.search();
-					angular.extend(search, {
-						spa: 1,
-						table: table,
-						filter: filter,
-						p: page,
-						o: orderBy,
-						d: orderDirection
-					});
-					$location.search(search);
-				}
-				
-				$scope.$on('$destroy', function() {
-					if (watcher)
-						watcher.unsubscribe();
-				});
-				
-				$scope.setPageNum = function(num) {
-					$scope.data.p = num;
-					getData(true);
-					$timeout(function() {
-						$scope.focusOnTableHeader();
-					});
-				};
-				
-				$scope.setOrderBy = function(field) {
-					var d = "asc";
-					if ($scope.data.o == field) {
-						if ($scope.data.d == "asc")
-							d = "desc";
-						else
-							d = "asc";
-					}
-					
-					if (d === "asc") {
-						spAriaUtil.sendLiveMessage($scope.data.msg.sortingByAsc);
-					} else if (d === "desc") {
-						spAriaUtil.sendLiveMessage($scope.data.msg.sortingByDesc);
-					}
-					
-					$scope.data.o = field;
-					$scope.data.d = d;
-					$scope.setSearch(true);
-				};
-				
-				$scope.setSearch = function(updateUrl) {
-					$scope.data.p = 1;
-					getData(updateUrl);
-				};
-				
-				$scope.$on(eventNames.setFilter, function(e, newFilter){
-					$scope.data.filter = newFilter;
-					$scope.setSearch(false);
-				});
-				
-				$scope.$on(eventNames.setKeywords, function(e, keywords){
-					$scope.data.keywords = keywords;
-					$scope.setSearch(false);
-				});
-				
-				$scope.$on('widget-filter-breadcrumbs.queryModified', function(e, newFilter){
-					$scope.data.filter = newFilter;
-					// DFCT0010709
-					$scope.data.breadcrumb_change=true;
-					$scope.setSearch(true);
-				});
-				
-				$scope.rowsWerePruned = function() {
-					if (!$scope.data.list)
-						return;
-					
-					$scope.rowsPruned = $scope.mathMin($scope.data.window_end,$scope.data.row_count) - $scope.data.window_start - $scope.data.list.length;
-					return $scope.rowsPruned > 0;
-				};
-				
-				$scope.showFilter = function() {
-					return !$scope.data.list.length && !$scope.data.num_pages && !$scope.data.invalid_table && !$scope.loadingData;
-				};
-				
-				c.appendQuery = function(query){
-					if ($scope.data.filter.length > 1)
-						$scope.data.filter += '^';
-					$scope.data.filter += query;
-					$scope.setSearch();
-					
-				};
-				
-				// Makes Widget Async
-				$scope.data = $scope.options;
-				// DFCT0010617
-				$scope.data.initialLoad = true;
-	
-				$scope.loadingData = true;
-				$scope.server.update().then(function() {
-					if ($scope.data.newButtonUnsupported)
-						jslog("Service Portal: New button not supported for sys_attachment list");
-					$scope.loadingData = false;
-					// STRY0101803 - moved to load in client so table updates
-					loadFilterWidget();
-				});
-	
-				
-	function parseQuery(table, queryString){
-		return $http.post('/api/now/sp/parsequery/' + table, queryString).then(function(response){
-				return response.data.result;
-		});
-	}
+        $location.search(parms);
+    };
 
-	c.createQueryTerm = function(table, field, sys_id, operator){
-		return $http.get('/api/now/sp/getInOutQueryTerm', {
-			params: {
-				table: table,
-				sys_id: sys_id,
-				field: field,
-				operator: operator
-			}
-		}).then(function(response){
-			if (response && response.data && response.data.result)
-				return response.data.result.parts;
-		});
-	};
+    function recoverStateFromUrl() {
+        $scope.data.fields_array = [];
+        var s = $location.search();
+        for (var x in keys) {
+            if (s[keys[x]]) {
+                $scope.data[keys[x]] = s[keys[x]];
+            }
+        }
+        $scope.server.update().then(function(data) {
+            if (s.sys_id) {
+                for (var x in data.list) {
+                    if (data.list[x].sys_id == s.sys_id) {
+                        $scope.go(s.table, data.list[x]);
+                    }
+                }
+                // DFCT0010566
+                loadFilterWidget();
+            }
+        });
+    }
 
-	c.isMultiPart = function(terms) {
-		for (var i = 0; i < terms.length; i++) {
-			var term = terms[i];
-			while (term.left)
-				term = term.left;
-			if (term.NQ)
-				return true;
-		}
-		return false;
-	};
-	
-	c.showMatching = function(field, newTerm) {
-		var queryString = $scope.data.filter;
-		var eq = "";
-		parseQuery($scope.data.table, queryString).then(function(oldTerms) {
-			var isMultiPart = c.isMultiPart(oldTerms);
-			for (var i = 0; i < oldTerms.length; i++) {
-				var term = oldTerms[i];
-				if (!isMultiPart && isSameField(newTerm, term))
-					continue;
+    if ($scope.options.fromUrl) {
+        var origSearch = $location.search();
+        $scope.$on('$locationChangeSuccess', function(e) {
+            var s = $location.search();
+            if (origSearch.id !== s.id)
+                return;
 
-				if (eq.length)
-					eq += '^';
+            if ($scope.ignoreLocationChange) {
+                $scope.ignoreLocationChange = false;
+                return;
+            }
 
-				// term may be separated into nested "left" and "right" bits,
-				// follow the lefts to the bottom where "NQ" might be specified
-				var termNQCheck = oldTerms[i];
-				while (termNQCheck.left)
-					termNQCheck = termNQCheck.left;
-				if (termNQCheck.NQ) {
-					// query is multipart so apply new term to each part
-					eq += getEncodedTerm(newTerm);
-					eq += "^NQ";
-				}
-				eq += getEncodedTerm(term);
-			}
-			if (eq.length)
-				eq += '^';
-			eq += getEncodedTerm(newTerm);
+            // Helps to recover state when using the browser's back button
+            recoverStateFromUrl();
+        });
+    }
 
-			$scope.data.filter = eq;
-			$scope.setSearch();
-		});
-	};
+    $scope.getNumber = function(num) {
+        return new Array(num);
+    };
 
-	c.filterOut = function(field, newTerm) {
-		var eq = "";
-		if ($scope.data.filter.indexOf("^NQ") == -1) {
-			// don't need server roundtrip to parse query,
-			// can just append the new term
-			eq = $scope.data.filter;
-			if (eq.length)
-				eq += '^';
-			eq += getEncodedTerm(newTerm);
-			$scope.data.filter = eq;
-			$scope.setSearch();
-			return;
-		}
-		
-		// query may be multipart so must apply new term to each part
-		var queryString = $scope.data.filter;
-		parseQuery($scope.data.table, queryString).then(function(oldTerms) {
-			for (var i = 0; i < oldTerms.length; i++) {
-				var term = oldTerms[i];
-				if (eq.length)
-					eq += '^';
+    $scope.mathMin = function(v1, v2) {
+        return Math.min(v1, v2);
+    };
 
-				// term may be separated into nested "left" and "right" bits,
-				// follow the lefts to the bottom where "NQ" might be specified
-				var termNQCheck = oldTerms[i];
-				while (termNQCheck.left)
-					termNQCheck = termNQCheck.left;
-				if (termNQCheck.NQ) {
-					// query is multipart so apply new term to end of each part
-					eq += getEncodedTerm(newTerm);
-					eq += "^NQ";
-				}
-				eq += getEncodedTerm(term);
-			}
-			if (eq.length)
-				eq += '^';
-			eq += getEncodedTerm(newTerm);
+    function getData(updateUrl) {
+        var f = $scope.data;
+        spUtil.update($scope).then(function(data) {
+            f.view = data.view;
+            if ($scope.options.fromUrl && updateUrl)
+                setPermalink(f.table, f.filter, f.o, f.d, f.p);
 
-			$scope.data.filter = eq;
-			$scope.setSearch();
-		});
-	};
+            // DFCT0010547
+            loadFilterWidget();
+        });
+    }
 
-	function isSameField(t1, t2) {
-		if ('left' in t1 && 'left' in t2)
-			return t1.left.query_term_field === t2.left.query_term_field;
-		else if ('left' in t1)
-			return t1.left.query_term_field === t2.query_term_field;
-		else if ('left' in t2)
-			return t1.query_term_field === t2.left.query_term_field;
-		return t1.query_term_field === t2.query_term_field;
-	}
+    function setPermalink(table, filter, orderBy, orderDirection, page) {
+        $scope.ignoreLocationChange = true;
+        var search = $location.search();
+        angular.extend(search, {
+            spa: 1,
+            table: table,
+            filter: filter,
+            p: page,
+            o: orderBy,
+            d: orderDirection
+        });
+        $location.search(search);
+    }
 
-	function getEncodedTerm(term) {
-		var eq;
-		if (term.left) {
-			eq = getEncodedTerm(term.left);
-			eq += '^OR';
-			eq += getEncodedTerm(term.right);
-		} else {
-			eq = term.query_term_field;
-			eq += term.operator;
-			eq += term.value;
-		}
-		return eq;
-	}
-			}]]></client_script>
+    $scope.$on('$destroy', function() {
+        if (watcher)
+            watcher.unsubscribe();
+    });
+
+    $scope.setPageNum = function(num) {
+        $scope.data.p = num;
+        getData(true);
+        $timeout(function() {
+            $scope.focusOnTableHeader();
+        });
+    };
+
+    $scope.setOrderBy = function(field) {
+        var d = "asc";
+        if ($scope.data.o == field) {
+            if ($scope.data.d == "asc")
+                d = "desc";
+            else
+                d = "asc";
+        }
+
+        if (d === "asc") {
+            spAriaUtil.sendLiveMessage($scope.data.msg.sortingByAsc);
+        } else if (d === "desc") {
+            spAriaUtil.sendLiveMessage($scope.data.msg.sortingByDesc);
+        }
+
+        $scope.data.o = field;
+        $scope.data.d = d;
+        $scope.setSearch(true);
+    };
+
+    $scope.setSearch = function(updateUrl) {
+        $scope.data.p = 1;
+        getData(updateUrl);
+    };
+
+    $scope.$on(eventNames.setFilter, function(e, newFilter) {
+        $scope.data.filter = newFilter;
+        $scope.setSearch(false);
+    });
+
+    $scope.$on(eventNames.setKeywords, function(e, keywords) {
+        $scope.data.keywords = keywords;
+        $scope.setSearch(false);
+    });
+
+    $scope.$on('widget-filter-breadcrumbs.queryModified', function(e, newFilter) {
+        $scope.data.filter = newFilter;
+        // DFCT0010709
+        $scope.data.breadcrumb_change = true;
+        $scope.setSearch(true);
+    });
+
+    $scope.rowsWerePruned = function() {
+        if (!$scope.data.list)
+            return;
+
+        $scope.rowsPruned = $scope.mathMin($scope.data.window_end, $scope.data.row_count) - $scope.data.window_start - $scope.data.list.length;
+        return $scope.rowsPruned > 0;
+    };
+
+    $scope.showFilter = function() {
+        return !$scope.data.list.length && !$scope.data.num_pages && !$scope.data.invalid_table && !$scope.loadingData;
+    };
+
+    c.appendQuery = function(query) {
+        if ($scope.data.filter.length > 1)
+            $scope.data.filter += '^';
+        $scope.data.filter += query;
+        $scope.setSearch();
+
+    };
+
+    // Makes Widget Async
+    $scope.data = $scope.options;
+    // DFCT0010617
+    $scope.data.initialLoad = true;
+
+    $scope.loadingData = true;
+    $scope.server.update().then(function() {
+        if ($scope.data.newButtonUnsupported)
+            jslog("Service Portal: New button not supported for sys_attachment list");
+        $scope.loadingData = false;
+        // STRY0101803 - moved to load in client so table updates
+        loadFilterWidget();
+    });
+
+
+    function parseQuery(table, queryString) {
+        return $http.post('/api/now/sp/parsequery/' + table, queryString).then(function(response) {
+            return response.data.result;
+        });
+    }
+
+    c.createQueryTerm = function(table, field, sys_id, operator) {
+        return $http.get('/api/now/sp/getInOutQueryTerm', {
+            params: {
+                table: table,
+                sys_id: sys_id,
+                field: field,
+                operator: operator
+            }
+        }).then(function(response) {
+            if (response && response.data && response.data.result)
+                return response.data.result.parts;
+        });
+    };
+
+    c.isMultiPart = function(terms) {
+        for (var i = 0; i < terms.length; i++) {
+            var term = terms[i];
+            while (term.left)
+                term = term.left;
+            if (term.NQ)
+                return true;
+        }
+        return false;
+    };
+
+    c.showMatching = function(field, newTerm) {
+        var queryString = $scope.data.filter;
+        var eq = "";
+        parseQuery($scope.data.table, queryString).then(function(oldTerms) {
+            var isMultiPart = c.isMultiPart(oldTerms);
+            for (var i = 0; i < oldTerms.length; i++) {
+                var term = oldTerms[i];
+                if (!isMultiPart && isSameField(newTerm, term))
+                    continue;
+
+                if (eq.length)
+                    eq += '^';
+
+                // term may be separated into nested "left" and "right" bits,
+                // follow the lefts to the bottom where "NQ" might be specified
+                var termNQCheck = oldTerms[i];
+                while (termNQCheck.left)
+                    termNQCheck = termNQCheck.left;
+                if (termNQCheck.NQ) {
+                    // query is multipart so apply new term to each part
+                    eq += getEncodedTerm(newTerm);
+                    eq += "^NQ";
+                }
+                eq += getEncodedTerm(term);
+            }
+            if (eq.length)
+                eq += '^';
+            eq += getEncodedTerm(newTerm);
+
+            $scope.data.filter = eq;
+            $scope.setSearch();
+        });
+    };
+
+    c.filterOut = function(field, newTerm) {
+        var eq = "";
+        if ($scope.data.filter.indexOf("^NQ") == -1) {
+            // don't need server roundtrip to parse query,
+            // can just append the new term
+            eq = $scope.data.filter;
+            if (eq.length)
+                eq += '^';
+            eq += getEncodedTerm(newTerm);
+            $scope.data.filter = eq;
+            $scope.setSearch();
+            return;
+        }
+
+        // query may be multipart so must apply new term to each part
+        var queryString = $scope.data.filter;
+        parseQuery($scope.data.table, queryString).then(function(oldTerms) {
+            for (var i = 0; i < oldTerms.length; i++) {
+                var term = oldTerms[i];
+                if (eq.length)
+                    eq += '^';
+
+                // term may be separated into nested "left" and "right" bits,
+                // follow the lefts to the bottom where "NQ" might be specified
+                var termNQCheck = oldTerms[i];
+                while (termNQCheck.left)
+                    termNQCheck = termNQCheck.left;
+                if (termNQCheck.NQ) {
+                    // query is multipart so apply new term to end of each part
+                    eq += getEncodedTerm(newTerm);
+                    eq += "^NQ";
+                }
+                eq += getEncodedTerm(term);
+            }
+            if (eq.length)
+                eq += '^';
+            eq += getEncodedTerm(newTerm);
+
+            $scope.data.filter = eq;
+            $scope.setSearch();
+        });
+    };
+
+    function isSameField(t1, t2) {
+        if ('left' in t1 && 'left' in t2)
+            return t1.left.query_term_field === t2.left.query_term_field;
+        else if ('left' in t1)
+            return t1.left.query_term_field === t2.query_term_field;
+        else if ('left' in t2)
+            return t1.query_term_field === t2.left.query_term_field;
+        return t1.query_term_field === t2.query_term_field;
+    }
+
+    function getEncodedTerm(term) {
+        var eq;
+        if (term.left) {
+            eq = getEncodedTerm(term.left);
+            eq += '^OR';
+            eq += getEncodedTerm(term.right);
+        } else {
+            eq = term.query_term_field;
+            eq += term.operator;
+            eq += term.value;
+        }
+        return eq;
+    }
+};]]></client_script>
         <controller_as>c</controller_as>
         <css>//------------------------------------------------------------------------------------------------------------------------
 // COMPANY: DISCOVER TECHNOLOGIES
@@ -948,136 +957,142 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <has_preview>false</has_preview>
         <id>tasker_portal_board_with_filter</id>
         <internal>false</internal>
-        <link><![CDATA[function link(scope, element, attrs, ctrl){
-	var $ul, $contextMenu;
-	
-	scope.focusOnTableHeader = function() {
-		element.find(".data-table-title").attr("tabindex", "-1").focus();
-	};
-	
-	element.on('contextmenu', function(e){
-		if (e.ctrlKey)
-			return; // ctrlKey is for the debug menu, not this menu
-		
-		var rowScope = angular.element(e.target).scope();
-		var field, item, fieldVal;
-		
-		// Context Menu for tbody
-		if (angular.isDefined(rowScope.field) && angular.isDefined(rowScope.item)){
-			e.preventDefault();
-			field = rowScope.field;
-			item = rowScope.item;
-			fieldVal = item[field].value;
-			
-			var items = [
-			['${Show Matching}', function(){
-				ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '=').then(function(term){
-					ctrl.showMatching(field, term);
-				});
-			}],
-			['${Filter Out}', function(){
-				ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '!=').then(function(term){
-					ctrl.filterOut(field, term);
-				});
-			}]
-			];
-			
-			renderContextMenu(items);
-			setContextMenuPosition(e);
-		}
-	});
-	
-	function renderContextMenu(items){
-		var scrollHeight = $('body').get(0).scrollHeight;
-		$contextMenu = angular.element('<div>', {'class': 'dropdown clearfix context-dropdown open'});
-			
-			$contextMenu.on('click', function (e) {
-				if ($(e.target).hasClass('dropdown')) {
-					_clearContextMenus(event);
-				}
-			});
-			$contextMenu.on('contextmenu', function (event) {
-				event.preventDefault();
-				_clearContextMenus(event);
-			});
-			
-			$contextMenu.css({
-				position: 'absolute',
-				top: 0,
-				height: scrollHeight,
-				left: 0,
-				right: 0,
-				zIndex: 9999
-			});
-			
-			$('body').append($contextMenu);
-			
-			$ul = angular.element('<ul>', {
-				'class': 'dropdown-menu',
-				'role': 'menu'
-			});
-			renderItems();
-			$contextMenu.append($ul);
-			
-			function renderItems(){
-				angular.forEach(items, function (item) {
-					var $li = angular.element('<li>');
-					
-					if (item === null) {
-						$li.addClass('divider');
-					} else {
-						var $a = angular.element('<a>');
-						$a.attr({tabindex: '-1', href:'#'});
-							$a.text(item[0]);
-							$li.append($a);
-							$li.on('click', function (e) {
-								e.preventDefault();
-								scope.$apply(function () {
-									_clearContextMenus(e);
-									item[1].call(item, item);
-								});
-							});
-						}
-						
-						$ul.append($li);
-					});
-				}
-			}
-			
-			function _clearContextMenus(event){
-				if (!event){
-					return;
-				}
-				
-				angular.element(event.currentTarget).removeClass('context');
-				
-				var els = angular.element(".context-dropdown");
-				angular.forEach(els, function(el){
-					angular.element(el).remove();
-				});
-			}
-			
-			var contextMenuItemHeight = 0;
-			function setContextMenuPosition(event){
-				if (contextMenuItemHeight === 0)
-					contextMenuItemHeight = $ul.children(0).height();
-				
-				// Why not just call .width() and .height() on the container? Because those calculations cause browsers to reflow
-				// that can cause IE10 to take 200ms to render a context menu.
-				var cmWidth = 150;
-				var cmHeight = contextMenuItemHeight * $ul.children().length;
-				var startX = event.pageX + cmWidth >= window.innerWidth ? event.pageX - cmWidth : event.pageX;
-				var startY = event.pageY + cmHeight >= window.innerHeight ? event.pageY - cmHeight : event.pageY;
-				
-				$ul.css({
-					display: 'block',
-					position: 'absolute',
-					left: startX,
-					top: startY,
-					'min-width': cmWidth
-				});
-			}
-		}]]></link>
+        <link><![CDATA[function link(scope, element, attrs, ctrl) {
+    var $ul, $contextMenu;
+
+    scope.focusOnTableHeader = function() {
+        element.find(".data-table-title").attr("tabindex", "-1").focus();
+    };
+
+    element.on('contextmenu', function(e) {
+        if (e.ctrlKey)
+            return; // ctrlKey is for the debug menu, not this menu
+
+        var rowScope = angular.element(e.target).scope();
+        var field, item, fieldVal;
+
+        // Context Menu for tbody
+        if (angular.isDefined(rowScope.field) && angular.isDefined(rowScope.item)) {
+            e.preventDefault();
+            field = rowScope.field;
+            item = rowScope.item;
+            fieldVal = item[field].value;
+
+            var items = [
+                ['${Show Matching}', function() {
+                    ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '=').then(function(term) {
+                        ctrl.showMatching(field, term);
+                    });
+                }],
+                ['${Filter Out}', function() {
+                    ctrl.createQueryTerm(scope.data.table, field, item.sys_id, '!=').then(function(term) {
+                        ctrl.filterOut(field, term);
+                    });
+                }]
+            ];
+
+            renderContextMenu(items);
+            setContextMenuPosition(e);
+        }
+    });
+
+    function renderContextMenu(items) {
+        var scrollHeight = $('body').get(0).scrollHeight;
+        $contextMenu = angular.element('<div>', {
+            'class': 'dropdown clearfix context-dropdown open'
+        });
+
+        $contextMenu.on('click', function(e) {
+            if ($(e.target).hasClass('dropdown')) {
+                _clearContextMenus(event);
+            }
+        });
+        $contextMenu.on('contextmenu', function(event) {
+            event.preventDefault();
+            _clearContextMenus(event);
+        });
+
+        $contextMenu.css({
+            position: 'absolute',
+            top: 0,
+            height: scrollHeight,
+            left: 0,
+            right: 0,
+            zIndex: 9999
+        });
+
+        $('body').append($contextMenu);
+
+        $ul = angular.element('<ul>', {
+            'class': 'dropdown-menu',
+            'role': 'menu'
+        });
+        renderItems();
+        $contextMenu.append($ul);
+
+        function renderItems() {
+            angular.forEach(items, function(item) {
+                var $li = angular.element('<li>');
+
+                if (item === null) {
+                    $li.addClass('divider');
+                } else {
+                    var $a = angular.element('<a>');
+                    $a.attr({
+                        tabindex: '-1',
+                        href: '#'
+                    });
+                    $a.text(item[0]);
+                    $li.append($a);
+                    $li.on('click', function(e) {
+                        e.preventDefault();
+                        scope.$apply(function() {
+                            _clearContextMenus(e);
+                            item[1].call(item, item);
+                        });
+                    });
+                }
+
+                $ul.append($li);
+            });
+        }
+    }
+
+    function _clearContextMenus(event) {
+        if (!event) {
+            return;
+        }
+
+        angular.element(event.currentTarget).removeClass('context');
+
+        var els = angular.element(".context-dropdown");
+        angular.forEach(els, function(el) {
+            angular.element(el).remove();
+        });
+    }
+
+    var contextMenuItemHeight = 0;
+
+    function setContextMenuPosition(event) {
+        if (contextMenuItemHeight === 0)
+            contextMenuItemHeight = $ul.children(0).height();
+
+        // Why not just call .width() and .height() on the container? Because those calculations cause browsers to reflow
+        // that can cause IE10 to take 200ms to render a context menu.
+        var cmWidth = 150;
+        var cmHeight = contextMenuItemHeight * $ul.children().length;
+        var startX = event.pageX + cmWidth >= window.innerWidth ? event.pageX - cmWidth : event.pageX;
+        var startY = event.pageY + cmHeight >= window.innerHeight ? event.pageY - cmHeight : event.pageY;
+
+        $ul.css({
+            display: 'block',
+            position: 'absolute',
+            left: startX,
+            top: startY,
+            'min-width': cmWidth
+        });
+    }
+}]]></link>
         <name>Tasker Portal Board with Filter</name>
         <option_schema>[{"hint":"If enabled, show the list filter in the breadcrumbs of the data table","name":"enable_filter","default_value":"false","section":"Behavior","label":"Enable Filter","type":"boolean"}]</option_schema>
         <public>false</public>
@@ -1188,60 +1203,64 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 //                                         Changes in Server Script and Client controller
 // 2.8   | 2022-08-20 | raj  | DFCT0010995 - "Show Matching" right-click option on "Modern Portal" displays incorrect results in "My Tasks" filter
 //                                         Changes in Client controller
+// 2.8 | 2022-09-13 | mmcc | DFCT0011301 - On the "Modern Portal" when clicking on the "Title" widget rows are jacked up (Rows do NOT display)
+//                                      In Client controller, reset data p to 1 and data row_count to 0 in the scope.on for countPanelClicked
+//                                      Changes made in Client controller.
+
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
-	// moved back to the top.  Since this is async, there is no reason to set any values on data
+    // moved back to the top.  Since this is async, there is no reason to set any values on data
     if (!input) // asynch load list
         return;
-		// STRY0121807
-		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('tasker_portal_board_with_filter');
-		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
-	
-		if(!input.userDefaultMenuTitle){
-			// DFCT0011087
-			data.userDefaultMenuTitle = data.settings.userDefaultMainFilter.diplayValue;
-			data.tasker_filter_id = data.settings.userDefaultMainFilter.value;
-		} else {
-			// DFCT0011087
-			data.userDefaultMenuTitle = input.userDefaultMenuTitle;
-			data.tasker_filter_id = input.tasker_filter_id;
-		}
+    // STRY0121807
+    var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('tasker_portal_board_with_filter');
+    data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+
+    if (!input.userDefaultMenuTitle) {
+        // DFCT0011087
+        data.userDefaultMenuTitle = data.settings.userDefaultMainFilter.diplayValue;
+        data.tasker_filter_id = data.settings.userDefaultMainFilter.value;
+    } else {
+        // DFCT0011087
+        data.userDefaultMenuTitle = input.userDefaultMenuTitle;
+        data.tasker_filter_id = input.tasker_filter_id;
+    }
     data.userID = gs.getUserID();
     // STRY0101803 - load user preferences object for use when opening forms
     // only load this one time
-		var tsss =  new x_153465_discovert.tasking_System_Settings_Scripts();
+    var tsss = new x_153465_discovert.tasking_System_Settings_Scripts();
     var OUsWhereIamAMember = tsss.getOUsWhereIamAMember();
-		// DFCT0010732
-		var OUsWhereIamAMemberAdmin = tsss.getMyOUMemberAdmins();
-		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
-		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
-		//               this prevented the user from completely clearing the filter
-		//               a new variable was added in the client script when the filter is changed from the breadcrumb
-		//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
-		if(input.breadcrumb_change==true){
-			data.filter = input.filter;
-			options.filter = input.filter;
-		}
-	
-		if (input && input.getURL==true){
-			var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
-			// DFCT0010669
-			var userPreferences = oUserPref.loadMyFormPreferences();
-			// if just getting the URL, then get URL and return
-			var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id,input.view);
-			data.sys_id = input.sys_id;
-			data.pageId = url_Properties.pageId;
-			data.pageTable = url_Properties.pageTable;
-			data.view = url_Properties.view;
-			data.portal_url_ref = url_Properties.portal_url_ref;
-			// only call once
-			data.getURL = false;
-			return;
-		}
+    // DFCT0010732
+    var OUsWhereIamAMemberAdmin = tsss.getMyOUMemberAdmins();
+    // DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
+    //               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
+    //               this prevented the user from completely clearing the filter
+    //               a new variable was added in the client script when the filter is changed from the breadcrumb
+    //               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
+    if (input.breadcrumb_change == true) {
+        data.filter = input.filter;
+        options.filter = input.filter;
+    }
 
-		// 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform
+    if (input && input.getURL == true) {
+        var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+        // DFCT0010669
+        var userPreferences = oUserPref.loadMyFormPreferences();
+        // if just getting the URL, then get URL and return
+        var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id, input.view);
+        data.sys_id = input.sys_id;
+        data.pageId = url_Properties.pageId;
+        data.pageTable = url_Properties.pageTable;
+        data.view = url_Properties.view;
+        data.portal_url_ref = url_Properties.portal_url_ref;
+        // only call once
+        data.getURL = false;
+        return;
+    }
+
+    // 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform
     data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
 
     data.msg = {};
@@ -1264,19 +1283,18 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
      * data.filter = the encoded query
      */
     // copy to data[name] from input[name] || option[name]
-
     optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'field_list', 'keywords', 'view']);
     optCopy(['relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
     // STRY0101803
-    optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments','DiscoverControllerURL']);
-	
-		// DFCT0011087 - changed to use id instead of title
-		if(data.tasker_filter_id && (input.initialLoad || input.menuChanged)) {
-			data = loadDefaultMenu(data.tasker_filter_id, data);
-			// DFCT0010617
-			data.initialLoad = false;
-			data.menuChanged = false;
-		}
+    optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments', 'DiscoverControllerURL']);
+
+    // DFCT0011087 - changed to use id instead of title
+    if (data.tasker_filter_id && (input.initialLoad || input.menuChanged)) {
+        data = loadDefaultMenu(data.tasker_filter_id, data);
+        // DFCT0010617
+        data.initialLoad = false;
+        data.menuChanged = false;
+    }
 
     if (!data.table) {
         data.invalid_table = true;
@@ -1294,20 +1312,20 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     if (!data.modal_title_fields)
         data.modal_title_fields = '';
 
-		// DFCT0010416 - this is a change from the OOTB form
-		//data.view = data.view || 'mobile';
-	
+    // DFCT0010416 - this is a change from the OOTB form
+    //data.view = data.view || 'mobile';
+
     data.table = data.table || $sp.getValue('table');
-		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
-		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
-		//               this prevented the user from completely clearing the filter
-		//               a new variable was added in the client script when the filter is changed from the breadcrumb
-		//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
-		if(input.breadcrumb_change==true){
-				data.filter = input.filter;
-		} else {
-			data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
-		}
+    // DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
+    //               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
+    //               this prevented the user from completely clearing the filter
+    //               a new variable was added in the client script when the filter is changed from the breadcrumb
+    //               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
+    if (input.breadcrumb_change == true) {
+        data.filter = input.filter;
+    } else {
+        data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
+    }
 
     // STRY0101803 -default to true if not set
     if (data.include_comments == undefined)
@@ -1325,7 +1343,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     if (isNaN(windowSize) || windowSize < 1)
         windowSize = 20;
     data.window_size = windowSize;
-	
+
     var gr;
     if (gs.getProperty("glide.security.ui.filter") == "true") {
         gr = new GlideRecord(data.table);
@@ -1353,8 +1371,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         gr.addQuery('123TEXTQUERY321', data.keywords);
         data.keywords = null;
     }
-	
-		data.filter = gr.getEncodedQuery();
+
+    data.filter = gr.getEncodedQuery();
     if (data.relationship_id) {
         var rel = GlideRelationship.get(data.relationship_id);
         var target = new GlideRecord(data.table);
@@ -1369,7 +1387,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         else
             gr.orderByDesc(data.o);
     }
-		// DFCT0010734 Modern Portal Filter - Sort does NOT work on multiple columns
+    // DFCT0010734 Modern Portal Filter - Sort does NOT work on multiple columns
     data.pfm_filter = gr.getEncodedQuery();
 
     data.window_start = data.page_index * data.window_size;
@@ -1442,8 +1460,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         //										or we would need a badge coding also
         // need to be able to define title fields and order and separator
 
-				// DFCT0010550 - set the default tooltip template
-				data.toolTipTemplate = 'task-info-tooltip-template';
+        // DFCT0010550 - set the default tooltip template
+        data.toolTipTemplate = 'task-info-tooltip-template';
         // need to define what loads in quick view for each table or at least set the title as it is different for task than the title on popup		
         var sys_id = gr.getUniqueValue();
         if (!data.popOverRecord[sys_id]) {
@@ -1469,62 +1487,62 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                     };
                     break;
                 case 'x_153465_discovert_tasker_requests':
-										// DFCT0010550
-										if(gr.getDisplayValue('parent') != ""){
-											// STRY0101803 set the default hover field for request if not set, load if set
-											data.hoverField = (data.hoverField != undefined && data.hoverField != '') ? data.hoverField : 'number';
-											data.popOverRecord[sys_id] = {
-													'sys_id': gr.getUniqueValue(),
-													'title': gr.getDisplayValue('number') + ' - ' + gr.getDisplayValue('parent.taskernumber') + ' - ' + gr.getDisplayValue('parent.short_description'),
-													// 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML; added u_top_task. as subtasks showed blank Objective
-													// "objective": gr.getDisplayValue('u_objective'),
-													"objective": gr.getDisplayValue('parent.u_top_task.u_objective'),
-													"short_description": gr.getDisplayValue('parent.short_description'),
-													"number": gr.getValue('number'),
-													"state": gr.getDisplayValue('parent.state'),
-													// TODO, QUESTION, do we use request type here or task type or a combination of both?
-													// "taskType": gr.getDisplayValue('parent.tasker_type'),
-													"taskType": gr.getDisplayValue('parent.tasker_type') + ' - ' + gr.getDisplayValue('u_request_type'),
-													"classification": gr.getDisplayValue('parent.classification'),
-													"assignment_group": gr.getDisplayValue('parent.assignment_group'),
-													'status': gr.getDisplayValue('parent.status'),
-													'reviewer': gr.getDisplayValue('parent.u_reviewer'),
-													'numComments': numComments
-											};
-										}
-										// DFCT0010550
-										if(gr.getDisplayValue('u_ou_parent') != ""){
-											var ou_request_status = gr.getDisplayValue('u_status');
-											var state_converted;
-											switch (ou_request_status){
-												case 'In progress':
-													state_converted = 'Work in Progress';
-													break;
-												case "Completed":
-													state_converted = 'Completed';
-													break;
-											}
-											// reset to ou request template
-											data.toolTipTemplate = 'ou-request-info-tooltip-template';
-											// STRY0101803 set the default hover field for request if not set, load if set
-											data.hoverField = (data.hoverField != undefined && data.hoverField != '') ? data.hoverField : 'number';
-											data.popOverRecord[sys_id] = {
-													'u_ou_parent': gr.getValue('u_ou_parent'),
-													'sys_id': gr.getUniqueValue(),
-													'title': gr.getDisplayValue('number') + ' - ' + gr.getDisplayValue('u_ou_parent.office_name'),
-													"u_request_type": gr.getDisplayValue('u_request_type'),
-													'state_converted': state_converted,
-													'u_status': ou_request_status,
-													'u_request_comments': gr.getDisplayValue('u_request_comments'),
-													'u_requested': gr.getDisplayValue('u_requested'),
-													'u_responded_by': gr.getDisplayValue('u_responded_by'),
-													'u_response': gr.getDisplayValue('u_response'),
-													'u_response_comments': gr.getDisplayValue('u_response_comments'),
-													'response_comments_html': "<p>" + gr.getDisplayValue('u_response_comments').toString().replace(/(?:\r\n|\r|\n)/g, '</p><p>') + "</p>",
-													'request_comments_html': "<p>" + gr.getDisplayValue('u_request_comments').toString().replace(/(?:\r\n|\r|\n)/g, '</p><p>') + "</p>"
-											};
-										}
-								
+                    // DFCT0010550
+                    if (gr.getDisplayValue('parent') != "") {
+                        // STRY0101803 set the default hover field for request if not set, load if set
+                        data.hoverField = (data.hoverField != undefined && data.hoverField != '') ? data.hoverField : 'number';
+                        data.popOverRecord[sys_id] = {
+                            'sys_id': gr.getUniqueValue(),
+                            'title': gr.getDisplayValue('number') + ' - ' + gr.getDisplayValue('parent.taskernumber') + ' - ' + gr.getDisplayValue('parent.short_description'),
+                            // 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML; added u_top_task. as subtasks showed blank Objective
+                            // "objective": gr.getDisplayValue('u_objective'),
+                            "objective": gr.getDisplayValue('parent.u_top_task.u_objective'),
+                            "short_description": gr.getDisplayValue('parent.short_description'),
+                            "number": gr.getValue('number'),
+                            "state": gr.getDisplayValue('parent.state'),
+                            // TODO, QUESTION, do we use request type here or task type or a combination of both?
+                            // "taskType": gr.getDisplayValue('parent.tasker_type'),
+                            "taskType": gr.getDisplayValue('parent.tasker_type') + ' - ' + gr.getDisplayValue('u_request_type'),
+                            "classification": gr.getDisplayValue('parent.classification'),
+                            "assignment_group": gr.getDisplayValue('parent.assignment_group'),
+                            'status': gr.getDisplayValue('parent.status'),
+                            'reviewer': gr.getDisplayValue('parent.u_reviewer'),
+                            'numComments': numComments
+                        };
+                    }
+                    // DFCT0010550
+                    if (gr.getDisplayValue('u_ou_parent') != "") {
+                        var ou_request_status = gr.getDisplayValue('u_status');
+                        var state_converted;
+                        switch (ou_request_status) {
+                            case 'In progress':
+                                state_converted = 'Work in Progress';
+                                break;
+                            case "Completed":
+                                state_converted = 'Completed';
+                                break;
+                        }
+                        // reset to ou request template
+                        data.toolTipTemplate = 'ou-request-info-tooltip-template';
+                        // STRY0101803 set the default hover field for request if not set, load if set
+                        data.hoverField = (data.hoverField != undefined && data.hoverField != '') ? data.hoverField : 'number';
+                        data.popOverRecord[sys_id] = {
+                            'u_ou_parent': gr.getValue('u_ou_parent'),
+                            'sys_id': gr.getUniqueValue(),
+                            'title': gr.getDisplayValue('number') + ' - ' + gr.getDisplayValue('u_ou_parent.office_name'),
+                            "u_request_type": gr.getDisplayValue('u_request_type'),
+                            'state_converted': state_converted,
+                            'u_status': ou_request_status,
+                            'u_request_comments': gr.getDisplayValue('u_request_comments'),
+                            'u_requested': gr.getDisplayValue('u_requested'),
+                            'u_responded_by': gr.getDisplayValue('u_responded_by'),
+                            'u_response': gr.getDisplayValue('u_response'),
+                            'u_response_comments': gr.getDisplayValue('u_response_comments'),
+                            'response_comments_html': "<p>" + gr.getDisplayValue('u_response_comments').toString().replace(/(?:\r\n|\r|\n)/g, '</p><p>') + "</p>",
+                            'request_comments_html': "<p>" + gr.getDisplayValue('u_request_comments').toString().replace(/(?:\r\n|\r|\n)/g, '</p><p>') + "</p>"
+                        };
+                    }
+
                     break;
                 case 'x_153465_discovert_tasker_schedule':
                     // STRY0101803 set the default hover field for request if not set, load if set
@@ -1589,40 +1607,40 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                 record.sub_category = {};
                 record.tasker_type = {};
                 record.state = {};
-								// STRY0108629
-								if(gr.parent){
-									record.parentType = 'Task';
-									record.category.display_value = gr.getDisplayValue('parent.category');
-									record.category.value = gr.getValue('parent.category');
-									record.sub_category.display_value = gr.getDisplayValue('parent.sub_category');
-									record.sub_category.value = gr.getValue('parent.sub_category');
-									record.tasker_type.display_value = gr.getDisplayValue('parent.tasker_type');
-									record.tasker_type.value = gr.getValue('parent.tasker_type');
-									record.state.display_value = gr.getDisplayValue('parent.state');
-									record.state.value = gr.getValue('parent.state');
-								} else {
-									record.parentType = 'Organizational Unit';
-									record.u_ou_parent = gr.getValue('u_ou_parent');
-								}
+                // STRY0108629
+                if (gr.parent) {
+                    record.parentType = 'Task';
+                    record.category.display_value = gr.getDisplayValue('parent.category');
+                    record.category.value = gr.getValue('parent.category');
+                    record.sub_category.display_value = gr.getDisplayValue('parent.sub_category');
+                    record.sub_category.value = gr.getValue('parent.sub_category');
+                    record.tasker_type.display_value = gr.getDisplayValue('parent.tasker_type');
+                    record.tasker_type.value = gr.getValue('parent.tasker_type');
+                    record.state.display_value = gr.getDisplayValue('parent.state');
+                    record.state.value = gr.getValue('parent.state');
+                } else {
+                    record.parentType = 'Organizational Unit';
+                    record.u_ou_parent = gr.getValue('u_ou_parent');
+                }
                 break;
             default:
                 break;
         }
         record.sys_id = gr.getValue('sys_id');
-				record.dcu_ref = '';
+        record.dcu_ref = '';
         // STRY0101803 set the id for the Task page based on the table of the filter
         switch (data.table) {
             case 'x_153465_discovert_route_task_instance':
                 record.href_id = gr.getValue('sys_id');
                 break;
             case 'x_153465_discovert_tasker_requests':
-								if(gr.parent){
-									record.href_id = gr.getValue('parent');
-								} else{
-									// STRY0108629
-									record.href_id = gr.getValue('sys_id');
-									record.dcu_ref = 'u_ou_parent';
-								}
+                if (gr.parent) {
+                    record.href_id = gr.getValue('parent');
+                } else {
+                    // STRY0108629
+                    record.href_id = gr.getValue('sys_id');
+                    record.dcu_ref = 'u_ou_parent';
+                }
                 break;
             case 'x_153465_discovert_tasker_schedule':
                 record.href_id = gr.getValue('sys_id');
@@ -1669,95 +1687,97 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
             data[name] = input[name] || options[name];
         });
     }
-	// DFCT0011087 - changed to use id instead of title
-	function loadDefaultMenu(filterId, data){
-		var menuFound;
-		// DFCT0011087 - changed to use id instead of title
-		menuFound = loadFilter(filterId);
-		// uddate data object with menu found
-		if(menuFound){
-			data.table = menuFound.table;
-			data.filter = menuFound.filter;
-			data.sp_page_dv = menuFound.view_all_page;
-			data.title = menuFound.filter_label;
-			data.d = menuFound.d;
-			data.o = menuFound.o;
-			data.modal_title_field_separator = menuFound.modal_title_field_separator;
-			data.modal_title_fields = menuFound.modal_title_fields;
-			// STRY0108629
-			data.DiscoverControllerURL = menuFound.DiscoverControllerURL;
-			data.include_comments = menuFound.include_comments;
-			if(menuFound.field_list != undefined && menuFound.field_list != ''){
-				data.field_list = menuFound.field_list;
-			} else {
-				data.field_list = undefined;
-			}
-		}
-		return data;
-	}
-	
-	// DFCT0011087 - changed to use id instead of title
-	function loadFilter(filterId) {
-		var filter;
-		// get filter from filters table
-		// STRY0101803 - had to change to glide record as some users couldn't see the Table field
-		var gr_filters = new GlideRecord('x_153465_discovert_tasker_filters');
-		// DFCT0011087 - changed to use id instead of title
-		if (gr_filters.get(filterId)) {
-			// STRY0099083
-			var currentFilter = gr_filters.getDisplayValue('u_filter');
-			// DFCT0010732
-			if (currentFilter.indexOf("OUsWhereIamAMemberAdmin") > 0) {
-				currentFilter = currentFilter.replace("OUsWhereIamAMemberAdmin", OUsWhereIamAMemberAdmin);
-			}
-			if (currentFilter.indexOf("OUsWhereIamAMember") > 0) {
-				currentFilter = currentFilter.replace("OUsWhereIamAMember", OUsWhereIamAMember);
-			}
-			// STRY0108629
-			var DiscoverControllerURL = gr_filters.getValue('u_discover_controller_url');
-			DiscoverControllerURL = DiscoverControllerURL != null ? (DiscoverControllerURL == true) : false;
+    // DFCT0011087 - changed to use id instead of title
+    function loadDefaultMenu(filterId, data) {
+        var menuFound;
+        // DFCT0011087 - changed to use id instead of title
+        menuFound = loadFilter(filterId);
+        // uddate data object with menu found
+        if (menuFound) {
+            data.table = menuFound.table;
+            data.filter = menuFound.filter;
+            data.sp_page_dv = menuFound.view_all_page;
+            data.title = menuFound.filter_label;
+            data.d = menuFound.d;
+            data.o = menuFound.o;
+            data.modal_title_field_separator = menuFound.modal_title_field_separator;
+            data.modal_title_fields = menuFound.modal_title_fields;
+            // STRY0108629
+            data.DiscoverControllerURL = menuFound.DiscoverControllerURL;
+            data.include_comments = menuFound.include_comments;
+            if (menuFound.field_list != undefined && menuFound.field_list != '') {
+                data.field_list = menuFound.field_list;
+            } else {
+                data.field_list = undefined;
+            }
+        }
+        return data;
+    }
 
-			// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
-			// Create the filter then push later
-			filter = {
-				tasker_filter_id: gr_filters.getUniqueValue(),
-				table: gr_filters.getDisplayValue('u_table.name'),
-				// STRY0101803
-				field_list: gr_filters.getDisplayValue('u_field_list') + '',
-				modal_title_fields: gr_filters.getDisplayValue('u_modal_title_fields') + '',
-				modal_title_field_separator: gr_filters.getDisplayValue('u_modal_title_field_separator') + '',
-				// STRY0101803 load the "hover over field" from the filter defnition if set
-				hoverField: gr_filters.getDisplayValue('u_hover_field') + '',
-				filter_label: gr_filters.getDisplayValue('u_filter_label'),
-				filter: currentFilter,
-				view_all_page: gr_filters.getDisplayValue('u_view_all_page'),
-				// STRY0101803
-				// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
-				// include_comments: gr_filters.getDisplayValue('u_include_comments'),
-				include_comments: gr_filters.getValue('u_include_comments'),
-				// STRY0108629
-				DiscoverControllerURL: DiscoverControllerURL,
-				o: gr_filters.getDisplayValue('u_order_by'),
-				d: gr_filters.getDisplayValue('u_direction')
-			};
-		}
-		
-		return filter;
-	}
+    // DFCT0011087 - changed to use id instead of title
+    function loadFilter(filterId) {
+        var filter;
+        // get filter from filters table
+        // STRY0101803 - had to change to glide record as some users couldn't see the Table field
+        var gr_filters = new GlideRecord('x_153465_discovert_tasker_filters');
+        // DFCT0011087 - changed to use id instead of title
+        if (gr_filters.get(filterId)) {
+            // STRY0099083
+            var currentFilter = gr_filters.getDisplayValue('u_filter');
+            // DFCT0010732
+            if (currentFilter.indexOf("OUsWhereIamAMemberAdmin") > 0) {
+                currentFilter = currentFilter.replace("OUsWhereIamAMemberAdmin", OUsWhereIamAMemberAdmin);
+            }
+            if (currentFilter.indexOf("OUsWhereIamAMember") > 0) {
+                currentFilter = currentFilter.replace("OUsWhereIamAMember", OUsWhereIamAMember);
+            }
+            // STRY0108629
+            var DiscoverControllerURL = gr_filters.getValue('u_discover_controller_url');
+            DiscoverControllerURL = DiscoverControllerURL != null ? (DiscoverControllerURL == true) : false;
+
+            // 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
+            // Create the filter then push later
+            filter = {
+                tasker_filter_id: gr_filters.getUniqueValue(),
+                table: gr_filters.getDisplayValue('u_table.name'),
+                // STRY0101803
+                field_list: gr_filters.getDisplayValue('u_field_list') + '',
+                modal_title_fields: gr_filters.getDisplayValue('u_modal_title_fields') + '',
+                modal_title_field_separator: gr_filters.getDisplayValue('u_modal_title_field_separator') + '',
+                // STRY0101803 load the "hover over field" from the filter defnition if set
+                hoverField: gr_filters.getDisplayValue('u_hover_field') + '',
+                filter_label: gr_filters.getDisplayValue('u_filter_label'),
+                filter: currentFilter,
+                view_all_page: gr_filters.getDisplayValue('u_view_all_page'),
+                // STRY0101803
+                // 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
+                // include_comments: gr_filters.getDisplayValue('u_include_comments'),
+                include_comments: gr_filters.getValue('u_include_comments'),
+                // STRY0108629
+                DiscoverControllerURL: DiscoverControllerURL,
+                o: gr_filters.getDisplayValue('u_order_by'),
+                d: gr_filters.getDisplayValue('u_direction')
+            };
+        }
+
+        return filter;
+    }
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1253</sys_mod_count>
+        <sys_mod_count>1273</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-20 20:48:28</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2022-09-13 18:58:26</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
