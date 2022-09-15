@@ -242,6 +242,8 @@
 //																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
 // 2.8 | 2022-08-31 | raj  |  DFCT0011236 - Click on any banner notification > My Task > Awaiting Acceptance, click "My Attachments", 'tab', that should NOT go away other tabs
 //																			Changes in the client script to reload widgets differently so the widget always exits and just changes instead of being set to null and readded
+// 2.8 | 2022-09-06 | raj  | DFCT0011217 - Stretch - "My Attachments' should be ONLY allowed to the associated  Task to the Task owner when uploading files in the My Attachment tab
+//																			In Server Script - pass canAttach to related list builder
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function($sp, input, data, options, gs) {
@@ -273,44 +275,58 @@
 	if (!data.table || !data.sys_id)
 		return;
 
-	// STRY0114416
-	var gr_Task_Attachments = new GlideRecord(data.table);
-	if (!gr_Task_Attachments.isValid())
+	// DFCT0011217 - change glide record name to set the gr_Task_Attachments record for the task.
+	//               this is helpful to get the task for shared attachements when the id and table are the tree
+	var gr_Task_Attachments;
+	
+	// STRY0114416  NOTE: using glide record here b/c we are setting permissions in this script
+	var gr_Table_of_Attachments = new GlideRecord(data.table);
+	if (!gr_Table_of_Attachments.isValid())
 		return;
 	
-	if (!gr_Task_Attachments.get(data.sys_id))
+	if (!gr_Table_of_Attachments.get(data.sys_id))
 		return;
 	
 	if (input && input.action == "deleted") {
-		gr_Task_Attachments.comments = input.action + " an attachment";
-		gr_Task_Attachments.update();
+		gr_Table_of_Attachments.comments = input.action + " an attachment";
+		gr_Table_of_Attachments.update();
 	}
 	if(input){
 		data.sys_id = input.sys_id;
 	}
 
+	// DFCT0011217 - set default values for all tables, this may be overriden for Task and Task Tree
+	data.isActive = gr_Table_of_Attachments.active;
+	data.canRead = gr_Table_of_Attachments.canRead();
+	data.canWrite = gr_Table_of_Attachments.canWrite();
+	data.canAttach = data.canWrite && gs.hasRole(gs.getProperty("glide.attachment.role"));
+	
 	//STRY0072011 | 2.5.13
-	if (data.table == 'x_153465_discovert_route_task_instance'){	
-		//------------------------------------------------------------------------------------------------------------------------
-		// CUSTOM: DOC. INT INTEGRATION - INITIALIZING VARIABLES 
-		//------------------------------------------------------------------------------------------------------------------------
-		var tDS = new taskerDocumentScripts();
-		var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(gr_Task_Attachments);
-		data.SNAttachmentsON = currentAttachDocSettings.sNOWAttachmentsOn.toString();
-		//------------------------------------------------------------------------------------------------------------------------
-		// CUSTOM: TASK INTEGRATION - ACTIVE - INITIALIZING VARIABLES 
-		//------------------------------------------------------------------------------------------------------------------------
-		data.isActive = gr_Task_Attachments.active;
-		//------------------------------------------------------------------------------------------------------------------------
-		data.canWrite = gr_Task_Attachments.canWrite() && data.SNAttachmentsON == 'true' && data.isActive == true; //STRY0072011 | 2.5.13 | Added: & data.SNAttachmentsON == true && data.isActive == true;
-		data.canAttach = gs.hasRole(gs.getProperty("glide.attachment.role")) && data.SNAttachmentsON == 'true' && data.isActive == true; //STRY0072011 | 2.5.13 | Added: & data.SNAttachmentsON == true && data.isActive == true;
-
-	} else {
-		data.canWrite = gr_Task_Attachments.canWrite();
-		data.canAttach = gs.hasRole(gs.getProperty("glide.attachment.role"));
+	if (data.table == 'x_153465_discovert_route_task_instance' ||
+			data.table == 'x_153465_discovert_task_tree'){
+		// NOTE: using glide record here b/c we are setting permissions in this script
+		gr_Task_Attachments = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+		data.task_id = (input || {}).task_id || options.task_id || $sp.getParameter("task_id");
+		if(gr_Task_Attachments.get(data.task_id)){
+			//------------------------------------------------------------------------------------------------------------------------
+			// CUSTOM: DOC. INT INTEGRATION - INITIALIZING VARIABLES 
+			//------------------------------------------------------------------------------------------------------------------------
+			var tDS = new taskerDocumentScripts();
+			var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(gr_Task_Attachments);
+			data.SNAttachmentsON = currentAttachDocSettings.sNOWAttachmentsOn.toString();
+			//------------------------------------------------------------------------------------------------------------------------
+			var TaskACLs = new TaskerTaskACLs(gr_Task_Attachments);
+			var canAttach = TaskACLs.canAttach();
+			data.canWrite = canAttach && data.SNAttachmentsON == 'true'; //STRY0072011 | 2.5.13 | Added: & data.SNAttachmentsON == true && data.isActive == true;
+			// DFCT0011217
+			data.canAttach = data.canWrite && gs.hasRole(gs.getProperty("glide.attachment.role"));
+		} else {
+			data.canWrite = false;
+			data.canAttach = false;
+			data.canRead = false;
+		}
 	}
 	
-	data.canRead = gr_Task_Attachments.canRead();
 	
 	function _getActualTable(table, id) {
 		if (!table)
@@ -339,14 +355,14 @@
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-04-22 17:25:45</sys_created_on>
         <sys_id>5a5d0f5cdb81b300bb8ee536ca96193f</sys_id>
-        <sys_mod_count>231</sys_mod_count>
+        <sys_mod_count>240</sys_mod_count>
         <sys_name>Tasker Attachments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5a5d0f5cdb81b300bb8ee536ca96193f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-09-01 19:17:16</sys_updated_on>
+        <sys_updated_on>2022-09-15 02:50:28</sys_updated_on>
         <template><![CDATA[<div ng-if="data.SNAttachmentsON == 'true'" ng-class="{'flex-column flex-grow dtech-overflow-hidden':data.bifold==true||data.isModal==true}">
   <div ng-if="data.canRead" class="panel panel-primary b" 
        ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-margin-bottom-0':data.bifold==true||data.isModal==true}">
