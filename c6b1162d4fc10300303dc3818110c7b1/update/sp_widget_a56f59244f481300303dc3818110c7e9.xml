@@ -2,1227 +2,1259 @@
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[api.controller = function($scope, $timeout, $http, $location, $rootScope, amb, spModal, spUtil, $interpolate, htmlToStringService) {
-	//------------------------------------------------------------------------------------------------------------------------
-	// COMPANY: DISCOVER TECHNOLOGIES
-	// CUSTOMIZED BY: KARINA TORRES
-	// RECURSIVE GRAPHICAL TREE FOR PROCESS INSTANCE
-	// HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
-	//------------------------------------------------------------------------------------------------------------------------
-	// 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
-	// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
-	//											some special characters in "instruction" or "Signature Instructions" field
-	// 											Add a private function to convert HTML to a simple string
-	//											Added missing semicolons, formatted code
-	// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
-	//											some special characters in "instruction" or "Signature Instructions" field
-	// 											Remove private function to convert HTML to a simple string; use service instead
-	//											Instructions and Signature Instructions need HTML converted to string before
-	//											the call to substring with field.maxChars
-	//------------------------------------------------------------------------------------------------------------------------
-	var c = this;
-	var twjs = x_153465_discovert.twJS;
-	var TREE_CONST;
-	var modalObjects;
-	var $go; // for conciseness in defining templates
-	//  UI/UX - STRY0065140 - 2.5 Template List - FIX
-	var diagram;
-	// this is used to set the initial select percent
-	var diagramInitCompleted = false;	
+    //------------------------------------------------------------------------------------------------------------------------
+    // COMPANY: DISCOVER TECHNOLOGIES
+    // CUSTOMIZED BY: KARINA TORRES
+    // RECURSIVE GRAPHICAL TREE FOR PROCESS INSTANCE
+    // HELPUL LINKS: https://gojs.net/latest/intro/textblocks.html
+    //------------------------------------------------------------------------------------------------------------------------
+    // 2.5.21 | 09.08.2020 | KT | UI  | STRY0074067: TECH - Tasker - Unified CSS on widgets (Internal Story, PO story needed)
+    // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes" when entering 
+    //											some special characters in "instruction" or "Signature Instructions" field
+    // 											Add a private function to convert HTML to a simple string
+    //											Added missing semicolons, formatted code
+    // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+    //											some special characters in "instruction" or "Signature Instructions" field
+    // 											Remove private function to convert HTML to a simple string; use service instead
+    //											Instructions and Signature Instructions need HTML converted to string before
+    //											the call to substring with field.maxChars
+    //------------------------------------------------------------------------------------------------------------------------
+    var c = this;
+    var twjs = x_153465_discovert.twJS;
+    var TREE_CONST;
+    var modalObjects;
+    var $go; // for conciseness in defining templates
+    //  UI/UX - STRY0065140 - 2.5 Template List - FIX
+    var diagram;
+    // this is used to set the initial select percent
+    var diagramInitCompleted = false;
 
-	// overview is the picture-in-picture image of the diagram
-	var myOverview;
-	var treeOrientation;
-	var treeOrientationWithinBorder;
-	var treeNodeAngle;
-	var url_id;
-	var watcher;
-	// TREE FOOTER TOOLBAR
-	var viewPortHeight = 0;
-	// call main function
-	
-	main();
-	function main(){
-		// every time the form is loaded, set not collpased based on whether the accordion is being used
-		c.data.isNotCollapsed = c.data.hide_accordion;
-		TREE_CONST = _loadTreeConstants();
-		$go = go.GraphObject.make; // for conciseness in defining templates
+    // overview is the picture-in-picture image of the diagram
+    var myOverview;
+    var treeOrientation;
+    var treeOrientationWithinBorder;
+    var treeNodeAngle;
+    var url_id;
+    var watcher;
+    // TREE FOOTER TOOLBAR
+    var viewPortHeight = 0;
+    // call main function
 
-		if(!c.data.selectedId || c.data.selectedId == 'null')
-			c.data.selectedId = $location.search().sys_id;
-		$scope.page = {
-			displayValue: $scope.data.title,
-			value: $scope.data.topParentTask_id,
-			name: 'page'
-		};
+    main();
 
-		// DFCT0010652 - STRY0119599
-		if (c.data.hide_accordion){
-			if(c.data.widgetTreeHeaderToolbars){
-				// load orientation from the header widget
-				treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
-			}
-			// DFCT0010674
-			resetDiagram();
-			// DFCT0011129
-			initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);
-		}
-	}
-	
-		// STRY0117600
-	function _loadTreeConstants() {
-		var oTREE_CONST = {
-			// DFCT0011227
-			tree_name_max_length: 43,
-			tree_details_max_length: 43,
-			// STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
-			fontStyle: "14px Segoe UI",
-			fontStyleTaskerNumber: "10px Segoe UI",
-			fontStyleNodeDetails: "12px Segoe UI",
-			node_id: "page_map",
-			minHeight: 12,
-			diagramMinHeight: 150,
-			horizontalTreeAngle: 0,
-			verticalTreeAngle: 90,
-			outlineWidth: 2,
-			roundedRectangleFill: "Gray",
-			node_active_bg: '#33738e',
-			node_inactive_bg: '#787878',
-			node_selected_border: "#00A4FF",//'#ADD8E6',
-			node_selected_border_stroke_width: 4,
+    function main() {
+        // every time the form is loaded, set not collpased based on whether the accordion is being used
+        c.data.isNotCollapsed = c.data.hide_accordion;
+        TREE_CONST = _loadTreeConstants();
+        $go = go.GraphObject.make; // for conciseness in defining templates
 
-			nodeOuterRectangelWidth: 310,
-			nodeOuterRectangelHeight: 80,
-			nodeTextPanelMargin:5,
-			numberPanelWidth: 90,
-			textPanelMinWidth:290,
-			textPanelMinHeight:35,
-			textPanelMaxWidth:290,
-			textPanelMaxHeight:35,
+        if (!c.data.selectedId || c.data.selectedId == 'null')
+            c.data.selectedId = $location.search().sys_id;
+        $scope.page = {
+            displayValue: $scope.data.title,
+            value: $scope.data.topParentTask_id,
+            name: 'page'
+        };
 
-			spacingNode:5,
-			spacingLayer: 60,
-			
-			//	Font Awesome css
-			// STRY0109208 - Add Create Icon
-			font_awesome_plus_o: '\uf067',
-			font_awesome_calendar_o: '\uf073',
-			font_awesome_user_o: '\uf007',
-			font_awesome_exclamation_triangle_o: '\uf071',
-			font_awesome_pencil_square_o: '\uf044',
-			// STRY0124682
-			font_awesome_info_o: '\uf129',
-			
-			icon_font: '18px FontAwesome',
-			icon_top_margin: 2,
-			icon_right_margin: 5,
-			icon_bottom_margin: 2,
-			icon_left_margin: 5,
-			icon_panel_width: 200,
-			
-			// NOTE: other trees set this default to 700, but task tree is setting to 200
-			toolTipHoverDelay: 200,
-			toolTipDuration: 10000,
-			toolTipBackgroundColor: '#FFFFFF', // "#C5C5C5"
-			toolTipNormalMargin : 3,
-			toolTipWarningNoteMargin : 6,
-			toolTipColumnWidth: 600, // "auto",
-			toolTipWarningMessageColumnWidth: 600,
-	    // -------------------------------------------------------------------	
+        // DFCT0010652 - STRY0119599
+        if (c.data.hide_accordion) {
+            if (c.data.widgetTreeHeaderToolbars) {
+                // load orientation from the header widget
+                treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+            }
+            // DFCT0010674
+            resetDiagram();
+            // DFCT0011129
+            initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);
+        }
+    }
 
-      node_status_ontime: '#37C1C3', //success
-			node_status_warning: '#F6C716', //warning
-			node_status_critical: '#E32921', //danger
-			node_colors : {
-				"waiting": {
-					bg: '#6b6b6b',
-					text: 'white',
-					warning: '#F6C716',
-					hover: '#F00'
-				},
-				"unassigned": {
-					bg: '#F6C716',
-					text: '#434343',
-					warning: '#000000',
-					hover: '#F00'
-				},
-				"assigned": {
-					bg: '#427A93',
-					text: 'white',
-					warning: '#000000',
-					hover: '#F00'
-				},
-				"accepted": {
-					bg: '#A0D468',
-					text: '#434343',
-					warning: '#000000',
-					hover: '#2E3C54'
-				},
-				"rejected": {
-					bg: '#E32921',
-					text: 'white',
-					warning: '#000000',
-					hover: '#F5F5F5'
-				},
-				"workinprogress": {
-					bg: '#2E3C54',
-					text: 'white',
-					warning: '#F6C716',
-					hover: '#F5F5F5'
-				},
-				"workscheduled": {
-					bg: '#2E3C54',
-					text: 'white',
-					warning: '#F6C716',
-					hover: '#F5F5F5'
-				},
-				"inreview": {
-					bg: '#736ac6',
-					text: 'white',
-					warning: '#000000',
-					hover: '#F5F5F5'
-				},
-				"rework": {
-					bg: '#2E3C54',
-					text: 'white',
-					warning: '#F6C716',
-					hover: '#F5F5F5'
-				},
-				"completed": {
-					bg: '#37C1C3',
-					text: '#434343',
-					warning: '#000000',
-					hover: '#2E3C54'
-				},
-				"closedincomplete": {
-					bg: '#37C1C3',
-					text: '#434343',
-					warning: '#000000',
-					hover: '#2E3C54'
-				},
-				"cancelled": {
-					bg: '#37C1C3',
-					text: '#434343',
-					warning: '#000000',
-					hover: '#2E3C54'
-				},
-				"colorDefault": {
-					bg: '#6b6b6b',
-					text: 'white',
-					warning: '#F6C716',
-					hover: '#F00'
-				}
-			}
-		};
-		return oTREE_CONST;
-	}
+    // STRY0117600
+    function _loadTreeConstants() {
+        var oTREE_CONST = {
+            // DFCT0011227
+            tree_name_max_length: 43,
+            tree_details_max_length: 43,
+            // STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
+            fontStyle: "14px Segoe UI",
+            fontStyleTaskerNumber: "10px Segoe UI",
+            fontStyleNodeDetails: "12px Segoe UI",
+            node_id: "page_map",
+            minHeight: 12,
+            diagramMinHeight: 150,
+            horizontalTreeAngle: 0,
+            verticalTreeAngle: 90,
+            outlineWidth: 2,
+            roundedRectangleFill: "Gray",
+            node_active_bg: '#33738e',
+            node_inactive_bg: '#787878',
+            node_selected_border: "#00A4FF", //'#ADD8E6',
+            node_selected_border_stroke_width: 4,
 
+            nodeOuterRectangelWidth: 310,
+            nodeOuterRectangelHeight: 80,
+            nodeTextPanelMargin: 5,
+            numberPanelWidth: 90,
+            textPanelMinWidth: 290,
+            textPanelMinHeight: 35,
+            textPanelMaxWidth: 290,
+            textPanelMaxHeight: 35,
 
-	function getStateColors(state, type) {
-		var font_color;
-		switch (state) {
-			case "-3": // waiting
-				font_color = getFontColors(type, TREE_CONST.node_colors.waiting);
-				break;
-			case "-5": // unassigned
-				font_color = getFontColors(type, TREE_CONST.node_colors.unassigned);
-				break;
-			case "1": // assigned
-				font_color = getFontColors(type, TREE_CONST.node_colors.assigned);
-				break;
-			case "10": // accepted
-				font_color = getFontColors(type, TREE_CONST.node_colors.accepted);
-				break;
-			case "11": // rejected
-				font_color = getFontColors(type, TREE_CONST.node_colors.rejected);
-				break;
-			case "13": // workinprogress
-				font_color = getFontColors(type, TREE_CONST.node_colors.workinprogress);
-				break;
-			case "12": // workscheduled
-				font_color = getFontColors(type, TREE_CONST.node_colors.workscheduled);
-				break;
-			case "14": // inreview
-				font_color = getFontColors(type, TREE_CONST.node_colors.inreview);
-				break;
-			case "15": // rework
-				font_color = getFontColors(type, TREE_CONST.node_colors.rework);
-				break;
-			case "3": // completed
-				font_color = getFontColors(type, TREE_CONST.node_colors.completed);
-				break;
-			case "4": // closedincomplete
-				font_color = getFontColors(type, TREE_CONST.node_colors.closedincomplete);
-				break;
-			case "7": // cancelled
-				font_color = getFontColors(type, TREE_CONST.node_colors.cancelled);
-				break;
-			default:
-				font_color = getFontColors(type, TREE_CONST.node_colors.colorDefault);
-		}
-		return font_color;
-	}
+            spacingNode: 5,
+            spacingLayer: 60,
 
-	function getFontColors(type, fontColors) {
-		var font_color;
-		switch (type) {
-			case "bg":
-				font_color = fontColors.bg;
-				break;
-			case "text":
-				font_color = fontColors.text;
-				break;
-			case "warning":
-				font_color = fontColors.warning;
-				break;
-			case "hover":
-				font_color = fontColors.hover;
-				break;
-		}
-		return font_color;
-	}
+            //	Font Awesome css
+            // STRY0109208 - Add Create Icon
+            font_awesome_plus_o: '\uf067',
+            font_awesome_calendar_o: '\uf073',
+            font_awesome_user_o: '\uf007',
+            font_awesome_exclamation_triangle_o: '\uf071',
+            font_awesome_pencil_square_o: '\uf044',
+            // STRY0124682
+            font_awesome_info_o: '\uf129',
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// START RECORD WATCHER BLOCK
-	// -----------------------------------------------------------------------------------------------------------------
-	function initRecordWatcher(table, filter) {
-		if (watcher)
-			watcher.unsubscribe();
+            icon_font: '18px FontAwesome',
+            icon_top_margin: 2,
+            icon_right_margin: 5,
+            icon_bottom_margin: 2,
+            icon_left_margin: 5,
+            icon_panel_width: 200,
 
-		if (table && filter) {
-			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
-			var params = {};
-			var watcherChannel = amb.getChannelRW(table, filter);
-			amb.connect();
-			watcher = watcherChannel.subscribe(function(name) {
-				var changes = name.data.changes;
-				var sys_id = name.data.sys_id;
-				switch (name.data.operation) {
-					case "update":
-						var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
-						if (nodeChangedFound) {
-							var nodeDataChanged = false;
-							for (var change in changes) {
-								if (c.data.fieldsInModel[changes[change]]) {
-									nodeDataChanged = true;
-									break;
-								}
-							}
-							if (nodeDataChanged) {
-								updateModelNodeData(nodeChangedFound, name.data.record);
-							}
-						}
-						break;
-					case "insert":
-						// 2.7.0 | 2021-11-02 | mmcc | DFCT0010588 - When creating a Subtask on the Task form, record watcher shows 2 subtasks created
-						// .model.findNodeDataForKey() returns null if a node data with that key cannot be found in the model...
-						var isNotFoundNodeInsert = diagram.model.findNodeDataForKey(sys_id) == null;
-						if (isNotFoundNodeInsert) {
-							if (name.data.record.parent) {
-								var newNodeData = createModelNodeData(sys_id, name.data.record);
-								diagram.startTransaction("Add new Task");
-								diagram.model.addNodeData(newNodeData);
-								diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
-								diagram.commitTransaction("Add new Task");
-								// if suspensedate changed, need to check parent and all subtasks again
-								checkDateWarnings(newNodeData);
-							}
-						}
-						break;
-					case "delete":
-						var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
-						if (nodeDeletedFound) {
-							diagram.model.removeNodeData(nodeDeletedFound);
-						}
-				}
-			});
-		}
-	}
-	
-	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
-	function createModelNodeData(sys_id, record) {
-		var newNodeData = {};
-		newNodeData.key = sys_id;
-		newNodeData.sys_id = sys_id;
-		for (var key in record) {
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if (field) {
-				fieldLabel = field.fieldLabel;
+            // NOTE: other trees set this default to 700, but task tree is setting to 200
+            toolTipHoverDelay: 200,
+            toolTipDuration: 10000,
+            toolTipBackgroundColor: '#FFFFFF', // "#C5C5C5"
+            toolTipNormalMargin: 3,
+            toolTipWarningNoteMargin: 6,
+            toolTipColumnWidth: 600, // "auto",
+            toolTipWarningMessageColumnWidth: 600,
+            // -------------------------------------------------------------------	
 
-				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
-				// displayValue = record[key].display_value;
-				if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
-					displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
-				} else {
-					displayValue = record[key].display_value;
-				}
-
-				if (field.maxChars > 0)
-					displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
-				if (field.hasValue) {
-					// many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
-					// others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to'
-					newNodeData[key] = record[key].value;
-				}
-				if (field.keyUsesDisplayOnly) {
-					// 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
-					newNodeData[key] = displayValue;
-				}
-				if (field.hasDiplayValue) {
-					// 'state_DisplayValue', 'assigned_to_DisplayValue'
-					newNodeData[key + '_DisplayValue'] = displayValue;
-				}
-				if (field.type == 'date') {
-					// DFCT0011140  - get date in user's timezone
-					var date_number = getDateFromFormat(record[key].display_value, g_user_date_time_format);
-					var tzDate = new Date();
-					var tzMinOffset = tzDate.getTimezoneOffset();
-					var tzOffset = tzMinOffset * 60 * 1000;
-					date_number = date_number - tzOffset;
-					newNodeData[key] = date_number;
-				}
-			} //if field wasn't found do nothing
-		}
+            node_status_ontime: '#37C1C3', //success
+            node_status_warning: '#F6C716', //warning
+            node_status_critical: '#E32921', //danger
+            node_colors: {
+                "waiting": {
+                    bg: '#6b6b6b',
+                    text: 'white',
+                    warning: '#F6C716',
+                    hover: '#F00'
+                },
+                "unassigned": {
+                    bg: '#F6C716',
+                    text: '#434343',
+                    warning: '#000000',
+                    hover: '#F00'
+                },
+                "assigned": {
+                    bg: '#427A93',
+                    text: 'white',
+                    warning: '#000000',
+                    hover: '#F00'
+                },
+                "accepted": {
+                    bg: '#A0D468',
+                    text: '#434343',
+                    warning: '#000000',
+                    hover: '#2E3C54'
+                },
+                "rejected": {
+                    bg: '#E32921',
+                    text: 'white',
+                    warning: '#000000',
+                    hover: '#F5F5F5'
+                },
+                "workinprogress": {
+                    bg: '#2E3C54',
+                    text: 'white',
+                    warning: '#F6C716',
+                    hover: '#F5F5F5'
+                },
+                "workscheduled": {
+                    bg: '#2E3C54',
+                    text: 'white',
+                    warning: '#F6C716',
+                    hover: '#F5F5F5'
+                },
+                "inreview": {
+                    bg: '#736ac6',
+                    text: 'white',
+                    warning: '#000000',
+                    hover: '#F5F5F5'
+                },
+                "rework": {
+                    bg: '#2E3C54',
+                    text: 'white',
+                    warning: '#F6C716',
+                    hover: '#F5F5F5'
+                },
+                "completed": {
+                    bg: '#37C1C3',
+                    text: '#434343',
+                    warning: '#000000',
+                    hover: '#2E3C54'
+                },
+                "closedincomplete": {
+                    bg: '#37C1C3',
+                    text: '#434343',
+                    warning: '#000000',
+                    hover: '#2E3C54'
+                },
+                "cancelled": {
+                    bg: '#37C1C3',
+                    text: '#434343',
+                    warning: '#000000',
+                    hover: '#2E3C54'
+                },
+                "colorDefault": {
+                    bg: '#6b6b6b',
+                    text: 'white',
+                    warning: '#F6C716',
+                    hover: '#F00'
+                }
+            }
+        };
+        return oTREE_CONST;
+    }
 
 
-		// DFCT0011078
-		newNodeData.name = getTaskTitleNode(newNodeData);
-		newNodeData.nodeDetails = getTaskNodeDetails(newNodeData);
-		
-		newNodeData.warning = {};
+    function getStateColors(state, type) {
+        var font_color;
+        switch (state) {
+            case "-3": // waiting
+                font_color = getFontColors(type, TREE_CONST.node_colors.waiting);
+                break;
+            case "-5": // unassigned
+                font_color = getFontColors(type, TREE_CONST.node_colors.unassigned);
+                break;
+            case "1": // assigned
+                font_color = getFontColors(type, TREE_CONST.node_colors.assigned);
+                break;
+            case "10": // accepted
+                font_color = getFontColors(type, TREE_CONST.node_colors.accepted);
+                break;
+            case "11": // rejected
+                font_color = getFontColors(type, TREE_CONST.node_colors.rejected);
+                break;
+            case "13": // workinprogress
+                font_color = getFontColors(type, TREE_CONST.node_colors.workinprogress);
+                break;
+            case "12": // workscheduled
+                font_color = getFontColors(type, TREE_CONST.node_colors.workscheduled);
+                break;
+            case "14": // inreview
+                font_color = getFontColors(type, TREE_CONST.node_colors.inreview);
+                break;
+            case "15": // rework
+                font_color = getFontColors(type, TREE_CONST.node_colors.rework);
+                break;
+            case "3": // completed
+                font_color = getFontColors(type, TREE_CONST.node_colors.completed);
+                break;
+            case "4": // closedincomplete
+                font_color = getFontColors(type, TREE_CONST.node_colors.closedincomplete);
+                break;
+            case "7": // cancelled
+                font_color = getFontColors(type, TREE_CONST.node_colors.cancelled);
+                break;
+            default:
+                font_color = getFontColors(type, TREE_CONST.node_colors.colorDefault);
+        }
+        return font_color;
+    }
 
-		// DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
-		newNodeData.canCreateSubTask = ((newNodeData.state != 3  && newNodeData.state != 4 && newNodeData.state != 7) &&
-																		(c.data.currentUser == newNodeData.assigned_to || c.data.currentUser == newNodeData.u_task_requester));
+    function getFontColors(type, fontColors) {
+        var font_color;
+        switch (type) {
+            case "bg":
+                font_color = fontColors.bg;
+                break;
+            case "text":
+                font_color = fontColors.text;
+                break;
+            case "warning":
+                font_color = fontColors.warning;
+                break;
+            case "hover":
+                font_color = fontColors.hover;
+                break;
+        }
+        return font_color;
+    }
 
-		// STRY0095748 - no suspensedate warning
-		newNodeData.warning.noSuspenseDate = (newNodeData.suspense_date == '' || newNodeData.suspense_date == null);
-		// New cannot be top in this context.  So, set to false on exteneral inbound fo task
-		newNodeData.isInboundExternalOU = false;
-		newNodeData.warning.isTopSuspenseDateAfterExternalInboundDate = false;
-		newNodeData.isOutboundExternalOU = (record.outbound == true);
-		newNodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate = newNodeData.isOutboundExternalOU && (record.u_external_due_date > record.suspense_date);
+    // -----------------------------------------------------------------------------------------------------------------
+    // START RECORD WATCHER BLOCK
+    // -----------------------------------------------------------------------------------------------------------------
+    function initRecordWatcher(table, filter) {
+        if (watcher)
+            watcher.unsubscribe();
 
-		newNodeData.warning.waitStatewithNoSubtasks = (((newNodeData.u_wait_for_subtasks_to_finish == 'true') && 
-																										(parseInt(newNodeData.calchaschildren) == 0)) ||
-																									 (((newNodeData.u_wait_for_subtasks_to_finish == 'true') && 
-																										(parseInt(newNodeData.calchaschildren) != 0) && 
-																										 (newNodeData.state==-3) &&
-																										 (parseInt(newNodeData.u_active_subtasks) == 0)
-																										)));
-		
-		newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
-		newNodeData.warning.assignedMemberEmpty = ((newNodeData.assigned_to == '' || newNodeData.assigned_to == null));
+        if (table && filter) {
+            // STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+            var params = {};
+            var watcherChannel = amb.getChannelRW(table, filter);
+            amb.connect();
+            watcher = watcherChannel.subscribe(function(name) {
+                var changes = name.data.changes;
+                var sys_id = name.data.sys_id;
+                switch (name.data.operation) {
+                    case "update":
+                        var nodeChangedFound = diagram.model.findNodeDataForKey(sys_id);
+                        if (nodeChangedFound) {
+                            var nodeDataChanged = false;
+                            for (var change in changes) {
+                                if (c.data.fieldsInModel[changes[change]]) {
+                                    nodeDataChanged = true;
+                                    break;
+                                }
+                            }
+                            if (nodeDataChanged) {
+                                updateModelNodeData(nodeChangedFound, name.data.record);
+                            }
+                        }
+                        break;
+                    case "insert":
+                        // 2.7.0 | 2021-11-02 | mmcc | DFCT0010588 - When creating a Subtask on the Task form, record watcher shows 2 subtasks created
+                        // .model.findNodeDataForKey() returns null if a node data with that key cannot be found in the model...
+                        var isNotFoundNodeInsert = diagram.model.findNodeDataForKey(sys_id) == null;
+                        if (isNotFoundNodeInsert) {
+                            if (name.data.record.parent) {
+                                var newNodeData = createModelNodeData(sys_id, name.data.record);
+                                diagram.startTransaction("Add new Task");
+                                diagram.model.addNodeData(newNodeData);
+                                diagram.model.setParentKeyForNodeData(newNodeData, name.data.record.parent.value);
+                                diagram.commitTransaction("Add new Task");
+                                // if suspensedate changed, need to check parent and all subtasks again
+                                checkDateWarnings(newNodeData);
+                            }
+                        }
+                        break;
+                    case "delete":
+                        var nodeDeletedFound = diagram.model.findNodeDataForKey(sys_id);
+                        if (nodeDeletedFound) {
+                            diagram.model.removeNodeData(nodeDeletedFound);
+                        }
+                }
+            });
+        }
+    }
 
-		// if status is not provided on a new record, set to unkown
-		if (!newNodeData.status)
-			newNodeData.status = 'unkown';
+    // load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+    function createModelNodeData(sys_id, record) {
+        var newNodeData = {};
+        newNodeData.key = sys_id;
+        newNodeData.sys_id = sys_id;
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
 
-		return newNodeData;
-	}
+                // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
 
-	// load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
-	function updateModelNodeData(nodeData, record) {
-		for (var key in record) {
-			var displayValue = '';
-			var fieldLabel = '';
-			var field = c.data.fieldsInModel[key];
-			if (field) {
-				fieldLabel = field.fieldLabel;
+                if (field.maxChars > 0)
+                    displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
+                if (field.hasValue) {
+                    // many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
+                    // others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to'
+                    newNodeData[key] = record[key].value;
+                }
+                if (field.keyUsesDisplayOnly) {
+                    // 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
+                    newNodeData[key] = displayValue;
+                }
+                if (field.hasDiplayValue) {
+                    // 'state_DisplayValue', 'assigned_to_DisplayValue'
+                    newNodeData[key + '_DisplayValue'] = displayValue;
+                }
+                if (field.type == 'date') {
+                    // DFCT0011140  - get date in user's timezone
+                    var date_number = getDateFromFormat(record[key].display_value, g_user_date_time_format);
+                    var tzDate = new Date();
+                    var tzMinOffset = tzDate.getTimezoneOffset();
+                    var tzOffset = tzMinOffset * 60 * 1000;
+                    date_number = date_number - tzOffset;
+                    newNodeData[key] = date_number;
+                }
+            } //if field wasn't found do nothing
+        }
 
-				// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
-				// displayValue = record[key].display_value;
-				if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
-					displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
-				} else {
-					displayValue = record[key].display_value;
-				}
 
-				if (field.maxChars > 0)
-					displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
-				if (field.hasValue) {
-					// many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
-					// others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to'
-					diagram.model.setDataProperty(nodeData, key, record[key].value); // this is the default value to key match
-				}
-				if (field.keyUsesDisplayOnly) {
-					// 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
-					diagram.model.setDataProperty(nodeData, key, displayValue);
-				}
-				if (field.hasDiplayValue) {
-					// 'state_DisplayValue', 'assigned_to_DisplayValue'
-					diagram.model.setDataProperty(nodeData, key + '_DisplayValue', displayValue);
-				}
-				if (field.type == 'date') {
-					// DFCT0011140  - get date in user's timezone
-					var date_number = getDateFromFormat(record[key].display_value, g_user_date_time_format);
-					var tzDate = new Date();
-					var tzMinOffset = tzDate.getTimezoneOffset();
-					var tzOffset = tzMinOffset * 60 * 1000;
-					date_number = date_number - tzOffset;
-					diagram.model.setDataProperty(nodeData, key, date_number);
-				}
-			} //if field wasn't found do nothing
-		}
-		var nameValue = getTaskTitleNode(nodeData);
-		if (nodeData.name != nameValue) {
-			diagram.model.setDataProperty(nodeData, 'name', nameValue);
-		}
+        // DFCT0011078
+        newNodeData.name = getTaskTitleNode(newNodeData);
+        newNodeData.nodeDetails = getTaskNodeDetails(newNodeData);
 
-		// DFCT0011078
-		var nodeDetails = getTaskNodeDetails(nodeData);
-		if (nodeData.nodeDetails != nodeDetails) {
-			diagram.model.setDataProperty(nodeData, 'nodeDetails', nodeDetails);
-		}
+        newNodeData.warning = {};
 
-		// DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
-		var canCreateSubTask = ((nodeData.state != 3  && nodeData.state != 4 && nodeData.state != 7) &&
-														(c.data.currentUser == nodeData.assigned_to || c.data.currentUser == nodeData.u_task_requester));
-		if (nodeData.canCreateSubTask != canCreateSubTask) {
-			diagram.model.setDataProperty(nodeData, 'canCreateSubTask', canCreateSubTask);
-		}
+        // DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
+        newNodeData.canCreateSubTask = ((newNodeData.state != 3 && newNodeData.state != 4 && newNodeData.state != 7) &&
+            (c.data.currentUser == newNodeData.assigned_to || c.data.currentUser == newNodeData.u_task_requester));
 
-		var newWaitState = (((nodeData.u_wait_for_subtasks_to_finish == 'true') && 
-																										(parseInt(nodeData.calchaschildren) == 0)) ||
-																									 (((nodeData.u_wait_for_subtasks_to_finish == 'true') && 
-																										(parseInt(nodeData.calchaschildren) != 0) && 
-																										 (nodeData.state==-3) &&
-																										 (parseInt(nodeData.u_active_subtasks) == 0)
-																										)));
-		
-		if (nodeData.warning.waitStatewithNoSubtasks != newWaitState) {
-			diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
-		}
-		// STRY0095748 - no suspensedate warning
-		var newSuspenseDateFlag = (nodeData.suspense_date == '' || nodeData.suspense_date == null);
-		if (nodeData.warning.noSuspenseDate != newSuspenseDateFlag) {
-			diagram.model.setDataProperty(nodeData.warning, 'noSuspenseDate', newSuspenseDateFlag);
-		}
-		var newExtInboundFlag = nodeData.isInboundExternalOU && (nodeData.suspense_date > nodeData.u_external_due_date);
-		if (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate != newExtInboundFlag) {
-			diagram.model.setDataProperty(nodeData.warning, 'isTopSuspenseDateAfterExternalInboundDate', newExtInboundFlag);
-		}
-		var newExtOutboundFlag = nodeData.isOutboundExternalOU && (nodeData.u_external_due_date > nodeData.suspense_date);
-		if (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate != newExtOutboundFlag) {
-			diagram.model.setDataProperty(nodeData.warning, 'isTopSuspenseDateBeforeExternalOutboundDate', newExtOutboundFlag);
-		}
+        // STRY0095748 - no suspensedate warning
+        newNodeData.warning.noSuspenseDate = (newNodeData.suspense_date == '' || newNodeData.suspense_date == null);
+        // New cannot be top in this context.  So, set to false on exteneral inbound fo task
+        newNodeData.isInboundExternalOU = false;
+        newNodeData.warning.isTopSuspenseDateAfterExternalInboundDate = false;
+        newNodeData.isOutboundExternalOU = (record.outbound == true);
+        newNodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate = newNodeData.isOutboundExternalOU && (record.u_external_due_date > record.suspense_date);
 
-		var primaryAssigneeEmpty = (nodeData.primary_assignee == '' || nodeData.primary_assignee == null);
-		if (primaryAssigneeEmpty != nodeData.warning.primaryAssigneeEmpty) {
-			diagram.model.setDataProperty(nodeData.warning, 'primaryAssigneeEmpty', primaryAssigneeEmpty);
-		}
-		var assignedMemberEmpty = ((nodeData.assigned_to == '' || nodeData.assigned_to == null));
-		if (assignedMemberEmpty != nodeData.warning.assignedMemberEmpty) {
-			diagram.model.setDataProperty(nodeData.warning, 'assignedMemberEmpty', assignedMemberEmpty);
-		}
-		// if suspensedate changed, need to check parent and all subtasks again
-		checkDateWarnings(nodeData);
-		diagram.model.updateTargetBindings(nodeData);
-	}
+        newNodeData.warning.waitStatewithNoSubtasks = (((newNodeData.u_wait_for_subtasks_to_finish == 'true') &&
+                (parseInt(newNodeData.calchaschildren) == 0)) ||
+            (((newNodeData.u_wait_for_subtasks_to_finish == 'true') &&
+                (parseInt(newNodeData.calchaschildren) != 0) &&
+                (newNodeData.state == -3) &&
+                (parseInt(newNodeData.u_active_subtasks) == 0)
+            )));
 
-	function getTaskTitleNode(nodeData) {
-		var nodeOrder = "";
-		if(nodeData.order != null && nodeData.order != "null"){
-			nodeOrder = nodeData.order + ". ";
-		}
+        newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
+        newNodeData.warning.assignedMemberEmpty = ((newNodeData.assigned_to == '' || newNodeData.assigned_to == null));
 
-		var nodeTitle = nodeData.short_description;
-		if (nodeData.parent != '') nodeTitle = nodeOrder + nodeTitle; // NEW
-		// DFCT0011078 - STRY0127737 - updated name and details and separated number
-		if(nodeTitle.length > TREE_CONST.tree_name_max_length){
-			nodeTitle = nodeTitle.substring(0, TREE_CONST.tree_name_max_length) + "...";
-		}
-		return nodeTitle;
-	}
-		
-	function getTaskNodeDetails(nodeData) {
-		// DFCT0011078
-		var nodeDetails = "";
-		var active_subtasks = 0;
-		if(nodeData.u_active_subtasks != null && nodeData.u_active_subtasks != "null" &&
-			 nodeData.u_active_subtasks != undefined && nodeData.u_active_subtasks != "undefined" ){
-			active_subtasks = nodeData.u_active_subtasks;
-		}
-	
-		switch (nodeData.state_DisplayValue) {
-			case 'Waiting':
-				if (nodeData.calchaschildren == '0')
-					nodeDetails += nodeData.state_DisplayValue + " on creating Subtasks ";
-				else
-					nodeDetails += nodeData.state_DisplayValue + " on " + active_subtasks + " out of " + nodeData.calchaschildren + " Subtasks";
-				break;
-			case 'Assigned':
-				nodeDetails += nodeData.state_DisplayValue + " to " + nodeData.assigned_to_DisplayValue;
-				break;
-			// DFCT0011179
-			case 'Accepted':
-			case 'Work in Progress':
-			case 'Completed':
-				// STRY0128732 Task Tree- Improved Messaging for Decision Made on Approval and Concurrence Tasker Types
-				if(nodeData.decision_DisplayValue && nodeData.decision_DisplayValue !="" && nodeData.decision_DisplayValue != 'N/A'){
-					nodeDetails += nodeData.decision_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
-				} else {
-					nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
-				}
-			break;
-			case 'In Review':
-				nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.u_reviewer + ", Worked by " + nodeData.assigned_to_DisplayValue;
-				break;
-			default:
-				nodeDetails += nodeData.state_DisplayValue;
-				break;
-		}
-		// DFCT0011227
-		if(nodeDetails.length > TREE_CONST.tree_details_max_length){
-			nodeDetails = nodeDetails.substring(0, TREE_CONST.tree_details_max_length) + "...";
-		}
-		
-		return nodeDetails;
-	}
+        // if status is not provided on a new record, set to unkown
+        if (!newNodeData.status)
+            newNodeData.status = 'unkown';
 
-	function checkDateWarnings(changedNodeData) {
-		if (changedNodeData.parent != '' && changedNodeData.parent != undefined) {
-			var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
-			compareParentDateToAllChildren(parentNodeData.sys_id);
-		}
-		compareParentDateToAllChildren(changedNodeData.sys_id);
-	}
+        return newNodeData;
+    }
 
-	function compareParentDateToAllChildren(parentKey) {
-		var parentNode = diagram.findNodeForKey(parentKey);
-		var childrenNodes = parentNode.findTreeChildrenNodes();
-		var parentAfterAllChildren = true;
-		while (childrenNodes.next()) {
-			var node = childrenNodes.value;
-			var childAfterParent = (node.data.suspense_date > parentNode.data.suspense_date);
-			if (childAfterParent) {
-				parentAfterAllChildren = false;
-			}
-			diagram.model.setDataProperty(node.data.warning, 'isSuspenseDateAfterParent', childAfterParent);
-			diagram.model.updateTargetBindings(node.data);
-		}
-		diagram.model.setDataProperty(parentNode.data.warning, 'isSuspenseDateAfterChildren', parentAfterAllChildren);
-		diagram.model.updateTargetBindings(parentNode.data);
-	}
-	// -----------------------------------------------------------------------------------------------------------------
-	// END RECORD WATCHER BLOCK
-	// -----------------------------------------------------------------------------------------------------------------
+    // load all of the field names used in the task tree nodes (see TaskHelpers.getTaskTreeLevelO and TaskHelpers.getTaskTitleNode)
+    function updateModelNodeData(nodeData, record) {
+        for (var key in record) {
+            var displayValue = '';
+            var fieldLabel = '';
+            var field = c.data.fieldsInModel[key];
+            if (field) {
+                fieldLabel = field.fieldLabel;
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// START EVENTS RAISED
-	// -----------------------------------------------------------------------------------------------------------------
-	function nodeSelectionChanged(node) {
-		var evt = {};
-		var d = node.data;
+                // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
+                // displayValue = record[key].display_value;
+                if ((field.fieldName == 'u_signature_instructions') || (field.fieldName == 'instructions')) {
+                    displayValue = htmlToStringService.convertHtmlToString(record[key].display_value);
+                } else {
+                    displayValue = record[key].display_value;
+                }
 
-		// if Task State is Draft
-		if (d.state == -6) {
-			c.data.isTopTaskOrNotDraft = false;
-			// if this is the top node then parent is undefined
-			if (d.parent == undefined) {
-				// Do not show the Draft task(s) can only be published message
-				c.data.isTopTaskOrNotDraft = true;
-			}
-		} else {
-			// Do not show the Draft task(s) can only be published message
-			c.data.isTopTaskOrNotDraft = true;
-		}
+                if (field.maxChars > 0)
+                    displayValue = displayValue.toString().length > field.maxChars ? displayValue.substring(0, field.maxChars - 1) : displayValue.toString();
+                if (field.hasValue) {
+                    // many have value, only a few have only value 'calchaschildren', 'parent', 'u_wait_for_subtasks_to_finish'
+                    // others 'primary_assignee', 'primary_office', 'tasking_authority', 'state', 'assigned_to'
+                    diagram.model.setDataProperty(nodeData, key, record[key].value); // this is the default value to key match
+                }
+                if (field.keyUsesDisplayOnly) {
+                    // 'status', 'task_name', 'u_active_subtasks', 'order', 'u_reviewer': 
+                    diagram.model.setDataProperty(nodeData, key, displayValue);
+                }
+                if (field.hasDiplayValue) {
+                    // 'state_DisplayValue', 'assigned_to_DisplayValue'
+                    diagram.model.setDataProperty(nodeData, key + '_DisplayValue', displayValue);
+                }
+                if (field.type == 'date') {
+                    // DFCT0011140  - get date in user's timezone
+                    var date_number = getDateFromFormat(record[key].display_value, g_user_date_time_format);
+                    var tzDate = new Date();
+                    var tzMinOffset = tzDate.getTimezoneOffset();
+                    var tzOffset = tzMinOffset * 60 * 1000;
+                    date_number = date_number - tzOffset;
+                    diagram.model.setDataProperty(nodeData, key, date_number);
+                }
+            } //if field wasn't found do nothing
+        }
+        var nameValue = getTaskTitleNode(nodeData);
+        if (nodeData.name != nameValue) {
+            diagram.model.setDataProperty(nodeData, 'name', nameValue);
+        }
 
-		evt.sys_id = d.sys_id;
-		if (evt.sys_id == c.data.selectedId) // get called twice by gojs
-			return;
-		evt.table = d.sys_class_name || c.data.table;
-		c.data.selectedId = evt.sys_id;
-		// TREE FOOTER TOOLBAR
-		// STRY0117600 - need to update the child widget toolbar footer
-		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
+        // DFCT0011078
+        var nodeDetails = getTaskNodeDetails(nodeData);
+        if (nodeData.nodeDetails != nodeDetails) {
+            diagram.model.setDataProperty(nodeData, 'nodeDetails', nodeDetails);
+        }
 
-		$location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
-		$rootScope.$broadcast('$sp.list.click', evt);
-		//$rootScope.$broadcast('data_table.click', evt);// KT - TLV - STRY0057360 - Macro Widget
+        // DFCT0010684 - This code needs to mirror the code in uiConditionCheck for canCreateSubTask
+        var canCreateSubTask = ((nodeData.state != 3 && nodeData.state != 4 && nodeData.state != 7) &&
+            (c.data.currentUser == nodeData.assigned_to || c.data.currentUser == nodeData.u_task_requester));
+        if (nodeData.canCreateSubTask != canCreateSubTask) {
+            diagram.model.setDataProperty(nodeData, 'canCreateSubTask', canCreateSubTask);
+        }
 
-		diagram.centerRect(node.actualBounds);
-	}
-	// -----------------------------------------------------------------------------------------------------------------
-	// END EVENTS RAISED
-	// -----------------------------------------------------------------------------------------------------------------
+        var newWaitState = (((nodeData.u_wait_for_subtasks_to_finish == 'true') &&
+                (parseInt(nodeData.calchaschildren) == 0)) ||
+            (((nodeData.u_wait_for_subtasks_to_finish == 'true') &&
+                (parseInt(nodeData.calchaschildren) != 0) &&
+                (nodeData.state == -3) &&
+                (parseInt(nodeData.u_active_subtasks) == 0)
+            )));
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// START EVENTS MONITORED
-	// -----------------------------------------------------------------------------------------------------------------
-	// STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
-	$rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
-		// NOTE: this does not post back to the server, so no reason to reset the header and footer diagram objects in Task Tree
-		if (diagram == undefined) {
-			return;
-		}
-		// if the event was not raised on the table associated with this widget, ignore the click
-		if (c.data.table == parms.table && c.data.sys_id != parms.sys_id) {
-			c.data.sys_id = parms.sys_id;
-			// STRY0074663 Only rebroadcast if the node changed
-			if (c.data.selectedId != parms.sys_id) {
-				c.data.selectedId = parms.sys_id;
-				// Select the node using the sys_id parameter supplied.
-				var node_select = diagram.findNodeForKey(c.data.selectedId);
-				diagram.select(node_select);
-			}
-		}
-	});
+        if (nodeData.warning.waitStatewithNoSubtasks != newWaitState) {
+            diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
+        }
+        // STRY0095748 - no suspensedate warning
+        var newSuspenseDateFlag = (nodeData.suspense_date == '' || nodeData.suspense_date == null);
+        if (nodeData.warning.noSuspenseDate != newSuspenseDateFlag) {
+            diagram.model.setDataProperty(nodeData.warning, 'noSuspenseDate', newSuspenseDateFlag);
+        }
+        var newExtInboundFlag = nodeData.isInboundExternalOU && (nodeData.suspense_date > nodeData.u_external_due_date);
+        if (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate != newExtInboundFlag) {
+            diagram.model.setDataProperty(nodeData.warning, 'isTopSuspenseDateAfterExternalInboundDate', newExtInboundFlag);
+        }
+        var newExtOutboundFlag = nodeData.isOutboundExternalOU && (nodeData.u_external_due_date > nodeData.suspense_date);
+        if (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate != newExtOutboundFlag) {
+            diagram.model.setDataProperty(nodeData.warning, 'isTopSuspenseDateBeforeExternalOutboundDate', newExtOutboundFlag);
+        }
 
-	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
-		if (diagram == undefined) {
-			return;
-		}
-		// if the item is already selected ignore the click
-		if (c.data.sys_id != parms.sys_id) {
-			c.data.sys_id = parms.sys_id;
-			// STRY0074663 Only rebroadcast if the node changed
-			if (c.data.selectedId != parms.sys_id) {
-				c.data.selectedId = parms.sys_id;
-				// Select the node using the sys_id parameter supplied.
-				var node_select = diagram.findNodeForKey(c.data.selectedId);
-				diagram.select(node_select);
-			}
-		}
-	});
-	
-	$scope.$on("field.change", function(evt, parms) {
-		if (parms.field.name == 'page')
-			changePage(parms.newValue);
-	});
+        var primaryAssigneeEmpty = (nodeData.primary_assignee == '' || nodeData.primary_assignee == null);
+        if (primaryAssigneeEmpty != nodeData.warning.primaryAssigneeEmpty) {
+            diagram.model.setDataProperty(nodeData.warning, 'primaryAssigneeEmpty', primaryAssigneeEmpty);
+        }
+        var assignedMemberEmpty = ((nodeData.assigned_to == '' || nodeData.assigned_to == null));
+        if (assignedMemberEmpty != nodeData.warning.assignedMemberEmpty) {
+            diagram.model.setDataProperty(nodeData.warning, 'assignedMemberEmpty', assignedMemberEmpty);
+        }
+        // if suspensedate changed, need to check parent and all subtasks again
+        checkDateWarnings(nodeData);
+        diagram.model.updateTargetBindings(nodeData);
+    }
 
-	function changePage(p) {
-		var path = $location.path();
-		var searchParms = $location.search();
-		$location.search({
-			id: searchParms.id,
-			p: p
-		});
-	}
+    function getTaskTitleNode(nodeData) {
+        var nodeOrder = "";
+        if (nodeData.order != null && nodeData.order != "null") {
+            nodeOrder = nodeData.order + ". ";
+        }
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// END EVENTS MONITORED
-	// -----------------------------------------------------------------------------------------------------------------
+        var nodeTitle = nodeData.short_description;
+        if (nodeData.parent != '') nodeTitle = nodeOrder + nodeTitle; // NEW
+        // DFCT0011078 - STRY0127737 - updated name and details and separated number
+        if (nodeTitle.length > TREE_CONST.tree_name_max_length) {
+            nodeTitle = nodeTitle.substring(0, TREE_CONST.tree_name_max_length) + "...";
+        }
+        return nodeTitle;
+    }
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// TASK TREE FEATURES
-	// BEGIN BLOCK
-	// -----------------------------------------------------------------------------------------------------------------
-	$scope.getMap = function() {
-		$scope.toggleCollpased();
-		loadMap();
-	};
+    function getTaskNodeDetails(nodeData) {
+        // DFCT0011078
+        var nodeDetails = "";
+        var active_subtasks = 0;
+        if (nodeData.u_active_subtasks != null && nodeData.u_active_subtasks != "null" &&
+            nodeData.u_active_subtasks != undefined && nodeData.u_active_subtasks != "undefined") {
+            active_subtasks = nodeData.u_active_subtasks;
+        }
 
-	$scope.toggleCollpased= function() {
-	// you are here, why does toggle get messed up after second click		
-		if(c.data.hide_accordion){
-			c.data.isNotCollapsed = true;	
-		} else {
-			c.data.isNotCollapsed = !c.data.isNotCollapsed;
-		}
-	}
-	
-	// DFCT0010652
-	function loadMap(){
-		if (c.data.map == undefined || c.data.map.length == 0) {
-			$scope.data.loadData = true;
-			// DFCT0010652
-			$scope.hide_accordion=c.data.hide_accordion;
-			// TREE FOOTER TOOLBAR
-			// STRY0117600 - does not like diagram posted back to server
-			if(c.data.widgetTreeFooterToolbars){
-				c.data.widgetTreeFooterToolbars[0].diagram = null;	
-			}
-			if(c.data.widgetTreeHeaderToolbars){
-				c.data.widgetTreeHeaderToolbars[0].diagram = null;	
-			}
-			spUtil.update($scope).then(function(data) {
-				if(c.data.widgetTreeHeaderToolbars){
-					// load orientation from the header widget
-					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
-				}
-				resetDiagram();
-				// DFCT0011129
-				initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);				
-			});
-			// DFCT0010674
-		} else {
-			resetDiagram();
-		}
-	}
-	// -----------------------------------------------------------------------------------------------------------------
-	// TASK TREE FEATURES
-	// END BLOCK
-	// -----------------------------------------------------------------------------------------------------------------
+        switch (nodeData.state_DisplayValue) {
+            case 'Waiting':
+                if (nodeData.calchaschildren == '0')
+                    nodeDetails += nodeData.state_DisplayValue + " on creating Subtasks ";
+                else
+                    nodeDetails += nodeData.state_DisplayValue + " on " + active_subtasks + " out of " + nodeData.calchaschildren + " Subtasks";
+                break;
+            case 'Assigned':
+                nodeDetails += nodeData.state_DisplayValue + " to " + nodeData.assigned_to_DisplayValue;
+                break;
+                // DFCT0011179
+            case 'Accepted':
+            case 'Work in Progress':
+            case 'Completed':
+                // STRY0128732 Task Tree- Improved Messaging for Decision Made on Approval and Concurrence Tasker Types
+                if (nodeData.decision_DisplayValue && nodeData.decision_DisplayValue != "" && nodeData.decision_DisplayValue != 'N/A') {
+                    nodeDetails += nodeData.decision_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
+                } else {
+                    nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.assigned_to_DisplayValue;
+                }
+                break;
+            case 'In Review':
+                nodeDetails += nodeData.state_DisplayValue + " by " + nodeData.u_reviewer + ", Worked by " + nodeData.assigned_to_DisplayValue;
+                break;
+            default:
+                nodeDetails += nodeData.state_DisplayValue;
+                break;
+        }
+        // DFCT0011227
+        if (nodeDetails.length > TREE_CONST.tree_details_max_length) {
+            nodeDetails = nodeDetails.substring(0, TREE_CONST.tree_details_max_length) + "...";
+        }
 
-	// -----------------------------------------------------------------------------------------------------------------
-	// START ICON MODALS
-	// -----------------------------------------------------------------------------------------------------------------
-	// NOTE: TODO - look at the standard TWJS modal widget used in template.  
-	//       All of the widgets in task should be able to use this same funtion.
-	//       If we replace spModal everywhere with this function we can change style of modals in one place.
-	openDurationModal = function(obj) {
-		// call common duration modal
-		var title = c.data.messages["Tasker - Title - Duration Modal"] + ': ' + obj.part.data.task_name;
-		twjs.openDurationModal(spModal, title, c.data.table, obj.part.data.key);
-	};
+        return nodeDetails;
+    }
 
-	openAssignmentModal = function(obj) {
-		var title = c.data.messages["Tasker - Title - Assignment Modal"] + ': ' + obj.part.data.task_name;
-		twjs.openAssignmentModal(spModal, title, c.data.table, obj.part.data.key);
-	};
+    function checkDateWarnings(changedNodeData) {
+        if (changedNodeData.parent != '' && changedNodeData.parent != undefined) {
+            var parentNodeData = diagram.model.findNodeDataForKey(changedNodeData.parent);
+            compareParentDateToAllChildren(parentNodeData.sys_id);
+        }
+        compareParentDateToAllChildren(changedNodeData.sys_id);
+    }
 
-	// STRY0109208 - Add Create Icon
-	openCreateModal = function(obj) {
-		var title = c.data.messages["Tasker - Add a Subtask"] + ': ' + obj.part.data.task_name;
-		var query = 'parent=' + obj.part.data.key;
-		twjs.openCreateModal(spModal, title, c.data.table, c.data.view, query, obj.part.data.u_servicenow_form_view);
-	};
+    function compareParentDateToAllChildren(parentKey) {
+        var parentNode = diagram.findNodeForKey(parentKey);
+        var childrenNodes = parentNode.findTreeChildrenNodes();
+        var parentAfterAllChildren = true;
+        while (childrenNodes.next()) {
+            var node = childrenNodes.value;
+            var childAfterParent = (node.data.suspense_date > parentNode.data.suspense_date);
+            if (childAfterParent) {
+                parentAfterAllChildren = false;
+            }
+            diagram.model.setDataProperty(node.data.warning, 'isSuspenseDateAfterParent', childAfterParent);
+            diagram.model.updateTargetBindings(node.data);
+        }
+        diagram.model.setDataProperty(parentNode.data.warning, 'isSuspenseDateAfterChildren', parentAfterAllChildren);
+        diagram.model.updateTargetBindings(parentNode.data);
+    }
+    // -----------------------------------------------------------------------------------------------------------------
+    // END RECORD WATCHER BLOCK
+    // -----------------------------------------------------------------------------------------------------------------
 
-	openOperationalModal = function(obj) {
-		var title = c.data.messages["Tasker - Title - Operational Modal"] + ': ' + obj.part.data.task_name;
-		twjs.openOperationalModal(spModal, title, c.data.table, obj.part.data.key);
-	};	
-	// -----------------------------------------------------------------------------------------------------------------
-	// END ICON MODALS
-	// -----------------------------------------------------------------------------------------------------------------
-	
-	// **************************************************************************************************************
-	// STRY0119818 - NOTE: reorganized Task to put all of the repeated functions in the same block of code
-	// TREE Code functions in all trees 
-	// BEGIN BLOCK
-	// **************************************************************************************************************	
-	$(window).on("resize", function() {
-		// not sure why, but increasing the minHeight seems to work, but not sure why
-		TREE_CONST.minHeight = 12;
-		resizeDiagram();
-	});
-	// TREE HEADER TOOLBAR
-	// STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
-	$scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function(){
-		treeOrientation="Horizontal";
-		treeNodeAngle=0;
-		resetDiagram();
-	});
-	
-	// TREE HEADER TOOLBAR
-	// STRY0117600 - this event is raised when the switch to vertical icon is clicked 
-	$scope.$on("$tasker-tree-toolbar-icons.switchToVertical", function(){
-		treeOrientation="Vertical";
-		treeNodeAngle=90;
-		resetDiagram();
-	});
-	
-	function resetDiagram(){
-		if(c.data.widgetTreeHeaderToolbars){
-			// set default tree orientation based on system setting (this will change when user perference is enabled)
-			if(treeOrientation == 'Horizontal'){
-				treeNodeAngle = TREE_CONST.horizontalTreeAngle;
-				// this is handles positioning the status indicator
-				treeOrientationWithinBorder = "Vertical";
-			} else {
-				treeNodeAngle = TREE_CONST.verticalTreeAngle;
-				// this is handles positioning the status indicator
-				treeOrientationWithinBorder = "Horizontal";
-			}
-		}
-		
-		diagramInitCompleted = false;	
-		// NOTE: updated to use data.topParentTask_id
-		if ($scope.data.topParentTask_id) {
-			drawTree();
-		}
-		_setToolbarProperties();
-		// STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, no need to destroy overviewdiv
-		if (myOverview == undefined) {
-			// STRY0116823
-			myOverview =  $go(go.Overview, "myOverview",
-												{ observed: diagram}); // , contentAlignment: go.Spot.Center
-		}		
-		// DFCT0010275
-		if($scope.data.map.length > 0){	
-			// // STRY0072032 - this event handler is called when the diagram is first ready
-			// LayoutCompleted fires whenever the layout changes
-			diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
-				resizeDiagram();
-				var node = diagram.findNodeForKey(c.data.selectedId);
-				diagram.centerRect(node.actualBounds);
-				// the diagram is initialized so the initial scale can be set
-				// NOTE: zoomToFit and zoomToRect do not work in this init function
-				// so calling a timeout function to initialize the scale
-				$timeout(function(){ _initializeScale();},200);				
-			});
+    // -----------------------------------------------------------------------------------------------------------------
+    // START EVENTS RAISED
+    // -----------------------------------------------------------------------------------------------------------------
+    function nodeSelectionChanged(node) {
+        var evt = {};
+        var d = node.data;
 
-			// TREE FOOTER TOOLBAR
-			// STRY0117600 - this event handler is called when the diagram bounds change
-			diagram.addDiagramListener("ViewportBoundsChanged", function(e) {
-				// set the footer scale when bounds change
-				// but wait until init is completed
-				if(viewPortHeight != diagram.viewportBounds.height){
-					// this block only runs once per diagram load
-					if(diagramInitCompleted){
-						// only need to set scale after initial load
-						// STRY0117945 STRY0121780 (cleared error when toolbar wasn't loaded)
-						if(c.data.widgetTreeFooterToolbars){
-							c.data.widgetTreeFooterToolbars[0].scale(diagram.scale);
-						}
-						
-					}
-	
-					var node = diagram.findNodeForKey(c.data.selectedId);
-					// and center it and select it
-					// STRY0072032
-					diagram.centerRect(node.actualBounds);
-					viewPortHeight = diagram.viewportBounds.height;
-				}
+        // if Task State is Draft
+        if (d.state == -6) {
+            c.data.isTopTaskOrNotDraft = false;
+            // if this is the top node then parent is undefined
+            if (d.parent == undefined) {
+                // Do not show the Draft task(s) can only be published message
+                c.data.isTopTaskOrNotDraft = true;
+            }
+        } else {
+            // Do not show the Draft task(s) can only be published message
+            c.data.isTopTaskOrNotDraft = true;
+        }
 
-			});
-		}
-	}
-	// ***************************************
-	// this block only runs once
-	// BEGIN BLOCK
-	// ***************************************
-	function _initializeScale(){
-		if(c.data.widgetTreeFooterToolbars[0].data.isTree){
-			// submit percent change back to server
-			diagram.zoomToRect(diagram.documentBounds);
-		} else {
-			// get the initial scale from the footer widget
-			diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
-		}
-		diagramInitCompleted=true;
-	}
-	// ***************************************
-	// END BLOCK
-	// ***************************************
-	
-	// TREE FOOTER TOOLBAR
-	// STRY0117600 - move toolbar into separate widget to use same functionality across all
-	function _setToolbarProperties(){
-		// STRY0117600 - pass a reference to diagram to toolbar
-		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		if(diagramInitCompleted){
-			// this is needed to reset zoom to custom when the diagram changes
-			c.data.widgetTreeFooterToolbars[0].resetDiagram(diagram);
-		} else {
-			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
-		}
-		// STRY0117600 - pass selectedId to toolbar
-		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeFooterToolbars[0].currentTop = c.data.topParentTask_id;
+        evt.sys_id = d.sys_id;
+        if (evt.sys_id == c.data.selectedId) // get called twice by gojs
+            return;
+        evt.table = d.sys_class_name || c.data.table;
+        c.data.selectedId = evt.sys_id;
+        // TREE FOOTER TOOLBAR
+        // STRY0117600 - need to update the child widget toolbar footer
+        // this sets the selected id on the footer tooltip when the selected id changes
+        c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+        c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
 
-		// STRY0117600 - pass a reference to diagram to toolbar
-		// this sets the diagram on the toolbar so it can handle gojs events in the toolbar
-		c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
-		// STRY0117600 - pass selectedId to toolbar
-		// this sets the selected id on the footer tooltip when the selected id changes
-		c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
-		c.data.widgetTreeHeaderToolbars[0].currentTop = c.data.topParentTask_id;
+        $location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
+        $rootScope.$broadcast('$sp.list.click', evt);
+        //$rootScope.$broadcast('data_table.click', evt);// KT - TLV - STRY0057360 - Macro Widget
 
-	}
-	
-	function resizeDiagram() {
-		// 2.8 | 2022-06-22 | mmcc | STRY0120303 - Task Tree Widget- Add Header and Footer area; deleted all commented out code
-		if($scope.data.map && $scope.data.map.length > 0){	
-			// 2.8 | 2022-06-22 | mmcc | STRY0120303 - Task Tree Widget- Add Header and Footer area; no calculating height since using Flexbox
-			var node_select = diagram.findNodeForKey(c.data.selectedId);
-			diagram.select(node_select);
-		}
-	}
-	
-	// NOTE: YOU ARE HERE
-	// TODO: 
-	// - Remove all hard coded constants
-	// - Review entire widget against Template
-	// - Review HTML against template
+        diagram.centerRect(node.actualBounds);
+    }
+    // -----------------------------------------------------------------------------------------------------------------
+    // END EVENTS RAISED
+    // -----------------------------------------------------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // START EVENTS MONITORED
+    // -----------------------------------------------------------------------------------------------------------------
+    // STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
+    $rootScope.$on('$taskerTabbedForm.drillDownList.click', function(e, parms) {
+        // NOTE: this does not post back to the server, so no reason to reset the header and footer diagram objects in Task Tree
+        if (diagram == undefined) {
+            return;
+        }
+        // if the event was not raised on the table associated with this widget, ignore the click
+        if (c.data.table == parms.table && c.data.sys_id != parms.sys_id) {
+            c.data.sys_id = parms.sys_id;
+            // STRY0074663 Only rebroadcast if the node changed
+            if (c.data.selectedId != parms.sys_id) {
+                c.data.selectedId = parms.sys_id;
+                // Select the node using the sys_id parameter supplied.
+                var node_select = diagram.findNodeForKey(c.data.selectedId);
+                diagram.select(node_select);
+            }
+        }
+    });
+
+    $rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+        if (diagram == undefined) {
+            return;
+        }
+        // if the item is already selected ignore the click
+        if (c.data.sys_id != parms.sys_id) {
+            c.data.sys_id = parms.sys_id;
+            // STRY0074663 Only rebroadcast if the node changed
+            if (c.data.selectedId != parms.sys_id) {
+                c.data.selectedId = parms.sys_id;
+                // Select the node using the sys_id parameter supplied.
+                var node_select = diagram.findNodeForKey(c.data.selectedId);
+                diagram.select(node_select);
+            }
+        }
+    });
+
+    $scope.$on("field.change", function(evt, parms) {
+        if (parms.field.name == 'page')
+            changePage(parms.newValue);
+    });
+
+    function changePage(p) {
+        var path = $location.path();
+        var searchParms = $location.search();
+        $location.search({
+            id: searchParms.id,
+            p: p
+        });
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // END EVENTS MONITORED
+    // -----------------------------------------------------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // TASK TREE FEATURES
+    // BEGIN BLOCK
+    // -----------------------------------------------------------------------------------------------------------------
+    $scope.getMap = function() {
+        $scope.toggleCollpased();
+        loadMap();
+    };
+
+    $scope.toggleCollpased = function() {
+        // you are here, why does toggle get messed up after second click		
+        if (c.data.hide_accordion) {
+            c.data.isNotCollapsed = true;
+        } else {
+            c.data.isNotCollapsed = !c.data.isNotCollapsed;
+        }
+    };
+
+    // DFCT0010652
+    function loadMap() {
+        if (c.data.map == undefined || c.data.map.length == 0) {
+            $scope.data.loadData = true;
+            // DFCT0010652
+            $scope.hide_accordion = c.data.hide_accordion;
+            // TREE FOOTER TOOLBAR
+            // STRY0117600 - does not like diagram posted back to server
+            if (c.data.widgetTreeFooterToolbars) {
+                c.data.widgetTreeFooterToolbars[0].diagram = null;
+            }
+            if (c.data.widgetTreeHeaderToolbars) {
+                c.data.widgetTreeHeaderToolbars[0].diagram = null;
+            }
+            spUtil.update($scope).then(function(data) {
+                if (c.data.widgetTreeHeaderToolbars) {
+                    // load orientation from the header widget
+                    treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+                }
+                resetDiagram();
+                // DFCT0011129
+                initRecordWatcher($scope.data.table, "u_task_tree=" + $scope.data.task_tree);
+            });
+            // DFCT0010674
+        } else {
+            resetDiagram();
+        }
+    }
+    // -----------------------------------------------------------------------------------------------------------------
+    // TASK TREE FEATURES
+    // END BLOCK
+    // -----------------------------------------------------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // START ICON MODALS
+    // -----------------------------------------------------------------------------------------------------------------
+    // NOTE: TODO - look at the standard TWJS modal widget used in template.  
+    //       All of the widgets in task should be able to use this same funtion.
+    //       If we replace spModal everywhere with this function we can change style of modals in one place.
+    openDurationModal = function(obj) {
+        // call common duration modal
+        var title = c.data.messages["Tasker - Title - Duration Modal"] + ': ' + obj.part.data.task_name;
+        twjs.openDurationModal(spModal, title, c.data.table, obj.part.data.key);
+    };
+
+    openAssignmentModal = function(obj) {
+        var title = c.data.messages["Tasker - Title - Assignment Modal"] + ': ' + obj.part.data.task_name;
+        twjs.openAssignmentModal(spModal, title, c.data.table, obj.part.data.key);
+    };
+
+    // STRY0109208 - Add Create Icon
+    openCreateModal = function(obj) {
+        var title = c.data.messages["Tasker - Add a Subtask"] + ': ' + obj.part.data.task_name;
+        var query = 'parent=' + obj.part.data.key;
+        twjs.openCreateModal(spModal, title, c.data.table, c.data.view, query, obj.part.data.u_servicenow_form_view);
+    };
+
+    openOperationalModal = function(obj) {
+        var title = c.data.messages["Tasker - Title - Operational Modal"] + ': ' + obj.part.data.task_name;
+        twjs.openOperationalModal(spModal, title, c.data.table, obj.part.data.key);
+    };
+    // -----------------------------------------------------------------------------------------------------------------
+    // END ICON MODALS
+    // -----------------------------------------------------------------------------------------------------------------
+
+    // **************************************************************************************************************
+    // STRY0119818 - NOTE: reorganized Task to put all of the repeated functions in the same block of code
+    // TREE Code functions in all trees 
+    // BEGIN BLOCK
+    // **************************************************************************************************************	
+    $(window).on("resize", function() {
+        // not sure why, but increasing the minHeight seems to work, but not sure why
+        TREE_CONST.minHeight = 12;
+        resizeDiagram();
+    });
+    // TREE HEADER TOOLBAR
+    // STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
+    $scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function() {
+        treeOrientation = "Horizontal";
+        treeNodeAngle = 0;
+        resetDiagram();
+    });
+
+    // TREE HEADER TOOLBAR
+    // STRY0117600 - this event is raised when the switch to vertical icon is clicked 
+    $scope.$on("$tasker-tree-toolbar-icons.switchToVertical", function() {
+        treeOrientation = "Vertical";
+        treeNodeAngle = 90;
+        resetDiagram();
+    });
+
+    function resetDiagram() {
+        if (c.data.widgetTreeHeaderToolbars) {
+            // set default tree orientation based on system setting (this will change when user perference is enabled)
+            if (treeOrientation == 'Horizontal') {
+                treeNodeAngle = TREE_CONST.horizontalTreeAngle;
+                // this is handles positioning the status indicator
+                treeOrientationWithinBorder = "Vertical";
+            } else {
+                treeNodeAngle = TREE_CONST.verticalTreeAngle;
+                // this is handles positioning the status indicator
+                treeOrientationWithinBorder = "Horizontal";
+            }
+        }
+
+        diagramInitCompleted = false;
+        // NOTE: updated to use data.topParentTask_id
+        if ($scope.data.topParentTask_id) {
+            drawTree();
+        }
+        _setToolbarProperties();
+        // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, no need to destroy overviewdiv
+        if (myOverview == undefined) {
+            // STRY0116823
+            myOverview = $go(go.Overview, "myOverview", {
+                observed: diagram
+            }); // , contentAlignment: go.Spot.Center
+        }
+        // DFCT0010275
+        if ($scope.data.map.length > 0) {
+            // // STRY0072032 - this event handler is called when the diagram is first ready
+            // LayoutCompleted fires whenever the layout changes
+            diagram.addDiagramListener("InitialLayoutCompleted", function(e) {
+                resizeDiagram();
+                var node = diagram.findNodeForKey(c.data.selectedId);
+                diagram.centerRect(node.actualBounds);
+                // the diagram is initialized so the initial scale can be set
+                // NOTE: zoomToFit and zoomToRect do not work in this init function
+                // so calling a timeout function to initialize the scale
+                $timeout(function() {
+                    _initializeScale();
+                }, 200);
+            });
+
+            // TREE FOOTER TOOLBAR
+            // STRY0117600 - this event handler is called when the diagram bounds change
+            diagram.addDiagramListener("ViewportBoundsChanged", function(e) {
+                // set the footer scale when bounds change
+                // but wait until init is completed
+                if (viewPortHeight != diagram.viewportBounds.height) {
+                    // this block only runs once per diagram load
+                    if (diagramInitCompleted) {
+                        // only need to set scale after initial load
+                        // STRY0117945 STRY0121780 (cleared error when toolbar wasn't loaded)
+                        if (c.data.widgetTreeFooterToolbars) {
+                            c.data.widgetTreeFooterToolbars[0].scale(diagram.scale);
+                        }
+
+                    }
+
+                    var node = diagram.findNodeForKey(c.data.selectedId);
+                    // and center it and select it
+                    // STRY0072032
+                    diagram.centerRect(node.actualBounds);
+                    viewPortHeight = diagram.viewportBounds.height;
+                }
+
+            });
+        }
+    }
+    // ***************************************
+    // this block only runs once
+    // BEGIN BLOCK
+    // ***************************************
+    function _initializeScale() {
+        if (c.data.widgetTreeFooterToolbars[0].data.isTree) {
+            // submit percent change back to server
+            diagram.zoomToRect(diagram.documentBounds);
+        } else {
+            // get the initial scale from the footer widget
+            diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
+        }
+        diagramInitCompleted = true;
+    }
+    // ***************************************
+    // END BLOCK
+    // ***************************************
+
+    // TREE FOOTER TOOLBAR
+    // STRY0117600 - move toolbar into separate widget to use same functionality across all
+    function _setToolbarProperties() {
+        // STRY0117600 - pass a reference to diagram to toolbar
+        // this sets the diagram on the toolbar so it can handle gojs events in the toolbar
+        if (diagramInitCompleted) {
+            // this is needed to reset zoom to custom when the diagram changes
+            c.data.widgetTreeFooterToolbars[0].resetDiagram(diagram);
+        } else {
+            c.data.widgetTreeFooterToolbars[0].diagram = diagram;
+        }
+        // STRY0117600 - pass selectedId to toolbar
+        // this sets the selected id on the footer tooltip when the selected id changes
+        c.data.widgetTreeFooterToolbars[0].parentSelectedId = c.data.selectedId;
+        c.data.widgetTreeFooterToolbars[0].currentTop = c.data.topParentTask_id;
+
+        // STRY0117600 - pass a reference to diagram to toolbar
+        // this sets the diagram on the toolbar so it can handle gojs events in the toolbar
+        c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
+        // STRY0117600 - pass selectedId to toolbar
+        // this sets the selected id on the footer tooltip when the selected id changes
+        c.data.widgetTreeHeaderToolbars[0].parentSelectedId = c.data.selectedId;
+        c.data.widgetTreeHeaderToolbars[0].currentTop = c.data.topParentTask_id;
+
+    }
+
+    function resizeDiagram() {
+        // 2.8 | 2022-06-22 | mmcc | STRY0120303 - Task Tree Widget- Add Header and Footer area; deleted all commented out code
+        if ($scope.data.map && $scope.data.map.length > 0) {
+            // 2.8 | 2022-06-22 | mmcc | STRY0120303 - Task Tree Widget- Add Header and Footer area; no calculating height since using Flexbox
+            var node_select = diagram.findNodeForKey(c.data.selectedId);
+            diagram.select(node_select);
+        }
+    }
+
+    // NOTE: YOU ARE HERE
+    // TODO: 
+    // - Remove all hard coded constants
+    // - Review entire widget against Template
+    // - Review HTML against template
 
     function drawTree() {
-				if (diagram == undefined) {
-						// STRY0072032
-						diagram =
-							$go(go.Diagram, TREE_CONST.node_id, {
-							initialContentAlignment: go.Spot.Default,
-							allowZoom: true,
-							// define the layout for the diagram
-							layout: $go(go.TreeLayout, 
-													{angle:treeNodeAngle, 
-													 nodeSpacing: TREE_CONST.spacingNode,
-													 layerSpacing: TREE_CONST.spacingLayer})
-						});
-				}	else {
-					 // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
-					diagram.clear();
-					diagram.layout.angle = treeNodeAngle;
-				}
-				diagram.model = new go.TreeModel($scope.data.map);
-				diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850, but for Task Tree set to 200
-				// Task Tree only control changing this default
-				diagram.toolManager.toolTipDuration = TREE_CONST.toolTipDuration; // default is 5000, but for Task Tree set to 10000
+        if (diagram == undefined) {
+            // STRY0072032
+            diagram =
+                $go(go.Diagram, TREE_CONST.node_id, {
+                    initialContentAlignment: go.Spot.Default,
+                    allowZoom: true,
+                    // define the layout for the diagram
+                    layout: $go(go.TreeLayout, {
+                        angle: treeNodeAngle,
+                        nodeSpacing: TREE_CONST.spacingNode,
+                        layerSpacing: TREE_CONST.spacingLayer
+                    })
+                });
+        } else {
+            // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
+            diagram.clear();
+            diagram.layout.angle = treeNodeAngle;
+        }
+        diagram.model = new go.TreeModel($scope.data.map);
+        diagram.toolManager.hoverDelay = TREE_CONST.toolTipHoverDelay; // default is 850, but for Task Tree set to 200
+        // Task Tree only control changing this default
+        diagram.toolManager.toolTipDuration = TREE_CONST.toolTipDuration; // default is 5000, but for Task Tree set to 10000
 
-				// Define a simple node template consisting of text followed by an expand/collapse button
-				diagram.nodeTemplate = _createNodeTemplate();
+        // Define a simple node template consisting of text followed by an expand/collapse button
+        diagram.nodeTemplate = _createNodeTemplate();
 
 
-				diagram.select(diagram.findNodeForKey(c.data.selectedId));
-				diagram.allowVerticalScroll=true;
+        diagram.select(diagram.findNodeForKey(c.data.selectedId));
+        diagram.allowVerticalScroll = true;
 
-				// Define a trivial link template with no arrowhead
-				diagram.linkTemplate = $go(go.Link, { selectable: false }, $go(go.Shape)); // the link shape
-		}
-	// **************************************************************************************************************
-	// STRY0119818 - NOTE: reorganized Template and OU to put all of the repeated functions in the same block of code
-	// TREE Code functions in all trees 
-	// END BLOCK
-	// **************************************************************************************************************	
+        // Define a trivial link template with no arrowhead
+        diagram.linkTemplate = $go(go.Link, {
+            selectable: false
+        }, $go(go.Shape)); // the link shape
+    }
+    // **************************************************************************************************************
+    // STRY0119818 - NOTE: reorganized Template and OU to put all of the repeated functions in the same block of code
+    // TREE Code functions in all trees 
+    // END BLOCK
+    // **************************************************************************************************************	
 
-	// **************************************************************************************************************	
-	// DRAW TREE AND TREE LAYOUT FUCNTIONS
-	// This block contains the functions that define the tree structure and capabilities
-	// START BLOCK
-	// **************************************************************************************************************	
-	// Define a simple node template consisting of text followed by an expand/collapse button
-	function _createNodeTemplate(){
-		var nodeTemplate = 
-				$go(go.Node, treeOrientation, {
-					selectionAdorned: false,
-					selectionChanged: nodeSelectionChanged,
-					isTreeExpanded: true,
-					isTreeLeaf: true}, // this event handler is defined below
-						_createTreeNode()
-						// NOTE: The Tree Expander button is a differnt for task tree b/c we have the status indicator still outside the triangle.
-						//       When we change the color to a flat color and move the status indicator inside the rectangle this will change to look like all the others.
-					 );
-		
-		return nodeTemplate;
-	}
-		function _createTreeNode(){
-		var treeNode = 
-				$go(go.Panel, treeOrientationWithinBorder, // everything within the border
-						$go(go.Panel, treeOrientation, // the row of status indicators
-								makeIndicator("status", "10"),
-								$go(go.Panel, "Auto",
-										_createOurterRoundedRectangle(),
-										_createVerticalMainPanel()
-									 ),
-								// this was overkill for small diagrams
-								$go("TreeExpanderButton", 
-										{ alignment: go.Spot.Default}, 
-										{ visible: true })
-							 )
-					 );
-		return treeNode;
-	}
-	
-	function _createOurterRoundedRectangle(){
-		// STRY0113936, STRY0111888 - set width and height
-		var roundedRectangle =
-				$go(go.Shape, "RoundedRectangle", {strokeWidth: TREE_CONST.outlineWidth, width: TREE_CONST.nodeOuterRectangelWidth, height:TREE_CONST.nodeOuterRectangelHeight, fill: TREE_CONST.roundedRectangleFill},
-						new go.Binding("stroke", "isSelected", function(s) {
-							if (s)
-								return TREE_CONST.node_selected_border;
-							else
-								return null;}).ofObject(""),
-						// if we want to have same border width even on selected, remove this section
-						new go.Binding("strokeWidth", "isSelected", function(s) {
-							if (s)
-								return TREE_CONST.node_selected_border_stroke_width;
-							else
-								return null;
-						}).ofObject(""),
-						// this does not appear to create a dashed border.  not sure if it is broken or if dash is not recognized
-						new go.Binding("strokeDashArray", "isSelected", function(s) {
-							if (s)
-								return "dash";
-							else
-								return null;
-						}).ofObject(""),
-						// NOTE: fill is different b/c it is based on state until we remove the color from the bacground
-						new go.Binding("fill", "state", function(t) {
-							return getStateColors(t, "bg");
-						})
-					 );
-		return roundedRectangle;
-	}
-	function _createVerticalMainPanel(){
-		var mainPanel = 
-				$go(go.Panel, "Auto", 
-						$go(go.Panel, "Vertical",
-								// DFCT0011134 - STRY0127737 - change name and number display
-								$go(go.Panel, "Horizontal",
+    // **************************************************************************************************************	
+    // DRAW TREE AND TREE LAYOUT FUCNTIONS
+    // This block contains the functions that define the tree structure and capabilities
+    // START BLOCK
+    // **************************************************************************************************************	
+    // Define a simple node template consisting of text followed by an expand/collapse button
+    function _createNodeTemplate() {
+        var nodeTemplate =
+            $go(go.Node, treeOrientation, {
+                    selectionAdorned: false,
+                    selectionChanged: nodeSelectionChanged,
+                    isTreeExpanded: true,
+                    isTreeLeaf: true
+                }, // this event handler is defined below
+                _createTreeNode()
+                // NOTE: The Tree Expander button is a differnt for task tree b/c we have the status indicator still outside the triangle.
+                //       When we change the color to a flat color and move the status indicator inside the rectangle this will change to look like all the others.
+            );
 
-										_createNumberHeader(),
-										_createIconPanel()
-									 ),
-								// DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
-								$go(go.Panel,  "Vertical", {alignment: go.Spot.Left, margin: TREE_CONST.nodeTextPanelMargin, 
-																						minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight), 
-																						maxSize: new go.Size(TREE_CONST.textPanelMaxWidth, TREE_CONST.textPanelMaxHeight)
-																					 },
-										$go(go.TextBlock, {alignment: go.Spot.Left,
-																			 text: "verticalAlignment: Center",
-																			 textAlign:"left", 
-																			 wrap: go.TextBlock.WrapFit,
-																			 font: TREE_CONST.fontStyle, 
-																			 stroke: TREE_CONST.textStrokeColor},
-												new go.Binding("stroke", "state", function(t) {
-													return getStateColors(t, "text");
-												}),
-												new go.Binding("text", "name")
-											 ),
-										$go(go.TextBlock, {alignment: go.Spot.Left,
-																			 text: "verticalAlignment: Center",
-																			 textAlign:"left", 
-																			 wrap: go.TextBlock.WrapFit,
-																			 font: TREE_CONST.fontStyleNodeDetails, 
-																			 stroke: TREE_CONST.textStrokeColor},
-												new go.Binding("stroke", "state", function(t) {
-													return getStateColors(t, "text");
-												}),
-												new go.Binding("text", "nodeDetails")
-											 )
-									 )
-							 )
-						);
-		return mainPanel;
-	}
+        return nodeTemplate;
+    }
 
-	openIconForm = function(obj, iconName){
-		switch (iconName){
-			case 'AddIcon':
-				openCreateModal(obj);
-				break;
-			case 'DurationIcon':
-				openDurationModal(obj);
-				break;
-			case 'UserIcon':
-				openAssignmentModal(obj);
-				break;
-			case 'OperationalIcon':
-				openOperationalModal(obj);
-				break;
-		}
-	};	
+    function _createTreeNode() {
+        var treeNode =
+            $go(go.Panel, treeOrientationWithinBorder, // everything within the border
+                $go(go.Panel, treeOrientation, // the row of status indicators
+                    makeIndicator("status", "10"),
+                    $go(go.Panel, "Auto",
+                        _createOurterRoundedRectangle(),
+                        _createVerticalMainPanel()
+                    ),
+                    // this was overkill for small diagrams
+                    $go("TreeExpanderButton", {
+                        alignment: go.Spot.Default
+                    }, {
+                        visible: true
+                    })
+                )
+            );
+        return treeNode;
+    }
 
-	function _createNumberHeader(){
-		var numberHeader = 
-				$go(go.TextBlock, 
-						{alignment: go.Spot.Left,
-						 width:TREE_CONST.numberPanelWidth
-						},						
+    function _createOurterRoundedRectangle() {
+        // STRY0113936, STRY0111888 - set width and height
+        var roundedRectangle =
+            $go(go.Shape, "RoundedRectangle", {
+                    strokeWidth: TREE_CONST.outlineWidth,
+                    width: TREE_CONST.nodeOuterRectangelWidth,
+                    height: TREE_CONST.nodeOuterRectangelHeight,
+                    fill: TREE_CONST.roundedRectangleFill
+                },
+                new go.Binding("stroke", "isSelected", function(s) {
+                    if (s)
+                        return TREE_CONST.node_selected_border;
+                    else
+                        return null;
+                }).ofObject(""),
+                // if we want to have same border width even on selected, remove this section
+                new go.Binding("strokeWidth", "isSelected", function(s) {
+                    if (s)
+                        return TREE_CONST.node_selected_border_stroke_width;
+                    else
+                        return null;
+                }).ofObject(""),
+                // this does not appear to create a dashed border.  not sure if it is broken or if dash is not recognized
+                new go.Binding("strokeDashArray", "isSelected", function(s) {
+                    if (s)
+                        return "dash";
+                    else
+                        return null;
+                }).ofObject(""),
+                // NOTE: fill is different b/c it is based on state until we remove the color from the bacground
+                new go.Binding("fill", "state", function(t) {
+                    return getStateColors(t, "bg");
+                })
+            );
+        return roundedRectangle;
+    }
 
-						
-					{font: TREE_CONST.fontStyleTaskerNumber},
-					new go.Binding("text", "", function(data) {
-						return data.taskernumber;
-					}),
-						new go.Binding("stroke", "", function(data) {
-							var iconStroke = getStateColors(data.state, "text");
-							return iconStroke;
-						})
-				);
-		return numberHeader;
-	}
-function _createIcon(iconName, iconText){
-		var icon = 
-				$go(go.TextBlock, 
-						{name: iconName,
-						 text: iconText,
-						 margin: new go.Margin(TREE_CONST.icon_top_margin, TREE_CONST.icon_right_margin, TREE_CONST.icon_bottom_margin, TREE_CONST.icon_left_margin),
-						 alignment: go.Spot.Right,
-						 font: TREE_CONST.icon_font,
-						 editable: false,
-						 isMultiline: false,
-						 isActionable: true,
-						 click: function(e, obj) {
-							 openIconForm(obj, iconName);
-							 e.handled = true;
-						 },
-						 mouseEnter: function(e, obj) {
-							 obj.saveStroke = obj.stroke;
-							 obj.stroke = getStateColors(obj.part.data.state, "hover");
-						 },
-						 mouseLeave: function(e, obj) {
-							 obj.stroke = obj.saveStroke;
-							 obj.saveStroke = null;
-						 }
-						},
-						 new go.Binding("toolTip", "", function(nodeData) {
-						 return toolTipJSON(iconName, nodeData);
-						 }),						
-						new go.Binding("text", "", function(data) {
-							if(iconName == 'ExclamationIcon'){
-								if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
-										data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
-										data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-										data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
-									return TREE_CONST.font_awesome_exclamation_triangle_o;
-								else
-									return '';								
-							} else {
-								return iconText;
-							}
-						}),
-						//this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-						//the fake logic sets the warning color, otherwise use the default color.
-						new go.Binding("stroke", "", function(data) {
-							var iconStroke = getStateColors(data.state, "text");
-							switch(iconName){
-								case 'UserIcon':
-									// STRY0095897
-									if (data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
-										iconStroke = getStateColors(data.state, "warning");
-									else
-										iconStroke = getStateColors(data.state, "text");
-									break;
-								case 'DurationIcon':
-									if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
-											data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-											data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks)
-										iconStroke = getStateColors(data.state, "warning");
-									else
-										iconStroke = getStateColors(data.state, "text");									
-									break;
-								case 'ExclamationIcon':
-									iconStroke = getStateColors(data.state, "warning");
-									break;
-							}
-							return iconStroke;
-						}),
-						new go.Binding("visible", "", function(data) {
-							if(iconName == 'AddIcon'){
-								return (data.canCreateSubTask == true);
-							} else {
-								return true;
-							}
-						})
-					 );
-		return icon;
-	}	
-function _createIconPanel(){
-	// STRY0109208 - Add Create Icon
-	var iconPanel =
-			$go(go.Panel, "Horizontal",
-					// removing width allows the width to be size of text.
-					{alignment: go.Spot.Right, width: TREE_CONST.icon_panel_width, isOpposite: true },
+    function _createVerticalMainPanel() {
+        var mainPanel =
+            $go(go.Panel, "Auto",
+                $go(go.Panel, "Vertical",
+                    // DFCT0011134 - STRY0127737 - change name and number display
+                    $go(go.Panel, "Horizontal",
 
-					_createIcon('AddIcon', TREE_CONST.font_awesome_plus_o),
-					_createIcon('DurationIcon', TREE_CONST.font_awesome_calendar_o),
-					_createIcon('UserIcon', TREE_CONST.font_awesome_user_o),
-					// STRY0124682
-					_createIcon('OperationalIcon', TREE_CONST.font_awesome_info_o),
-					//this binds the exclamation icon to the duration warning  property of the data mapping, 
-					//the function uses the level determine if the icon is added or not
-					_createIcon('ExclamationIcon', TREE_CONST.icon_warning_stroke)
-				 );
-			return iconPanel;
-	}
+                        _createNumberHeader(),
+                        _createIconPanel()
+                    ),
+                    // DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
+                    $go(go.Panel, "Vertical", {
+                            alignment: go.Spot.Left,
+                            margin: TREE_CONST.nodeTextPanelMargin,
+                            minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight),
+                            maxSize: new go.Size(TREE_CONST.textPanelMaxWidth, TREE_CONST.textPanelMaxHeight)
+                        },
+                        $go(go.TextBlock, {
+                                alignment: go.Spot.Left,
+                                text: "verticalAlignment: Center",
+                                textAlign: "left",
+                                wrap: go.TextBlock.WrapFit,
+                                font: TREE_CONST.fontStyle,
+                                stroke: TREE_CONST.textStrokeColor
+                            },
+                            new go.Binding("stroke", "state", function(t) {
+                                return getStateColors(t, "text");
+                            }),
+                            new go.Binding("text", "name")
+                        ),
+                        $go(go.TextBlock, {
+                                alignment: go.Spot.Left,
+                                text: "verticalAlignment: Center",
+                                textAlign: "left",
+                                wrap: go.TextBlock.WrapFit,
+                                font: TREE_CONST.fontStyleNodeDetails,
+                                stroke: TREE_CONST.textStrokeColor
+                            },
+                            new go.Binding("stroke", "state", function(t) {
+                                return getStateColors(t, "text");
+                            }),
+                            new go.Binding("text", "nodeDetails")
+                        )
+                    )
+                )
+            );
+        return mainPanel;
+    }
 
-	    // common styling for each indicator
+    openIconForm = function(obj, iconName) {
+        switch (iconName) {
+            case 'AddIcon':
+                openCreateModal(obj);
+                break;
+            case 'DurationIcon':
+                openDurationModal(obj);
+                break;
+            case 'UserIcon':
+                openAssignmentModal(obj);
+                break;
+            case 'OperationalIcon':
+                openOperationalModal(obj);
+                break;
+        }
+    };
+
+    function _createNumberHeader() {
+        var numberHeader =
+            $go(go.TextBlock, {
+                    alignment: go.Spot.Left,
+                    width: TREE_CONST.numberPanelWidth
+                },
+
+
+                {
+                    font: TREE_CONST.fontStyleTaskerNumber
+                },
+                new go.Binding("text", "", function(data) {
+                    return data.taskernumber;
+                }),
+                new go.Binding("stroke", "", function(data) {
+                    var iconStroke = getStateColors(data.state, "text");
+                    return iconStroke;
+                })
+            );
+        return numberHeader;
+    }
+
+    function _createIcon(iconName, iconText) {
+        var icon =
+            $go(go.TextBlock, {
+                    name: iconName,
+                    text: iconText,
+                    margin: new go.Margin(TREE_CONST.icon_top_margin, TREE_CONST.icon_right_margin, TREE_CONST.icon_bottom_margin, TREE_CONST.icon_left_margin),
+                    alignment: go.Spot.Right,
+                    font: TREE_CONST.icon_font,
+                    editable: false,
+                    isMultiline: false,
+                    isActionable: true,
+                    click: function(e, obj) {
+                        openIconForm(obj, iconName);
+                        e.handled = true;
+                    },
+                    mouseEnter: function(e, obj) {
+                        obj.saveStroke = obj.stroke;
+                        obj.stroke = getStateColors(obj.part.data.state, "hover");
+                    },
+                    mouseLeave: function(e, obj) {
+                        obj.stroke = obj.saveStroke;
+                        obj.saveStroke = null;
+                    }
+                },
+                new go.Binding("toolTip", "", function(nodeData) {
+                    return toolTipJSON(iconName, nodeData);
+                }),
+                new go.Binding("text", "", function(data) {
+                    if (iconName == 'ExclamationIcon') {
+                        if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
+                            data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
+                            data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
+                            data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
+                            return TREE_CONST.font_awesome_exclamation_triangle_o;
+                        else
+                            return '';
+                    } else {
+                        return iconText;
+                    }
+                }),
+                //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
+                //the fake logic sets the warning color, otherwise use the default color.
+                new go.Binding("stroke", "", function(data) {
+                    var iconStroke = getStateColors(data.state, "text");
+                    switch (iconName) {
+                        case 'UserIcon':
+                            // STRY0095897
+                            if (data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
+                                iconStroke = getStateColors(data.state, "warning");
+                            else
+                                iconStroke = getStateColors(data.state, "text");
+                            break;
+                        case 'DurationIcon':
+                            if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
+                                data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
+                                data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks)
+                                iconStroke = getStateColors(data.state, "warning");
+                            else
+                                iconStroke = getStateColors(data.state, "text");
+                            break;
+                        case 'ExclamationIcon':
+                            iconStroke = getStateColors(data.state, "warning");
+                            break;
+                    }
+                    return iconStroke;
+                }),
+                new go.Binding("visible", "", function(data) {
+                    if (iconName == 'AddIcon') {
+                        return (data.canCreateSubTask == true);
+                    } else {
+                        return true;
+                    }
+                })
+            );
+        return icon;
+    }
+
+    function _createIconPanel() {
+        // STRY0109208 - Add Create Icon
+        var iconPanel =
+            $go(go.Panel, "Horizontal",
+                // removing width allows the width to be size of text.
+                {
+                    alignment: go.Spot.Right,
+                    width: TREE_CONST.icon_panel_width,
+                    isOpposite: true
+                },
+
+                _createIcon('AddIcon', TREE_CONST.font_awesome_plus_o),
+                _createIcon('DurationIcon', TREE_CONST.font_awesome_calendar_o),
+                _createIcon('UserIcon', TREE_CONST.font_awesome_user_o),
+                // STRY0124682
+                _createIcon('OperationalIcon', TREE_CONST.font_awesome_info_o),
+                //this binds the exclamation icon to the duration warning  property of the data mapping, 
+                //the function uses the level determine if the icon is added or not
+                _createIcon('ExclamationIcon', TREE_CONST.icon_warning_stroke)
+            );
+        return iconPanel;
+    }
+
+    // common styling for each indicator
     function makeIndicator(propName, label) { // the data property name
         return $go(go.Shape,
             "Circle", {
@@ -1246,33 +1278,33 @@ function _createIconPanel(){
             })
         );
     }
-	// **************************************************************************************************************	
-	// DRAW TREE AND TREE LAYOUT FUCNTIONS
-	// This block contains the functions that define the tree structure and capabilities
-	// END BLOCK
-	// **************************************************************************************************************	
-	// -----------------------------------------------------------------------------------------------------------------
-	// START TOOLTIPS
-	// -----------------------------------------------------------------------------------------------------------------
-	function _createTableColumn (visibleFlag, rowNum, columnNum, spanMultipleInt, columnWidth, margin, textAlignment, text){
-		var tableColumn;
-		tableColumn = 
-			$go(go.TextBlock, 
-					{visible: visibleFlag,
-					 row: rowNum,
-					 column: columnNum,
-					 columnSpan: spanMultipleInt,
-					 width: columnWidth,
-					 margin: margin,
-					 alignment: textAlignment,
-					 wrap: go.TextBlock.WrapFit,
-					 background: TREE_CONST.toolTipBackgroundColor
-					}, 
-					text 
-				 );
-		return tableColumn;
-		
-	}
+    // **************************************************************************************************************	
+    // DRAW TREE AND TREE LAYOUT FUCNTIONS
+    // This block contains the functions that define the tree structure and capabilities
+    // END BLOCK
+    // **************************************************************************************************************	
+    // -----------------------------------------------------------------------------------------------------------------
+    // START TOOLTIPS
+    // -----------------------------------------------------------------------------------------------------------------
+    function _createTableColumn(visibleFlag, rowNum, columnNum, spanMultipleInt, columnWidth, margin, textAlignment, text) {
+        var tableColumn;
+        tableColumn =
+            $go(go.TextBlock, {
+                    visible: visibleFlag,
+                    row: rowNum,
+                    column: columnNum,
+                    columnSpan: spanMultipleInt,
+                    width: columnWidth,
+                    margin: margin,
+                    alignment: textAlignment,
+                    wrap: go.TextBlock.WrapFit,
+                    background: TREE_CONST.toolTipBackgroundColor
+                },
+                text
+            );
+        return tableColumn;
+
+    }
 
     // STRY0091260
     function getToolTipText(objectName, nodeData) {
@@ -1280,124 +1312,124 @@ function _createIconPanel(){
         switch (objectName) {
             // // STRY0109208 - Add Create Icon
             case 'AddIcon':
-                toolTip = 
-									$go(go.Panel, "Table", 
-											// Row 1
-											_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.messages["Tasker - Add a Subtask"])
-                );
+                toolTip =
+                    $go(go.Panel, "Table",
+                        // Row 1
+                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.messages["Tasker - Add a Subtask"])
+                    );
                 break;
             case 'DurationIcon':
-								var waitStatewithNoSubtasks = (nodeData.warning.waitStatewithNoSubtasks == true);
-								var noSuspenseDate = (nodeData.warning.noSuspenseDate == true);
-								var isTopSuspenseDateAfterExternalInboundDate = (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate == true);
-								var isTopSuspenseDateBeforeExternalOutboundDate = (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate == true);
-								var isChildSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterChildren != true);
-								var isSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterParent == true);
+                var waitStatewithNoSubtasks = (nodeData.warning.waitStatewithNoSubtasks == true);
+                var noSuspenseDate = (nodeData.warning.noSuspenseDate == true);
+                var isTopSuspenseDateAfterExternalInboundDate = (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate == true);
+                var isTopSuspenseDateBeforeExternalOutboundDate = (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate == true);
+                var isChildSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterChildren != true);
+                var isSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterParent == true);
                 var durrationWarningCount = 1;
-                toolTip = 
-									$go(go.Panel, "Table",
-											// Row 1
-											_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.suspense_date.fieldLabel + ": "),
-											_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.suspense_date_DisplayValue),
-											// Row 2
-											_createTableColumn(waitStatewithNoSubtasks, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Wait state set with no subtasks"]),
-											// Row 3
-											_createTableColumn(noSuspenseDate, 2, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task has no Suspense Date"]),
-											// Row 4
-											_createTableColumn(isTopSuspenseDateAfterExternalInboundDate, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Internal Suspense date is after the External Suspense Date"]),
-											// Row 5
-											_createTableColumn(isTopSuspenseDateBeforeExternalOutboundDate, 4, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound"]),
-											// Row 6 (width is wider on this message)
-											_createTableColumn(isChildSuspenseDateAfterParent, 5, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["A Subtask has a Suspense Date AFter this Task"]),
-											// Row 7 (width is wider on this message)
-											_createTableColumn(isSuspenseDateAfterParent, 6, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Subtask Suspense Date AFTER Parent Task Suspense Date"])
-										 );
+                toolTip =
+                    $go(go.Panel, "Table",
+                        // Row 1
+                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.suspense_date.fieldLabel + ": "),
+                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.suspense_date_DisplayValue),
+                        // Row 2
+                        _createTableColumn(waitStatewithNoSubtasks, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Wait state set with no subtasks"]),
+                        // Row 3
+                        _createTableColumn(noSuspenseDate, 2, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task has no Suspense Date"]),
+                        // Row 4
+                        _createTableColumn(isTopSuspenseDateAfterExternalInboundDate, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Internal Suspense date is after the External Suspense Date"]),
+                        // Row 5
+                        _createTableColumn(isTopSuspenseDateBeforeExternalOutboundDate, 4, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound"]),
+                        // Row 6 (width is wider on this message)
+                        _createTableColumn(isChildSuspenseDateAfterParent, 5, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["A Subtask has a Suspense Date AFter this Task"]),
+                        // Row 7 (width is wider on this message)
+                        _createTableColumn(isSuspenseDateAfterParent, 6, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Subtask Suspense Date AFTER Parent Task Suspense Date"])
+                    );
                 break;
             case 'OperationalIcon':
-							var hasSignatureInstructions = (nodeData.u_signature_instructions != 'null');
-							var hasDecision = (nodeData.decision != null && nodeData.decision != 'null');
-							var decisionText = "";
-							if(hasDecision)
-								decisionText = nodeData.decision;
-							var hasClassification = (nodeData.classification_DisplayValue != 'null');
-							toolTip = 
-								$go(go.Panel, "Table",
-										// Row 1 - DFCT0011078 - STRY0127737 - added name to the table to enable seeing the full longer name
-										_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.task_name.fieldLabel + ": "),
-										_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.task_name),
-										// Row 2
-										_createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
-										_createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
-										// Row 3
-										_createTableColumn(hasClassification, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
-										_createTableColumn(hasClassification, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
-										// Row 4
-										_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.priority.fieldLabel + ": "),
-										_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.priority_DisplayValue),
-										// Row 5
-										_createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.risk_flag.fieldLabel + ": "),
-										_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.risk_flag_DisplayValue),
-										// Row 6
-										_createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
-										// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-										// strip HTML Tags
-										// new go.Binding("text", "", function(data) {
-										//    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
-										// convert HTML to a simple string
+                var hasSignatureInstructions = (nodeData.u_signature_instructions != 'null');
+                var hasDecision = (nodeData.decision != null && nodeData.decision != 'null');
+                var decisionText = "";
+                if (hasDecision)
+                    decisionText = nodeData.decision;
+                var hasClassification = (nodeData.classification_DisplayValue != 'null');
+                toolTip =
+                    $go(go.Panel, "Table",
+                        // Row 1 - DFCT0011078 - STRY0127737 - added name to the table to enable seeing the full longer name
+                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.task_name.fieldLabel + ": "),
+                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.task_name),
+                        // Row 2
+                        _createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
+                        _createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
+                        // Row 3
+                        _createTableColumn(hasClassification, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
+                        _createTableColumn(hasClassification, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
+                        // Row 4
+                        _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.priority.fieldLabel + ": "),
+                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.priority_DisplayValue),
+                        // Row 5
+                        _createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.risk_flag.fieldLabel + ": "),
+                        _createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.risk_flag_DisplayValue),
+                        // Row 6
+                        _createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
+                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+                        // strip HTML Tags
+                        // new go.Binding("text", "", function(data) {
+                        //    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
+                        // convert HTML to a simple string
 
-										// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
-										// return _convertHtmlToSimpleString(data.instructions); // function was removed
-										// Need to call below to have <, >, and & show as that character and not an ALT code
-										// return htmlToStringService.convertHtmlToString(data.instructions);															
-										_createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
-										// Row 7
-										_createTableColumn(hasSignatureInstructions, 6, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
-										// 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-										// strip HTML Tags
-										// new go.Binding("text", "", function(data) {
-										//    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
-										// convert HTML to a simple string
+                        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                        // return _convertHtmlToSimpleString(data.instructions); // function was removed
+                        // Need to call below to have <, >, and & show as that character and not an ALT code
+                        // return htmlToStringService.convertHtmlToString(data.instructions);															
+                        _createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
+                        // Row 7
+                        _createTableColumn(hasSignatureInstructions, 6, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
+                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
+                        // strip HTML Tags
+                        // new go.Binding("text", "", function(data) {
+                        //    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
+                        // convert HTML to a simple string
 
-										// 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
-										// return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
-										// Need to call below to have <, >, and & show as that character and not an ALT code
-										// return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
-										_createTableColumn(hasSignatureInstructions, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions)),
-										// Row 8
-										_createTableColumn(hasDecision, 7, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.decision.fieldLabel + ": "),
-										_createTableColumn(hasDecision, 7, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, decisionText)
-									 );
+                        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
+                        // return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
+                        // Need to call below to have <, >, and & show as that character and not an ALT code
+                        // return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
+                        _createTableColumn(hasSignatureInstructions, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions)),
+                        // Row 8
+                        _createTableColumn(hasDecision, 7, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.decision.fieldLabel + ": "),
+                        _createTableColumn(hasDecision, 7, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, decisionText)
+                    );
                 break;
             case 'UserIcon':
-                toolTip = 
-									$go(go.Panel, "Table",
-											// Row 1
-											_createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasking_authority.fieldLabel + ": "),
-											_createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasking_authority_DisplayValue),
-											// Row 2
-											_createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_office.fieldLabel + ": "),
-											_createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_office_DisplayValue),
-											// Row 3
-											_createTableColumn(true, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_assignee.fieldLabel + ": "),
-											_createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_assignee_DisplayValue),
-											// Row 4
-											_createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.assigned_to.fieldLabel + ": "),
-											_createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue)
-										 );
+                toolTip =
+                    $go(go.Panel, "Table",
+                        // Row 1
+                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasking_authority.fieldLabel + ": "),
+                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasking_authority_DisplayValue),
+                        // Row 2
+                        _createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_office.fieldLabel + ": "),
+                        _createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_office_DisplayValue),
+                        // Row 3
+                        _createTableColumn(true, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_assignee.fieldLabel + ": "),
+                        _createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_assignee_DisplayValue),
+                        // Row 4
+                        _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.assigned_to.fieldLabel + ": "),
+                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue)
+                    );
                 break;
             case 'ExclamationIcon':
                 // STRY0095748 - no suspensedate warning
-							var durationExclamation = (nodeData.warning.noSuspenseDate || nodeData.warning.isTopSuspenseDateAfterExternalInboundDate ||
-                                nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate || !nodeData.warning.isSuspenseDateAfterChildren ||
-                                nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks);
-							var assignmentExclamation =  (nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty);
-                toolTip = 
-									$go(go.Panel, "Table",
-											// Row 1
-											_createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
-											// row 3
-											_createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"])
-										 );
+                var durationExclamation = (nodeData.warning.noSuspenseDate || nodeData.warning.isTopSuspenseDateAfterExternalInboundDate ||
+                    nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate || !nodeData.warning.isSuspenseDateAfterChildren ||
+                    nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks);
+                var assignmentExclamation = (nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty);
+                toolTip =
+                    $go(go.Panel, "Table",
+                        // Row 1
+                        _createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
+                        // row 3
+                        _createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"])
+                    );
                 break;
         }
         return toolTip;
@@ -1412,9 +1444,9 @@ function _createIconPanel(){
         );
         return toolJSON;
     }
-	// -----------------------------------------------------------------------------------------------------------------
-	// END TOOLTIPS
-	// -----------------------------------------------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------------------------------------------
+    // END TOOLTIPS
+    // -----------------------------------------------------------------------------------------------------------------
 
 };]]></client_script>
         <controller_as>c</controller_as>
@@ -1609,118 +1641,124 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 // 2.8 | 2022-09-02 | mmcc | DFCT0011213 - In Tree Bi-Fold, in Subtask tab, Task Progress Bar PUSHES content off on certain monitor sizes
 //                                      In HTML, update panel heading to use ngclass when bifold to add min height standard
 //                                      Changes made in HTML.
+// 2.8 | 2022-09-21 | mmcc | STRY0129140 - Task/Template Tree- Add "TaskFlow (tm)"
+//                                      In HTML, replaced style attribute with CSS selector .text-right; 
+//                                      added 2 div's relative and absolute to position TaskFlowTM_Logo.svg
+//                                      In Client controller, added missing semicolon to $scope.toggleCollpased and formatted file
+//                                      Changes made in HTML and Client controller.
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
 
-	main();
-	function main() {
-		var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-recursivetasktreegraph');
-		data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
-		data.messages = taskWidgetIconsAndMessage.loadMessages();
-		data.icons = taskWidgetIconsAndMessage.loadIcons();
+    main();
 
-		// DFCT0010684
-		data.currentUser = gs.getUserID();
-		// DFCT0010652
-		data.hide_accordion = (input || {}).hide_accordion || (options || {}).hide_accordion || false;
-		// 2.7.0 | 2021-08-27 | mmcc | STRY0107400 - Draft Scheduled Tasks – UI – Publish from Subtasks
-		data.isTopTaskOrNotDraft = true;
-		data.loadData = false;
-		// DFCT0010674
-		data.selectedId = (input || {}).sys_id || $sp.getParameter('sys_id');
-		data.table = (input || {}).table || $sp.getParameter('table');
-		
-		// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add bifold
-		data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+    function main() {
+        var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-recursivetasktreegraph');
+        data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+        data.messages = taskWidgetIconsAndMessage.loadMessages();
+        data.icons = taskWidgetIconsAndMessage.loadIcons();
 
-		// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add bifold
-		// DFCT0010674 - STRY0119599
-		convertToBool(['bifold', 'hide_accordion']);
+        // DFCT0010684
+        data.currentUser = gs.getUserID();
+        // DFCT0010652
+        data.hide_accordion = (input || {}).hide_accordion || (options || {}).hide_accordion || false;
+        // 2.7.0 | 2021-08-27 | mmcc | STRY0107400 - Draft Scheduled Tasks – UI – Publish from Subtasks
+        data.isTopTaskOrNotDraft = true;
+        data.loadData = false;
+        // DFCT0010674
+        data.selectedId = (input || {}).sys_id || $sp.getParameter('sys_id');
+        data.table = (input || {}).table || $sp.getParameter('table');
 
-		data.dynamic_tree = $sp.getParameter("dynamic_tree"); // KT - TLV - STRY0057360 - Macro Widget
-		if ((data.table != "x_153465_discovert_route_task_instance") || (!data.selectedId)) {
-			data.topParentTask_id = null;
-			return;
-		}
-		if (input) {
-			data.loadData = input.loadData;
-		}
+        // 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add bifold
+        data.bifold = (input || {}).bifold || (options || {}).bifold || false;
 
-		// DFCT0010674 - STRY0119599
-		if(data.hide_accordion){
-			data.loadData = true;
-		}
+        // 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add bifold
+        // DFCT0010674 - STRY0119599
+        convertToBool(['bifold', 'hide_accordion']);
 
-		if(data.loadData){
-			_loadTaskTree();
-			// STRY0121780 - moved here load toolbar after loading task tree
-			_loadToolBars();
+        data.dynamic_tree = $sp.getParameter("dynamic_tree"); // KT - TLV - STRY0057360 - Macro Widget
+        if ((data.table != "x_153465_discovert_route_task_instance") || (!data.selectedId)) {
+            data.topParentTask_id = null;
+            return;
+        }
+        if (input) {
+            data.loadData = input.loadData;
+        }
 
-		}
-	}
+        // DFCT0010674 - STRY0119599
+        if (data.hide_accordion) {
+            data.loadData = true;
+        }
 
-	function _loadToolBars(){
-		// TREE HEADER TOOLBAR
-		// STRY0117600 - move toolbar into separate widget to use same functionality across all
-		// STRY0120908 - added show separator
-		var header_widget_parameters = {
-			baseWidget: 'discovertasker-recursivetasktreegraph',
-			// STRY0121780
-			topId: data.topParentTask_id,
-			showSeparator: !data.hide_accordion,
-			iconGroup: 'header'
-		};
-		data.widgetTreeHeaderToolbars = [];
-		data.widgetTreeHeaderToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters)); 
+        if (data.loadData) {
+            _loadTaskTree();
+            // STRY0121780 - moved here load toolbar after loading task tree
+            _loadToolBars();
 
-		// TREE FOOTER TOOLBAR
-		// STRY0117600 - move toolbar into separate widget to use same functionality across all
-		var footer_widget_parameters = {
-			baseWidget: 'discovertasker-recursivetasktreegraph',
-			// STRY0121780
-			topId: data.topParentTask_id,
-			iconGroup: 'footer'
-		};
-		data.widgetTreeFooterToolbars = [];
-		data.widgetTreeFooterToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters));
-	}
+        }
+    }
 
-	function _loadTaskTree(){
+    function _loadToolBars() {
+        // TREE HEADER TOOLBAR
+        // STRY0117600 - move toolbar into separate widget to use same functionality across all
+        // STRY0120908 - added show separator
+        var header_widget_parameters = {
+            baseWidget: 'discovertasker-recursivetasktreegraph',
+            // STRY0121780
+            topId: data.topParentTask_id,
+            showSeparator: !data.hide_accordion,
+            iconGroup: 'header'
+        };
+        data.widgetTreeHeaderToolbars = [];
+        data.widgetTreeHeaderToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', header_widget_parameters));
 
-		var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-		if (!grTask.get(data.selectedId)) {
-			data.topParentTask_id = null;
-			return;
-		}
-		var id = grTask.getValue("u_top_task");
+        // TREE FOOTER TOOLBAR
+        // STRY0117600 - move toolbar into separate widget to use same functionality across all
+        var footer_widget_parameters = {
+            baseWidget: 'discovertasker-recursivetasktreegraph',
+            // STRY0121780
+            topId: data.topParentTask_id,
+            iconGroup: 'footer'
+        };
+        data.widgetTreeFooterToolbars = [];
+        data.widgetTreeFooterToolbars.push($sp.getWidget('tasker-tree-toolbar-icons', footer_widget_parameters));
+    }
 
-		var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
-		if (!grTopTask.get(id)) {
-			data.topParentTask_id = null;
-			return;
-		}
-		// DFCT0011096 - replaced data.id with data.topParentTask_id everywhere
-		data.topParentTask_id = grTopTask.getValue('sys_id');
-				
-		data.task_tree = grTopTask.getValue('u_task_tree');
+    function _loadTaskTree() {
 
-		// STRY0091251 - NOTE: this uses the same data building functions as the 'Tasker List Task Tree' widget id: discovertasker-recursivetasktreelist
-		if (data.loadData) {
-			// DFCT0010674
-			var map = data.map = [];			
-			var taskWidgetData = new TaskWidgetData();
-			data.fieldsInModel = taskWidgetData.loadTaskTreeFieldsInModelAndFieldLabels(grTopTask);
-			taskWidgetData.buildTaskMap('discovertasker-recursivetasktreegraph', map, grTopTask, data.fieldsInModel);
-		}
-	}
+        var grTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+        if (!grTask.get(data.selectedId)) {
+            data.topParentTask_id = null;
+            return;
+        }
+        var id = grTask.getValue("u_top_task");
 
-	function convertToBool(names) {
-		names.forEach(function(name) {
-			data[name] = data[name] == true || data[name] == 'true';
-		});
-	}
+        var grTopTask = new GlideRecordSecure('x_153465_discovert_route_task_instance');
+        if (!grTopTask.get(id)) {
+            data.topParentTask_id = null;
+            return;
+        }
+        // DFCT0011096 - replaced data.id with data.topParentTask_id everywhere
+        data.topParentTask_id = grTopTask.getValue('sys_id');
+
+        data.task_tree = grTopTask.getValue('u_task_tree');
+
+        // STRY0091251 - NOTE: this uses the same data building functions as the 'Tasker List Task Tree' widget id: discovertasker-recursivetasktreelist
+        if (data.loadData) {
+            // DFCT0010674
+            var map = data.map = [];
+            var taskWidgetData = new TaskWidgetData();
+            data.fieldsInModel = taskWidgetData.loadTaskTreeFieldsInModelAndFieldLabels(grTopTask);
+            taskWidgetData.buildTaskMap('discovertasker-recursivetasktreegraph', map, grTopTask, data.fieldsInModel);
+        }
+    }
+
+    function convertToBool(names) {
+        names.forEach(function(name) {
+            data[name] = data[name] == true || data[name] == 'true';
+        });
+    }
 
 })();]]></script>
         <servicenow>false</servicenow>
@@ -1729,7 +1767,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1942</sys_mod_count>
+        <sys_mod_count>1975</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -1737,7 +1775,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-09-15 18:56:24</sys_updated_on>
+        <sys_updated_on>2022-09-21 13:14:01</sys_updated_on>
         <template><![CDATA[<div id="accordionTaskerGraphical" class="panel-group flex-row flex-grow">
   <div id="main_body" class="panel panel-default flex-column flex-grow" ng-class="{'dtech-topstick-posabso':data.hide_accordion==true}"> 
     <div id="panel_heading" class="panel-heading" ng-class="{'dtech-panel-heading-min-height-standard':data.bifold==true}">
@@ -1758,7 +1796,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
       <div id="collapseTaskerGraphical" class="flex-column flex-grow" ng-class="{'collapse':!data.hide_accordion}" >
 
         <div class="flex-column flex-grow m-t-sm"  ng-show="data.topParentTask_id">
-          <div id="legend" class="panel-heading" style="text-align:right;">
+          <div id="legend" class="panel-heading text-right">
             <span>Projected on time: <span class="label label-as-badge label-success"> </span></span>&nbsp;
             <span>Warning: <span class="label label-as-badge label label-warning"> </span></span>&nbsp;
             <span>Critical: <span class="label label-as-badge label label-danger"> </span></span>&nbsp;
@@ -1780,7 +1818,15 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 
           <div class="flex-column flex-grow">
             <div id="page_map" class="flex-column flex-grow page-map" ng-class="{'dtech-h-50vh':!data.hide_accordion}"/>
-            <div class="flex-row justify-center" id="draftTaskPublishMessage">
+
+            <div class="dtech-position-relative">
+              <div class="dtech-position-abso-bottom-15-left-0-zindex-2">
+                <img src="{{::data.icons['TaskFlowTM_Logo'].src}}" title="{{::data.icons['TaskFlowTM_Logo'].title}}"
+                     alt="{{::data.icons['TaskFlowTM_Logo'].alt}}" class="dtech-pad-left-10-bottom-10"/>
+              </div>
+            </div>
+
+            <div class="flex-row justify-center" id="draftTaskPublishMessage">              
               <div ng-hide="data.isTopTaskOrNotDraft">
                 <span class="m-l-sm"><img src="InfoRound28.svg"/></span>
                 <span class="m-l-xs">{{data.messages["Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task."]}}</span>
