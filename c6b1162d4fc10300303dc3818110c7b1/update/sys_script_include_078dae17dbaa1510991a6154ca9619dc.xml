@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.TaskerTypes</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Check if a UI Action should be visible for a specific Task Type&#13;
+&#13;
+2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table</description>
+        <name>TaskerTypes</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+g_taskerTaskTypes = {};
+var TaskerTypes = Class.create();
+// STRY0127550 - define constants for task types
+TaskerTypes.CONST_TASKER_TYPE_STANDARD = "standard";
+TaskerTypes.CONST_TASKER_TYPE_INFORMATION_ONLY = "information_only";
+TaskerTypes.CONST_TASKER_TYPE_ACKNOWLEDGEMENT = "acknowledgement";
+TaskerTypes.CONST_TASKER_TYPE_APPROVAL_WITH_SIGNATURE = "approval_with_signature";
+TaskerTypes.CONST_TASKER_TYPE_APPROVAL = "approval";
+TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE_WITH_SIGNATURE = "concurrence_with_signature";
+TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE = "concurrence";
+
+TaskerTypes.prototype = {
+	initialize: function() {
+		if (g_taskerTaskTypes.lastRefreshDateTime != undefined){
+			var typesUpdated = this._getTaskTypesUpdated();
+			if(!typesUpdated){
+				this._displayToValue = this._loadDisplayToValue();
+				this._valueConstants = this._loadValueConstants();
+				// if records exist and the last time preferences were loaded is later than the last update, then return.
+				// no need to reload the preferences as they haven't changed
+				return g_taskerTaskTypes;						
+			}
+		}
+		// set the global object
+		this.g_taskerTaskTypes = this._loadTaskTypes();
+		this._displayToValue = this._loadDisplayToValue();
+		this._valueConstants = this._loadValueConstants();
+		return this.g_taskerTaskTypes;
+    },
+	
+	// return display value for a tasker type
+	_getType:function (value){
+		var taskType = g_taskerTaskTypes.taskTypes.filter(function (tt){
+			if(tt.u_value == value){
+				return tt;
+			}
+		})[0].tasker_type;
+		return taskType;
+	},
+
+	// return display value for a tasker type
+	_getValue:function (type){
+		var taskType = g_taskerTaskTypes.taskTypes.filter(function (tt){
+			if(tt.tasker_type == type){
+				return tt;
+			}
+		})[0].u_value;
+		return taskType;
+	},
+	
+	// Get last updated time
+	_getTaskTypesUpdated: function(){
+		// DFCT0010755 
+		var lastUpdated = false;
+		var gr_task_types = new GlideRecordSecure('x_153465_discovert_tasker_type');
+		var gdt = new GlideDateTime();
+		gdt.setValue(g_taskerTaskTypes.lastRefreshDateTime);
+		gr_task_types.addQuery('sys_updated_on', '>', gdt);
+		gr_task_types.query();
+		if(gr_task_types.next())
+			lastUpdated = true;
+		return lastUpdated;
+	},
+	
+	_loadTaskTypes: function (){
+		var taskerTaskTypes = {};
+		taskerTaskTypes.taskTypes = [];
+		
+		
+		var gr_task_types = new GlideRecordSecure('x_153465_discovert_tasker_type');
+		gr_task_types.addQuery('active', true);
+		
+		gr_task_types.orderByDesc('order');
+		gr_task_types.query();
+		var fields = gr_task_types.getElements();
+
+		while(gr_task_types.next()){
+			var taskType = {};
+			for (var i = 0; i < fields.length; i++) {
+				var glideElement = fields[i];
+				var key = glideElement.getName();
+				if(!key.startsWith('sys_')){
+					switch(key){
+						case "order":
+						case "tasker_type":	
+						case "u_servicenow_form_view":
+						case "u_value":
+							taskType[key] = gr_task_types.getValue(glideElement.getName());
+						break;
+						case "work_type":
+							// set the display value the same way reguardless of field
+							taskType[key] = {};
+							taskType[key].displayValue = gr_task_types.getDisplayValue(glideElement.getName());
+							taskType[key].value = gr_task_types.getValue(glideElement.getName());
+							break;
+					}
+				}
+			}
+			taskerTaskTypes.taskTypes.push(taskType);
+		}
+		
+		var dteLastRefresh = new GlideDateTime();
+		taskerTaskTypes.lastRefreshDateTime = dteLastRefresh.getValue();
+		
+		g_taskerTaskTypes = {};
+		g_taskerTaskTypes = taskerTaskTypes;
+		return g_taskerTaskTypes;
+	},
+	
+	// load an ojbect with tasker type value.diplay_value for each type
+	_loadDisplayToValue: function(){
+		var displayToValue = {};
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_STANDARD)] = TaskerTypes.CONST_TASKER_TYPE_STANDARD;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_INFORMATION_ONLY)] = TaskerTypes.CONST_TASKER_TYPE_INFORMATION_ONLY;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_ACKNOWLEDGEMENT)] = TaskerTypes.CONST_TASKER_TYPE_ACKNOWLEDGEMENT;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_APPROVAL_WITH_SIGNATURE)] = TaskerTypes.CONST_TASKER_TYPE_APPROVAL_WITH_SIGNATURE;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_APPROVAL)] = TaskerTypes.CONST_TASKER_TYPE_APPROVAL;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE_WITH_SIGNATURE)] = TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE_WITH_SIGNATURE;
+		displayToValue[this._getType(TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE)] = TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE;
+		return displayToValue;
+	},
+	
+	_loadValueConstants: function(){
+		var taskTypeValue = {};
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_STANDARD] = TaskerTypes.CONST_TASKER_TYPE_STANDARD;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_INFORMATION_ONLY] = TaskerTypes.CONST_TASKER_TYPE_INFORMATION_ONLY;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_ACKNOWLEDGEMENT] = TaskerTypes.CONST_TASKER_TYPE_ACKNOWLEDGEMENT;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_APPROVAL_WITH_SIGNATURE] = TaskerTypes.CONST_TASKER_TYPE_APPROVAL_WITH_SIGNATURE;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_APPROVAL] = TaskerTypes.CONST_TASKER_TYPE_APPROVAL;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE_WITH_SIGNATURE] = TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE_WITH_SIGNATURE;
+		taskTypeValue[TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE] = TaskerTypes.CONST_TASKER_TYPE_CONCURRENCE;
+		return taskTypeValue;
+	},
+	
+	getDisplayValues: function(){
+		return this._displayToValue;
+	},
+	
+	getValueConstants: function(){
+		return this._valueConstants;
+	},
+	
+	type: 'TaskerTypes'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-10-20 13:29:42</sys_created_on>
+        <sys_id>078dae17dbaa1510991a6154ca9619dc</sys_id>
+        <sys_mod_count>30</sys_mod_count>
+        <sys_name>TaskerTypes</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>protected</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_078dae17dbaa1510991a6154ca9619dc</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-10-22 03:56:12</sys_updated_on>
+    </sys_script_include>
+</record_update>
