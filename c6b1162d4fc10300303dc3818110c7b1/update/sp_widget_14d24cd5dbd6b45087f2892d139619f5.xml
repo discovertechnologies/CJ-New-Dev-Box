@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function($rootScope, $scope, $timeout, spAriaFocusManager, $http, amb, spModal, $uibModal, $location, $log, $window, spUtil, spAriaUtil, spNavStateManager) {
+        <client_script><![CDATA[api.controller=function($rootScope, $scope, $timeout, $location, $window, spUtil, spNavStateManager) {
 	// Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
 	// Script Continued Below
 	//------------------------------------------------------------------------------------------------------------------------
@@ -63,14 +63,14 @@
 		} else {
 			return $scope.data.f._ui_actions;
 		}
-	}
+	};
 
 	$scope.getPrimaryAction = function() {
 		var primaryActions = $scope.data.f._ui_actions.filter(function(action) {
 			return action.primary;
 		});		
 		return (primaryActions.length) ? primaryActions[0] : null;
-	}
+	};
 
 	$scope.getUIActionContextMenu = function(event) {
 		var menu = [];
@@ -94,7 +94,7 @@
 		}]);
 
 		return menu;
-	}
+	};
 
 	function exportPDF(landscape) {
 		$window.open("/" + $scope.data.f.table + ".do?PDF&landscape=" + landscape + "&sys_id=" + $scope.data.sys_id + "&sysparm_view=" + $scope.data.f.view);
@@ -107,7 +107,7 @@
 			$scope.triggerUIAction(primaryAction);
 	});
 	$scope.$on('$destroy', function() {
-		deregister()
+		deregister();
 	});
 
 	$scope.triggerUIAction = function(action) {
@@ -127,7 +127,7 @@
 					$scope.submitting = false;
 			}
 		});
-	}
+	};
 
 	$scope.$on("spModel.uiActionComplete", function(evt, response, savedFormSysId) {
 		if ($scope.data.sys_id !== savedFormSysId)
@@ -165,14 +165,14 @@
 			$scope.status = message;
 			spUtil.addTrivialMessage(message);
 			$timeout(clearStatus, 2000);
-		}
+		};
 	}
 
 	var ctrl = this;
 	
 	$scope.$on("$destroy", function() {
 		unregister();
-	})
+	});
 
 	function _save() {
 		var primaryAction = $scope.getPrimaryAction();
@@ -187,7 +187,7 @@
 		$scope.data.sys_id = f.sys_id = sys_id;
 		$scope.data.view =	f.view = c.data.view;
 		$scope.server.update().then(function(){
-			$scope.go(c.data.send_table, c.data.send_sys_id)
+			$scope.go(c.data.send_table, c.data.send_sys_id);
 		});
 	}
 
@@ -243,7 +243,7 @@
 			if (data.fieldToClear != "" && g_form.hasField(data.fieldToClear))
 				g_form.setValue(data.fieldToClear, "");
 		}
-	})
+	});
 
 	// Show or hide related lists
 	$scope.$watch('data.f._related_lists', function() {
@@ -279,7 +279,7 @@
 	if ($scope.data.f.title) {
 		$scope.$emit('sp.widget-modal.set-aria-label', $scope.data.f.title);
 	}
-}]]></client_script>
+};]]></client_script>
         <controller_as>c</controller_as>
         <css>.dtech-pad-right-6px {&#13;
   padding-right: 6px;&#13;
@@ -457,8 +457,13 @@
 //                                         Changes made in Server Script
 // 2.7.0 | 2021-11-01 | raj  | DFCT0010772 - Error message on OU Request bi-fold view: "getPlural is not allowed in scope x_153465_discovert"
 //                                         Changes made in Server Script
+// 2.8 | 2022-10-26 | mmcc | STRY0130236 - Hierarchy Requests page needs updated to match the standard layout for flexing header-body-footer 
+//                                      In HTML, use ngif bifold to add flex CSS selectors to panel panel-default, 
+//                                        panel-body and div wrapping sp-model; remove sp-attachment-manager
+//                                      In Server script, Added "|| false" to omitHeaderOptions, omitHeader and isModal; added bifold; added convertToBool()
+//                                      In Client controller, added api.controller= and ending semicolon; added many missing semicolons
+//                                      Changes made in HTML, Server script and Client controller.
 // 
-//// form functionality - URL parameter driven
 //------------------------------------------------------------------------------------------------------------------------
 (function(sp, input, data, options, gs) {
   /* "use strict"; -linter issues */
@@ -476,13 +481,17 @@
 	// *************** Customization End ***************************
 	
 	data.emptyStateTemplate = options.empty_state_template;
+	data.size = (input || {}).size || (options || {}).size;	
 	data.hideRelatedLists = options.hideRelatedLists || false;
 	data.disableUIActions = (input || {}).disableUIActions || (options || {}).disableUIActions || false;	
 	data.hideRelatedLists = (input || {}).hideRelatedLists || (options || {}).hideRelatedLists || false;
-	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions;	
-	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader;	
-	data.size = (input || {}).size || (options || {}).size;	
-	data.isModal = (input || {}).isModal || (options || {}).isModal;
+	// 2.8 | 2022-10-26 | mmcc | STRY0130236 - Hierarchy Requests page needs to flex; updated with || false
+	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions || false;	
+	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;	
+	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+	
+	// 2.8 | 2022-10-26 | mmcc | STRY0130236 - Hierarchy Requests page needs to flex; added bifold
+	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
 	
 	// *************** Customization Start ***************************
 	// RAJ - added to improve ability to open in a modal
@@ -499,6 +508,9 @@
 		data.dcu_view = (input || {}).dcu_view || (options || {}).dcu_view || $sp.getParameter("dcu_view");	
 		data.dcu_ref = (input || {}).dcu_ref || (options || {}).dcu_ref || $sp.getParameter("dcu_ref");
 	}
+	
+	// 2.8 | 2022-10-26 | mmcc | STRY0130236 - Hierarchy Requests page needs to flex; added convertToBool()
+	convertToBool(['bifold', 'isModal', 'omitHeader', 'omitHeaderOptions']);
 	
 	// *************** Customization end ***************************
 	
@@ -721,20 +733,25 @@
 		return prevRec;
 	}
 
+	// 2.8 | 2022-10-26 | mmcc | STRY0130236 - Hierarchy Requests page needs to flex; added convertToBool()
+	function convertToBool(names) {
+		names.forEach(function(name) {
+			data[name] = data[name] == true || data[name] == 'true';
+		});
+	}
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-08-29 17:17:53</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>14d24cd5dbd6b45087f2892d139619f5</sys_id>
-        <sys_mod_count>208</sys_mod_count>
         <sys_name>Simple Processing Form</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_14d24cd5dbd6b45087f2892d139619f5</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-01-21 21:05:09</sys_updated_on>
         <template><![CDATA[<div ng-if="::!data.isValid && !data.emptyStateTemplate" class="panel panel-default">
   <div class="panel-body wrapper-lg text-center">
     <span ng-if="!data.tableUnsupported">${Record not found}</span>
@@ -766,7 +783,10 @@
       <p>${This record is in the <strong>{{data.f.recordScopeLabel}}</strong> application, but <strong>{{data.f.currentScopeLabel}}</strong> is the current application.}</p>
     </div>
   </div>
-  <div ng-show="isPageReady" class="panel panel-default" ng-if="data.f._view.length || !data.hideRelatedLists" >
+
+  <div ng-if="data.f._view.length || !data.hideRelatedLists" ng-show="isPageReady" class="panel panel-default"
+       ng-class="{'dtech-topstick-posabso flex-column flex-grow':data.bifold==true}">
+
     <div class="panel-heading" ng-if="data.f.title.length" sp-context-menu="getUIActionContextMenu(event)">
       	<span class="dropdown m-r-xs" ng-if="(data.isAdmin || getUIActions('context').length > 0) && options.omitHeaderOptions != 'true'">
             <button aria-label="${Form menu}" class="btn btn-form-menu dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="adminMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
@@ -823,7 +843,8 @@
       </div>
 
     </div>
-    <div class="panel-body">
+    
+    <div class="panel-body" ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-pad-all-0 dtech-pad-bottom-5':data.bifold==true}">
       <!-- performance debug -->
       <div ng-if="data.show_sql">
         <div class="comment">
@@ -834,10 +855,9 @@
           {{s.statement}}
         </div>
       </div>
-      <!-- attachments -->
-      <sp-attachment-manager table="::data.table" sys-id="data.f._attachmentGUID" omit-edit="::!data.canAttach"></sp-attachment-manager>
+      
       <!-- form -->
-      <div>
+      <div ng-class="{'dtech-overflow-auto-pad-right-15-gutter-stable dtech-pad-left-5 dtech-pad-top-15':data.bifold==true}">
         <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
       </div>
       <!-- UI Action Links -->
@@ -874,6 +894,7 @@
         <span ng-repeat="f in mandatory" class="label dtech-field-error-label" ng-bind="f.label"></span>
       </div>
     </div>
+    
   </div>
 </div>]]></template>
     </sp_widget>
