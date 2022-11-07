@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>Enable permission fields based on the current user's roles&#13;
+2.8.1 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office</description>
+        <field>u_tasker_user</field>
+        <global>true</global>
+        <isolate_script>true</isolate_script>
+        <messages>Tasker - Groups and Roles are not fully configured. Navigate to Tasker Administration - Groups Management and select a group for each role.&#13;
+Tasker - The Group is missing the role. Navigate to Tasker Administration - Groups Management and ensure all groups have a role applied.&#13;
+Tasker - This user has been assigned the role explicitly (i.e., not assigned through group membership). Navigate to Tasker Administration - Groups Management and use the "lets fix it" link to move the user into the group.&#13;
+Tasker - This user has been assigned the Task User role explicitly (i.e., not assigned through group membership). Navigate to Tasker Administration - Groups Management and use the "lets fix it" link to move the user into the group.</messages>
+        <name>Org User-onChange User SetPermissions</name>
+        <order/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+function onChange(control, oldValue, newValue, isLoading, isTemplate) {
+	var userInfo;
+	var permissions;
+	var defaultOU;
+	var fieldPrefix = "";
+	if (isLoading || newValue === '') {
+		permissions = g_scratchpad.userRolesAndPermissions;
+		_setMessages();
+		return;
+	} else {
+		_changeUser();
+	}
+	// change all of these
+	function _changeUser(){
+		// STRY0050440 
+		g_form.clearValue('is_task_administrator');
+		// STRY0112585 - Task Executive- Update for New Member Form
+		g_form.clearValue('is_task_executive');
+		g_form.clearValue('is_tasker_application_administrator');
+		g_form.clearValue('is_global_hierarchy_administrator');
+		g_form.clearValue('can_manage_template_permissions');
+		g_form.clearValue('can_manage_global_template');
+		
+		g_form.clearValue('has_personal_template_rights');
+		g_form.clearValue('u_default_ou');
+
+		var tasker_user = g_form.getValue('u_tasker_user');
+		var userInfo  = new GlideAjax('ClientUserInfoScripts');
+		userInfo.addParam('sysparm_name','getUserInfo');
+		userInfo.addParam("user", tasker_user);
+		// STRY0129039 - removed role parameter as it should be set one place for everywhere that we need the global role list
+
+		userInfo.getXML(f_returnUserInfo);		
+	}
+
+	function f_returnUserInfo(response){
+		var answer = response.responseXML.documentElement.getAttribute("answer");
+		userInfo = JSON.parse(answer);
+		permissions = userInfo.permissions;
+		defaultOU = userInfo.defaultOU;
+		for(var i=0; i<permissions.length; i++){
+			var permission = permissions[i];
+			if(g_form.getControl(permission.fieldName)){
+				g_form.setValue(permission.fieldName, permission.hasRole);
+			}
+		}
+		// set default OU
+		g_form.setValue('u_default_ou', defaultOU.value, defaultOU.displayValue);
+		_setMessages();
+	}
+	
+	function _setMessages(){
+		for(var i=0; i<permissions.length; i++){
+			var permission = permissions[i];
+			var fieldName = fieldPrefix + permission.fieldName;
+			if(permission.fieldName && permission.fieldName != ''){
+				// set the message for permission fields
+				if(g_form.getControl(fieldName)){
+					if(permission.hasRoleExplicitly){
+						g_form.showFieldMsg(fieldName, 
+											getMessage('Tasker - This user has been assigned the role explicitly (i.e., not assigned through group membership). Navigate to Tasker Administration - Groups Management and use the "lets fix it" link to move the user into the group.'),
+											"warning");
+					}
+					if(permission.usesGroupsForRoles){
+						if(!permission.groupSelected){
+							g_form.showFieldMsg(fieldName, 
+												getMessage("Tasker - Groups and Roles are not fully configured. Navigate to Tasker Administration - Groups Management and select a group for each role."),
+												"warning");
+							g_form.setDisabled(fieldName, true);
+							g_form.setReadOnly(fieldName, true);
+						} else if(!permission.groupHasRole){
+							g_form.showFieldMsg(fieldName, 
+												getMessage("Tasker - The Group is missing the role. Navigate to Tasker Administration - Groups Management and ensure all groups have a role applied."),
+												"warning");
+						}
+					}
+				}
+				
+			} else {
+				// set the message for the member field
+				if(permission.role == 'x_153465_discovert.tasker_user'){
+					// is the member control on the form
+					if(g_form.getControl('u_tasker_user')){
+						if(permission.hasRoleExplicitly){
+							g_form.showFieldMsg("u_tasker_user", 
+													getMessage('Tasker - This user has been assigned the Task User role explicitly (i.e., not assigned through group membership). Navigate to Tasker Administration - Groups Management and use the "lets fix it" link to move the user into the group.'),
+													"warning");
+						}
+						if(permission.usesGroupsForRoles){
+							if(!permission.groupSelected){
+								g_form.showFieldMsg("u_tasker_user", 
+													getMessage("Tasker - Groups and Roles are not fully configured. Navigate to Tasker Administration - Groups Management and select a group for each role."),
+													"warning");
+								g_form.setDisabled("u_tasker_user", true);
+								g_form.setReadOnly("u_tasker_user", true);
+							} else if(!permission.groupHasRole){
+								g_form.showFieldMsg("u_tasker_user", 
+													getMessage("Tasker - The Group is missing the role. Navigate to Tasker Administration - Groups Management and ensure all groups have a role applied."),
+													"warning");
+							}
+						}
+					}
+				}
+			}
+		}
+		// disable member field this is not a new record
+		if(!g_form.isNewRecord()){
+			if(g_form.getControl('u_tasker_user')){
+				g_form.setDisabled("u_tasker_user", true);
+				g_form.setReadOnly("u_tasker_user", true);
+			}
+		}
+	}
+}
+
+]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-10-31 06:01:16</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>e96071721bf25d10e75655f5624bcb1c</sys_id>
+        <sys_mod_count>3</sys_mod_count>
+        <sys_name>Org User-onChange User SetPermissions</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_client_e96071721bf25d10e75655f5624bcb1c</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-11-03 20:42:15</sys_updated_on>
+        <table>x_153465_discovert_organization_user</table>
+        <type>onChange</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

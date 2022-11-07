@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8    | 2022-09-22 - raj -  STRY0130090 - 2.8 Certifier requested updates -10. Hardcoded Data :  Avoid using hard-coded URLs in scripts. &#13;
+        <description>2.8.1 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
+2.8.1 | 2022-11-04 - raj - changed to use gs.setProperty as the scope issue seems to be resolved as of San Diego&#13;
+&#13;
+2.8    | 2022-09-22 - raj -  STRY0130090 - 2.8 Certifier requested updates -10. Hardcoded Data :  Avoid using hard-coded URLs in scripts. &#13;
 2.8    | 2022-09-08 - raj -  STRY0129041 - Block Search for User if Groups are Selected but aren't Configured&#13;
 2.8    | 2022-09-08 - raj -  STRY0129039 - OU Hierarchy Group Not Configured for Role Warning&#13;
 2.8    | 2022-08-24 - raj -  DFCT0011207 - Groups: TAA is unable to perform any actions, Groups Management" display an empty screen&#13;
@@ -172,8 +175,9 @@ tasking_System_Settings_Scripts.prototype = {
 				propertyValue = property.value;
 			}
 			propertyValue = propertyValue + "";
-			//gs.setProperty(property.name, propertyValue);
-			this._setSystemProperty(property.name, propertyValue);
+			// before San Diego, this was failing unless admin and saying in the wrong application scope.
+			gs.setProperty(property.name, propertyValue);
+			//this._setSystemProperty(property.name, propertyValue);
 		}
 		// reload global object with updated values
 		this.resetGlobalRolesForGroupsSettings();
@@ -282,6 +286,7 @@ tasking_System_Settings_Scripts.prototype = {
 		this._syncTaskerMembersWithRole(groupProperty);
 	},
 	
+	//  STRY0131148 - Members table changed to Users table, left functions and objects as they were to reduce code change
 	_syncTaskerMembersWithRole: function(groupProperty){
 		var uis = new UserInfoScripts();
 		var roleName;
@@ -289,53 +294,78 @@ tasking_System_Settings_Scripts.prototype = {
 		var usersProcessed = 0;
 		var recordsChanged = 0; // records all records changed
 		var usersChanged = 0;
-		var currentUserUpdated = false;
+		var usersAdded = 0;
 		var userHasRole = false;
-		var currentUserId;
 		var fieldName = "";
+		//  STRY0131148 - Members table changed to Users table, left functions and objects as they were to reduce code change
 		groupProperty.MemberTableSyncResults = {};
-		// get field for role name
-		var grOfficeMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		//  STRY0131148 - updated to move table - get field for role name
+		var grOrgUsers = new GlideRecordSecure('x_153465_discovert_organization_user');
 		
 		if (groupProperty.roleName && groupProperty.roleName != ""){
 			roleName = groupProperty.roleName;
 			fieldName = this._getFieldforRoleName(roleName);
 			// go through users one at a time
-			grOfficeMembers.orderBy("office_member");
-			grOfficeMembers.query();
-			while(grOfficeMembers.next()){
-				if(currentUserId != grOfficeMembers.getValue("office_member")){
-					if(currentUserUpdated){
-						usersChanged++;
-						// reset users changed to false
-						currentUserUpdated = false;
-					}
-					// change user
-					currentUserId = grOfficeMembers.getValue("office_member");
-					userHasRole = uis.UserHasRoleScoped(roleName, currentUserId);
-					// increment process users count
-					usersProcessed++;
-				}
+			grOrgUsers.orderBy("u_tasker_user");
+			grOrgUsers.query();
+			while(grOrgUsers.next()){
+				currentUserId = grOrgUsers.getValue("u_tasker_user");
+				userHasRole = uis.UserHasRoleScoped(roleName, currentUserId);
+				// increment process users count
+				usersProcessed++;
 				recordsProcessed++;
 				// check each record for the user
-				if(userHasRole != grOfficeMembers.getValue(fieldName)){
-					currentUserUpdated=true;
+				if(userHasRole != grOrgUsers.getValue(fieldName)){
 					// no need to update any groups or roles, changing table to match group or roles
-					grOfficeMembers.setWorkflow(false);
-					grOfficeMembers.setValue(fieldName,userHasRole);
-					grOfficeMembers.update("Member Sycn performed by user: " + gs.getUserDisplayName() + "[ User Id: "+ gs.getUserName() + "]");
+					grOrgUsers.setWorkflow(false);
+					grOrgUsers.setValue(fieldName,userHasRole);
+					grOrgUsers.update("User Sycn performed by user: " + gs.getUserDisplayName() + "[ User Id: "+ gs.getUserName() + "]");
 					recordsChanged++;
+					usersChanged++;
 				}
 			}
+			usersAdded =+ this._addUsersWithRoleNotInOrganizationalUsersTable(property, roleName, fieldName);
+			usersProcessed =+ usersAdded;
+			usersChanged =+ usersAdded;
+			recordsProcessed =+ usersAdded;
+			recordsChanged =+ usersAdded;
+			
 		} else{
-// todo, error here
-// todo, task user is different, can't update users must be added 
+			// no role name associated with the system property.  This should not happen, but handled here.
 		}
 		groupProperty.MemberTableSyncResults.recordsProcessed = recordsProcessed;
 		groupProperty.MemberTableSyncResults.usersProcessed = usersProcessed;
 		groupProperty.MemberTableSyncResults.recordsChanged = recordsChanged;
 		groupProperty.MemberTableSyncResults.usersChanged = usersChanged;
 	},
+	
+	// Make sure all users with the role are in the User Table
+	_addUsersWithRoleNotInOrganizationalUsersTable: function(property, roleName, fieldName){
+		var grOrgUsers;
+		var grRoleUsers = new GlideRecord('sys_user_has_role');
+		var usersProcessed = 0;
+		var usersChanged = 0;
+
+		grRoleUsers.addQuery('role.name', roleName);
+		grRoleUsers.query();
+		while (grRoleUsers.next()) {
+			grOrgUsers = new GlideRecordSecure('x_153465_discovert_organization_user');
+
+			var roleUserId = grRoleUsers.getValue("user"); 
+			grOrgUsers.addQuery("u_tasker_user", roleUserId);
+			// add any users not in the system to the Organizational User table
+			grOrgUsers.query();
+			if (!grOrgUsers.next()) {
+				grOrgUsers.initialize();
+				grOrgUsers.u_tasker_user = roleUserId;
+				grOrgUsers[fieldName] = true;
+				grOrgUsers.insert();
+				usersChanged++;
+			}
+		}
+		return usersChanged;
+	},
+
 	
 	migrateRoleUsersIntoGroup: function(groupProperty){
 		var roleName = "";
@@ -712,54 +742,63 @@ tasking_System_Settings_Scripts.prototype = {
 		return count;
 	},
 
+	//  STRY0131148 - Members table changed to Users table, left functions and objects as they were to reduce code change
 	_countTaskerMembersWithRole: function(groupProperty, roleName){
 		var count = -1; // default to error state since 0 is a valid count
 		var fieldName = "";
-		// get field for role name
-		var gaOfficeMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		// STRY0131148 - member table moved to user table for personal permissions get field for role name
+		var gaOrgUsers = new GlideAggregate('x_153465_discovert_organization_user');
 		
 		fieldName = this._getFieldforRoleName(roleName);
 		// Group Management - add field name to property so client doesn't have to post back to server to get it
 		groupProperty.memberTableFieldName = fieldName;
 		
 		if(fieldName && fieldName!=""){
-			gaOfficeMembers.addQuery(fieldName, true);
+			gaOrgUsers.addQuery(fieldName, true);
 		}
-		gaOfficeMembers.addAggregate('COUNT(DISTINCT', 'office_member.sys_id');
-		gaOfficeMembers.setGroup(false);
-		gaOfficeMembers.query();
-		if(gaOfficeMembers.next()){
-			count = gaOfficeMembers.getAggregate('COUNT(DISTINCT', 'office_member.sys_id');
+		// STRY0131148 - member table moved to user table for personal permissions get field for role name
+		gaOrgUsers.addAggregate('COUNT(DISTINCT', 'u_tasker_user.sys_id');
+		gaOrgUsers.setGroup(false);
+		gaOrgUsers.query();
+		if(gaOrgUsers.next()){
+			count = gaOrgUsers.getAggregate('COUNT(DISTINCT', 'u_tasker_user.sys_id');
 		}
-		return count;		
+		return count;
 	},
 	
 	_getFieldforRoleName: function(roleName){
 		var fieldName;
 		switch(roleName){
 			case tasking_System_Settings_Scripts.CONST_ROLE_TASKER_APPLICATION_ADMINISTRATOR:
-				fieldName = "is_tasker_application_admin";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "is_tasker_application_administrator";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_HIERARCHY_ADMINISTRATOR:
-				fieldName = "user_is_organization_admin";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "is_global_hierarchy_administrator";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_TASK_ADMINISTRATOR:
-				fieldName = "is_global_tasking_authority";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "is_task_administrator";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_TASK_EXECUTIVE:
+				// STRY0131148 - moved the table for personal permissions and changed names 
 				fieldName = "is_task_executive";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_TEMPLATE_ADMINISTRATOR:
-				fieldName = "can_manage_process_permissions";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "can_manage_template_permissions";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_GLOBAL_TEMPLATE_DESIGNER:
-				fieldName = "can_manage_global_processes";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "can_manage_global_template";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_PERSONAL_TEMPLATE_DESIGNER:
-				fieldName = "has_personal_process_rights";
+				// STRY0131148 - moved the table for personal permissions and changed names 
+				fieldName = "has_personal_template_rights";
 				break;
 			case tasking_System_Settings_Scripts.CONST_ROLE_TASKER_USER:
-				// tasker user is not in the member table.  if the field is blank return a search for all unique members and bipass the where clause
+				// tasker user is not in the user table.  if the field is blank return a search for all unique members and bipass the where clause
 				fieldName = "";
 				break;
 		}		
@@ -862,6 +901,7 @@ tasking_System_Settings_Scripts.prototype = {
 	// DFCT0010732
 	getUserOUMemberAdmins: function(user) {
 		var offices = [];
+		// STRY0131148 - member table moved to user table for personal permissions get field for role name
 		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		grOUs.addQuery('can_manage_ou_members', 'true');
 		grOUs.addQuery('office_member', user);
@@ -1436,13 +1476,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>340</sys_mod_count>
+        <sys_mod_count>353</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-10-07 22:21:42</sys_updated_on>
+        <sys_updated_on>2022-11-04 17:16:23</sys_updated_on>
     </sys_script_include>
 </record_update>

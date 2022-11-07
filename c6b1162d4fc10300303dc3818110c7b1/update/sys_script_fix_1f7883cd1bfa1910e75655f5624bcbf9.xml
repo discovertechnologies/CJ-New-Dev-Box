@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>This fix script creates a record in the Organizational User Table for Every unique OU Member in the Organizational Member table.&#13;
+The script also moves all global permissions from the OU Member table to the OU User Tabale</description>
+        <name>2.8.1 - Orgainizational User - Migration</name>
+        <record_for_rollback>true</record_for_rollback>
+        <script><![CDATA[// Lots of work to go through all of the mappings.  First Pass create the rows.  Then delete all as you work through each field that needs to move.
+
+var gr_OU_Members = new GlideRecord("x_153465_discovert_discover_office_members");
+var ga_ou_Members = new GlideAggregate('x_153465_discovert_discover_office_members');
+var ga_ou_User;
+var countUsersInMultipleOUs = 0;
+var countMigratedUsers = 0;
+var TotalRecordsInMembersTable = 0;
+var validationCount = 0;
+var memberUserID = "";
+var OrgUserId = "";
+// no filter, load all
+gr_OU_Members.query();
+
+while (gr_OU_Members.next()){
+	memberUserID = gr_OU_Members.getValue("office_member");
+	OrgUserId = "";
+	
+	// do not add same user more than once.
+	ga_ou_User = new GlideAggregate('x_153465_discovert_organization_user');
+	ga_ou_User.addQuery('u_tasker_user',gr_OU_Members.getValue('office_member'));
+	
+	ga_ou_User.query();
+	var numUsers = 0;
+	if(ga_ou_User.next()){
+		numUsers = ga_ou_User.getAggregate('COUNT');
+	}
+	
+	if(numUsers == 0){
+		// add org user here
+		gr_ou_user = new GlideRecord("x_153465_discovert_organization_user");
+		gr_ou_user.initialize();
+		// set permission fields
+		// field name changed from process to template
+		gr_ou_user.has_personal_template_rights = gr_OU_Members.getValue("has_personal_process_rights");
+		// field name changed to better match role
+		gr_ou_user.is_global_hierarchy_administrator = gr_OU_Members.getValue("user_is_organization_admin");
+		// field name changed from process to template
+		gr_ou_user.can_manage_template_permissions = gr_OU_Members.getValue("can_manage_process_permissions");
+		
+		gr_ou_user.is_task_executive = gr_OU_Members.getValue("is_task_executive");
+		// changed naame to match the role
+		gr_ou_user.is_task_administrator = gr_OU_Members.getValue("is_global_tasking_authority");
+		gr_ou_user.is_tasker_application_administrator = gr_OU_Members.getValue("is_tasker_application_admin");
+		
+		gr_ou_user.u_tasker_user = gr_OU_Members.getValue("office_member");
+		gr_ou_user.	u_default_ou = gr_OU_Members.getValue("u_default_ou");
+		gr_ou_user.insert();
+		OrgUserId = gr_ou_user.getUniqueValue();
+		countMigratedUsers++;
+	} else {
+		// log users in multiple OUs
+		countUsersInMultipleOUs++;
+		gs.info("User in more than on OU - User Name: " + gr_OU_Members.getDisplayValue("office_member"));
+		gr_ou_user = new GlideRecord("x_153465_discovert_organization_user");
+		gr_ou_user.addQuery("u_tasker_user", memberUserID);
+		gr_ou_user.query();
+		if(gr_ou_user.next()){
+			// set the new Organizational User field on the member table
+			OrgUserId = gr_ou_user.getUniqueValue();
+		}
+	}
+	if(OrgUserId != ""){
+		// set the new Organizational User field on the member table
+		gr_OU_Members.u_organizational_user = OrgUserId;
+		gr_OU_Members.update();		
+	}
+
+}
+
+
+// get total Organizational Members
+ga_ou_Members.addAggregate('COUNT');
+ga_ou_Members.query();
+if(ga_ou_Members.next()){
+	TotalRecordsInMembersTable = ga_ou_Members.getAggregate('COUNT');
+}
+
+gs.info("Total Orgainzational Members [" + TotalRecordsInMembersTable + "].");
+gs.info("Total Count of Migrated Users [" + countMigratedUsers + "]");
+gs.info("Count of records where Users is in More than one OU - Multiple OU Count [" + countUsersInMultipleOUs + "].");
+
+gs.info("Validation - Total Orgainzational Members [" + TotalRecordsInMembersTable + "]" + " - Multiple OU Count [" + countUsersInMultipleOUs + "] = Total Count of Migrated Users [" + countMigratedUsers + "]");
+
+validationCount = TotalRecordsInMembersTable-(countUsersInMultipleOUs + countMigratedUsers);
+if(validationCount==0){
+	gs.info("Validation - the number of users migrated matches the unique user count.");
+} else if(validationCount>0){
+	gs.info("Validation - the number of unique users in the Member table is greater than the number of users Migrated.  Most likely a user was not moved. Compare tables to find differences.  Using a group by on the OU Member field in the Organizational Member table will give you a count of unique records.  You can sort and compare to find diffences");
+} else if(validationCount<0){
+	gs.info("Validation - the number of unique users in the Member table is lower than the number of users Migrated. Most likely a user was migrated more than onece.  Compare tables to find differences.  Using a group by on the OU Member field in the Organizational Member table will give you a count of unique records.  You can sort and compare to find diffences");
+}
+]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-10-26 02:07:32</sys_created_on>
+        <sys_id>1f7883cd1bfa1910e75655f5624bcbf9</sys_id>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>2.8.1 - Orgainizational User - Migration</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_1f7883cd1bfa1910e75655f5624bcbf9</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-10-27 19:59:42</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
