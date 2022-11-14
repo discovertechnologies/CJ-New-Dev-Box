@@ -13,6 +13,9 @@ function onSubmit() {
     return true;
 }]]></client_script>
         <description>New UI Page to prompt from Platform about deleting Tasks and subtasks - this page is also used for Template and Template Task&#13;
+2.8.1 | 2022-11-12 | raj  | STRY0131195 - Delete OOO Schedule Confirmation Modal&#13;
+                                         Added OOO to the list of objects this page can delete&#13;
+&#13;
 2.8.0 - 2022-07-09 - raj - STRY0119137 - Stretch- Template UI Clean Up- Delete Top Template Task Confirmation Modal (moved delete to new script)&#13;
 2.8.0 - 2022-07-09 - raj -  STRY0119138 - Stretch- Template UI Clean Up- Delete Template Subtask Confirmation Modal (moved delete to new script)&#13;
 &#13;
@@ -70,6 +73,9 @@ function onSubmit() {
 		Tasker - This will also delete the entire template with all its {0} template tasks
 		Tasker - You are about to permanently delete this template task with all its {0} template subtasks
 		Tasker - Button - Delete Template
+		
+		Tasker - Button - Delete Scheduled Out Of Office
+		Tasker - Delete a scheduled out of office between {0} and {1}
 	</g:messages>
 
 	<g:ui_form>
@@ -84,6 +90,10 @@ function onSubmit() {
 		<j:set var="jvar_templateTaskNumberShortDescription" value="${sysparm_templateTaskNumberShortDescription}" />
 		<j:set var="jvar_isTopTemplateTask" value="${sysparm_isTopTemplateTask}" />
 		
+		<j:set var="jvar_oooSysId" value="${sysparm_oooSysId}"/>
+		<j:set var="jvar_oooStartDate" value="${sysparm_oooStartDate}"/>
+		<j:set var="jvar_oooEndDate" value="${sysparm_oooEndDate}"/>
+		
 		<!-- NOW protocol requires hidden input to make value accessible -->
 		<input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
 		<input type="hidden" id="task_name" value="${jvar_taskNumberShortDescription}" />
@@ -96,12 +106,19 @@ function onSubmit() {
 		<input type="hidden" id="templateTaskSysId" name="templateTaskSysId"  value="${jvar_templateTaskSysId}"/>
 		<input type="hidden" id="templateTask_name" value="${jvar_templateTaskNumberShortDescription}" />
 
+		<input type="hidden" id="oooSysId" name="oooSysId"  value="${jvar_oooSysId}"/>
+		<input type="hidden" id="oooStartDate" name="oooStartDate"  value="${jvar_oooStartDate}"/>
+		<input type="hidden" id="oooEndDate" name="oooEndDate"  value="${jvar_oooEndDate}"/>
+		
 		<!-- Get short description for the popupto show; keep within the <g:ui_form> -->
 		<g:evaluate var="jvar_shortDescription" jelly="true">
 			var messageShortDescription = '';
 			var taskId = jelly.jvar_taskSysId;
 			var templateId = jelly.jvar_templateSysId;
 			var tempTaskId = jelly.jvar_templateTaskSysId;
+			var oooSysId = jelly.jvar_oooSysId;
+			var oooStartDate = jelly.jvar_oooStartDate;
+			var oooEndDate = jelly.jvar_oooEndDate;
 
 			if(taskId){
 				messageShortDescription = jelly.jvar_taskNumberShortDescription;
@@ -109,6 +126,9 @@ function onSubmit() {
 				messageShortDescription = jelly.jvar_templateTaskNumberShortDescription;
 			} else if(templateId){
 				messageShortDescription = jelly.jvar_templateNumberShortDescription;
+			} else if (oooSysId){
+				messageShortDescription = gs.getMessage('Tasker - Delete a scheduled out of office between {0} and {1}', [oooStartDate, oooEndDate]);
+
 			}
 
 			messShortDescription = messageShortDescription;
@@ -159,7 +179,11 @@ function onSubmit() {
 			var templateId = jelly.jvar_templateSysId;
 			var tempTaskId = jelly.jvar_templateTaskSysId;
 			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
-			if(!tempTaskId){
+			var oooSysId = jelly.jvar_oooSysId;
+
+			if(oooSysId){
+				deleteButtonText = gs.getMessage('Delete');
+			} else if(!tempTaskId){
 				if(templateId){
 					deleteButtonText = gs.getMessage('Tasker - Button - Delete Template');
 				}
@@ -171,8 +195,12 @@ function onSubmit() {
 		<g:evaluate var="jvar_messageTopTaskInfo" jelly="true">
 			var messageTopTaskInfo = '';
 			var isTopTemplateTask = jelly.jvar_isTopTemplateTask;
+			var oooSysId = jelly.jvar_oooSysId;
 			if(isTopTemplateTask){
 				messageTopTaskInfo = gs.getMessage('Tasker - Deleting a "Top Template Task" will delete the entire Template');
+			} else if (oooSysId){
+				messageTopTaskInfo = '';
+
 			} else {
 				messageTopTaskInfo = gs.getMessage('Tasker - If this task has subtask(s), they will also be deleted');
 			}
@@ -200,7 +228,8 @@ function onSubmit() {
 				<h1 id="msgBody2" class="text-uppercase">${gs.getMessage('Warning')}!</h1>
 			</div>
 			<div class="dtech-text-center dtech-task-name">
-				<span id="msgBody3">${jvar_shortDescription}</span>
+				<span id="msgBody3">
+				<g:no_escape>${HTML:jvar_shortDescription}</g:no_escape></span>
 			</div>
 
 			<div class="dtech-text-center dtech-standard-text-color">
@@ -222,11 +251,13 @@ function onSubmit() {
 			</div>
 			<br></br>
 
-			<div class="dtech-text-center">
-				<img src="InfoRound24.svg"/>
-				<span id="msgBody6" class="dtech-subtasks-also-deleted">${jvar_messageTopTaskInfo}</span>
-			</div>
-			<br></br>
+			<j:if test="${jvar_messageTopTaskInfo!=''}">
+				<div class="dtech-text-center">
+					<img src="InfoRound24.svg"/>
+					<span id="msgBody6" class="dtech-subtasks-also-deleted">${jvar_messageTopTaskInfo}</span>
+				</div>
+				<br></br>
+			</j:if>
 		</div>
 		<div id="footer" class="dtech-modal-widget-footer dtech-box">
 			<g:dialog_button 
@@ -239,7 +270,7 @@ function onSubmit() {
 			</g:dialog_button>
 			<g:dialog_button 
 							 id="submit"
-							 title="${gs.getMessage('Delete')}"
+							 title="${gs.getMessage('Tasker - Button - Delete Scheduled Out Of Office')}"
 							 type="submit"
 							 style_class="btn btn-danger dtech-max-width-fit-content dtech-push-right "
 							 onclick="return onSubmit();"
@@ -294,6 +325,13 @@ function taskerDelete() {
 			new Template_uiAction().uiAction_DeleteTemplate(gr_delete_temp);
 			url = '/discovertaskerportal?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template';
 		}
+	} else if(oooSysId){
+		// STRY0131195 - delete Out of Office
+		var gr_delete_ooo = new GlideRecordSecure('x_153465_discovert_out_of_office');
+		if(gr_delete_ooo.get(oooSysId)){
+			new Organization_uiAction().uiAction_deleteOoO(gr_delete_ooo);	
+		}
+		url='';
 	}
 	response.sendRedirect(url);
 }]]></processing_script>
@@ -301,13 +339,13 @@ function taskerDelete() {
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-08-28 23:50:27</sys_created_on>
         <sys_id>597d48c9db9ab8101048570bd39619e8</sys_id>
-        <sys_mod_count>141</sys_mod_count>
+        <sys_mod_count>151</sys_mod_count>
         <sys_name>tasker_delete_prompt</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_page_597d48c9db9ab8101048570bd39619e8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-10 23:39:20</sys_updated_on>
+        <sys_updated_on>2022-11-14 05:41:01</sys_updated_on>
     </sys_ui_page>
 </record_update>

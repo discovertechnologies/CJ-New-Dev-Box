@@ -15,10 +15,7 @@
 			// DFCT0011235
 			$rootScope.$broadcast('sp.modal.form.complete');				
 			$scope.$parent.$parent.$dismiss();
-			
-
-
-			
+		
 			// 2.7.0 | 2021-10-22 | mmcc | DFCT0010600 - Deleting the Top Task from Portal App does not redirect to the Tasker Portal Board
 			// If on the top task when Delete clicked, navigate to Tasker Portal Board
 			if (c.data.parent == '') {
@@ -112,6 +109,8 @@
 // 2.8.0 - 2022-07-23 - raj - DFCT0011074 - Tasker - Deleting a "Top Template Task" will delete the entire Template
 // 2.8.0 - 2022-07-29 - raj - DFCT0011088 - After deleting a "Top Template Task" the user is not redirected to the "Template List Page" 
 // 2.8.0 - 2022-08-25 - raj - DFCT0011235 - Tbd_Draft Task is deleted  but the Modal remains open
+// 2.8.1 - 2022-11-12 - raj - STRY0131195 - Delete OOO Schedule Confirmation Modal
+//                                         Changes made in Server Script, Client Script and HTML, added OOO to the list of objects this widget can delete and renamed
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -127,6 +126,8 @@
 				_optCopy(['taskSysId', 'taskNumberShortDescription']);
 				_optCopy(['templateSysId', 'templateNumberShortDescription']);
 				_optCopy(['templateTaskSysId', 'templateTaskNumberShortDescription', 'isTopTemplateTask']);
+				// STRY0131195 - delete Out of Office
+				_optCopy(['oooSysId', 'oooStartDate', 'oooEndDate']);
 
 				_buildMessages();
 				_setDataDefaults();
@@ -156,13 +157,23 @@
 			if(gr_delete_temp.get(input.templateSysId)){
 				new Template_uiAction().uiAction_DeleteTemplate(gr_delete_temp);	
 			}
+		} else if(input.oooSysId){
+		// STRY0131195 - delete Out of Office
+			var gr_delete_ooo = new GlideRecordSecure('x_153465_discovert_out_of_office');
+			if(gr_delete_ooo.get(input.oooSysId)){
+				new Organization_uiAction().uiAction_deleteOoO(gr_delete_ooo);	
+			}		
 		}
 	}
 	function _buildMessages() {
 		data.cancelButtonText = gs.getMessage('cancel');
 		
 		data.submitButtonTitle = gs.getMessage('Delete');
-		if(!data.templateTaskSysId && data.templateSysId){
+		// STRY0131195 - delete Out of Office
+		if(data.oooSysId){
+			data.submitButtonTitle = gs.getMessage('Tasker - Button - Delete Scheduled Out Of Office');
+			data.submitButtonText = gs.getMessage('Delete');
+		} else if(!data.templateTaskSysId && data.templateSysId){
 			data.submitButtonText = gs.getMessage('Tasker - Button - Delete Template');
 		} else {
 			data.submitButtonText = gs.getMessage('Tasker - Button - Delete Task');
@@ -195,6 +206,11 @@
 			count = _getDescendantsCount();
 			messageCount = gs.getMessage('Tasker - This will also delete the entire template with all its {0} template tasks', [count]);
 			messageInfo = gs.getMessage('Tasker - Deleting a Template will delete all of the Template Tasks.');
+		} else if(data.oooSysId){
+			// STRY0131195 - delete Out of Office
+			messageShortDescription = gs.getMessage('Tasker - Delete a scheduled out of office between {0} and {1}', [data.oooStartDate, data.oooEndDate]);
+			messageInfo = "";
+			count = 0;
 		}
 
 		data.msgBody3 = messageShortDescription;
@@ -254,14 +270,14 @@
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-08-30 00:00:04</sys_created_on>
         <sys_id>48be459ddb9e3c101048570bd396197d</sys_id>
-        <sys_mod_count>119</sys_mod_count>
+        <sys_mod_count>133</sys_mod_count>
         <sys_name>Tasker Modal - Delete Task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_48be459ddb9e3c101048570bd396197d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-26 01:42:13</sys_updated_on>
+        <sys_updated_on>2022-11-13 13:58:57</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
   <div class="dtech-text-center">
     <img id="msgBody1" src="Warning64.svg"/>
@@ -272,8 +288,9 @@
   </div>
 
   <div class="dtech-text-center dtech-task-name">
-    <span>{{data.msgBody3}}</span>
+    <span ng-bind-html="data.msgBody3"></span>
   </div>
+  
   
   <div ng-if="data.isTopTemplateTask">
     <div class="dtech-text-center dtech-standard-text-color">
@@ -295,7 +312,7 @@
   </div>
   <br>
 
-  <div class="dtech-text-center">
+  <div ng-if="{{data.msgBody6}}" class="dtech-text-center">
     <img src="InfoRound24.svg"/>
     <span class="dtech-subtasks-also-deleted">{{data.msgBody6}}</span>
   </div>
