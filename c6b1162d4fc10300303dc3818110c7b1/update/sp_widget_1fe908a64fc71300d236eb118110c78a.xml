@@ -1125,6 +1125,8 @@ tbody tr:last-child {
 //
 // 2.8 | 2022-09-23 | raj  | DFCT0011345 - Stretch - Task Form's Activity Log does NOT filter to this task when clicking "Show results for this Task and all descendants"
 //                                      Changes in Server Script
+// 2.8.1 | 2022-11-14 | raj  | STRY0131197 - Tasker User Profile- New SubWidget- OOO Schedule History
+//                                      Changes in Server and HTML, added variable for long dates in each
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1198,8 +1200,8 @@ tbody tr:last-child {
 		//               updated server and client to receive this setting from input or options
 		optCopy(['show_breadcrumbs', 'showStatesMultipleBar', 'hideTaskFilter', 'parentField', 'task_id' , 'originalFilter']);
 		// DFCT0011271
-		optCopy(['u_servicenow_form_view']);
-						 
+	optCopy(['u_servicenow_form_view']);
+
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
 	// DFCT0011236
@@ -1214,9 +1216,11 @@ tbody tr:last-child {
 	
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
 	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+	// STRY0131197
+	data.showLongDates = (input || {}).showLongDates || (options || {}).showLongDates || false;
 	
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
-	convertToBool(['bifold', 'isModal', 'isTopWidget']);
+	convertToBool(['bifold', 'isModal', 'isTopWidget', 'showLongDates']);
 	
     data.showInactiveProcess = input.showInactiveProcess;
     //data.view = data.view || 'mobile';
@@ -1488,14 +1492,14 @@ tbody tr:last-child {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1447</sys_mod_count>
+        <sys_mod_count>1457</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-09-23 12:22:37</sys_updated_on>
+        <sys_updated_on>2022-11-14 19:58:16</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -1524,9 +1528,6 @@ tbody tr:last-child {
         <span class="title-ellipsised" uib-tooltip="{{data.title || data.table_plural}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
           <i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>
           {{data.title || data.table_plural}}
-          <!-- STRY0128070 - new is not using an icon
-          <button name="new" role="link" class="btn btn-primary btn-sm m-l-xs" ng-click="newRecord()" ng-if="data.show_new && !data.newButtonUnsupported" aria-label="${Create new record}">${New}</button>
-					-->
         </span>
       </span>
       
@@ -1595,13 +1596,11 @@ tbody tr:last-child {
          ng-class="{'flexbox dtech-margin-bottom-0': data.bifold==true||data.isModal==true}">
 
       <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; new <table> class add remove table-responsive remove ng-if -->
-      <!-- <table class="table table-striped table-responsive" ng-if="data.list.length"> -->
       <table id="dtech-list-1" class="table table-striped table-condensed" ng-if="data.list.length">
         <thead>
           <tr>
             <th class="sr-only"></th>
             <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; if isModal use text-nowrap -->
-            <!-- <th ng-repeat="field in data.fields_array track by $index" class="text-wrap" ng-click="setOrderBy(field)" tabindex="0"> -->
             <th ng-repeat="field in data.fields_array track by $index" ng-class="{'text-nowrap': data.isModal==true}" ng-click="setOrderBy(field)" tabindex="0">
               <div class="th-title" aria-label="${Sort by } {{data.column_labels[field]}}">{{data.column_labels[field]}}</div>
               <i class="fa" ng-if="field == data.o" ng-class="{'asc': 'fa-chevron-up', 'desc': 'fa-chevron-down'}[data.d]" aria-label="${Sorted by } {{data.column_labels[field]}} {{data.d == 'asc' ?  '${Ascending}': '${Descending}' }}"></i>
@@ -1625,10 +1624,17 @@ removed :: in the item[field} and data display value lines	 below-->
                 </span>
                 <span ng-switch-when = "state" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
                 <span ng-switch-when = "status" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
-                <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
-                <!--<span ng-switch-default>{{item[field].display_value}}</span>-->
                 <span ng-switch-default>
                   <span ng-switch="item[field].type">
+                    <!-- STRY0131197- if showLongDates is true on date fields, show in long format-->
+                    <span ng-switch-when="glide_date_time">
+                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
+                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
+                    </span>
+                    <span ng-switch-when="glide_date">
+                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
+                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
+                    </span>
                     <span ng-switch-when="html">
                       <span ng-bind-html="item[field].display_value"></span>
                     </span>
@@ -1649,17 +1655,23 @@ removed :: in the item[field} and data display value lines	 below-->
           <tr ng-if="data.open_row_details_in_modal == true" ng-repeat="item in data.list track by item.sys_id">
             <td class="sr-only" tabindex="0" role="link" ng-click="openModal(item)" aria-label="${Open record}"></td>
             <td role="text" aria-label="{{item[field].display_value}}" class="pointer sp-list-cell" ng-class="{selected: item.selected}" ng-click="openModal(item)" ng-repeat="field in data.fields_array" data-field="{{field}}" data-th="{{data.column_labels[field]}}">
-              <!--KT STRY0057360: 2.5.10 -->
               <span ng-switch="field" >
                 <span ng-switch-when = "schedules">
                   <a href="javascript:void(0)" class="label label-as-badge label-primary" >{{item[field].display_value}}</a> 
                 </span>
                 <span ng-switch-when = "state" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
                 <span ng-switch-when = "status" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
-                <!-- 2.6.0 | 2021-03-11 | mmcc | STRY0092273 DTLV – Optimize Print of the Dynamic Tree Level View -->
-                <!--<span ng-switch-default>{{item[field].display_value}}</span>-->
                 <span ng-switch-default>
                   <span ng-switch="item[field].type">
+                    <!-- STRY0131197- if showLongDates is true on date fields, show in long format-->
+                    <span ng-switch-when="glide_date_time">
+                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
+                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
+                    </span>
+                    <span ng-switch-when="glide_date">
+                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
+                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
+                    </span>
                     <span ng-switch-when="html">
                       <span ng-bind-html="item[field].display_value"></span>
                     </span>

@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function($scope, $filter, spUtil,spModal) {
+  /* widget controller */
+  var c = this;
+	$scope.showingHistory=false;
+
+	// catch view history click from Scheduled OoO widget
+	$scope.$on('$oooViewHistory', function () {
+		$scope.showingHistory=true;	
+	});	
+
+	$scope.showSchedule = function(){
+		$scope.showingHistory=false;		
+	};
+	
+	$scope.showHistory = function(){
+		$scope.showingHistory=true;		
+	};
+
+	// *******************************************
+	// START NEW OOO MENU OPTION
+	// *******************************************
+	$scope.newOOO = function(){
+		spModal.open({
+			message: '',
+			backdrop: 'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: {
+				table: c.data.table,
+				sys_id: -1,
+				query: c.data.newFilter,
+				hideRelatedLists: false,
+				omitHeader: true,
+				bifold: false,
+				hideAttachmentBtn: true,
+				isModal: true
+			},
+			shared: {},
+			size: 'lg',
+			buttons: [''],
+			footerStyle: {
+				'display': 'none'
+			}
+		});
+	};
+	// *******************************************
+	// END NEW OOO MENU OPTION
+	// *******************************************
+
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.ooo-text{
+  font-family: SourceSansPro, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #757575;
+}
+
+.ooo-backbtn{
+  width: 100%;
+  height: 30px;
+  background-color: none;
+  color: black;
+  border-radius: 5px;
+  box-shadow: none;
+}
+.ooo-backbtn:hover{
+  background-color: #d9edf7;
+  box-shadow:0px 0px 0px 2px #d9edf7 inset;
+  cursor: pointer;
+}
+.ooo-backbtn:focus{
+  box-shadow:0px 0px 0px 2px #00A4FF inset;
+}
+
+.ooo-hyperlink{
+  width: 100%;
+  height: 32px;
+  background-color: none;
+  border-radius: 5px;
+  text-decoration: underline;
+  font-family: SourceSansPro, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #000000;
+  font-weight: 400;
+  line-height: 28px;
+  box-shadow: none;
+}
+
+.ooo-hyperlink:hover{
+  color: #0087D2;
+  cursor: pointer;
+}
+
+.ooo-hyperlink:focus{
+  box-shadow:0px 0px 0px 2px #00A4FF inset;
+}
+
+.ooo-hyperlink:disabled {
+  color: #757575;
+  cursor: none;
+}
+
+</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>dt_out_of_office</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Out of Office</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// 2.8.1 | 2022-11-10 | raj  | STRY0132270 - Tasker User Profile- New Component- "Out of Office Schedule" - OOO Scheduled Widget
+//                                      New Widget
+// 2.8.1 | 2022-11-12 | raj  | STRY0131195 - Delete OOO Schedule Confirmation Modal
+//                                         Changes made in Server Script, Client Script, opened the tasker delete prompt widget from delete click
+// Script Continued Below
+(function($sp, input, data, options, gs) {
+	main();
+
+	function main() {
+
+		data.isModal = (input || {}).isModal || (options || {}).isModal || $sp.getParameter("isModal") || false;
+		data.isTopWidget = (input || {}).isTopWidget || (options || {}).isTopWidget || $sp.getParameter("isTopWidget") || false;
+		data.bifold = (input || {}).bifold || (options || {}).bifold || $sp.getParameter("bifold") || false;	
+		data.user = (input || {}).user || (options || {}).user || $sp.getParameter("user_id") || gs.getUserID();
+		data.table = "x_153465_discovert_out_of_office";
+		data.showLongDates=true;
+		data.newFilter = "^u_user=" + data.user;
+		data.historyFilter = "^u_user=" + data.user + "^u_end_date<javascript:gs.beginningOfToday()";
+		data.order = "u_start_date";
+		data.direction ="DESC";
+		data.view = "sp";
+		
+		data.historyCount = _countOoOHistory();
+
+
+		_getMessages();
+	}
+
+	function _getMessages(){
+		data.backIcon = "BackArrow16.svg";
+		data.historyIcon = "History16.svg";
+		data.oooIcon = "OOO16.svg";
+	}
+	
+	function _countOoOHistory(){
+		var count = 0;
+		
+		var ga_count = new GlideAggregate(data.table);
+		ga_count.addEncodedQuery(data.historyFilter);
+		ga_count.addAggregate('COUNT');
+		ga_count.query();
+		if (ga_count.next()) {
+			count = ga_count.getAggregate('COUNT');
+		}
+		return count;
+	}
+	
+	// copy to data from input or options
+	function optCopy(names) {
+		names.forEach(function(name) {
+			data[name] = input[name] || options[name];
+		});
+	}
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
+	function convertToBool(names) {
+		names.forEach(function(name) {
+			data[name] = data[name] == true || data[name] == 'true';
+		});
+	}
+})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-11-14 16:33:23</sys_created_on>
+        <sys_id>b15780ab1b8f9910e75655f5624bcb9c</sys_id>
+        <sys_mod_count>59</sys_mod_count>
+        <sys_name>Out of Office</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_b15780ab1b8f9910e75655f5624bcb9c</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-11-15 21:34:31</sys_updated_on>
+        <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
+     ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
+  <div class="panel-body" 
+       ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-pad-all-0':data.bifold==true||data.isModal==true}">
+
+    <div ng-class="{'flexbox dtech-margin-bottom-0': data.bifold==true||data.isModal==true}">
+      <span ng-show="showingHistory" >
+        <a class="ooo-backbtn"
+           ng-click="showSchedule();">
+          <img class="dtech-enabled"
+               src="{{::data.backIcon}}" title="${Back}"
+               alt="${Back}" class="dtech-pad-all-10"/>
+          ${Back}
+        </a>
+      </span>
+
+      <span>
+        <br>
+        Placeholder for profile card
+        <br>
+      </span>
+      <span ng-show="showingHistory">
+        <widget id="discovertasker-widget-data-table" 
+                options='{"isModal": data.isModal,
+                         "isTopWidget": data.isTopWidget,
+                         "bifold": data.bifold,
+                         "showLongDates": data.showLongDates,
+                         "table": data.table, 
+                         "o": data.order, 
+                         "d": data.direction,
+                         "view": data.view,
+                         "filter": data.historyFilter,
+                         "user": data.user}'>
+        </widget>
+      </span>
+      <span ng-show="!showingHistory && data.historyCount>0" >
+        <a class="ooo-hyperlink"
+           ng-click="newOOO();">
+          <img class="dtech-enabled"
+               src="{{::data.oooIcon}}" 
+               title="${View scheduling history}"
+               alt="${View scheduling history}"
+               class="dtech-pad-all-10"/>
+          ${Schedule your out of office...}
+        </a>
+      </span>
+      <span ng-show="!showingHistory">
+        ${Scheduled Out of Office}
+      </span>
+      <span ng-show="!showingHistory">
+        <widget id="scheduled_out_of_office" 
+                options='{"isModal": data.isModal,
+                         "isTopWidget": data.isTopWidget,
+                         "bifold": data.bifold, 
+                         "user": data.user}'></widget>
+      </span>
+      <span ng-show="!showingHistory && data.historyCount>0" >
+        <a class="ooo-hyperlink"
+           ng-click="showHistory();">
+          <img class="dtech-enabled"
+               src="{{::data.historyIcon}}" 
+               title="${View scheduling history}"
+               alt="${View scheduling history}"
+               class="dtech-pad-all-10"/>
+          ${View scheduling history}
+        </a>
+      </span>
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>
