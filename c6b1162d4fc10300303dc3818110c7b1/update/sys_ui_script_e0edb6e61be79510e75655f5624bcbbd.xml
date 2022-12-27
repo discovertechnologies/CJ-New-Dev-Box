@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>This UI script contains all the common out of office client scrpts created in 2.8.1&#13;
+&#13;
+2.8.1 | 2022-09-21| raj  |  STRY0130635 - Task Form- Assignee is Out of Office</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.DTech_Out_of_Office</name>
+        <script><![CDATA[var x_153465_discovert = x_153465_discovert || {};
+
+x_153465_discovert.DTech_Out_of_Office = (function() {
+    "use strict";
+
+	var CONST_OOO_MESAGE_ID_SUFFIX = "_OOO_Message";
+
+	// get reference to document
+	var _document;
+    // create private varialbe to hold g_form
+    var _g_form;
+    // create private varialbe to hold GlideAjax
+    var _ajax;
+    // create private varialbe to hold g_scratchpad.taskScheduledooo
+    // this holds all of the ooo schedules for all of the users in the task
+    // when the form loads, 
+    var _taskScheduledooo;
+	// used to load all messages into UI Script
+	var _messages;
+	// used to load all stylesheets into UI Script
+	var _styleSheetLinks;
+	
+    // private function to set the form's message
+    function _setFieldMessage(ooo_schedule, fieldName) {
+		var fieldMsgHTML;
+		var fieldMsg;
+		var tooltipHTML;
+		var toolTipMsg;
+		var oooMessageElement = _document.getElementById(fieldName + CONST_OOO_MESAGE_ID_SUFFIX);
+		if(oooMessageElement){
+			oooMessageElement.remove();
+		}
+		switch(ooo_schedule.length){
+			case 1:
+				fieldMsg = _messages["Tasker - {0} is out of office from {1} to {2} and may not respond."];
+				fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
+				fieldMsg = fieldMsg.replace("{1}", ooo_schedule[0].start_date);
+				fieldMsg = fieldMsg.replace("{2}", ooo_schedule[0].end_date);
+				fieldMsgHTML = _messages["Tasker - OOO - Single - HTML"];
+				tooltipHTML = _messages["Tasker - OOO - ToolTip HTML"];
+				toolTipMsg = ooo_schedule[0].message;
+				tooltipHTML = tooltipHTML.replace("{0}", toolTipMsg);
+//				tooltipHTML = $sce.trustAsHtml(tooltipHTML);
+				fieldMsgHTML = fieldMsgHTML.replace("{0}", toolTipMsg);
+//				fieldMsgHTML = fieldMsgHTML.replace("{1}", tooltipHTML);
+				fieldMsgHTML = fieldMsgHTML.replace("{2}", fieldMsg);
+
+				// add ooo field message
+				_setFieldMessageHTML(fieldName, fieldMsgHTML);
+				
+				break;
+				// 0 or undefined, hide message box
+			case 0: case undefined:
+				// no need to do anything message is always deleted above and readded if the new user has ooo conflict
+				break;
+				// Greater than 1 will fall here
+			default:
+				
+				fieldMsg = _messages["Tasker - {0} is out of office from {1} to {2} and may not respond."];
+				fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
+				fieldMsg = fieldMsg.replace("{1}", ooo_schedule[0].start_date);
+				fieldMsg = fieldMsg.replace("{2}", ooo_schedule[0].end_date);
+				fieldMsgHTML = _messages["Tasker - OOO - Single - HTML"];
+				tooltipHTML = _messages["Tasker - OOO - ToolTip HTML"];
+				toolTipMsg = ooo_schedule[0].message;
+				tooltipHTML = tooltipHTML.replace("{0}", toolTipMsg);
+//				tooltipHTML = $sce.trustAsHtml(tooltipHTML);
+				fieldMsgHTML = fieldMsgHTML.replace("{0}", toolTipMsg);
+//				fieldMsgHTML = fieldMsgHTML.replace("{1}", tooltipHTML);
+				fieldMsgHTML = fieldMsgHTML.replace("{2}", fieldMsg);
+
+				// add ooo field message
+				_setFieldMessageHTML(fieldName, fieldMsgHTML);
+				break;
+		}		
+    }
+	function _setFieldMessageHTML(fieldName, msgHTML){
+		setTimeout(_timeoutSetFieldMessageHTML, 1000, fieldName, msgHTML);
+	}
+	
+	// function to set innerHTML of the field message
+	function _timeoutSetFieldMessageHTML(fieldName, msgHTML) {
+		try {
+			var inputElement = _g_form.getControl(fieldName);                // ask Service-Now for a DOM reference to our field of interest
+			var parentElement = inputElement.parentElement;             // get the field's parent because the Field Messages are siblings to inputElement    
+			var fieldElement;
+			var fieldMessageContainer;
+
+			if(parentElement){
+				// platform has a different structure
+				//fieldMessageContainer = parentElement.firstChild;
+				//fieldMessageContainer = inputElement;
+
+				// get the display element
+				var fieldDisplayElement = _document.getElementById("sys_display.x_153465_discovert_route_task_instance." + fieldName);
+				// get the display container
+				var fieldDisplayContainer = fieldDisplayElement.parentElement;
+				// move up to the input controls - this element has no id in platform
+				fieldMessageContainer = fieldDisplayContainer.parentElement;
+			} else {
+				// get the field element for portal
+				fieldElement = _document.getElementById(fieldName);
+				fieldMessageContainer = fieldElement.firstElementChild;
+			}
+			// create the div for the ooo message
+			var ooo_div = _document.createElement("div");
+			ooo_div.id = fieldName + CONST_OOO_MESAGE_ID_SUFFIX;
+			ooo_div.innerHTML = msgHTML;
+			fieldMessageContainer.appendChild(ooo_div);
+			return;
+		}
+		catch (err) {
+			jslog(err.message);
+		}
+
+		return null;
+	}	
+    /**********************
+    Share variables between multiple UI scripts by adding them to your scope object. For example: 
+    ***********************
+    // NOTE: we may want to make g_form shared so all local UI_scripts have access to it
+    x_153465_discovert.sharedVar = 0; 
+    // Then access them in your scripts the same way. For example: 
+    function get_shared() {
+    	return x_153465_discovert.sharedVar;
+    }
+    ***********************
+    END Shared Vairables
+    ***********************/
+    return {
+
+		// inititialize variables
+		init: function(param_document, param_ajax, param_g_form, 
+						param_taskScheduledooo, param_messages, param_styleSheetLinks){
+			_document=param_document;
+			_ajax=param_ajax;
+			_g_form=param_g_form;
+			_taskScheduledooo=param_taskScheduledooo;
+			_messages = param_messages;
+			_styleSheetLinks = param_styleSheetLinks;
+			return;
+		},
+		load_stylesheets_ui_native_only: function() {
+			for (var i=0; i<_styleSheetLinks.length; i++) {
+				var styleSheetLink = _styleSheetLinks[i];
+				var styleSheetLoaded = _document.getElementById("dtech-stylesheet-" + styleSheetLink.fileName);
+				if(!styleSheetLoaded){
+					var linkElement = _document.createElement('link');
+					linkElement.type="text/css";
+					linkElement.rel = 'stylesheet';
+					// styles/tasker_out_of_office.css
+					linkElement.href = styleSheetLink.url;
+					linkElement.id = "dtech-stylesheet-" + styleSheetLink.fileName;
+					_document.head.appendChild(linkElement);	
+				}
+			}
+		},
+	
+        /***********************
+        START public API
+        ***********************/
+        get_user_ooo: function(taskScheduledooo, user_id) {
+            // create empty user schedule object
+            // NOTE format for this object is in 
+            //      file: x_153465_discovert.Out_of_Office
+            //  function: _initTaskOOO
+            var userFound = {
+                user_id: "",
+                userDisplayValue: "",
+                ooo_schedule: []
+            };
+            for (var user in taskScheduledooo) {
+                if (taskScheduledooo[user].user_id == user_id) {
+                    userFound = taskScheduledooo[user];
+                    break;
+                }
+            }
+            return userFound;
+        },
+
+        // STRY0130635  if user changed, check scratchpad for user_id
+        ooo_change_user: function(fieldName) {
+            var newValue;
+            // if the field is not on the form, ignore the change request
+            if (!_g_form.getControl(fieldName)) {
+                return;
+            }
+            newValue = _g_form.getValue(fieldName);
+            var userOOOSchedule = this.get_user_ooo(_taskScheduledooo, newValue);
+            // if in scratchpad, then function will return user ooo schedule object
+            if (userOOOSchedule.user_id && userOOOSchedule.user_id != "") {
+                // might not work, or might need scratch passed in
+                _taskScheduledooo[newValue] = userOOOSchedule;
+                _setFieldMessage(userOOOSchedule.ooo_schedule, fieldName);
+            } else {
+                // if not in scratchpad ooo, then go back to server to see if user has ooo
+                _ajax.addParam('sysparm_name', 'getUserOutOfOffice');
+                _ajax.addParam('sysparm_task_id', _g_form.getUniqueValue());
+                _ajax.addParam('sysparm_user_id', newValue);
+                _ajax.getXML(f_returnOOOSchedule);
+            }
+
+            function f_returnOOOSchedule(response) {
+                try {
+                    var sOOOSchedule = response.responseXML.documentElement.getAttribute("answer");
+                    var userOOOSchedule = JSON.parse(sOOOSchedule);
+                    _taskScheduledooo[newValue] = userOOOSchedule;
+                    _setFieldMessage(userOOOSchedule.ooo_schedule, fieldName);
+                } catch (e) {
+                    // seeing first response as just a GUID, which is raising a syntax error, ignoring if the first response
+                    if (e.name != "SyntaxError") {
+                        jslog(e);
+                    }
+
+                }
+            }
+
+        },
+        /***********************
+        END public API
+        ***********************/
+        type: "DTech_Out_of_Office"
+    };
+})();]]></script>
+        <script_name>DTech_Out_of_Office</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-12-06 23:49:16</sys_created_on>
+        <sys_id>e0edb6e61be79510e75655f5624bcbbd</sys_id>
+        <sys_mod_count>189</sys_mod_count>
+        <sys_name>x_153465_discovert.DTech_Out_of_Office</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_e0edb6e61be79510e75655f5624bcbbd</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-12-21 02:59:38</sys_updated_on>
+        <ui_type>10</ui_type>
+        <use_scoped_format>true</use_scoped_format>
+    </sys_ui_script>
+</record_update>

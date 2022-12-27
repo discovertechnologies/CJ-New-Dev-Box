@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.Out_of_Office</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script contains the Out of Office functionality for DTech Apps&#13;
+2.8.1 | 2022-12-20| raj  |  STRY0130630 - Banner Notification &amp; Task List- My Conflicting Schedules (Out of Office)&#13;
+2.8.1 | 2022-09-21| raj  |  STRY0130635 - Task Form- Assignee is Out of Office&#13;
+</description>
+        <name>Out_of_Office</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+var Out_of_Office = Class.create();
+// this is used in the Banner also
+Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_EMPTY_FILTER = "^ooo_u_end_date>=javascript:gs.beginningOfToday()^task_suspense_dateISEMPTY";
+Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_NOT_EMPTY_FILTER = "^task_suspense_dateISNOTEMPTY^ooo_u_start_dateMORETHANtask_suspense_date@hour@before@0";
+Out_of_Office.CONST_TASK_OUT_OF_OFFICE_JOIN_SUSPENSE_EMPTY_FILTER = "!ooo_u_end_date>=javascript:gs.beginningOfToday()!task_suspense_dateISEMPTY";
+Out_of_Office.CONST_TASK_OUT_OF_OFFICE_JOIN_SUSPENSE_NOT_EMPTY_FILTER = "!task_suspense_dateISNOTEMPTY!ooo_u_start_dateMORETHANtask_suspense_date@hour@before@0";
+
+Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE = "x_153465_discovert_task_users_ooo";
+Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE = "x_153465_discovert_out_of_office";
+Out_of_Office.prototype = {
+    initialize: function() {
+		this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
+	},
+
+	// STRY0130635 - this is used to set the default out of office object
+	_initTaskOOO: function(){
+		var task_ooo = {
+			user_id: "",
+			userDisplayValue: "",
+			ooo_schedule: []
+		};
+		return task_ooo;
+	},
+	
+	// STRY0130635 - get the list of scheduled out of office for the user during task period
+	isUserOutOfOfficeTaskId: function (task_id, user_id){
+		var task_ooo = this._initTaskOOO();
+		task_ooo.user_id = user_id;
+		// get the suspense date
+		var gr_task = new GlideRecordSecure(this.tableRouteTaskInstance);
+		if(gr_task.get(task_id)){
+			task_ooo = this._isUserOutOfOfficeGRTask(gr_task, user_id);
+		}
+		return task_ooo;
+	},
+
+	// STRY0130635 - get the list of scheduled out of office for the user during task period
+	_isUserOutOfOfficeGRTask: function (gr_task, user_id){
+		var task_ooo = this._initTaskOOO();
+		task_ooo.user_id = user_id;
+		
+		var suspenseDateNextDayValue;
+		var suspenseDate = gr_task.getValue("suspense_date");
+		if(suspenseDate){
+			var suspenseDateDisplayValue = gr_task.getDisplayValue("suspense_date");
+			var gdtSuspense = new GlideDateTime(suspenseDateDisplayValue);
+			gdtSuspense.addDaysLocalTime(1);
+			suspenseDateNextDayValue = gdtSuspense.getDate();
+		}
+		var createdDateDisplayValue =  gr_task.getValue("sys_created_on");
+		var gdtCreatedDate = new GlideDateTime(createdDateDisplayValue);
+		var createdDate = gdtCreatedDate.getDate();
+		task_ooo.ooo_schedule = this._getUserOutOfOfficeForTask(createdDate, suspenseDateNextDayValue, user_id);
+		return task_ooo;
+	},
+	
+	_getUserOutOfOfficeForTask: function(createdDate, suspenseNextDate, user_id){
+		var a_schedule = [];
+		var gr_ooo = new GlideRecordSecure(Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE);
+		gr_ooo.addQuery("u_user", user_id);
+		if(suspenseNextDate && suspenseNextDate != ''){
+			gr_ooo.addQuery("u_start_date", "<", suspenseNextDate);
+			gr_ooo.addQuery("u_start_date", ">=", createdDate);
+		} else {
+			gr_ooo.addQuery("u_end_date", ">=", gs.daysAgoStart(0));
+		}
+		gr_ooo.query();
+		while(gr_ooo.next()){
+			var o_user_ooo = {};
+			var numStrStartDate = gr_ooo.getValue("u_start_date");
+			var numEndDate = gr_ooo.getValue("u_end_date");
+			var gd_start = new GlideDateTime(numStrStartDate);
+			var gd_end = new GlideDateTime(numEndDate);
+			o_user_ooo.userDisplayValue = gr_ooo.getDisplayValue("u_user");
+			o_user_ooo.start_date = gd_start.getDate().getByFormat('MMM dd');
+			o_user_ooo.end_date = gd_end.getDate().getByFormat('MMM dd');
+			o_user_ooo.message = gr_ooo.getValue("u_out_of_office_message");
+			a_schedule.push(o_user_ooo);
+		}
+		return a_schedule;
+	},
+
+	_getTaskAllUserFilter: function(task_id){
+		var task_filter = "^task_sys_id=" + task_id;
+		var filter;
+		filter = task_filter + Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_EMPTY_FILTER;
+		filter = filter + "^NQ" + task_filter + Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_NOT_EMPTY_FILTER;
+		filter = filter + "^ORDERBYooo_u_user";
+		return filter;
+	},
+	
+	getTaskOOOSchedules: function(task_id){
+		var usersLoaded = "";
+		var task_ooo = {};
+		var o_task_user_ooo;
+		var o_user_ooo = {};
+
+		var gr_task_ooo = new GlideRecordSecure(Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE);
+		var encodedFilter = this._getTaskAllUserFilter(task_id);
+		gr_task_ooo.addEncodedQuery(encodedFilter);
+		gr_task_ooo.query();
+		while(gr_task_ooo.next()){
+			var user_id  = gr_task_ooo.getValue("ooo_u_user");
+			// is user loaded yet
+			if(usersLoaded.indexOf(user_id) == -1) {
+				if(usersLoaded != ""){
+					usersLoaded = usersLoaded + ","; 
+				}
+				usersLoaded += user_id;
+				// load user
+				o_task_user_ooo = this._initTaskOOO();
+				o_task_user_ooo.user_id = gr_task_ooo.getValue("ooo_u_user");
+				o_task_user_ooo.userDisplayValue = gr_task_ooo.getDisplayValue("ooo_u_user");
+				// add this user to the task ooo object
+				task_ooo[user_id]=o_task_user_ooo;
+			}
+			// add schedules for the user
+			o_user_ooo = {};
+			o_user_ooo.userDisplayValue = gr_task_ooo.getDisplayValue("ooo_u_user");
+			o_user_ooo.start_date = gr_task_ooo.getValue("ooo_u_start_date");
+			o_user_ooo.end_date = gr_task_ooo.getValue("ooo_u_end_date");
+			o_user_ooo.message = gr_task_ooo.getValue("ooo_u_out_of_office_message");
+			o_task_user_ooo.ooo_schedule.push(o_user_ooo);
+		}
+		return task_ooo;
+	},
+	
+	// STRY0130630 - Banner Notification & Task List- My Conflicting Schedules (Out of Office)
+	getUserOOOFilter: function (user_id){
+		var oooCount = 0;
+		// first get the current and future Out of Office dates for this user
+		var userFilter = "^assigned_to=" + user_id + "^ORu_reviewer=" + user_id + "^ORu_task_requester=" + user_id;
+		var emptySuspenseDateQuery = "^suspense_dateISEMPTY"; 
+		var suspenseDateQuery = "";
+		var conflictingTaskQuery = "";
+		var earliestStart="";
+		var grUserOOO = new GlideRecord(Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE);
+		grUserOOO.addQuery("u_user", user_id);
+		grUserOOO.addQuery("u_end_date", ">=", gs.daysAgoStart(0));
+		// if the earliest start date is before the suspense date, then the user has a conflicting ooo
+		grUserOOO.orderBy("u_start_date");
+		grUserOOO.query();
+		if(grUserOOO.next()){
+			oooCount++;
+			earliestStart = grUserOOO.u_start_date;
+		}
+		if(oooCount > 0 ){
+			// create query for tasks with no suspense date.  
+			// If the user has any current or future out of office dates, 
+			// this is all task where the user is the Owner, Reviewer or Assigned Member
+			conflictingTaskQuery = emptySuspenseDateQuery + userFilter + "^NQ";
+			// create query for tasks with suspense date
+			// This will be all of the tasks where the User is the Owner, Reviewer or Assigned Member 
+			// and the out of office dates overlap with the suspense date of the task
+			conflictingTaskQuery += "^suspense_dateISNOTEMPTY^suspense_date>=" + earliestStart + userFilter;
+
+		}
+		return conflictingTaskQuery;
+	},
+
+
+    type: 'Out_of_Office'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2022-12-20 13:26:32</sys_created_on>
+        <sys_id>3405bc4b1bfbd150e75655f5624bcb1c</sys_id>
+        <sys_mod_count>23</sys_mod_count>
+        <sys_name>Out_of_Office</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_3405bc4b1bfbd150e75655f5624bcb1c</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2022-12-27 03:56:13</sys_updated_on>
+    </sys_script_include>
+</record_update>
