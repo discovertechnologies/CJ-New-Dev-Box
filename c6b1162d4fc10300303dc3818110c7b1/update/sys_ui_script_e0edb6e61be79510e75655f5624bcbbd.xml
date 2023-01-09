@@ -14,6 +14,8 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 
 	var CONST_OOO_MESAGE_ID_SUFFIX = "_OOO_Message";
 
+	// create private variable to reference _sp_modal
+	var _sp_modal;
 	// get reference to document
 	var _document;
     // create private varialbe to hold g_form
@@ -28,80 +30,176 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 	var _messages;
 	// used to load all stylesheets into UI Script
 	var _styleSheetLinks;
+	// original suspense date
+	var _originalSuspenseDate;
 	
-    // private function to set the form's message
-    function _setFieldMessage(ooo_schedule, fieldName) {
-		var fieldMsgHTML;
-		var fieldMsg;
-		var tooltipHTML;
-		var toolTipMsg;
+	// private function to load the OOO messages for all users in the additional Assigned Members list
+	function _setListFieldMessage(newValue, fieldName){
+		var aNewUserList = newValue.split(",");
+		var listFieldMsgHTML = "";
+		// TODO: this is not dry, look at _setFieldMessage below and see if we can reduce further
 		var oooMessageElement = _document.getElementById(fieldName + CONST_OOO_MESAGE_ID_SUFFIX);
 		if(oooMessageElement){
 			oooMessageElement.remove();
 		}
+
+		// NOTE all of the users should be found by the time we get here
+		for (var i = 0; i<aNewUserList.length;i++){
+			// look for each user in our users list
+			var userOOOSchedule = _get_user_ooo(_taskScheduledooo, aNewUserList[i]);
+			if (userOOOSchedule.user_id && userOOOSchedule.user_id != "") {
+				listFieldMsgHTML += _buildListFieldMessage(userOOOSchedule.ooo_schedule);
+			}
+		}
+		if(listFieldMsgHTML != ""){
+			_setFieldMessageHTML(fieldName, listFieldMsgHTML);
+		}
+	}
+	
+    // private function to set the form's message
+    function _setFieldMessage(ooo_schedule, fieldName) {
+		var user_id;
+		var fieldMsgHTML = "";
+		var fieldMsg;
+		var tooltipHTML;
+		var tooltipMsg;
+		var oooMessageElement = _document.getElementById(fieldName + CONST_OOO_MESAGE_ID_SUFFIX);
+		if(oooMessageElement){
+			oooMessageElement.remove();
+		}
+		// calls the function to get the message based on the user's schedule. if no scheduled ooo, this returns undefined
+		fieldMsgHTML = _buildFieldMessage(ooo_schedule);
+		if(fieldMsgHTML != ""){
+			_setFieldMessageHTML(fieldName, fieldMsgHTML);
+		}
+    }
+
+	// wrap each field message in a div to pad between
+	function _buildListFieldMessage(ooo_schedule){
+		var sUserHTML = _buildFieldMessage(ooo_schedule);
+		// only add outer div if user has ooo conflict
+		if(sUserHTML != ""){
+			sUserHTML = '<div class="dtech-ooo-list-message-item">' + sUserHTML + '</div>';
+		}
+		return sUserHTML;
+	}
+	
+	// builds and returns the field message for the given user
+	// if no scheduled ooo, this returns undefined
+	function _buildFieldMessage(ooo_schedule){
+		var fieldMsgHTML;
 		switch(ooo_schedule.length){
 			case 1:
-				fieldMsg = _messages["Tasker - {0} is out of office from {1} to {2} and may not respond."];
-				fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
-				fieldMsg = fieldMsg.replace("{1}", ooo_schedule[0].start_date);
-				fieldMsg = fieldMsg.replace("{2}", ooo_schedule[0].end_date);
-				fieldMsgHTML = _messages["Tasker - OOO - Single - HTML"];
-				tooltipHTML = _messages["Tasker - OOO - ToolTip HTML"];
-				toolTipMsg = ooo_schedule[0].message;
-				tooltipHTML = tooltipHTML.replace("{0}", toolTipMsg);
-//				tooltipHTML = $sce.trustAsHtml(tooltipHTML);
-				fieldMsgHTML = fieldMsgHTML.replace("{0}", toolTipMsg);
-//				fieldMsgHTML = fieldMsgHTML.replace("{1}", tooltipHTML);
-				fieldMsgHTML = fieldMsgHTML.replace("{2}", fieldMsg);
-
-				// add ooo field message
-				_setFieldMessageHTML(fieldName, fieldMsgHTML);
-				
+				// build the message for a single message
+				fieldMsgHTML =_buildSingleMessage(ooo_schedule);
 				break;
 				// 0 or undefined, hide message box
 			case 0: case undefined:
 				// no need to do anything message is always deleted above and readded if the new user has ooo conflict
+				fieldMsgHTML = "";
 				break;
 				// Greater than 1 will fall here
 			default:
-				
-				fieldMsg = _messages["Tasker - {0} is out of office from {1} to {2} and may not respond."];
-				fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
-				fieldMsg = fieldMsg.replace("{1}", ooo_schedule[0].start_date);
-				fieldMsg = fieldMsg.replace("{2}", ooo_schedule[0].end_date);
-				fieldMsgHTML = _messages["Tasker - OOO - Single - HTML"];
-				tooltipHTML = _messages["Tasker - OOO - ToolTip HTML"];
-				toolTipMsg = ooo_schedule[0].message;
-				tooltipHTML = tooltipHTML.replace("{0}", toolTipMsg);
-//				tooltipHTML = $sce.trustAsHtml(tooltipHTML);
-				fieldMsgHTML = fieldMsgHTML.replace("{0}", toolTipMsg);
-//				fieldMsgHTML = fieldMsgHTML.replace("{1}", tooltipHTML);
-				fieldMsgHTML = fieldMsgHTML.replace("{2}", fieldMsg);
-
-				// add ooo field message
-				_setFieldMessageHTML(fieldName, fieldMsgHTML);
+				fieldMsgHTML =_buildMultipleConflictMessage(ooo_schedule);
 				break;
-		}		
-    }
-	function _setFieldMessageHTML(fieldName, msgHTML){
-		setTimeout(_timeoutSetFieldMessageHTML, 1000, fieldName, msgHTML);
+		}
+		return fieldMsgHTML;
+	}
+
+	// build the message for a single message
+	function _buildSingleMessage(ooo_schedule){
+		var fieldMsgHTML;
+		var fieldMsg;
+		
+		var tooltipMsg = ooo_schedule[0].message;
+		
+		fieldMsg = _messages["Tasker - {0} is out of office from {1} to {2} and may not respond."];
+		fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
+		fieldMsg = fieldMsg.replace("{1}", ooo_schedule[0].start_date);
+		fieldMsg = fieldMsg.replace("{2}", ooo_schedule[0].end_date);
+		
+		fieldMsgHTML = _getFieldMsgHTML(tooltipMsg, fieldMsg);
+
+		return fieldMsgHTML;
+	}
+
+	// build the message for a multiple OOO conflicts
+	function _buildMultipleConflictMessage(ooo_schedule){
+		var fieldMsgHTML;
+		var fieldMsg;
+		
+		var showAllLink = _messages["Tasker - Show me all the Out of Office Schedules..."];
+		var tooltipMsg = '<a href="#" onclick="x_153465_discovert.DTech_Out_of_Office.ooo_show_user_schedule(&apos;' + ooo_schedule[0].user_id + '&apos;);">' + showAllLink + '</a>';
+		fieldMsg = _messages["Tasker - {0} has multiple out of office schedules set and may not respond."];
+		fieldMsg = fieldMsg.replace("{0}", ooo_schedule[0].userDisplayValue);
+
+		fieldMsgHTML = _getFieldMsgHTML(tooltipMsg, fieldMsg);
+
+		return fieldMsgHTML;
+	}
+
+	function _getFieldMsgHTML(tooltipMsg, fieldMsg){
+		var fieldMsgHTML;
+	
+		// escape string to escape single quotes
+		tooltipMsg = tooltipMsg.replace(/'/g, "&apos;");
+		tooltipMsg = tooltipMsg.replace(/'"/g, "&quot;");
+		
+		var tooltipHTML = _getTooltipHTML(tooltipMsg);
+
+		fieldMsgHTML = 
+			'<div class="dtech-ooo-message-container" data-toggle="tooltip" data-html="true" ' +
+					'title=\'' + tooltipMsg + '\' data-placement="bottom" data-template=\'' + tooltipHTML + '\'>' + 
+				'<table class="dtech-ooo-background-color">' +
+					'<tr>' +
+						'<td>' +
+							'<span>' +
+								'<img src="OOO16.svg" class="dtech-ooo-pad-right-10"/>' + 
+							'</span>' + 
+						'</td>' + 
+						'<td>' +
+							'<span class="dtech-ooo-message-text">' + 
+								fieldMsg +
+							'</span>' + 
+						'</td>' +
+					'</tr>' +
+				'</table>' +
+			'</div>';
+		return fieldMsgHTML;
+		
 	}
 	
-	// function to set innerHTML of the field message
-	function _timeoutSetFieldMessageHTML(fieldName, msgHTML) {
+	function _getTooltipHTML(tooltipMsg){
+		var tooltipHTML = 
+			'<div class="tooltip">' +
+				'<div class="dtech-ooo-tooltip-container dtech-ooo-arrow-up">' +
+					'<div class="dtech-ooo-tooltip-html tooltip-inner">' +
+						tooltipMsg +
+					'</div>' +
+				'</div>' +
+			'</div>';
+
+		return tooltipHTML;
+	}
+	
+	function _setFieldMessageHTML(fieldName, msgHTML){
 		try {
 			var inputElement = _g_form.getControl(fieldName);                // ask Service-Now for a DOM reference to our field of interest
 			var parentElement = inputElement.parentElement;             // get the field's parent because the Field Messages are siblings to inputElement    
 			var fieldElement;
 			var fieldMessageContainer;
-
+			
 			if(parentElement){
 				// platform has a different structure
 				//fieldMessageContainer = parentElement.firstChild;
 				//fieldMessageContainer = inputElement;
 
-				// get the display element
+				// get the display element for single field
 				var fieldDisplayElement = _document.getElementById("sys_display.x_153465_discovert_route_task_instance." + fieldName);
+				// if single field element not found, try list
+				if(!fieldDisplayElement){
+					fieldDisplayElement = _document.getElementById("x_153465_discovert_route_task_instance." + fieldName + "s_nonedit");
+				}
 				// get the display container
 				var fieldDisplayContainer = fieldDisplayElement.parentElement;
 				// move up to the input controls - this element has no id in platform
@@ -123,7 +221,39 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 		}
 
 		return null;
-	}	
+	}
+
+	function _get_user_ooo(taskScheduledooo, user_id) {
+		// create empty user schedule object
+		// NOTE format for this object is in 
+		//      file: x_153465_discovert.Out_of_Office
+		//  function: _initTaskOOO
+		var userFound = {
+			user_id: "",
+			userDisplayValue: "",
+			ooo_schedule: []
+		};
+		for (var user in taskScheduledooo) {
+			if (taskScheduledooo[user].user_id == user_id) {
+				userFound = taskScheduledooo[user];
+				break;
+			}
+		}
+		return userFound;
+	}
+
+	// get current suspense date
+	function _getSuspenseDate(){
+		var suspense_date = "";
+		// get current suspense date
+		if (_g_form.getControl("suspense_date")) {
+			suspense_date = _g_form.getDisplayValue("suspense_date");
+		} else {
+			suspense_date = _originalSuspenseDate;				
+		}
+		return suspense_date;
+	}
+
     /**********************
     Share variables between multiple UI scripts by adding them to your scope object. For example: 
     ***********************
@@ -137,18 +267,25 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
     END Shared Vairables
     ***********************/
     return {
+        /***********************
+        START public API
+        ***********************/
 
 		// inititialize variables
-		init: function(param_document, param_ajax, param_g_form, 
-						param_taskScheduledooo, param_messages, param_styleSheetLinks){
+		init: function(param_sp_modal, param_document, param_ajax, param_g_form, 
+						param_taskScheduledooo, param_messages, param_styleSheetLinks,
+						param_originalSuspenseDate){
+			_sp_modal = param_sp_modal;
 			_document=param_document;
 			_ajax=param_ajax;
 			_g_form=param_g_form;
 			_taskScheduledooo=param_taskScheduledooo;
 			_messages = param_messages;
 			_styleSheetLinks = param_styleSheetLinks;
+			_originalSuspenseDate = param_originalSuspenseDate;
 			return;
 		},
+		
 		load_stylesheets_ui_native_only: function() {
 			for (var i=0; i<_styleSheetLinks.length; i++) {
 				var styleSheetLink = _styleSheetLinks[i];
@@ -164,48 +301,82 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 				}
 			}
 		},
-	
-        /***********************
-        START public API
-        ***********************/
-        get_user_ooo: function(taskScheduledooo, user_id) {
-            // create empty user schedule object
-            // NOTE format for this object is in 
-            //      file: x_153465_discovert.Out_of_Office
-            //  function: _initTaskOOO
-            var userFound = {
-                user_id: "",
-                userDisplayValue: "",
-                ooo_schedule: []
-            };
-            for (var user in taskScheduledooo) {
-                if (taskScheduledooo[user].user_id == user_id) {
-                    userFound = taskScheduledooo[user];
-                    break;
+		
+		ooo_change_user_list: function(fieldName){
+			var userOOOSchedule;
+			var aUnfoundUserList = [];
+			var newUserList = [];
+            var newValue;
+			var suspense_date = _getSuspenseDate();
+            // if the field is not on the form, ignore the change request
+            if (!_g_form.getControl(fieldName)) {
+                return;
+            }
+
+            newValue = _g_form.getValue(fieldName);
+			newUserList = newValue.split(',');
+			for (var i=0; i < newUserList.length; i++) {
+				// look for each user in our users list
+				userOOOSchedule = _get_user_ooo(_taskScheduledooo, newUserList[i]);
+				if (!userOOOSchedule.user_id || userOOOSchedule.user_id == "") {
+					// add any users not on the task yet to the list of users to look up
+					aUnfoundUserList.push(newUserList[i]);
+				}
+			}
+			if(aUnfoundUserList.length>0){
+				var sUnfoundUserList = aUnfoundUserList.join(",");
+				// if any users not in scratchpad ooo, call back to server to get OOO OOO schedule for new users
+                _ajax.addParam('sysparm_name', 'getListUsersOutOfOffice');
+                _ajax.addParam('sysparm_list_user_ids', sUnfoundUserList);
+				_ajax.addParam('sysparm_suspense_date', suspense_date);
+                _ajax.getXML(f_returnListOOOSchedule);
+			} else {
+				_setListFieldMessage(newValue,fieldName);
+			}
+			
+			// TODO - add call back function
+            function f_returnListOOOSchedule(response) {
+                try {
+					var newUserOOOSchedule;
+                    var sOOOSchedules = response.responseXML.documentElement.getAttribute("answer");
+                    var aOOOSchedules = JSON.parse(sOOOSchedules);
+					for (var i=0; i < aOOOSchedules.length; i++) {
+						newUserOOOSchedule = aOOOSchedules[i];
+						_taskScheduledooo[newUserOOOSchedule.user_id] = newUserOOOSchedule;
+					}
+					// call fuction to set ooo list
+					// pass "newValue" into the function so all id's are processed to add the messages
+					_setListFieldMessage(newValue,fieldName);
+                } catch (e) {
+                    // seeing first response as just a GUID, which is raising a syntax error, ignoring if the first response
+                    if (e.name != "SyntaxError") {
+                        jslog(e);
+                    }
+
                 }
             }
-            return userFound;
-        },
-
+		},
+		
         // STRY0130635  if user changed, check scratchpad for user_id
-        ooo_change_user: function(fieldName) {
+        ooo_change_user: function(fieldName, loading) {
             var newValue;
+			var suspense_date = _getSuspenseDate();
             // if the field is not on the form, ignore the change request
             if (!_g_form.getControl(fieldName)) {
                 return;
             }
             newValue = _g_form.getValue(fieldName);
-            var userOOOSchedule = this.get_user_ooo(_taskScheduledooo, newValue);
+            var userOOOSchedule = _get_user_ooo(_taskScheduledooo, newValue);
             // if in scratchpad, then function will return user ooo schedule object
             if (userOOOSchedule.user_id && userOOOSchedule.user_id != "") {
                 // might not work, or might need scratch passed in
                 _taskScheduledooo[newValue] = userOOOSchedule;
                 _setFieldMessage(userOOOSchedule.ooo_schedule, fieldName);
-            } else {
+            } else if(!loading) {
                 // if not in scratchpad ooo, then go back to server to see if user has ooo
                 _ajax.addParam('sysparm_name', 'getUserOutOfOffice');
-                _ajax.addParam('sysparm_task_id', _g_form.getUniqueValue());
                 _ajax.addParam('sysparm_user_id', newValue);
+				_ajax.addParam('sysparm_suspense_date', suspense_date);
                 _ajax.getXML(f_returnOOOSchedule);
             }
 
@@ -223,8 +394,28 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 
                 }
             }
-
         },
+		
+		// this shows the out of office schedule for the given user
+		ooo_show_user_schedule: function(user_sys_id) {
+			if(_sp_modal != undefined){
+				_sp_modal.open({
+					title: 'Tasker User Settings Container',
+					backdrop: 'static',
+					widget: 'tasker_user_settings_container',
+					widgetInput: {
+						sys_id: user_sys_id,
+						sidebarMenuItem: _messages['Tasker - Out of Office Schedule'],
+						isModal: true
+					},
+					size: 'lg',
+					buttons: [],
+					footerStyle: {
+						'display': 'none'
+					}
+				});
+			}
+		},
         /***********************
         END public API
         ***********************/
@@ -236,14 +427,14 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-12-06 23:49:16</sys_created_on>
         <sys_id>e0edb6e61be79510e75655f5624bcbbd</sys_id>
-        <sys_mod_count>189</sys_mod_count>
+        <sys_mod_count>299</sys_mod_count>
         <sys_name>x_153465_discovert.DTech_Out_of_Office</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_script_e0edb6e61be79510e75655f5624bcbbd</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-12-21 02:59:38</sys_updated_on>
+        <sys_updated_on>2023-01-08 23:23:59</sys_updated_on>
         <ui_type>10</ui_type>
         <use_scoped_format>true</use_scoped_format>
     </sys_ui_script>
