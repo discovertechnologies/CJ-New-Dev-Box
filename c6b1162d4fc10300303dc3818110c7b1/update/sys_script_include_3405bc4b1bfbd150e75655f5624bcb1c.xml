@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This script contains the Out of Office functionality for DTech Apps&#13;
+2.8.1 | 2023-01-09 | raj  | STRY0131003 - Task Tree- OOO Visual Indicators&#13;
 2.8.1 | 2022-12-30| raj  |  DFCT0011562- Banner Notification "My Conflicting Schedules (Out of Office)" filter criteria SHOULD display Task (IS) Active &#13;
 2.8.1 | 2022-12-30| raj  |  DFCT0011556 - Banner Notification "My Conflicting Schedules (Out of Office)" should NOT display to the ALL user without any existing OOO schedules&#13;
 2.8.1 | 2022-12-30| raj  |  DFCT0011555 - Banner Notification "My Conflicting Schedules (Out of Office)" should NOT display the Draft task &#13;
@@ -121,6 +122,84 @@ Out_of_Office.prototype = {
 		}
 		return task_ooo;
 	},
+		
+	// STRY0131003 - Task Tree- get all OOO schedules for all tasks in the task tree, Task Tree- OOO Visual Indicators
+	// NOTE: test script for background execution run below this function
+	getTaskTreeOOOSchedules: function(tree_id){
+		var taskTreeOOO = [];
+		var taskOOO;
+		var userOOO;
+		var task_id = "";
+		var user_id = "";
+		var gaTreeOOO = new GlideAggregate(Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE);
+		gaTreeOOO.addQuery("task_u_task_tree", tree_id);
+		gaTreeOOO.addAggregate('COUNT', "task_sys_id");
+		gaTreeOOO.query();
+		while (gaTreeOOO.next()){
+			// reset the task object
+			task_id = gaTreeOOO.getValue("task_sys_id");
+			taskOOO = {};
+			taskOOO.task_id = task_id;
+			taskOOO.users = [];
+			
+			var gaTaskOOO = new GlideAggregate(Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE);
+			var encodedQuery = this._getTaskAllUserFilter(task_id);
+			gaTaskOOO.addEncodedQuery(encodedQuery);
+			gaTaskOOO.addAggregate('COUNT', "ooo_u_user");
+			gaTaskOOO.query();
+			while (gaTaskOOO.next()){
+				var oooCount = gaTaskOOO.getAggregate('COUNT', "ooo_u_user");
+				if(oooCount>0){
+					user_id = gaTaskOOO.getValue("ooo_u_user");
+					// reset the task object
+					userOOO = {};
+					userOOO.user_id = user_id;
+					userOOO.count = oooCount;
+					taskOOO.users.push(userOOO);
+				}
+			}
+			taskTreeOOO.push(taskOOO);
+
+		}
+		return taskTreeOOO;
+	},
+	/* -------------------------------------------------------
+	//  PASTE INTO BACKGROUND EXECUTION TO TEST TREE OOO
+	// -------------------------------------------------------
+		var gr_taskTrees = new GlideRecord("x_153465_discovert_task_tree");
+		gr_taskTrees.query();
+		var maxTreeOOO;
+		var maxTreeDisplayValue;
+		var overallStart = new GlideDateTime().getNumericValue();
+		var i = 0;
+		var maxMS = 0;
+		while(gr_taskTrees.next()){
+			i++;
+			var startTime = new GlideDateTime().getNumericValue();
+			var treeOOOSchedule = new x_153465_discovert.Out_of_Office().getTaskTreeOOOSchedules(gr_taskTrees.getUniqueValue());
+			var endTime = new GlideDateTime().getNumericValue();
+
+			var msTaken = endTime - startTime;
+			if(msTaken > maxMS){
+				maxMS = msTaken;
+				maxTreeOOO = treeOOOSchedule;
+				maxTreeDisplayValue= gr_taskTrees.getDisplayValue();
+			}
+
+			//   gs.info ("RJ - testing - Task Tree: " + gr_taskTrees.getDisplayValue() + " - number of miliseconds: " + msTaken);
+			//    gs.info ("RJ - testing - Task Tree: " + gr_taskTrees.getDisplayValue() + " treeOOOSchedule: " + JSON.stringify(treeOOOSchedule));
+		}
+
+		var overallEnd = new GlideDateTime().getNumericValue();
+
+		var overallMS = overallEnd - overallStart;
+		var averageMS = overallMS / i;
+
+		gs.info ("RJ - testing - total task trees processed: " + i + " - total time: " + overallMS + " - Max Time: " + maxMS + " - average time: " + averageMS);
+		gs.info ("RJ - testing - Max Task Tree: " + maxTreeDisplayValue + " treeOOOSchedule: " + JSON.stringify(maxTreeOOO));
+	 -------------------------------------------------------
+	 // END BACKGROUND SCRIPT
+	  ------------------------------------------------------- */
 	
 	// STRY0130630 - Banner Notification & Task List- My Conflicting Schedules (Out of Office)
 	getUserOOOTaskConflictFilter: function (user_id){
@@ -169,13 +248,13 @@ Out_of_Office.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-12-20 13:26:32</sys_created_on>
         <sys_id>3405bc4b1bfbd150e75655f5624bcb1c</sys_id>
-        <sys_mod_count>44</sys_mod_count>
+        <sys_mod_count>65</sys_mod_count>
         <sys_name>Out_of_Office</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3405bc4b1bfbd150e75655f5624bcb1c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-08 23:19:08</sys_updated_on>
+        <sys_updated_on>2023-01-10 19:58:00</sys_updated_on>
     </sys_script_include>
 </record_update>

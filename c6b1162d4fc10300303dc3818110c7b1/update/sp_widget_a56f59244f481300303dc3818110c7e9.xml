@@ -128,6 +128,8 @@
             toolTipWarningNoteMargin: 6,
             toolTipColumnWidth: 600, // "auto",
             toolTipWarningMessageColumnWidth: 600,
+						// STRY0131003 - OOO visual indicator
+						toolTipExclamationColumnWidth:250,
             // -------------------------------------------------------------------	
 
             node_status_ontime: '#37C1C3', //success
@@ -1211,10 +1213,11 @@
                 }),
                 new go.Binding("text", "", function(data) {
                     if (iconName == 'ExclamationIcon') {
+												// STRY0131003 - add ooo lookup to if statement
                         if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
                             data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
                             data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-                            data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
+                            data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty || _isAnyUserOOOforTask(data))
                             return TREE_CONST.font_awesome_exclamation_triangle_o;
                         else
                             return '';
@@ -1228,8 +1231,8 @@
                     var iconStroke = getStateColors(data.state, "text");
                     switch (iconName) {
                         case 'UserIcon':
-                            // STRY0095897
-                            if (data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty)
+                            // STRY0095897 - STRY0131003 - STRY0131003 - add ooo lookup to if statement
+                            if (data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty || _isAnyUserOOOforTask(data))
                                 iconStroke = getStateColors(data.state, "warning");
                             else
                                 iconStroke = getStateColors(data.state, "text");
@@ -1326,6 +1329,7 @@
                     margin: margin,
                     alignment: textAlignment,
                     wrap: go.TextBlock.WrapFit,
+					isMultiline:false,
                     background: TREE_CONST.toolTipBackgroundColor
                 },
                 text
@@ -1334,6 +1338,70 @@
 
     }
 
+		// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+		function _addOutOfOffice(visibleFlag, rowNum, columnNum, margin, task_id, user_id){
+			var oooImage;
+			var isUserOOO = _isUserOOOforTask(task_id, user_id);
+
+			// user conflict was return the ooo image
+			if(isUserOOO){
+				oooImage = 
+					$go(go.Picture, 
+							{visible: visibleFlag,
+							 row: rowNum,
+							 column: columnNum,
+							 margin: margin,
+							 background: TREE_CONST.toolTipBackgroundColor,
+							 source: 'OOO16.svg'
+							});			
+			// user conflict was not found return blank text
+			} else {
+					oooImage =
+							$go(go.TextBlock, {
+
+											row: rowNum,
+											column: columnNum,
+											margin: margin,
+											background: TREE_CONST.toolTipBackgroundColor
+									},
+									""
+							);
+			}
+
+			return oooImage;		
+		}
+
+		// STRY0131003 - function to the OOO array to see if a user on a task is out of the office
+		function _isUserOOOforTask(task_id, user_id){
+			var isUserOOO = false;
+			c.data.task_tree_ooo.filter(function(task){
+				if(task.task_id == task_id){
+					var userOOO = task.users.filter(function(user){
+						if(user.user_id == user_id){
+							isUserOOO = true;
+						}
+					});
+				}
+			});
+			return isUserOOO;
+		}
+	
+		// STRY0131003 - function to check the ooo object for any user on the task being out of the office
+		function _isAnyUserOOOforTask(nodeData){
+			// look at users one at a time and return true on first true found else return false
+			var isAssignedUserOOO = false;
+			var isReviewerOOO= false;
+			var isOwnerOOO= false;
+			isAssignedUserOOO = _isUserOOOforTask(nodeData.sys_id,nodeData.assigned_to);
+			if(!isAssignedUserOOO){
+				isReviewerOOO = _isUserOOOforTask(nodeData.sys_id,nodeData.u_reviewer);
+			}
+			if(!isAssignedUserOOO && !isReviewerOOO){
+				isOwnerOOO = _isUserOOOforTask(nodeData.sys_id,nodeData.u_task_requester);
+			}
+			return isAssignedUserOOO || isReviewerOOO || isOwnerOOO;
+		}
+	
     // STRY0091260
     function getToolTipText(objectName, nodeData) {
         var toolTip;
@@ -1442,7 +1510,21 @@
                         _createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_assignee_DisplayValue),
                         // Row 4
                         _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.assigned_to.fieldLabel + ": "),
-                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue)
+                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue),
+												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+												_addOutOfOffice(true, 3, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.assigned_to),
+												// STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer
+                        // Row 5
+                        _createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_reviewer.fieldLabel + ": "),
+												_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_reviewer_DisplayValue),
+												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+												_addOutOfOffice(true, 4, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_reviewer),
+												
+                        // Row 6
+                        _createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_task_requester.fieldLabel + ": "),
+                        _createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_task_requester_DisplayValue),
+												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+												_addOutOfOffice(true, 5, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_task_requester)
                     );
                 break;
             case 'ExclamationIcon':
@@ -1451,12 +1533,16 @@
                     nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate || !nodeData.warning.isSuspenseDateAfterChildren ||
                     nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks);
                 var assignmentExclamation = (nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty);
+								var oooExclamation = _isAnyUserOOOforTask(nodeData);
                 toolTip =
                     $go(go.Panel, "Table",
                         // Row 1
-                        _createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
+                        _createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
                         // row 3
-                        _createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"])
+                        _createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"]),
+												// row 5 - STRY0131003 - OOO visual indicator
+                        _createTableColumn(oooExclamation, 5, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task is assigned to a member that is out of office between now and the suspense date."])
+
                     );
                 break;
         }
@@ -1680,6 +1766,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                       in nodeSelectionChanged() added create outer in 2 places 
 //                                      Changes Client controller.
 //
+// 2.8.1 | 2023-01-09 | raj  | STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer
+//                                      Added to the tooltip in client script tool tip table
+// 2.8.1 | 2023-01-09 | raj  | STRY0131003 - Task Tree- OOO Visual Indicators
+//                                      Added to lookup to the tooltip
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1776,6 +1866,8 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         data.topParentTask_id = grTopTask.getValue('sys_id');
 
         data.task_tree = grTopTask.getValue('u_task_tree');
+				// STRY0131003 - Task Tree- OOO Visual Indicators - load the OOO list for tasks in the tree
+				data.task_tree_ooo = new Out_of_Office().getTaskTreeOOOSchedules(data.task_tree);
 
         // STRY0091251 - NOTE: this uses the same data building functions as the 'Tasker List Task Tree' widget id: discovertasker-recursivetasktreelist
         if (data.loadData) {
@@ -1798,17 +1890,15 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>1994</sys_mod_count>
+        <sys_mod_count>2019</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-12-20 11:17:36</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-01-13 00:16:56</sys_updated_on>
         <template><![CDATA[<div id="accordionTaskerGraphical" class="panel-group flex-row flex-grow">
   <div id="main_body" class="panel panel-default flex-column flex-grow" ng-class="{'dtech-topstick-posabso':data.hide_accordion==true}"> 
     <div id="panel_heading" class="panel-heading" ng-class="{'dtech-panel-heading-min-height-standard':data.bifold==true}">
