@@ -2,9 +2,10 @@
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[api.controller = function($scope) {
+	
     /* widget controller */
     var c = this;
-
+	
     c.onCancel = function() {
         $scope.$parent.$parent.$dismiss();
     };
@@ -19,7 +20,11 @@
 
 };]]></client_script>
         <controller_as>c</controller_as>
-        <css>/* No CSS here. Add via Tasker Theme */</css>
+        <css>/* No CSS here. Add via Tasker Theme */
+
+.dtech-bottom-padding-30{
+  padding-bottom:30px;
+}</css>
         <data_table>sp_instance</data_table>
         <demo_data/>
         <description>Create a new widget for tasks modal popup, based off of widget Tasker Modal - Reopen Tasks&#13;
@@ -48,6 +53,8 @@
 // WIDGET BASE: Tasker Modal - Reopen Tasks
 //------------------------------------------------------------------------------------------------------------------------
 // 2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'
+// 2.8.1 | 2023-01-14 | raj  | STRY0130998 - Publishing Tasks Modal- Add OOO Warning 
+//                             Changes in Server Script, and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -66,12 +73,14 @@
 				if (grSelectedTask.get(input.taskSysId)) {
 					new Task_uiAction().uiAction_PublishDraftTasks(grSelectedTask, input.publishType);
 				}
-
 			} else {
 				// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX; reorder and added _getDescendantsCount()
 				_setDataDefaults();
 				_optCopy(['taskSysId']);
 				_getDescendantsCount();
+				_hasDescendantTasksUserOOO();
+				_getDescendantTasksUserOOOFilter();
+
 				_buildMessages();
 			}
 		}
@@ -80,6 +89,7 @@
 	// Use this function to get Messages that will be used in this widget
 	function _buildMessages() {
 		data.msgBodyAllSubtasks = gs.getMessage('Tasker - This Task and all {0} Subtasks',[data.descendantsCount]);
+		data.msgOOOConflictTableHeader = gs.getMessage('Tasker - Draft Tasks with Out of Office Schedule Conflicts');
 	}
 
 	// get draft descendant count
@@ -90,6 +100,17 @@
 		data.descendantsCount = taskerHelpers.getDraftDescendantsCount(data.taskSysId);
 	}
 	
+	function _getDescendantTasksUserOOOFilter(){
+		var dtechOOO = new Out_of_Office();
+		data.OOOFilter = "";
+		data.OOOFilter = dtechOOO.getDescendantTasksIdOOOFilter(data.taskSysId);	
+	}
+	// get ooo conflict count
+	function _hasDescendantTasksUserOOO(){
+		var dtechOOO = new Out_of_Office();
+		data.hasOOOConflict = false;
+		data.hasOOOConflict = dtechOOO.hasDescendantTasksUserOOO(data.taskSysId);
+	}
 	// copy to data from input or options
 	function _optCopy(names) {
 		names.forEach(function(name) {
@@ -109,51 +130,81 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-06-08 00:06:14</sys_created_on>
         <sys_id>079031c4dbc8d9901e1792c5d4961909</sys_id>
-        <sys_mod_count>15</sys_mod_count>
+        <sys_mod_count>61</sys_mod_count>
         <sys_name>Tasker Modal - Publish Draft Tasks</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_079031c4dbc8d9901e1792c5d4961909</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-06-08 19:16:58</sys_updated_on>
-        <template><![CDATA[<div class="dtech-modal-widget-body">
+        <sys_updated_on>2023-01-18 17:51:50</sys_updated_on>
+        <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
+     ng-class="{'dtech-modal-relative':data.hasOOOConflict}">
+  <div class="dtech-modal-widget-body flex-column flex-grow dtech-overflow-hidden">
 
-  <div class="dtech-text-center dtech-standard-text-color">
-    <span>
-      ${Tasker - Please choose to publish only the top task or all of its subtasks as well}
-    </span>
-  </div>
-  <br>
-
-  <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-10 col-md-offset-2">
+    <div class="container-fluid dtech-bottom-padding-30">
+      <div class="row">
+        <div class="dtech-text-center dtech-standard-text-color">
+          <span>
+            ${Tasker - Please choose to publish only the top task or all of its subtasks as well}
+          </span>
+        </div>
+      </div>        
+      <div class="row">
         <input type="radio" name="publishType" id="taskOnly" aria-label="${Tasker - This Task Only}" ng-model="data.publishType" value="taskOnly">
         <label for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">${Tasker - This Task Only}</label>
       </div>
-    </div>
-
-    <div class="row">
-      <div class="col-md-10 col-md-offset-2">
+      <div class="row">
         <input type="radio" name="publishType" id="allSubtasks" aria-label="{{data.msgBodyAllSubtasks}}" ng-model="data.publishType" value="allSubtasks">
         <label for="allSubtasks" class="dtech-standard-text-color dtech-radio-inline">{{data.msgBodyAllSubtasks}}</label>
       </div>
     </div>
+    <!-- STRY0125927 -->
+    <div ng-if="data.hasOOOConflict"
+         class="flex-column flex-grow dtech-overflow-hidden">
+
+      <div class="dtech-text-center dtech-bottom-padding-30">
+        <img src="InfoRound24.svg"/>
+        <span class="dtech-subtasks-also-deleted">
+          ${Tasker - You are about to publish task(s) containing assignment to users scheduled out of office}
+        </span> 
+        <div class="dtech-subtasks-also-deleted">
+          ${Tasker - Please review the following tasks before publishing}
+        </div>
+      </div>
+      <div class="flex-column flex-grow dtech-overflow-hidden">
+        <widget id="discovertasker-widget-data-table" 
+                options='{"isModal": true,
+                         "isTopWidget": false,
+                         "bifold": false,
+                         "showLongDates": data.showLongDates,
+                         "table": "x_153465_discovert_route_task_instance", 
+                         "o": "number", 
+                         "d": "asc",
+                         "view": "Default View",
+                         "filter": data.OOOFilter,
+                         "open_row_details_in_modal": true,
+                         "fields": "number,taskernumber,short_description,suspense_date,primary_assignee,u_task_requester,u_reviewer,assigned_to,assignment_group",
+                         "title": data.msgOOOConflictTableHeader}'>
+        </widget>
+      </div>
+    </div>
+
+    <div id="footer" class="dtech-modal-widget-footer dtech-box">
+      <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
+              type="button" title="${cancel}"
+              ng-click="c.onCancel()" data-dismiss="modal">${cancel}
+      </button>
+
+      <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
+              type="submit" title="${Tasker - Button - Confirm}"
+              ng-click="c.onSubmit();">${Tasker - Button - Confirm}
+      </button>
+    </div>
 
   </div>
-  <br>
-</div>
-<div id="footer" class="dtech-modal-widget-footer dtech-box">
-  <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
-          type="button" title="${cancel}"
-          ng-click="c.onCancel()" data-dismiss="modal">${cancel}
-  </button>
 
-  <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
-          type="submit" title="${Tasker - Button - Confirm}"
-          ng-click="c.onSubmit();">${Tasker - Button - Confirm}
-  </button>
+
 </div>]]></template>
     </sp_widget>
 </record_update>

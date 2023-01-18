@@ -6,6 +6,11 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This script contains the Out of Office functionality for DTech Apps&#13;
+2.8.1 | 2023-01-18 | raj  | DFCT0011588 - When clearing "Suspense Date" on the New Task form, then selecting "Assigned Member" should NOT display There is a JavaScript error in your browser console&#13;
+2.8.1 | 2023-01-17 | raj  | STRY0130628 - Out of Office Modal- Success and Warning Toast&#13;
+2.8.1 | 2023-01-17 | raj  | DFCT0011561 - "Conflicting OOO Tasks" Banner Notification does NOT update when there is a new conflicting tasks is created&#13;
+2.8.1 | 2023-01-17 | raj  | DFCT0011559 - List of "Conflicted Out of Office Tasks" only checks the first record "Out of Office Schedule"&#13;
+2.8.1 | 2023-01-17 | raj  | STRY0130998 - Publishing Tasks Modal- Add OOO Warning &#13;
 2.8.1 | 2023-01-09 | raj  | STRY0131003 - Task Tree- OOO Visual Indicators&#13;
 2.8.1 | 2022-12-30| raj  |  DFCT0011562- Banner Notification "My Conflicting Schedules (Out of Office)" filter criteria SHOULD display Task (IS) Active &#13;
 2.8.1 | 2022-12-30| raj  |  DFCT0011556 - Banner Notification "My Conflicting Schedules (Out of Office)" should NOT display to the ALL user without any existing OOO schedules&#13;
@@ -50,11 +55,12 @@ Out_of_Office.prototype = {
 		var gr_ooo = new GlideRecordSecure(Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE);
 		var task_ooo = this._initTaskOOO();
 		task_ooo.user_id = user_id;
-		gdtSuspense = new GlideDateTime(suspenseDateDisplayValue);
-		gdtSuspense.addDaysLocalTime(1);
-		suspenseDateNextDayValue = gdtSuspense.getDate();
 		gr_ooo.addQuery("u_user", user_id);
 		if(suspenseDateDisplayValue && suspenseDateDisplayValue != ''){
+			// DFCT0011588 - when suspense date was empty the lines to set gdtSuspense failed, moved them inside of the if statement
+			gdtSuspense = new GlideDateTime(suspenseDateDisplayValue);
+			gdtSuspense.addDaysLocalTime(1);
+			suspenseDateNextDayValue = gdtSuspense.getDate();
 			gr_ooo.addQuery("u_start_date", "<=", suspenseDateNextDayValue);
 		}
 		gr_ooo.addQuery("u_end_date", ">=", gs.daysAgoStart(0));
@@ -122,7 +128,58 @@ Out_of_Office.prototype = {
 		}
 		return task_ooo;
 	},
+	
+	// STRY0130998
+	_getDescendantTasksAllUserFilter: function(task_id){		
+		var task_filter = 'task_sys_id=' + task_id + '^ORtask_u_all_ancestors_tasksLIKE' + task_id;
+		var filter;
+		filter = task_filter + Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_EMPTY_FILTER;
+		filter = filter + "^NQ" + task_filter + Out_of_Office.CONST_TASK_OUT_OF_OFFICE_SUSPENSE_NOT_EMPTY_FILTER;		
+		filter = filter + "^ORDERBYooo_u_user";
+
+		return filter;
+	},
+
+	// STRY0130998 
+	getDescendantTasksIdOOOFilter: function (task_id){
+		var task_id_filter = "none";
+		var task_ids = "";
 		
+		var gr_descend_task_ooo = new GlideRecordSecure(Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE);
+		var encodedFilter = this._getDescendantTasksAllUserFilter(task_id);
+		gr_descend_task_ooo.addEncodedQuery(encodedFilter);
+		gr_descend_task_ooo.query();
+		while(gr_descend_task_ooo.next()){
+			var current_task_id = gr_descend_task_ooo.task_sys_id;
+			if(!task_ids.includes(current_task_id)){
+				if(task_ids != ""){
+					task_ids += ",";
+				}
+				task_ids += current_task_id;
+			}
+		}
+		if(task_ids!=""){
+			task_id_filter = "sys_idIN" + task_ids;
+		}
+		return task_id_filter;
+		
+	},
+
+	// STRY0130998 
+	// this is used by the publish call and can be used to determine if any descendents of a task has an OOO conflict
+	hasDescendantTasksUserOOO: function(task_id){
+		var bHasDescendantTasksUserOOO = false;
+		
+		var gr_descend_task_ooo = new GlideRecordSecure(Out_of_Office.CONST_VIEW_NAME_TASK_OUT_OF_OFFICE);
+		var encodedFilter = this._getDescendantTasksAllUserFilter(task_id);
+		gr_descend_task_ooo.addEncodedQuery(encodedFilter);
+		gr_descend_task_ooo.query();
+		if(gr_descend_task_ooo.next()){
+			bHasDescendantTasksUserOOO = true;
+		}
+		return bHasDescendantTasksUserOOO;
+	},
+	
 	// STRY0131003 - Task Tree- get all OOO schedules for all tasks in the task tree, Task Tree- OOO Visual Indicators
 	// NOTE: test script for background execution run below this function
 	getTaskTreeOOOSchedules: function(tree_id){
@@ -200,14 +257,49 @@ Out_of_Office.prototype = {
 	 -------------------------------------------------------
 	 // END BACKGROUND SCRIPT
 	  ------------------------------------------------------- */
+	// STRY0130628 - Out of Office Modal- Success and Warning Toast
+	getUserOOOTaskConflictCount: function(user_id){
+		// retrn the count using the filter used by banner
+		var count = 0;
+		var hasConflict = false;
+		var ga_count = new GlideAggregate(this.tableRouteTaskInstance);
+		var filter = this.getUserOOOTaskConflictFilter(user_id);
+		ga_count.addEncodedQuery(filter);
+		ga_count.addAggregate('COUNT');
+		ga_count.query();
+		if (ga_count.next()) {
+			
+			count = ga_count.getAggregate('COUNT');
+		}
+		if(count > 0){
+			hasConflict = true;
+		}
+		return hasConflict;
+	},
 	
+	// get the URL for the success info message link to open taask conflict page for the users
+	getUserOOOTaskConflictURL: function(user_id){
+		var filter = this.getUserOOOTaskConflictFilter(user_id);
+
+		var href = '?id=discovertasker_detailsdrilldown&view=sp&table=' + this.tableRouteTaskInstance + 
+			'&filter=' + filter + '&o=suspense_date&d=asc&label=' + gs.getMessage("Tasker - My Conflicting Schedules (Out of Office)");
+
+		var userTaskConflict_link = "<span style='font-family: georgia, palatino; font-size: 12pt;'><a href='" + href + "'>" + 
+			gs.getMessage("Tasker - Take me to my Tasks...") +
+			"</a></span>";
+
+		return userTaskConflict_link;
+	},
+
 	// STRY0130630 - Banner Notification & Task List- My Conflicting Schedules (Out of Office)
 	getUserOOOTaskConflictFilter: function (user_id){
 		// DFCT0011556 - needed to return undefined instead of an empty string for the fitler to keep it from adding the banner
 		var conflictingTaskQuery;
 		var oooCount = 0;
 		// DFCT0011562 - fitler out active
-		var taskFitler = "^active=true";
+		// DFCT0011561 - DFCT0011559 ^ did not work with NQ
+		
+		var taskFitler = "active=true";
 		// DFCT0011555 - filter out Draft
 		taskFitler += "^state!=-6";
 		// first get the current and future Out of Office dates for this user
@@ -248,13 +340,13 @@ Out_of_Office.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-12-20 13:26:32</sys_created_on>
         <sys_id>3405bc4b1bfbd150e75655f5624bcb1c</sys_id>
-        <sys_mod_count>65</sys_mod_count>
+        <sys_mod_count>85</sys_mod_count>
         <sys_name>Out_of_Office</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3405bc4b1bfbd150e75655f5624bcb1c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-10 19:58:00</sys_updated_on>
+        <sys_updated_on>2023-01-18 12:33:58</sys_updated_on>
     </sys_script_include>
 </record_update>
