@@ -6,7 +6,8 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This script contains the Out of Office functionality for DTech Apps&#13;
-2.8 | 2023-01-19 | raj  |   DFCT0011483 - Stretch:Org Hier Tree/Bi-Fold, select "Organizational Member" clicks on the tab "Out of Office Schedule" or "Out of Office History" tab does NOT display rows&#13;
+2.8.1  | 2023-01-23 | raj |  STRY0134743 - Out of Office Message on Task Request Form&#13;
+2.8 .1 | 2023-01-19 | raj  |   DFCT0011483 - Stretch:Org Hier Tree/Bi-Fold, select "Organizational Member" clicks on the tab "Out of Office Schedule" or "Out of Office History" tab does NOT display rows&#13;
 2.8.1 | 2023-01-18 | raj  | DFCT0011588 - When clearing "Suspense Date" on the New Task form, then selecting "Assigned Member" should NOT display There is a JavaScript error in your browser console&#13;
 2.8.1 | 2023-01-17 | raj  | STRY0130628 - Out of Office Modal- Success and Warning Toast&#13;
 2.8.1 | 2023-01-17 | raj  | DFCT0011561 - "Conflicting OOO Tasks" Banner Notification does NOT update when there is a new conflicting tasks is created&#13;
@@ -46,6 +47,154 @@ Out_of_Office.prototype = {
 			ooo_schedule: []
 		};
 		return task_ooo;
+	},
+
+	// STRY0134743 - creates the warning message HTML for the Request Out of office. Done in script include and called from business rule onload so it can be used in portal and platform
+	getRequestOutOfOfficeWarningHTML: function(){
+		var warningMessage = gs.getMessage("Tasker - Warning: Some member(s) who can provide a response are out of office and may be unable to respond.");
+		var href_click_here = '<a>' +
+				gs.getMessage("Tasker - click here") +
+				'</a>';
+		var moreInfoMessage = gs.getMessage("Tasker - Please {0} for more information.",[href_click_here]);
+		var requestOOOMessage = 
+			warningMessage + 
+			moreInfoMessage;
+		requestOOOMessage = requestOOOMessage.replace(/'/g, "&apos;");
+		requestOOOMessage = requestOOOMessage.replace(/"/g, "&quot;");
+				var requestOOOMessageHTML = 
+					'<span class="dtech-ooo-background-color">' +
+							'<span>' +
+								'<img src="OOO16.svg" class="dtech-ooo-pad-right-10"/>' +
+							'</span>' +
+							'<span class="dtech-ooo-message-text">' +
+									requestOOOMessage +
+							'</span>' +
+					'</span>';
+
+/*
+		var requestOOOMessageHTML = 
+				'<table class="dtech-ooo-background-color">' +
+					'<tr>' +
+						'<td>' +
+							'<span>' +
+								'<img src="OOO16.svg" class="dtech-ooo-pad-right-10"/>' +
+							'</span>' +
+						'</td>' +
+						'<td>' +
+							'<span class="dtech-ooo-message-text">' +
+									requestOOOMessage +
+							'</span>' +
+						'</td>' +
+					'</tr>' +
+				'</table>';
+*/
+		return requestOOOMessageHTML;
+	},
+			
+
+	// STRY0134743 - load Task responders and see if any are out of the office
+	requestResponderIsOutOfOffice: function (task_id){
+		var isRequestResponderIsOutOfOffice = false;
+		var responderList = this._getRespondersList(task_id);
+		if(responderList  != ""){
+			isRequestResponderIsOutOfOffice = this._isAnyUserOutOfOffice(responderList);
+		}
+		// STRY0134743 - load all of the task users and see if any are out of the office
+		return isRequestResponderIsOutOfOffice;
+	},
+
+	getRequestUsersOOO: function (task_id){
+		var usersLoaded = "";
+		var ooo_users = {};
+		var o_user_ooo;
+		var o_user_ooo_schedule = {};
+		
+		var responderList = this._getRespondersList(task_id);
+		var gr_ooo = new GlideRecordSecure(Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE);
+		var encodedFilter = "u_userIN" + responderList + "^u_start_date<=javascript:gs.beginningOfToday()^u_end_date>=javascript:gs.endOfToday()";
+		gr_ooo.addEncodedQuery(encodedFilter);
+		gr_ooo.query();
+		while(gr_ooo.next()){
+			var user_id  = gr_ooo.getValue("u_user");
+			// is user loaded yet
+			if(usersLoaded.indexOf(user_id) == -1) {
+				if(usersLoaded != ""){
+					usersLoaded = usersLoaded + ","; 
+				}
+				usersLoaded += user_id;
+				// load user
+				o_user_ooo = this._initTaskOOO();
+				o_user_ooo.user_id = gr_ooo.getValue("u_user");
+				o_user_ooo.userDisplayValue = gr_ooo.getDisplayValue("u_user");
+				// add this user to the task ooo object
+				ooo_users[user_id]=o_user_ooo;
+			}
+			// add schedules for the user
+			o_user_ooo_schedule = {};
+			o_user_ooo_schedule.user_id = gr_ooo.getValue("u_user");
+			o_user_ooo_schedule.userDisplayValue = gr_ooo.getDisplayValue("u_user");
+			o_user_ooo_schedule.start_date = gr_ooo.getValue("u_start_date");
+			o_user_ooo_schedule.end_date = gr_ooo.getValue("u_end_date");
+			o_user_ooo_schedule.message = gr_ooo.getDisplayValue("u_out_of_office_message");
+			o_user_ooo.ooo_schedule.push(o_user_ooo_schedule);
+		}
+		return ooo_users;
+	},
+
+	
+	// STRY0134743 - load Task responders and see if any are out of the office
+	_getRespondersList: function(task_id){
+		var responder_list = "";
+		if(task_id && task_id != ""){
+			var gr_task = new GlideRecordSecure(this.tableRouteTaskInstance);
+			if(gr_task.get(task_id)){
+				// get users
+				var task_owner_id = gr_task.getValue("u_task_requester");
+				if(task_owner_id && task_owner_id != ""){
+					responder_list = task_owner_id;
+				}
+
+				var primary_assignee = gr_task.getValue("primary_assignee");
+				if(primary_assignee && primary_assignee != ""){
+					var gr_ou = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+					if(gr_ou.get(primary_assignee)){
+						var task_managers = gr_ou.getValue("tasking_authorities");
+						if(task_managers && task_managers != ''){
+							if(responder_list != ""){
+								responder_list += ",";
+							}
+							responder_list += task_managers;
+						}
+						var tasking_authorities = gr_ou.getValue("u_global_authorities");
+						if(tasking_authorities && tasking_authorities != ''){
+							if(responder_list != ""){
+								responder_list += ",";
+							}
+							responder_list += tasking_authorities;
+						}						
+					}
+				}
+			}
+		}
+		return responder_list;		
+	},
+	
+	// STRY0134743 - are any of the users in the list currently out of office
+	//               NOTE: this is used for  a single user also
+	_isAnyUserOutOfOffice: function(listOfUsers){
+		var oneOrMoreUsersOutOfOffice = false;
+		var ga_ooo = new GlideAggregate(Out_of_Office.CONST_TABLE_NAME_OUT_OF_OFFICE);
+		var encodedQuery = "u_userIN" + listOfUsers + "^u_start_date<=javascript:gs.beginningOfToday()^u_end_date>=javascript:gs.endOfToday()";
+		ga_ooo.addEncodedQuery(encodedQuery);
+		ga_ooo.addAggregate('COUNT', "u_user");
+		ga_ooo.query();
+		if(ga_ooo.next()){
+			var oooCount = ga_ooo.getAggregate('COUNT', "u_user");
+			if(oooCount>0){
+				oneOrMoreUsersOutOfOffice = true;
+			}
+		}
+		return oneOrMoreUsersOutOfOffice;
 	},
 	
 	// STRY0130635 - get the list of scheduled out of office for the user during task period
@@ -355,13 +504,13 @@ Out_of_Office.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-12-20 13:26:32</sys_created_on>
         <sys_id>3405bc4b1bfbd150e75655f5624bcb1c</sys_id>
-        <sys_mod_count>88</sys_mod_count>
+        <sys_mod_count>115</sys_mod_count>
         <sys_name>Out_of_Office</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_3405bc4b1bfbd150e75655f5624bcb1c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-19 14:24:27</sys_updated_on>
+        <sys_updated_on>2023-01-25 06:50:57</sys_updated_on>
     </sys_script_include>
 </record_update>

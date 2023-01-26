@@ -2,7 +2,7 @@
     <sys_ui_script action="INSERT_OR_UPDATE">
         <active>true</active>
         <description>This UI script contains all the common out of office client scrpts created in 2.8.1&#13;
-&#13;
+2.8.1 | 2023-01-22 | raj  | STRY0134743 - Out of Office Message on Task Request Form&#13;
 2.8.1 | 2022-09-21| raj  |  STRY0130635 - Task Form- Assignee is Out of Office</description>
         <global>false</global>
         <ignore_in_now_experience>false</ignore_in_now_experience>
@@ -22,6 +22,7 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
     var _g_form;
     // create private varialbe to hold GlideAjax
     var _ajax;
+	
     // create private varialbe to hold g_scratchpad.taskScheduledooo
     // this holds all of the ooo schedules for all of the users in the task
     // when the form loads, 
@@ -138,6 +139,7 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 		return fieldMsgHTML;
 	}
 
+	// STRY0134743 - the html in this function is also in the "Tasker Form with Tabs" wdiget
 	function _getFieldMsgHTML(tooltipMsg, fieldMsg){
 		var fieldMsgHTML;
 	
@@ -184,36 +186,36 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 	
 	function _setFieldMessageHTML(fieldName, msgHTML){
 		try {
-			var inputElement = _g_form.getControl(fieldName);                // ask Service-Now for a DOM reference to our field of interest
-			var parentElement = inputElement.parentElement;             // get the field's parent because the Field Messages are siblings to inputElement    
+			// ask Service-Now for a DOM reference to our field of interest
+			var inputElement = _g_form.getControl(fieldName);
+			// get the field's parent because the Field Messages are siblings to inputElement
+			var parentElement = inputElement.parentElement;
 			var fieldElement;
 			var fieldMessageContainer;
 			
 			if(parentElement){
-				// platform has a different structure
-				//fieldMessageContainer = parentElement.firstChild;
-				//fieldMessageContainer = inputElement;
-
-				// get the display element for single field
-				var fieldDisplayElement = _document.getElementById("sys_display.x_153465_discovert_route_task_instance." + fieldName);
-				// if single field element not found, try list
-				if(!fieldDisplayElement){
-					fieldDisplayElement = _document.getElementById("x_153465_discovert_route_task_instance." + fieldName + "s_nonedit");
+				var parentClassName = parentElement.className;
+				// Read only fields have an extra layer.  
+				// So, you need to check to see if the parent is the form-field and move up another level if not
+				if(parentClassName.indexOf("form-field") != -1) {
+					fieldMessageContainer = parentElement;
+				} else {
+					fieldMessageContainer = parentElement.parentElement;
 				}
-				// get the display container
-				var fieldDisplayContainer = fieldDisplayElement.parentElement;
-				// move up to the input controls - this element has no id in platform
-				fieldMessageContainer = fieldDisplayContainer.parentElement;
+
 			} else {
 				// get the field element for portal
 				fieldElement = _document.getElementById(fieldName);
 				fieldMessageContainer = fieldElement.firstElementChild;
 			}
-			// create the div for the ooo message
-			var ooo_div = _document.createElement("div");
-			ooo_div.id = fieldName + CONST_OOO_MESAGE_ID_SUFFIX;
-			ooo_div.innerHTML = msgHTML;
-			fieldMessageContainer.appendChild(ooo_div);
+			// only add if container found, otherwise an error will be thrown
+			if(fieldMessageContainer){
+				// create the div for the ooo message
+				var ooo_div = _document.createElement("div");
+				ooo_div.id = fieldName + CONST_OOO_MESAGE_ID_SUFFIX;
+				ooo_div.innerHTML = msgHTML;
+				fieldMessageContainer.appendChild(ooo_div);
+			}
 			return;
 		}
 		catch (err) {
@@ -252,6 +254,31 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 			suspense_date = _originalSuspenseDate;				
 		}
 		return suspense_date;
+	}
+
+	// STRY0134743 - load the messages for the fields with OOO users
+	function ooo_load_responder(fieldName, loading) {
+		// if the field is not on the form, ignore the change request
+		if (!_g_form.getControl(fieldName)) {
+			return;
+		}
+		// no updates on the user
+		var fieldValue = _g_form.getValue(fieldName);
+		var userOOOSchedule = _get_user_ooo(_taskScheduledooo, fieldValue);
+		if (userOOOSchedule.user_id && userOOOSchedule.user_id != "") {
+			_setFieldMessage(userOOOSchedule.ooo_schedule, fieldName);
+		}
+	}
+	
+	// STRY0134743 - load the messages for the fields with OOO users
+	function ooo_load_responder_list(fieldName) {
+		// if the field is not on the form, ignore the change request
+		if (!_g_form.getControl(fieldName)) {
+			return;
+		}
+        var fieldValue = _g_form.getValue(fieldName);
+		
+		_setListFieldMessage(fieldValue,fieldName);
 	}
 
     /**********************
@@ -334,7 +361,6 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 				_setListFieldMessage(newValue,fieldName);
 			}
 			
-			// TODO - add call back function
             function f_returnListOOOSchedule(response) {
                 try {
 					var newUserOOOSchedule;
@@ -396,6 +422,31 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
             }
         },
 		
+		// STRY0134743 - load the messages for the fields with OOO users
+		load_task_response_ooo: function() {
+			var task_id = _g_form.getUniqueValue();
+			_ajax.addParam('sysparm_name', 'getListTaskRespondersOutOfOffice');
+			_ajax.addParam('sysparm_task_id', task_id);
+			_ajax.getXML(f_returnTaskRespondersOOOSchedule);
+			
+			function f_returnTaskRespondersOOOSchedule(response) {
+                try {
+                    var sOOO_users = response.responseXML.documentElement.getAttribute("answer");
+					// set the global object for responders list
+                    _taskScheduledooo = JSON.parse(sOOO_users);
+					ooo_load_responder("u_task_requester", true);
+					ooo_load_responder_list("primary_assignee.tasking_authorities", true);
+					ooo_load_responder_list("primary_assignee.u_global_authorities", true);
+                } catch (e) {
+                    // seeing first response as just a GUID, which is raising a syntax error, ignoring if the first response
+                    if (e.name != "SyntaxError") {
+                        jslog(e);
+                    }
+
+                }
+			}
+		},
+		
 		// this shows the out of office schedule for the given user
 		ooo_show_user_schedule: function(user_sys_id) {
 			if(_sp_modal != undefined){
@@ -416,6 +467,16 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
 				});
 			}
 		},
+		
+		ooo_open_responder_list: function(){
+			var title = "TODO - get title from messages";
+			var modalForm = new GlideModalForm(title, 'x_153465_discovert_route_task_instance');
+			modalForm.setSysID(_g_form.getValue("parent"));
+			modalForm.addParm('sysparm_view','Task_Request_Responders');
+			modalForm.addParm("sysparm_view_forced", true);
+			modalForm.addParm('sysparm_form_only', 'true');
+			modalForm.render();
+		},
         /***********************
         END public API
         ***********************/
@@ -427,14 +488,14 @@ x_153465_discovert.DTech_Out_of_Office = (function() {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-12-06 23:49:16</sys_created_on>
         <sys_id>e0edb6e61be79510e75655f5624bcbbd</sys_id>
-        <sys_mod_count>299</sys_mod_count>
+        <sys_mod_count>332</sys_mod_count>
         <sys_name>x_153465_discovert.DTech_Out_of_Office</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_script_e0edb6e61be79510e75655f5624bcbbd</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-08 23:23:59</sys_updated_on>
+        <sys_updated_on>2023-01-26 05:55:51</sys_updated_on>
         <ui_type>10</ui_type>
         <use_scoped_format>true</use_scoped_format>
     </sys_ui_script>
