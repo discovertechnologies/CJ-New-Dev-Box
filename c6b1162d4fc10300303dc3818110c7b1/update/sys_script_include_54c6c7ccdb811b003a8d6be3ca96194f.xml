@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - move user profile scripts from TaskWidgetData into UerInfoScitps &#13;
 2.8.1    | 2022-10-24 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
 &#13;
 2.8    | 2022-09-19 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
@@ -47,6 +48,16 @@ v 2.5.16 P2&#13;
 var UserInfoScripts = Class.create();
 // STRY0129041 - format for this is "rolename = key and field name in the member table is value"
 // STRY0131148 - moved the table for personal permissions and changed names 
+// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+//											Updated loadPhotoInfo() to use sys_user; Added getConnectEnabled();
+//											in loadProfileInfo() added mobilePhone, contactPageHref, photo, emailSubject, buttonText and icons;
+//											Changed phone to businessPhone
+// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
+//											loadProfileInfo() var userProfile deleted unused fields
+//											_setStyleBackgroundImage(photo) as calling with 2nd param asBackgroundImage
+// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
+//											Cleaned up getConnectEnabled(); Added object pages; 
+//											Removed emailSubject and buttonText as they will added to the pages object
 UserInfoScripts.CONST_ARRAY_GLOBAL_ROLES_MEMBER_TABLE_MAPPING = {
 	'x_153465_discovert.tasker_user': '',
 	'x_153465_discovert.tasker_process_template_user': 'has_personal_template_rights',
@@ -63,6 +74,130 @@ UserInfoScripts.prototype = {
 	initialize: function() {
 	},
 	
+	// STRY0135276 
+	loadPhotoInfo: function(userGUID, asBackgroundImage) {
+		var strFirstName = '';
+		var strLastName = '';
+		var photo;
+		var displayName = '';
+		var photoInfo = {
+			name: '',
+			photo: undefined
+		};
+		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was GlideRecord("live_profile");
+		var grProfile = new GlideRecord("sys_user");
+		if (grProfile.get(userGUID)) {
+			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was .getDisplayValue("photo");
+			photo = grProfile.getValue("avatar");
+			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was if (photo.length > 0) {
+			if (photo != undefined) {
+				photo = photo + '.iix?t=small';
+			}
+			displayName = grProfile.getValue('name');
+			if(asBackgroundImage){
+				// if it is a background image set to background image
+				if (photo == undefined) {
+					photo = "Profile16.svg";
+				}
+
+				photo = this._setStyleBackgroundImage(photo);
+			}
+			photoInfo.photo = photo;
+			photoInfo.name = displayName;
+			photoInfo.sys_id = userGUID;
+		}
+		return photoInfo;
+	},
+
+	// STRY0114453  - STRY0135276 
+	loadProfileInfo: function(userGUID) {
+		var userProfile = {
+			sys_id: userGUID,
+			name: '',
+			first_name: '',
+			last_name: '',
+			middle_name: '',
+			email: '',
+			businessPhone: '',
+			mobilePhone: '',
+			location: '',
+			time_zone: '',
+			contactPageHref: '',
+			photo: '',
+			connectEnabled: '',
+			liveProfileId: '',
+			messages: {},
+			icons: {}
+		};
+		
+		var grUser = new GlideRecord('sys_user');
+		if(grUser.get(userGUID)){
+			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
+			//  added getDisplayValue to many, .contactPageHref, mobile phone; Changed phone to businessPhone, add call to get Connect Chat fields
+			userProfile.name = grUser.getDisplayValue('name');
+			userProfile.first_name = grUser.getDisplayValue('first_name');
+			userProfile.last_name = grUser.getDisplayValue('last_name');
+			userProfile.middle_name = grUser.getDisplayValue('middle_name');
+			userProfile.email = grUser.getDisplayValue('email');
+			userProfile.businessPhone = grUser.getDisplayValue('phone');
+			userProfile.mobilePhone = grUser.getDisplayValue('mobile_phone');
+			userProfile.location = grUser.getDisplayValue('location');
+			userProfile.contactPageHref = '?id=user_profile&sys_id=' + userGUID;
+			
+			// if no user time zone, but location is loaded
+			if(grUser.time_zone){
+				userProfile.time_zone = grUser.getDisplayValue('time_zone'); // + '';
+			} else if(grUser.location && grUser.location.time_zone){
+				userProfile.time_zone = gs.getMessage("Tasker - (location) - ") + userProfile.location.time_zone;
+			}
+			// Connect Chat 
+			var chat = this.getConnectEnabled(userGUID);
+			userProfile.connectEnabled = chat.connectEnabled;
+			userProfile.liveProfileId = chat.liveProfileId;
+		}
+		return userProfile;
+	},
+	
+	// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
+	// Get info about the plugin being active and if live_profile has a record get the live profile ID for the useer
+	getConnectEnabled: function(userId) {
+		var chat = {
+			connectEnabled: false,
+			liveProfileId: ''
+		};
+
+		// is chat active?
+		chat.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
+		
+		// Check if logged in user has a live profile for sending connect messages
+		if (GlidePluginManager().isActive('com.glideapp.live_common')) {
+			var liveProfileGR = new GlideRecord("live_profile");
+			liveProfileGR.addQuery("document", userId);
+			liveProfileGR.query();
+			if (liveProfileGR.next()) {
+				chat.liveProfileId = liveProfileGR.getValue("sys_id");
+// 				data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
+// 				// live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
+// 				if (data.liveProfileModel.short_description) {
+// 					data.liveProfileModel.short_description.label = gs.getMessage("Bio");
+// 					data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
+// 				}
+			} else {
+				chat.connectEnabled = false; // can't find a live profile for this user, so lets not integrate Connect
+			}
+		}
+		
+		return chat;
+	},
+	
+	// Returns a string to set a style tag over in the HTML to  display a persons' photo
+	// Parameter photo is sys_user avatar field with .iix?t=small appended
+	_setStyleBackgroundImage: function(photo) {
+		var imageUrl = '';
+		imageUrl = "background-image: url('" + photo + "');";
+		return imageUrl;
+	},
+
 	// STRY0129039 -  STRY0129041
 	getUserGlobalRolesAndMessages: function(userId){
 		var tsss = new tasking_System_Settings_Scripts();
@@ -1157,13 +1292,13 @@ UserInfoScripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>369</sys_mod_count>
+        <sys_mod_count>371</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-11-03 20:25:57</sys_updated_on>
+        <sys_updated_on>2023-02-18 01:51:11</sys_updated_on>
     </sys_script_include>
 </record_update>

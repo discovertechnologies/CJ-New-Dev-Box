@@ -9,7 +9,7 @@ Usage in a widget's HTML:
 		</div>
 
 
-	dtechParamObject maps to dtech-param-object
+	dtechUserProfile maps to dtech-user-profile
 
 	Here are two ways to get the HTML for the directive to use:
 	1. template: htmlTemplate
@@ -27,91 +27,263 @@ Usage in a widget's HTML:
 // 2.8.1 | 2022-11-21 | mmcc | STRY0132316 - Tasker User Profile Page- Add Component Selector - User Settings Container Widget
 //  Uncomment block of code for $scope.openUserProfileModal
 //  Need to hide Message button, update $scope.connectEnabled = function() to force false
+// 2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+//                                 Changes in dtechPopoverProfile directive
+// 2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+//                                 Changes in client controller
+//                                 Changes in dtechPopoverProfile directive
 //										   
 */
 function dtechPopoverProfile(getTemplateUrl, spModal, $window) {
+	var dtProfile = {
+		restrict: 'E',
+		replace: true,
+		scope: {		
+			dtechUserProfile: '=', // @: string 1 way, =: object 2 way, <: object 1 way
+			dtechProfileLocation: '<',
+			isOpen:"=?",
+			isOverProfile: "=?",
+			parentMouseLeave: '=?',
+			onToggle: '&'
+		},
+		controller: userProfileCtrl,
+		link: link,
+		controllerAs: 'd',
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechPopoverProfile.html')
+	};
+	return dtProfile;
 
-    var jsController =
-        function($scope) {
+	function userProfileCtrl($scope, $attrs, dtechMouseOver, dtechOrganizationalUser, $animate) {
+		var d = this;
+		d.cancelTiemout = _cancelTiemout;
+		d.connectEnabled = _connectEnabled;
+		d.init = _init;
+		d.isOpen = _isOpen;
+		$scope.$watch('isOpen', _isOpenWatch);
+		d.isOverProfile = _isOverProfile;
+		d.openClass="dtech-user-profile-open";
+		d.openConnectConversation = _openConnectConversation;
+		d.openUserProfileModal= _openUserProfileModal;
+		d.openUserProfileTab = _openUserProfileTab;
+		d.parentMouseLeave = _parentMouseLeave;
+		$scope.$watch('parentMouseLeave', _parentMouseLeaveWatch);
+		d.profileMouseEnter = _profileMouseEnter;
+		d.profileMouseLeave = _profileMouseLeave;
+		d.sendMailTo = _sendMailTo;
+		d.setStyleBackgroundImage = _setStyleBackgroundImage;
+		d.toggle = _toggle;
 
-            // 			$scope.callPhone = function(phone) {
-            // 				var phoneData = 'tel:' + phone.replace(/[^0-9]/g, '');
-            // 				$window.open(phoneData, '_self');
-            // 			}
+		// This allows 
+		function _cancelTiemout() {
+			dtechMouseOver.cancelTimeout();
+		}
+		
+		// connectEnabled()
+		// this function is called from Template html
+		// it is called to determine if the chat capability is on
+		// it controls showing the section of the user profile to allow users to chat
+		function _connectEnabled() {
+			return false; // At this time do not show the button
+			// return $scope.dtechUserProfile.connectEnabled;
+		}
 
-            // From button X click added to UI Macros HTML 
-            // 			$scope.closePopover = function() {
-            // 				var popoverDiv = angular.element(document.getElementById('popoverWrapper'))[0];
-            // 				popoverDiv.style.display = "none";
-            // 				popoverDiv = undefined;
-            // 			};
+		// init()
+		// initialize the control, called from the Link function
+		// gets a reference to the element
+		// sets the initial value of isOpen
+		function _init(element) {
+			d.$element = element;
+			$scope.isOpen = angular.isDefined($attrs.isOpen) ? $scope.$parent.$eval($attrs.isOpen) : false;
+			$scope.isOverProfile = angular.isDefined($attrs.isOverProfile) ? $scope.$parent.$eval($attrs.isOverProfile) : false;
+		}
 
-            // Example HTML <span class="dtech-avatar-link" ng-click="openUserProfileModal()"> Open Contact Page</span>
-            // Import spModal
-            $scope.openUserProfileModal = function() {
-                spModal.open({
-                    title: 'Tasker User Settings Container',
-                    backdrop: 'static',
-                    widget: 'tasker_user_settings_container',
-                    widgetInput: {
-                        sys_id: $scope.dtechParamObject.sys_id,
-                        isModal: true
-                    },
-                    size: 'lg',
-                    buttons: [],
-                    footerStyle: {
-                        'display': 'none'
-                    }
-                });
-            };
+		// isOpen
+		// this is the get function for the direcitve property isOpen
+		// this will return the current setting for is open
+		function _isOpen(){
+			return $scope.isOpen;
+		}
+		// isOpen
+		// this is the get function for the direcitve property isOpen
+		// this will return the current setting for is open
+		function _isOverProfile(){
+			return $scope.isOverProfile;
+		}
+				
+		// $watch('isOpen')
+		// this function is called when the $watch event fires 
+		// this happens whenever the isOpen property is changed
+		// The property can be changed from the parent, the service or the directive
+		function _isOpenWatch(value) {
+			if(value && $scope.dtechUserProfile && 
+				$scope.dtechUserProfile.sys_id != ''){
+// RJ - test, add this back when done testing
+// && $scope.dtechUserProfile.name == ''				
+				dtechOrganizationalUser.getUserProfile($scope.dtechUserProfile.sys_id).then(function(response){
+					var userProfile = response.userProfile;
+					$scope.dtechUserProfile = userProfile;
+					$scope.dtechUserProfile.photoBackground = d.setStyleBackgroundImage($scope.dtechUserProfile.photo);
+				});
 
-            $scope.openUserProfileTab = function() {
-                //$window.open($scope.dtechParamObject.contactPageHref, '_blank');
-							// STRY0130623 - not sure why, but I think the macro didn't reload on all browsers and this link was still hit at times
-							// for now, just sending the link over so people don't have to be told to refresh browser
-							$scope.openUserProfileModal();
-            };
+			} else {
+				$scope.dtechUserProfile.photoBackground = d.setStyleBackgroundImage($scope.dtechUserProfile.photo);
+			}
+			$animate[value ? 'addClass' : 'removeClass'](d.$element, d.openClass);
+			if(value){
+				dtechMouseOver.open($scope);
+			}else{
+				dtechMouseOver.close($scope);
+			}
+			
+			$scope.onToggle({ open: !!value });
+		}
 
-            $scope.connectEnabled = function() {
-                return false; // At this time do not show the button
-                // return $scope.dtechParamObject.connectEnabled;
-            };
+		// if the URL changes, close the profile
+		$scope.$on('$locationChangeSuccess', function() {
+			$scope.isOpen = false;
+		});
+		
+		// openConnectConversation()
+		// this function is called from Template html
+		// it is called when a user clicks on link to start a conversation
+		function _openConnectConversation () {
+			$window.open('/$c.do#?user=' + $scope.dtechUserProfile.liveProfileId, '_blank');
+		}
 
-            $scope.openConnectConversation = function() {
-                $window.open('/$c.do#?user=' + $scope.dtechParamObject.liveProfileId, '_blank');
-            };
+		// openUserProfileModal()
+		// this function is called from Template html
+		// it is called when a user clicks on the Open User Profile link
+		function _openUserProfileModal() {
+			spModal.open({
+				title: 'Tasker User Settings Container',
+				backdrop: 'static',
+				widget: 'tasker_user_settings_container',
+				widgetInput: {
+					sys_id: $scope.dtechUserProfile.sys_id,
+					isModal: true
+				},
+				size: 'lg',
+				buttons: [],
+				footerStyle: {
+					'display': 'none'
+				}
+			});
+		}
 
-            $scope.sendMailTo = function() {
-                var emailData = 'mailto:' + $scope.dtechParamObject.email;
-                if ($scope.dtechParamObject.messages.emailSubject && $scope.dtechParamObject.messages.emailSubject.length > 0) {
-                    emailData = emailData + '?subject=' + $scope.dtechParamObject.messages.emailSubject;
-                }
+		// this was kept so users didn't have to refresh browser on upgrade. 
+		// should be deprecated
+		function _openUserProfileTab() {
+			//$window.open($scope.dtechUserProfile.contactPageHref, '_blank');
+			// STRY0130623 - not sure why, but I think the macro didn't reload on all browsers and this link was still hit at times
+			// for now, just sending the link over so people don't have to be told to refresh browser
+			_openUserProfileModal();
+		}
+	
+		// _parentMouseLeave
+		// this is the get function for the direcitve property parentMouseLeave
+		// this will return the current setting for parentMouseLeave
+		function _parentMouseLeave(){
+			return $scope.parentMouseLeave;
+		}
+		
+		// $watch('parentMouseLeave')
+		// this function is called when the $watch event fires 
+		// this happens whenever the _parentMouseLeave property is changed
+		// The property can be changed from the parent, the service or the directive
+		function _parentMouseLeaveWatch(value) {
+			if(value){
+				dtechMouseOver.parentMouseLeave($scope);
+			}
+			$scope.onToggle({ open: !!value });
+		}
 
-                $window.open(emailData, '_self');
-            };
-        };
+		// profileMouseEnter()
+		// this function is called from Template html
+		// it is called when a user hovers over the profile tooltip
+		// it cancels the timeout and sets open to true again
+		function _profileMouseEnter(){
+			// if user moves off parent and onto profile, keep open
+			$scope.isOverProfile = true;
+			// cancel the timeout when user hovers
+			dtechMouseOver.cancelTimeout();
+			// reset open when user hovers
+			$scope.isOpen = true;
+		}
+		
+		// profileMouseLeave()
+		// this function is called from Template html
+		// it is called when a user hovers over the profile tooltip
+		// it cancels the timeout and sets open to true again
+		function _profileMouseLeave(){
+			// if user moves off prfile clear flag that keeps tooltip from closing
+			$scope.isOverProfile = false;
+			// cancel the timeout when user hovers
+			dtechMouseOver.cancelTimeout();
+			// reset open when user hoavers
+			$scope.isOpen = false;
+		}
 
-    return {
-        restrict: 'E',
-        scope: {
-            dtechParamObject: '<' // @: string 1 way, =: object 2 way, <: object 1 way
-        },
-        controller: jsController,
-        templateUrl: getTemplateUrl('x_153465_discovert_dtechPopoverProfile.html')
-    };
+		// sendMailTo()
+		// this function is called from Template html
+		// it is called when a user clicks on the link to send an email to a user
+		function _sendMailTo() {
+			var emailData = 'mailto:' + $scope.dtechUserProfile.email;
+			if ($scope.dtechUserProfile && $scope.dtechUserProfile.emailSubject.length > 0) {
+				emailData = emailData + '?subject=' + $scope.dtechUserProfile.emailSubject;
+			}
+			$window.open(emailData, '_self');
+		}
+		
+		// Returns a string to set a style tag over in the Macro HTML to display a persons' photo
+		// Parameter photo is sys_user avatar field with .iix?t=small appended
+		function  _setStyleBackgroundImage(photo) {
+			var imageUrl = '';
+
+			if (photo != undefined) {
+				imageUrl = "background-image: url('" + photo + "');";
+			} else {
+				imageUrl = "background-image: url('Profile16.svg');";
+			}
+
+			return imageUrl;
+		}
+		
+		// toggle()
+		// this function is called to toggle the profile open/close
+		function _toggle(open){
+			if(arguments.length>0){
+				$scope.isOpen = !open;
+			} else {
+				$scope.isOpen = !$scope.isOpen;
+			}
+		}
+	}
+
+	// Link function links local methods to parent controller methods
+	// see the list of events being monitored
+	function link(scope, element, attrs, userProfileCtrl){
+		// initialize the control
+		userProfileCtrl.init(element);			
+		scope.$on('$destroy',_destroy);
+
+		function _destroy(){
+			userProfileCtrl.cancelTimeout();
+			element.remove();
+		}
+	}
 }]]></script>
         <sys_class_name>sp_angular_provider</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2022-02-08 19:19:08</sys_created_on>
         <sys_id>87026fa91b2d0910d6062023b24bcbac</sys_id>
-        <sys_mod_count>156</sys_mod_count>
+        <sys_mod_count>232</sys_mod_count>
         <sys_name>dtechPopoverProfile</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_87026fa91b2d0910d6062023b24bcbac</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-11-23 16:21:13</sys_updated_on>
+        <sys_updated_on>2023-02-19 00:15:51</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>

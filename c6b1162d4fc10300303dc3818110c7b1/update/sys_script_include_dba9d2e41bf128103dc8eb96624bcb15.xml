@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8 | 2023-01-19 | raj  |   DFCT0011483 - Stretch:Org Hier Tree/Bi-Fold, select "Organizational Member" clicks on the tab "Out of Office Schedule" or "Out of Office History" tab does NOT display rows&#13;
+        <description>2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - moved user profile scripts into UerInfoScitps &#13;
+2.8 | 2023-01-19 | raj  |   DFCT0011483 - Stretch:Org Hier Tree/Bi-Fold, select "Organizational Member" clicks on the tab "Out of Office Schedule" or "Out of Office History" tab does NOT display rows&#13;
 2.8 | 2023-01-09 | raj  |   STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer&#13;
 2.8 | 2022-09-27 | raj  |  DFCT0011353 - Clicking on the "+" icon" on the Subtasks tab should NOT display the header "New Template Task"&#13;
 2.8 | 2022-09-17 | raj  |  DFCT0011306 - Stretch- OU Information- Tasks Tab- "Number of task in the footer" is for all tasks and the "Tasks Tab" number of tasks is counting only the active task&#13;
@@ -72,16 +73,6 @@ STRY0113084 - Templates- Duration Fields- Update Label and Info Text&#13;
 //											NOTE: href was no longer used.  So, removed completely to avoid future confusion
 // 2.7.3 | 2022-05-04 | raj |  DFCT0010902 - When a template task record is updated the Template Task Number in the node text is set to null.
 //                                           This is cleared with the next refresh
-// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-//											Updated loadPhotoInfo() to use sys_user; Added getConnectEnabled();
-//											in loadProfileInfo() added mobilePhone, contactPageHref, photo, emailSubject, buttonText and icons;
-//											Changed phone to businessPhone
-// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-//											Cleaned up getConnectEnabled(); Added object pages; 
-//											Removed emailSubject and buttonText as they will added to the pages object
-// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
-//											loadProfileInfo() var userProfile deleted unused fields
-//											_setStyleBackgroundImage(photo) as calling with 2nd param asBackgroundImage
 //  2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View
 //  2.8   - 2022-08-20 - raj - DFCT0011140 - Record watcher: "Warning Icon" &  "Duration icon"  should NOT trigger the visual warning indicator on load. (Taker Type "Approval)
 //  2.8   - 2022-08-26 - raj - STRY0128070 - Existing Task Form- All Content Tabs- "New" Button displays next to Header
@@ -899,10 +890,12 @@ TaskWidgetData.prototype = {
 	},
 	
 	_loadUserHover: function(userId){
+		// STRY0135276 -moved user profile scripts into UerInfoScitps 
+		var userInfo = new UserInfoScripts();
+
 		var hoverInfo = {};
-		var userInfo = {};
 		
-		hoverInfo = this.loadPhotoInfo(userId, true);
+		hoverInfo = userInfo.loadPhotoInfo(userId, true);
 		return hoverInfo;
 	},
 
@@ -974,6 +967,8 @@ TaskWidgetData.prototype = {
     },
     // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode; Task and Template widget data is same code
     getTaskListTreeLevelO: function(record, fields, level, widgetId) {
+		// STRY0135276 -moved user profile scripts into UerInfoScitps 
+		var userInfo = new UserInfoScripts();
         var displayValue = '';
         var newNodeData = {};
         var sys_id = record.getUniqueValue();
@@ -1045,7 +1040,7 @@ TaskWidgetData.prototype = {
 				// STRY0114453 
 				case 'profile':
 				case 'photo':
-					var photoInfo = this.loadPhotoInfo(newNodeData[key], false);
+					var photoInfo = userInfo.loadPhotoInfo(newNodeData[key], false);
 					newNodeData[key + '_photoName'] = photoInfo.name;
 					if(photoInfo.photo){
 						newNodeData[key + '_photo'] = photoInfo.photo;
@@ -1053,7 +1048,7 @@ TaskWidgetData.prototype = {
 
 					// STRY0114453 
 					if(field.type=='profile'){
-						var profileInfo = this.loadProfileInfo(newNodeData[key]);
+						var profileInfo = userInfo.loadProfileInfo(newNodeData[key]);
 						newNodeData[key + '_profile'] = profileInfo;
 					}
 					
@@ -1125,130 +1120,7 @@ TaskWidgetData.prototype = {
 		
         return newNodeData;
     },
-
-	// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-	// Get info about the plugin being active and if live_profile has a record get the live profile ID for the useer
-	getConnectEnabled: function(userId) {
-		var chat = {
-			connectEnabled: false,
-			liveProfileId: ''
-		};
-
-		// is chat active?
-		chat.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
 		
-		// Check if logged in user has a live profile for sending connect messages
-		if (GlidePluginManager().isActive('com.glideapp.live_common')) {
-			var liveProfileGR = new GlideRecord("live_profile");
-			liveProfileGR.addQuery("document", userId);
-			liveProfileGR.query();
-			if (liveProfileGR.next()) {
-				chat.liveProfileId = liveProfileGR.getValue("sys_id");
-// 				data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
-// 				// live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
-// 				if (data.liveProfileModel.short_description) {
-// 					data.liveProfileModel.short_description.label = gs.getMessage("Bio");
-// 					data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
-// 				}
-			} else {
-				chat.connectEnabled = false; // can't find a live profile for this user, so lets not integrate Connect
-			}
-		}
-		
-		return chat;
-	},
-	
-	// Returns a string to set a style tag over in the HTML to  display a persons' photo
-	// Parameter photo is sys_user avatar field with .iix?t=small appended
-	_setStyleBackgroundImage: function(photo) {
-		var imageUrl = '';
-		imageUrl = "background-image: url('" + photo + "');";
-		return imageUrl;
-	},
-	
-	loadPhotoInfo: function(userGUID, asBackgroundImage) {
-		var strFirstName = '';
-		var strLastName = '';
-		var photo;
-		var displayName = '';
-		var photoInfo = {
-			name: '',
-			photo: undefined
-		};
-		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was GlideRecord("live_profile");
-		var grProfile = new GlideRecord("sys_user");
-		if (grProfile.get(userGUID)) {
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was .getDisplayValue("photo");
-			photo = grProfile.getValue("avatar");
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was if (photo.length > 0) {
-			if (photo != undefined) {
-				photo = photo + '.iix?t=small';
-			}
-			displayName = grProfile.getValue('name');
-			if(asBackgroundImage){
-				// if it is a background image set to background image
-				if (photo == undefined) {
-					photo = "Profile16.svg";
-				}
-
-				photo = this._setStyleBackgroundImage(photo);
-			}
-			photoInfo.photo = photo;
-			photoInfo.name = displayName;
-			photoInfo.sys_id = userGUID;
-		}
-		return photoInfo;
-	},
-	
-	// STRY0114453 
-	loadProfileInfo: function(userGUID) {
-		var userProfile = {
-			sys_id: userGUID,
-			name: '',
-			first_name: '',
-			last_name: '',
-			middle_name: '',
-			email: '',
-			businessPhone: '',
-			mobilePhone: '',
-			location: '',
-			time_zone: '',
-			contactPageHref: '',
-			photo: '',
-			connectEnabled: '',
-			liveProfileId: '',
-			messages: {},
-			icons: {}
-		};
-		
-		var grUser = new GlideRecord('sys_user');
-		if(grUser.get(userGUID)){
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-			//  added getDisplayValue to many, .contactPageHref, mobile phone; Changed phone to businessPhone, add call to get Connect Chat fields
-			userProfile.name = grUser.getDisplayValue('name');
-			userProfile.first_name = grUser.getDisplayValue('first_name');
-			userProfile.last_name = grUser.getDisplayValue('last_name');
-			userProfile.middle_name = grUser.getDisplayValue('middle_name');
-			userProfile.email = grUser.getDisplayValue('email');
-			userProfile.businessPhone = grUser.getDisplayValue('phone');
-			userProfile.mobilePhone = grUser.getDisplayValue('mobile_phone');
-			userProfile.location = grUser.getDisplayValue('location');
-			userProfile.contactPageHref = '?id=user_profile&sys_id=' + userGUID;
-			
-			// if no user time zone, but location is loaded
-			if(grUser.time_zone){
-				userProfile.time_zone = grUser.getDisplayValue('time_zone'); // + '';
-			} else if(grUser.location && grUser.location.time_zone){
-				userProfile.time_zone = gs.getMessage("Tasker - (location) - ") + userProfile.location.time_zone;
-			}
-			// Connect Chat 
-			var chat = this.getConnectEnabled(userGUID);
-			userProfile.connectEnabled = chat.connectEnabled;
-			userProfile.liveProfileId = chat.liveProfileId;
-		}
-		return userProfile;
-	},
-	
     // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode
     // re-write function to use local var's; remove badgeclass and taskText.state
     getTaskTreeListTitleNode: function(newNodeData) {
@@ -1746,13 +1618,13 @@ TaskWidgetData.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>413</sys_mod_count>
+        <sys_mod_count>415</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-19 14:23:28</sys_updated_on>
+        <sys_updated_on>2023-02-18 01:51:19</sys_updated_on>
     </sys_script_include>
 </record_update>

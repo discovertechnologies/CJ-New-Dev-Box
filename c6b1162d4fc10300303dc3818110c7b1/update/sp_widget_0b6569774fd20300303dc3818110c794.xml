@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function ($scope, $location, $rootScope,spModal,$uibModal, spUtil, amb, $timeout) {
+        <client_script><![CDATA[api.controller = function ($scope, $location, $rootScope, spModal,$uibModal, spUtil, amb, $timeout, dtechMouseOver, dtechOrganizationalUser, htmlToStringService) {
 	//------------------------------------------------------------------------------------------------------------------------
 	// COMPANY: DISCOVER TECHNOLOGIES
 	// CUSTOMIZED BY: KARINA TORRES
@@ -34,8 +34,6 @@
 		TREE_CONST = _loadTreeConstants();
 		modalObjects = _loadModalObjects();
 		$go = go.GraphObject.make;  // for conciseness in defining templates
-		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; avatar popover
-		c.data.isPopoverOpened = false;
 
 		// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 		c.data.isPopoverListOpened = false;
@@ -233,7 +231,6 @@
 	}
 	
 	$scope.$on("$destroy", function (event) {
-		$timeout.cancel(c.popoverTimeout);
 		$timeout.cancel(c.popoverListTimeout);
 	});
 
@@ -457,42 +454,37 @@
 	}
 	// STRY0113883 load user profile and/or Photo information
 	function loadUserInfo(fieldType, nodeKey, fieldName, value, displayValue){
-		if (fieldType == 'photo') {
-			c.data.isPhotoDataNeeded = true;
-		} else if (fieldType == 'profile') {
-			c.data.isProfileDataNeeded = true;
-		}
 		c.data.getUserGUID = value;
-		// TREE FOOTER TOOLBAR
-		// STRY0117600 - does not like diagram posted back to server
-		c.data.widgetTreeFooterToolbars[0].diagram = null;
-		c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
-		c.server.update().then(function(){
-			// find the node to update again
-			var nodeData = diagram.model.findNodeDataForKey(nodeKey);
-			if (nodeData) {
-				nodeData[fieldName + '_photoName'] = c.data.updatedPhoto.name;
-				diagram.model.setDataProperty(nodeData, fieldName + '_photoName', c.data.updatedPhoto.name);
-
-				if(c.data.updatedPhoto.photo){
-					nodeData[fieldName + '_photo'] = c.data.updatedPhoto.photo;
-					diagram.model.setDataProperty(nodeData, fieldName + '_photo', c.data.updatedPhoto.photo);
-				}
-
-				if(c.data.updatedProfile){
-					newNodeData[fieldName + '_profile'] = c.data.updatedProfile;
-					diagram.model.setDataProperty(nodeData, fieldName + '_profile', c.data.updatedProfile);
-				}
-				diagram.model.updateTargetBindings(nodeData);
-			}
-			// TREE FOOTER TOOLBAR
-			// STRY0117600 - does not like diagram posted back to server
-			// readd diagram when returns from server
-			c.data.widgetTreeFooterToolbars[0].diagram = diagram;
-			c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
-		});
+		if (fieldType == 'photo' ||
+				fieldType == 'profile') {
+				dtechOrganizationalUser.getUserProfile(value).then(function(response){
+					var userProfile = response.userProfile;
+					updateProfileData(nodeKey, fieldName, userProfile.name, userProfile.photo, userProfile);
+				});
+		}
 	}
+	
+	function updateProfileData(nodeKey, fieldName, name, photo, updatedProfile){
+		// find the node to update again
+		var nodeData = diagram.model.findNodeDataForKey(nodeKey);
+		if (nodeData) {
+			nodeData[fieldName + '_photoName'] = name;
+			diagram.model.setDataProperty(nodeData, fieldName + '_photoName', name);
+
+			if(photo){
+				nodeData[fieldName + '_photo'] = photo;
+				diagram.model.setDataProperty(nodeData, fieldName + '_photo', photo);
+			}
+
+			if(updatedProfile){
+				newNodeData[fieldName + '_profile'] = updatedProfile;
+				diagram.model.setDataProperty(nodeData, fieldName + '_profile', updatedProfile);
+			}
+			diagram.model.updateTargetBindings(nodeData);
+		}
+	}
+	
 	// -----------------------------------------------------------------------------------------------------------------
 	// END RECORD WATCHER BLOCK
 	// -----------------------------------------------------------------------------------------------------------------
@@ -611,7 +603,8 @@
 		}
 	});
 	$scope.$on("field.change",function(evt,params){
-		_setPopoverDisplayNone('popoverWrapper');
+		c.data.toolTipOpen= false;
+
 		_setPopoverDisplayNone('popoverWrapperList');
 
 		// TREE FOOTER TOOLBAR
@@ -697,7 +690,7 @@
 	};
 	
 	openFormModal = function(widgetObject) {
-		_setPopoverDisplayNone('popoverWrapper');
+		c.data.toolTipOpen= false;
 		_setPopoverDisplayNone('popoverWrapperList');
 		
 		spModal.open({
@@ -732,7 +725,7 @@
 	};
 	
 	openListModal = function(widgetObject) {
-		_setPopoverDisplayNone('popoverWrapper');
+		c.data.toolTipOpen= false;
 		_setPopoverDisplayNone('popoverWrapperList');
 		
 		spModal.open({
@@ -764,21 +757,6 @@
 	};
 	
 	openReportModal = function(widgetObject) {
-/*		
-		
-//alert('RJ - testing - openReportModal: ' + c.data.settings.baseURL + '?id=organizational_report_page');
-		c.modalReportInstance = $uibModal.open({
-//			templateUrl:  c.data.settings.baseURL + 'tcp?id=organizational_report_page',
-			// STRY0105791
-			templateUrl:  c.data.settings.baseURL + c.data.settings.service_portal_url_suffix + '?id=discovertasker_dashboard',
-			scope: $scope,
-			size: 'lg'
-		}).closed.then(function(){
-			spUtil.update($scope);
-		});
-*/				
-		
-
 		spModal.open({
 			title: widgetObject.title,
 			message: '',
@@ -1568,88 +1546,30 @@
 	
 	// DFCT0011632 - on scrfoll or riesize tooltips were not being hidden
 	function _hideAllPopovers(){
-		_setPopoverDisplayNone('popoverWrapper');
-		_resetPopoverObject();
-
-		_setPopoverDisplayNone('popoverWrapperList');
-		_resetPopoverListObject();
-
+		
+		c.data.toolTipOpen= false;
+		if (c.data.isPopoverListOpened) {
+			_setPopoverDisplayNone('popoverWrapperList');
+			_resetPopoverListObject();
+		}
 	}
 	
 	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; Start	
 	function showPopoverUserInfo(obj, diagram, tool) {
-		_runPopoverUserInfo(obj.part.data, diagram.lastInput);
+// was - diagram.lastInput
+		var position = obj.getDocumentPoint(go.Spot.Center);
+//		var position = obj.part.location;
+		var docLoc = diagram.transformDocToView(position);
+		_runPopoverUserInfo(obj.part.data, docLoc);
 	}
 
 	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
 	function hidePopoverUserInfo(diagram, tool) {
-		if (c.data.isPopoverOpened == false) {
-			_setPopoverDisplayNone('popoverWrapper');
-			_resetPopoverObject();
-
-			// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
-			// we use below to have the bindings updated
-			$scope.$apply();
-		}
+		c.data.parentMouseLeave=true;
+		// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
+		// we use below to have the bindings updated
+		$scope.$apply();
 	}
-	
-	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-	c.avatarMouseEnter =  function() {
-		c.data.isPopoverOpened = true;
-		$timeout.cancel(c.popoverTimeout);
-	};
-	
-	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-	c.avatarMouseLeave =  function() {
-		c.data.isPopoverOpened = false;
-		_setPopoverDisplayNone('popoverWrapper');
-		_resetPopoverObject();
-	};
-	
-	// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-	function _resetPopoverObject() {
-		c.data.popoverRecord = {
-			sys_id: '',
-			name: '',
-			first_name: '',
-			last_name: '',
-			middle_name: '',
-			email: '',
-			businessPhone: '',
-			mobilePhone: '',
-			location: '',
-			time_zone: '',
-			contactPageHref: '',
-			photo: '',
-			connectEnabled: '',
-			liveProfileId: '',
-			messages: {},
-			icons: {}
-		};
-	}
-	
-	// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-	function _loadProfileMessages(abbrev) {
-		var tempMessages = {
-			emailSubject: c.data.messages['Tasker - Tasker Message: Organizational Unit: '] + abbrev,
-			buttonText: c.data.messages['Tasker - Button - Message'],
-			row3Message: c.data.messages['Tasker - Open Contact Page']
-		};
-		
-		return tempMessages;
-	}
-	
-	// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-	function _loadProfileIcons() {
-		var tempIcons = {
-			BusinessPhone16: c.data.icons.BusinessPhone16,
-			Mail16: c.data.icons.Mail16,
-			Phone16: c.data.icons.Phone16
-		};
-
-		return tempIcons;
-	}
-
 	// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 	function _showPopoverList(obj, diagram, tool) {
 		_runPopoverList(obj, diagram.lastInput);
@@ -1736,9 +1656,7 @@
 		_resetPopoverListObject();
 		c.data.isPopoverListOpened = true;
 		c.data.popoverListOptions.isSpinnerShown = true;
-		_setPopoverDisplayNone('popoverWrapper');
-		_resetPopoverObject();
-		
+	
 // 		since GoJS's use of HTMLInfo is outside of the AngularJS context, 
 // 		we use below to have the bindings updated
 		$scope.$apply();
@@ -1886,9 +1804,6 @@
 		c.data.isPopoverListOpened = true;
 		c.data.popoverListOptions.isSimplePopover = true;
 		c.data.popoverListOptions.isSpinnerShown = true;
-		_setPopoverDisplayNone('popoverWrapper');
-		_resetPopoverObject();
-		
 // 		since GoJS's use of HTMLInfo is outside of the AngularJS context, 
 // 		we use below to have the bindings updated
 		$scope.$apply();
@@ -1953,39 +1868,21 @@
 	}
 	
 	function _runPopoverUserInfo(objPartData, diagramLastInput) {
-		_resetPopoverObject();
-		c.data.isPopoverOpened = true;
+		// was var pt = diagramLastInput.viewPoint;
+		var pt = diagramLastInput;
+		c.data.profileLocation = pt;
+		c.data.toolTipOpen= true;
+		
 		_setPopoverDisplayNone('popoverWrapperList');
 		_resetPopoverListObject();
 
 		c.data.popoverRecord = objPartData.u_ou_primary_contact_profile;
-		c.data.popoverRecord.photo = _setStyleBackgroundImage(objPartData.u_ou_primary_contact_photo);
-
-		// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-		c.data.popoverRecord.messages = _loadProfileMessages(objPartData.office_abbreviation);
-		c.data.popoverRecord.icons = _loadProfileIcons();
+// RJ TEST - do we need this here?
+		c.data.popoverRecord.emailSubject = "${Tasker - Tasker Message: Organizational Unit: }"  + objPartData.office_abbreviation;
 
 		// since GoJS's use of HTMLInfo is outside of the AngularJS context, 
 		// we use below to have the bindings updated
 		$scope.$apply();
-
-		// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
-		var popoverAdjustLeft = -190;
-		var pt = diagramLastInput.viewPoint;
-		var popoverDiv = angular.element(document.getElementById('popoverWrapper'))[0];
-		popoverDiv.style.display = "block";
-		
-		// Do not go left of the viewport edge
-		if (pt.x + popoverAdjustLeft <= 0) {
-			popoverAdjustLeft = 0;
-		}
-		
-		popoverDiv.style.left = Math.ceil(pt.x + popoverAdjustLeft) + "px";
-		popoverDiv.style.top = Math.ceil(pt.y + 100) + "px";
-
-		c.popoverTimeout = $timeout(function() {
-			c.data.isPopoverOpened = false;
-		}, diagram.toolManager.toolTipDuration - 100);
 	}
 
 	/* 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Pane */
@@ -1996,23 +1893,7 @@
 		
 		if (popover == 'popoverWrapperList') {
 			$timeout.cancel(c.popoverListTimeout);
-		} else {
-			$timeout.cancel(c.popoverTimeout);
 		}
-	}
-	
-	// Returns a string to set a style tag over in the Macro HTML to display a persons' photo
-	// Parameter photo is sys_user avatar field with .iix?t=small appended
-	function  _setStyleBackgroundImage(photo) {
-		var imageUrl = '';
-		
-		if (photo != undefined) {
-			imageUrl = "background-image: url('" + photo + "');";
-		} else {
-			imageUrl = "background-image: url('Profile16.svg');";
-		}
-		
-		return imageUrl;
 	}
 	
 	function _startPopoverListTimer() {
@@ -2245,6 +2126,12 @@
 // 2.8.1 | 2023-01-30 | raj | DFCT0011632 - Organizational Hierarchy: scroll or resize the diagram the popup doesn't close
 //                                 Changes in client controller
 //
+// 2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+//                                 Changes in client controller
+//                                 Changes in dtechPopoverProfile directive
+//																 Added dtechOrganizationalUser Service
+//																 Added dtechMouseOver Service
+//																 Changes in Servcer Script to remvoe the ServerUpdate post back
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -2341,15 +2228,6 @@
 			// STRY0125624
 			data.topOU = input.topOU;
 			_loadOUmap(input.topOU,input.topOU);
-		} else if(input.isPhotoDataNeeded){
-			//  STRY0113883
-			data.isPhotoDataNeeded = false;
-			data.updatedPhoto = _loadPhoto(input.getUserGUID, false);
-		} else if(input.isProfileDataNeeded){
-			//  STRY0113883
-			data.isProfileDataNeeded = false;
-			data.updatedPhoto = _loadPhoto(input.getUserGUID, false);
-			data.updatedProfile = _loadProfile(input.getUserGUID);
 		} else if(input.isOuMemberListNeeded) {
 			// 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel
 			data.isOuMemberListNeeded = false;
@@ -2374,16 +2252,6 @@
 			// STRY0121023 - STRY0121017
 			_loadOUmap(input.selectedId, undefined);				
 		}
-	}
-	
-	//  STRY0113883
-	function _loadProfile(userGUID) {
-		return taskWidgetData.loadProfileInfo(userGUID);		
-	}
-	
-	//  STRY0113883
-	function _loadPhoto(userGUID, asBackgroundImage) {
-		return taskWidgetData.loadPhotoInfo(userGUID, asBackgroundImage);
 	}
 	
 	function _loadOUmap(selectedId, topOU){
@@ -2469,14 +2337,14 @@
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:35:27</sys_created_on>
         <sys_id>0b6569774fd20300303dc3818110c794</sys_id>
-        <sys_mod_count>2865</sys_mod_count>
+        <sys_mod_count>2939</sys_mod_count>
         <sys_name>Tasker Graph - Office Hierarchy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0b6569774fd20300303dc3818110c794</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-30 22:36:52</sys_updated_on>
+        <sys_updated_on>2023-02-19 00:15:51</sys_updated_on>
         <template><![CDATA[<style >
 
 
@@ -2556,10 +2424,28 @@ To create a new office, click on a node, then click on "Sub OUs" tab and click N
   </div>
   
   <!-- 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel -->
-  <div id="popoverWrapper" ng-mouseenter="c.avatarMouseEnter()" >
-    <dtech-popover-profile dtech-param-object="data.popoverRecord" ng-mouseleave="c.avatarMouseLeave()"></dtech-popover-profile>
-  </div>
   
+<!-- RAJ - test   
+  <div id="popoverWrapper" ng-mouseenter="c.avatarMouseEnter()" >
+    <dtech-popover-profile id="dtechUserProfile" dtech-user-profile="data.popoverRecord" ng-mouseleave="c.avatarMouseLeave()"></dtech-popover-profile>
+  </div>
+
+  <dtech-popover-profile id="dtechUserProfile" 
+                         is-open="data.toolTipOpen" 
+                         dtech-user-profile="data.popoverRecord" 
+                         ng-mouseenter="c.avatarMouseEnter()" 
+                         ng-mouseleave="c.avatarMouseLeave()">
+  </dtech-popover-profile>
+
+-->
+  <dtech-popover-profile id="dtechUserProfile"
+                         parent-mouse-leave="data.parentMouseLeave"
+                         is-open="data.toolTipOpen" 
+                         dtech-default-email-subject=""
+                         dtech-profile-location="data.profileLocation"
+                         dtech-user-profile="data.popoverRecord">
+  </dtech-popover-profile>
+
   <!-- 2.8 | 2022-03-10 | mmcc | STRY0114672 - Org Hierarchy Full Screen- Tree Node- Any Members List- Update to Popover Panel -->
   <div id="popoverWrapperList" ng-mouseenter="c.listMouseEnter()" >
     <dtech-popover-list dtech-param-object="data.popoverListRecord" popover-list-options="data.popoverListOptions" ng-mouseleave="c.listMouseLeave()"></dtech-popover-list>
