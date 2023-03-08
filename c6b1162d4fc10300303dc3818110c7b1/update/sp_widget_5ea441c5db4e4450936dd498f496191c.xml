@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>standard</category>
-        <client_script><![CDATA[api.controller = function($scope, spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager) {
+        <client_script><![CDATA[api.controller = function($scope, spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager, dtechOrganizationalUser) {
 
     // 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML
     // 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Tasker Modern Portal - Task Name Hover needs a short delay before showing the popup
@@ -282,8 +282,24 @@
 
     }
 
+		// STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+		$scope.getTitle = function(item){
+			var title = "";
+			var taskerNumber = item.taskernumber;
+			var shortDescription = item.short_description;
+			if(taskerNumber){
+				title = taskerNumber.value;
+			}
+			if(shortDescription){
+				if(taskerNumber){
+					title += " - "
+				}
+				title += shortDescription.value;
+			}
+			return title;
+		}
 
-    // AAlzyoud custom ends here
+		// AAlzyoud custom ends here
     //-----------------------------------------------------------------------------
     $scope.go = function(table, item) {
         spNavStateManager.onRecordChange(table).then(function() {
@@ -1206,7 +1222,12 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 // 2.8 | 2022-09-13 | mmcc | DFCT0011301 - On the "Modern Portal" when clicking on the "Title" widget rows are jacked up (Rows do NOT display)
 //                                      In Client controller, reset data p to 1 and data row_count to 0 in the scope.on for countPanelClicked
 //                                      Changes made in Client controller.
-
+// 2.8.1 | 2023-02-19 | raj  | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+//																			Changes in Server to get User Info
+//                                      Changes in Client to clean up rows and get a title for modals in the profile
+//                                      Changes in HTML to add pics for user rows
+//                                      Added Directive dtechUser
+//                                      Added Service dtechOrganizationalUser
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1438,6 +1459,10 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     }
     data.popOverData = [];
     data.list = [];
+		// STRY0135276 - used to hold all of the user information
+		data.usersPhotoInfo = {};
+		data.userProfiles = {};
+
     data.popOverRecord = {};
     while (gr.next()) {
         // calculate number of comments
@@ -1571,22 +1596,32 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         }
         // STRY0101803, use the data.field_list instead of optoins.field_list so it is updated for each filter
         $sp.getRecordElements(record, gr, data.field_list);
+				if (gr instanceof GlideRecordSecure) {
+					// FilteredGlideRecord doesn't do field-level
+					// security, so take care of that here
+					for (var f in data.fields_array) {
+						var fld = data.fields_array[f];
+						if (!gr.isValidField(fld))
+							continue;
 
-        if (gr instanceof GlideRecordSecure) {
-            // FilteredGlideRecord doesn't do field-level
-            // security, so take care of that here
-            for (var f in data.fields_array) {
-
-                var fld = data.fields_array[f];
-                if (!gr.isValidField(fld))
-                    continue;
-
-                if (!gr[fld].canRead()) {
-                    record[fld].value = null;
-                    record[fld].display_value = null;
-                }
-            }
-        }
+						if (!gr[fld].canRead()) {
+							record[fld].value = null;
+							record[fld].display_value = null;
+						}
+						// STRY0135276 - get Pic for each person into an array
+						if(record[fld].type == "reference"){
+							var refTable = gr[fld].getReferenceTable();
+							if(refTable == "sys_user"){
+								
+								// NOTE: to handle OoO indicator we need to set the key for 
+								//       task to include task GUID and User GUID
+								var user_sys_id = record[fld].value;
+								loadUserPhotoInfo(user_sys_id, fld, record);
+							}
+						}							
+					}
+				}
+			
         switch (data.table) {
             case 'x_153465_discovert_route_task_instance':
                 record.category = {};
@@ -1618,6 +1653,14 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                     record.tasker_type.value = gr.getValue('parent.tasker_type');
                     record.state.display_value = gr.getDisplayValue('parent.state');
                     record.state.value = gr.getValue('parent.state');
+										// STRY0135276 - get Pic for each person into an array
+										var ownerField = "parent.u_task_requester";
+										var taskOwner = record[ownerField];
+										if(taskOwner){
+											var ownerId = taskOwner.value;
+											loadUserPhotoInfo(ownerId, ownerField, record);
+										}
+											 
                 } else {
                     record.parentType = 'Organizational Unit';
                     record.u_ou_parent = gr.getValue('u_ou_parent');
@@ -1668,6 +1711,24 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     	data.filterBreadcrumbs // = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
     */
 
+		// STRY0135276 - get Pic for each person into an array
+		function loadUserPhotoInfo(user_sys_id, field, objRec){
+			// NOTE: to handle OoO indicator we need to set the key for 
+			//       task to include task GUID and User GUID
+			objRec[field].isUser = true;
+			if(!data.usersPhotoInfo[user_sys_id]){
+				// user not in array yet
+				var photoInfo = new UserInfoScripts().loadPhotoInfo(user_sys_id);
+				data.usersPhotoInfo[user_sys_id] = photoInfo;
+				// initialize profile object
+				data.userProfiles[user_sys_id] = {};
+				data.userProfiles[user_sys_id].sys_id = photoInfo.sys_id;
+				data.userProfiles[user_sys_id].photo = photoInfo.photo;
+				data.userProfiles[user_sys_id].name = photoInfo.name;
+				data.userProfiles[user_sys_id].loaded = false;
+			}
+		}
+	
     function getFilterMenuHeaderPosition(taskerFilters, menuHeader) {
         var position = -1;
 
@@ -1767,17 +1828,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1273</sys_mod_count>
+        <sys_mod_count>1285</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-09-13 18:58:26</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-03-07 03:45:39</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -1889,7 +1948,21 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                 {{item[field].display_value}}
               </span>
             </span>
-            <span ng-if="field != data.hoverField && field != 'state' ">{{item[field].display_value}}</span>
+            <span ng-if="field != data.hoverField && field != 'state' && item[field].isUser!=true">{{item[field].display_value}}</span>
+            <span ng-if="item[field].isUser==true && item[field].display_value!=''">
+              <div>
+                <!-- STRY0135276 - User Profile Directive -->
+                <dtech-user dtech-task-title = "getTitle(item);"
+                            dtech-field="field"
+                            dtech-user-image-size="24"
+                            dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
+                            dtech-param-object="data.userProfiles[item[field].value]"
+                            table="data.table"
+                            parent-sys-id="item.sys_id"
+                            />
+              </div>
+              <span ng-bind-html="item[field].display_value"/>
+            </span>
           </td>
           <!-- STRY0101803 Comments is an optional field -->
           <td ng-if="data.include_comments==true" role="text" class="pointer sp-list-cell">

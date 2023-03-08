@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function widgetClientController($scope, $location, spUtil, $rootScope, amb, $http, spAriaUtil, $timeout, spModal) {
+        <client_script><![CDATA[function widgetClientController($scope, $location, spUtil, $rootScope, amb, $http, spAriaUtil, $timeout, spModal, dtechOrganizationalUser) {
     // Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
     // Script Continued Below
     //------------------------------------------------------------------------------------------------------------------------
@@ -67,6 +67,32 @@
     $rootScope.$on('declareActiveTab', function(event, activeTab) {
         c.activeTab = activeTab;
     });
+
+		// STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+		$scope.getTitle = function(item){
+			var title = "";
+			var taskerNumber = item.taskernumber;
+			var shortDescription = item.short_description;
+			if(taskerNumber){
+				title = taskerNumber.value;
+			}
+			if(shortDescription){
+				if(taskerNumber){
+					title += " - "
+				}
+				title += shortDescription.value;
+			}
+			return title;
+		}
+
+		// STRY0135276 - by moving the condition into Client script, the HTML is much cleaner
+		$scope.openRecord = function(item){
+			if(c.data.open_row_details_in_modal == true){
+				$scope.openModal(item);
+			} else {
+				$scope.goTasker(c.data.table, item);
+			}
+		}
 
     $scope.goTasker = function(table, item) {
         var parms = {};
@@ -1154,6 +1180,12 @@ tbody tr:last-child {
 //                                      Changes in HTML, added ng-switch for true/false field types
 // 2.8.1 | 2022-11-25 | raj  | DFCT0011395 - Tasker Data Tables - when filter is turned off the table should not show the "Show Matching" and "Filter Out" row right-click context menus
 //                                      Changes in Link Function - don't show "Filter Out" or "Show Matching" if the filter is not enabled or users can't get back to where they were.
+// 2.8.1 | 2023-02-19 | raj  | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive
+//																			Changes in Server to get User Info
+//                                      Changes in Client to clean up rows and get a title for modals in the profile
+//                                      Changes in HTML to add pics for user rows
+//                                      Added Directive dtechUser
+//                                      Added Service dtechOrganizationalUser
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1449,6 +1481,10 @@ tbody tr:last-child {
     }
 
     data.list = [];
+		// STRY0135276 - used to hold all of the user information
+		data.usersPhotoInfo = {};
+		data.userProfiles = {};
+
     while (gr._next()) {
         var record = {};
         $sp.getRecordElements(record, gr, data.fields);
@@ -1459,11 +1495,33 @@ tbody tr:last-child {
             var fld = data.fields_array[f];
             if (!gr.isValidField(fld))
                 continue;
-
             if (!gr[fld].canRead()) {
                 record[fld].value = null;
                 record[fld].display_value = null;
             }
+					// STRY0135276 - get Pic for each person into an array
+					if(record[fld].type == "reference"){
+						var refTable = gr[fld].getReferenceTable();
+						if(refTable == "sys_user"){
+							// NOTE: to handle OoO indicator we need to set the key for 
+							//       task to include task GUID and User GUID
+							var user_sys_id = record[fld].value;
+							record[fld].isUser = true;
+							if(!data.usersPhotoInfo[user_sys_id]){
+								// user not in array yet
+								var photoInfo = new UserInfoScripts().loadPhotoInfo(user_sys_id);
+								data.usersPhotoInfo[user_sys_id] = photoInfo;
+								// initialize profile object
+								data.userProfiles[user_sys_id] = {};
+								data.userProfiles[user_sys_id].sys_id = photoInfo.sys_id;
+								data.userProfiles[user_sys_id].photo = photoInfo.photo;
+								data.userProfiles[user_sys_id].name = photoInfo.name;
+								data.userProfiles[user_sys_id].loaded = false;
+
+							}
+						}
+					}
+					
         }
         //} //From Global 
         record.sys_id = gr.getValue('sys_id');
@@ -1519,14 +1577,14 @@ tbody tr:last-child {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1467</sys_mod_count>
+        <sys_mod_count>1562</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-11-26 02:02:33</sys_updated_on>
+        <sys_updated_on>2023-03-08 00:00:54</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -1635,14 +1693,12 @@ tbody tr:last-child {
           </tr>
         </thead>
         <tbody>
-
           <!-- OPEN IN A PAGE DETAIL -->
-          <tr ng-if="!data.open_row_details_in_modal" class="" ng-click="goTasker(data.table, item)" ng-repeat="item in data.list track by item.sys_id">
-            <td class="sr-only" tabindex="0" role="link"aria-label="${Open record}"></td>
+          <tr ng-click="openRecord(item)" ng-repeat="item in data.list track by item.sys_id">
+            <td class="sr-only" tabindex="0" role="link" ng-click="openRecord(item)" aria-label="${Open record}"></td>
             <!--  STRY0101546 - EXP - Tasker Email change to asynchronous email - UPDATE status asynchronously
 removed :: in this line	-->
-            <td role="text" aria-label="{{item[field].display_value}}" class="pointer sp-list-cell" ng-class="{selected: item.selected}"  ng-repeat="field in data.fields_array" data-field="{{field}}" data-th="{{data.column_labels[field]}}">  
-              <!--KT STRY0057360: 2.5.10 -->
+            <td role="text" aria-label="{{item[field].display_value}}" class="pointer sp-list-cell" ng-class="{selected: item.selected}" ng-repeat="field in data.fields_array" data-field="{{field}}" data-th="{{data.column_labels[field]}}">
               <span ng-switch="field" >
                 <span ng-switch-when = "schedules">
                   <!--  STRY0101546 - EXP - Tasker Email change to asynchronous email - UPDATE status asynchronously
@@ -1669,47 +1725,25 @@ removed :: in the item[field} and data display value lines	 below-->
                     <span ng-switch-when="string">
                       <span ng-bind-html="item[field].display_value"></span>
                     </span>
-                    <span ng-switch-default>
-                      <span>{{item[field].display_value}}</span>
-                    </span>
-                  </span>
-                </span>
-              </span>
-            </td>
-          </tr>
-
-          <!-- OPEN IN A MODAL -->
-          <tr ng-if="data.open_row_details_in_modal == true" ng-repeat="item in data.list track by item.sys_id">
-            <td class="sr-only" tabindex="0" role="link" ng-click="openModal(item)" aria-label="${Open record}"></td>
-            <td role="text" aria-label="{{item[field].display_value}}" class="pointer sp-list-cell" ng-class="{selected: item.selected}" ng-click="openModal(item)" ng-repeat="field in data.fields_array" data-field="{{field}}" data-th="{{data.column_labels[field]}}">
-              <span ng-switch="field" >
-                <span ng-switch-when = "schedules">
-                  <a href="javascript:void(0)" class="label label-as-badge label-primary" >{{item[field].display_value}}</a> 
-                </span>
-                <span ng-switch-when = "state" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
-                <span ng-switch-when = "status" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
-                <span ng-switch-default>
-                  <span ng-switch="item[field].type">
-                    <!-- STRY0131197- if showLongDates is true on date fields, show in long format-->
-                    <span ng-switch-when="glide_date_time">
-                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
-                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
-                    </span>
-                    <span ng-switch-when="glide_date">
-                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
-                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
-                    </span>
-                    <span ng-switch-when="html">
-                      <span ng-bind-html="item[field].display_value"></span>
-                    </span>
-                    <!-- 2.6.0 | 2021-03-25 | mmcc | STRY0096103 Tree Level Print Report: Activity Log; added switch when string -->
-                    <span ng-switch-when="string">
-                      <span ng-bind-html="item[field].display_value"></span>
-                    </span>
                     <span ng-switch-when="boolean">
                       <span ng-class="{'table-cell-boolean-true': item[field].display_value=='true',
                                       'table-cell-boolean-false': item[field].display_value=='false'}">
                       </span>
+                      <span ng-bind-html="item[field].display_value"/>
+                    </span>
+                     <span ng-switch-when="reference">
+                      <div ng-if="item[field].isUser==true && item[field].display_value!=''">
+                        <!-- STRY0135276 - User Profile Directive -->
+                        <dtech-user dtech-task-title = "getTitle(item);"
+                                    dtech-field="field"
+                                    dtech-is-modal="data.isModal"
+                                    dtech-user-image-size="24"
+                                    dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
+                                    dtech-param-object="data.userProfiles[item[field].value]"
+                                    table="data.table"
+                                    parent-sys-id="item.sys_id"
+                                    />
+                      </div>
                       <span ng-bind-html="item[field].display_value"/>
                     </span>
                     <span ng-switch-default>
@@ -1720,7 +1754,6 @@ removed :: in the item[field} and data display value lines	 below-->
               </span>
             </td>
           </tr>
-
         </tbody>
       </table>
     </div>
@@ -1731,6 +1764,7 @@ removed :: in the item[field} and data display value lines	 below-->
       <span ng-if="rowsPruned > 1">${{{rowsPruned}} rows removed by security constraints}</span>
     </div>
   </div>
+
   <!-- footer -->
   <div class="panel-footer" ng-hide="options.hide_footer" ng-if="data.row_count">
     <div class="btn-toolbar m-r pull-left">
