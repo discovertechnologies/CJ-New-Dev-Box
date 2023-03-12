@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskWidgetData</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - moved user profile scripts into UerInfoScitps &#13;
+        <description>2.8.1 | 2023-03-09 | raj |  STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs&#13;
+2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - moved user profile scripts into UerInfoScitps &#13;
 2.8 | 2023-01-19 | raj  |   DFCT0011483 - Stretch:Org Hier Tree/Bi-Fold, select "Organizational Member" clicks on the tab "Out of Office Schedule" or "Out of Office History" tab does NOT display rows&#13;
 2.8 | 2023-01-09 | raj  |   STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer&#13;
 2.8 | 2022-09-27 | raj  |  DFCT0011353 - Clicking on the "+" icon" on the Subtasks tab should NOT display the header "New Template Task"&#13;
@@ -76,6 +77,7 @@ STRY0113084 - Templates- Duration Fields- Update Label and Info Text&#13;
 //  2.8   - 2022-08-16 - raj - DFCT0011078 - Long Task name should NOT impact the  "Task Name", "state" and  "user" name in the Task Tree View
 //  2.8   - 2022-08-20 - raj - DFCT0011140 - Record watcher: "Warning Icon" &  "Duration icon"  should NOT trigger the visual warning indicator on load. (Taker Type "Approval)
 //  2.8   - 2022-08-26 - raj - STRY0128070 - Existing Task Form- All Content Tabs- "New" Button displays next to Header
+//  2.8.1 | 2023-03-09 | raj |  STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
 // 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1327,19 +1329,16 @@ TaskWidgetData.prototype = {
 			var o = "";
 			var d = "";
 
-			// STRY0046028 - determine if user can create for the related list
-			var userInfoScript = new UserInfoScripts();
+			// STRY0135701 - use same function for related lists and additional lists
+			rl.canCreate = this._canUserCanCreate(rl.table,rlParms.rec);			
 			switch (rl.table) {
 				case "x_153465_discovert_tasker_requests":
-					// don't allow to create from related list, need to create a request based on type.
-					rl.canCreate = false;
 					open_row_details_in_modal = true;
 					rl.title = this._setDefaultTitle(rl);
 					o = "number";
 					d = "desc";
 					break;
 				case "x_153465_discovert_discover_office_members":
-					rl.canCreate = userInfoScript.userCanCreateMem(rlParms.rec.sys_id);
 					rl.title = gs.getMessage("Tasker - OU Members");
 					rl.label = rl.title;
 					rl.newModalTitle = gs.getMessage("Tasker - New OU Member");
@@ -1350,7 +1349,6 @@ TaskWidgetData.prototype = {
 					open_row_details_in_modal = true;
 					break;
 				case "x_153465_discovert_discover_office_hierarchy":
-					rl.canCreate = userInfoScript.userCanCreateOU(rlParms.rec.sys_id);
 					rl.title = gs.getMessage("Tasker - Sub OUs");
 					rl.label = rl.title;
 					filter = filter + "^ORDERBYlevel_order^ORDERBYoffice_name";
@@ -1360,7 +1358,6 @@ TaskWidgetData.prototype = {
 					rl.newModalQuery = 'parent=' + rlParms.rec.sys_id;
 					break;
 				case "x_153465_discovert_route_tasks":
-					rl.canCreate = userInfoScript.userHasProcessRights(rlParms.rec);
 					if (rlParms.page_id == "discovertasker_processtemplatedetails") open_row_details_in_modal = true;
 					
 					switch (rlParms.table) {
@@ -1387,8 +1384,6 @@ TaskWidgetData.prototype = {
 					}
 					break;
 				case "x_153465_discovert_tasker_schedule":
-					// STRY0082332 - FIX: Template Designers can create Template Schedules
-					rl.canCreate = new uiConditionCheck().runTemplateUIAction(rlParms.rec);
 					rl.title = this._setDefaultTitle(rl);
 					o = "next_run_date";
 					d = "asc";
@@ -1397,13 +1392,11 @@ TaskWidgetData.prototype = {
 					rl.newModalQuery = 'tasker_process=' + rlParms.rec.sys_id;
 					break;
 				case "x_153465_discovert_discover_routing_template":
-					rl.canCreate = userInfoScript.userHasProcessRights(rlParms.rec);
 					rl.title = this._setDefaultTitle(rl);
 					// no new modal for routing template, don't add new button to screen
 					break;
 
 				case "x_153465_discovert_organizational_contacts":
-					rl.canCreate = true;
 					rl.title = gs.getMessage("Tasker - Contacts");
 					rl.label = rl.title;
 					o = "u_user_information";
@@ -1415,7 +1408,6 @@ TaskWidgetData.prototype = {
 					open_row_details_in_modal = true;
 					break;
 				case "x_153465_discovert_route_task_instance":
-					rl.canCreate = rlParms.canCreateSubTask;
 					o = "task_order";
 					d = "asc";
 
@@ -1464,7 +1456,6 @@ TaskWidgetData.prototype = {
 					// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
 					// This will control showing a New button on the menu row for Tasker Emails tab
 				case 'x_153465_discovert_tasker_email':
-					rl.canCreate = rlParms.emailEnabled;
 					open_row_details_in_modal = true;
 					// STRY0128070 - updates for new button
 					rl.hideRelatedList = !rlParms.emailEnabled;
@@ -1479,8 +1470,6 @@ TaskWidgetData.prototype = {
 					break;
 				// DFCT0011483  - Out of office needed to be handled differntly
 				case "x_153465_discovert_out_of_office":
-					var org_uiAciton = new Organization_uiAction();
-					rl.canCreate = org_uiAciton.canCreateOOO(rlParms.rec.sys_id);
 					rl.title = this._setDefaultTitle(rl);
 					var user_id;
 					if (rlParms.table == "x_153465_discovert_discover_office_members") {
@@ -1502,7 +1491,6 @@ TaskWidgetData.prototype = {
 					break;
 
 				default:
-					rl.canCreate = false;
 					rl.title = this._setDefaultTitle(rl);
 			}
 			//------------------------------------------------------------------------------------------------------------------------
@@ -1606,6 +1594,134 @@ TaskWidgetData.prototype = {
 		return tab_widget_related_lists;
 	},
 
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	loadAdditionalLists: function(additonalLists, tabList, rec, u_servicenow_form_view, isModal, isBifold, optional_task_id) {
+		// STRY0120440
+		var al;
+		for (var i in additonalLists) {
+			al = additonalLists[i];
+			al.showList = true;
+			al.targetId = al.table + al.label.replace(/ /g, "_");
+			var filter = al.parentField + "=" + rec.sys_id;
+			var newModalTile = "";
+			if(al.newModalTitle && al.newModalTitle != ""){
+				newModalTile = al.newModalTitle;
+				if(al.newModalTitleFields && al.newModalTitleFields.length>0){
+					newModalTile = this._fieldFormatter(rec, al.newModalTitle, al.newModalTitleFields);
+				}
+			}
+			var newModalQuery = "";
+			if(al.newModalQuery && al.newModalQuery != ''){
+				newModalQuery = this._formatter(al.newModalQuery, al.newModalQueryFields);
+			}
+			var canCreate = false;
+			// if overriden in settings, the do not show.  If true in settings make sure user can create, then show
+			if(al.show_new==undefined ||  al.show_new==true){
+				canCreate = this._canUserCanCreate(al.table,rec);
+			}
+			
+			params = {
+				// STRY0120159 
+				showStatesMultipleBar: al.showStatesMultipleBar,
+				hideTaskFilter: al.hideTaskFilter,
+				task_id: optional_task_id,
+				// DFCT0011271
+				u_servicenow_form_view: u_servicenow_form_view,
+				parentField: al.parentField,
+				includeParent: al.includeParent,
+				o: al.orderBy,
+				d: al.direction,
+				table: al.table,
+				filter: filter,
+				additionalFilter: al.additionalFilter,
+				// STRY0107408
+				show_new: canCreate,
+				open_new_in_modal: al.openNewInModal,
+				view: al.view,
+				platform_view: al.platform_view,
+				fields: al.fields,
+				title: al.title,
+				isModal: isModal,
+				// NOTE: needs fieldname / parameter to state if something added to end of title
+				newModalTitle: newModalTile,
+				newModalQuery: newModalQuery,
+				newIconName: al.newIconName,  // optional
+				// DFCT0011268
+				addIconTitle: al.addIconTitle || al.newModalTitle,
+
+				bifold: isBifold,
+				open_row_details_in_modal: al.openRowDetailsInModal
+				//show_breadcrumbs: true
+			};
+			al.widget = $sp.getWidget('discovertasker-widget-data-table', params);
+			tabList.push(al);
+		}
+		return tabList;
+	},
+	
+	// STRY0135701 - this may exist and should be replaced if it does, but did not see an OOTB formatter for javascript
+	_formatter: function(stringToFormat, placeholders) {		
+		for(var placeNumber in placeholders) {
+			var re = new RegExp('{' + placeNumber + '}', 'gm');
+			var propertyName = placeholders[placeNumber];
+			stringToFormat = stringToFormat.replace(re, propertyName);
+		}
+		return stringToFormat;
+	},
+
+	// STRY0135701 - this may exist and should be replaced if it does, but did not see an OOTB formatter for javascript
+	_fieldFormatter: function(rec, stringToFormat, placeholders) {
+		for(var placeNumber in placeholders) {
+			var re = new RegExp('{' + placeNumber + '}', 'gm');
+			var propertyName = placeholders[placeNumber];
+			stringToFormat = stringToFormat.replace(re, rec.getDisplayValue(propertyName));
+		}
+		return stringToFormat;
+	},
+
+	// STRY0135701 - additional lists and related lists both needed this
+	_canUserCanCreate: function(table,rec){
+		var userInfoScript = new UserInfoScripts();
+		var userCanCreate = false;
+		switch (table) {
+			case "x_153465_discovert_tasker_requests":
+				// don't allow to create from related list, need to create a request based on type.
+				userCanCreate = false;
+				break;
+			case "x_153465_discovert_discover_office_members":
+				userCanCreate = userInfoScript.userCanCreateMem(rec.sys_id);
+				break;
+			case "x_153465_discovert_discover_office_hierarchy":
+				userCanCreate = userInfoScript.userCanCreateOU(rec.sys_id);
+				break;
+			case "x_153465_discovert_route_tasks":
+				userCanCreate = userInfoScript.userHasProcessRights(rec);
+				break;
+			case "x_153465_discovert_tasker_schedule":
+				userCanCreate = new uiConditionCheck().runTemplateUIAction(rec);
+				break;
+			case "x_153465_discovert_discover_routing_template":
+				userCanCreate = userInfoScript.userHasProcessRights(rec);
+				break;
+			case "x_153465_discovert_organizational_contacts":
+				userCanCreate = true;
+				break;
+			case "x_153465_discovert_route_task_instance":
+				userCanCreate = new uiConditionCheck().canCreateSubTask(rec);
+				break;
+			case 'x_153465_discovert_tasker_email':
+				userCanCreate = new uiConditionCheck().displaySendTaskAsEmailUIAction(rec);
+				break;
+			case "x_153465_discovert_out_of_office":
+					var org_uiAciton = new Organization_uiAction();
+					userCanCreate = org_uiAciton.canCreateOOO(rec.sys_id);
+					break;
+			default:
+				userCanCreate = false;
+		}
+		return userCanCreate;
+	},
+	
 	_setDefaultTitle: function(rl){
 		var title = rl.label;
 		if (rl.plural && rl.plural != '') {
@@ -1620,13 +1736,13 @@ TaskWidgetData.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-16 06:47:24</sys_created_on>
         <sys_id>dba9d2e41bf128103dc8eb96624bcb15</sys_id>
-        <sys_mod_count>416</sys_mod_count>
+        <sys_mod_count>434</sys_mod_count>
         <sys_name>TaskWidgetData</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_dba9d2e41bf128103dc8eb96624bcb15</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-02-25 22:41:31</sys_updated_on>
+        <sys_updated_on>2023-03-10 17:02:42</sys_updated_on>
     </sys_script_include>
 </record_update>

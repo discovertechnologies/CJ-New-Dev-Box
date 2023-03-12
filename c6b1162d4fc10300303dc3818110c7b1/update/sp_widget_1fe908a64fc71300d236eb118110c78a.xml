@@ -111,8 +111,10 @@
         if ((currentPageId != ("discovertasker_processtemplatelist")) && (currentPageId != "discovertasker_processtemplatedetails")) {
             // STRY0101803 added this to use Tasker Data Table for styling on the drill down page
             // STRY0117939
+						// STRY0135701 - broadcast click on the list bifold view -NOTE: might be better to make this a setting
             if (currentPageId == "discovertasker_detailsdrilldown" ||
-                currentPageId == "organizational_hierarchy_table") {
+                currentPageId == "organizational_hierarchy_table" ||
+								currentPageId == "task_list_bifold") {
                 var p = $scope.data.page_id || 'form';
                 var s = {
                     id: p,
@@ -1186,57 +1188,62 @@ tbody tr:last-child {
 //                                      Changes in HTML to add pics for user rows
 //                                      Added Directive dtechUser
 //                                      Added Service dtechOrganizationalUser
+// 2.8.1 | 2023-03-09 | raj |  STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+//																			Changes in ServerScript to handle additional fitler better
+//																			Changes in client script to broadcast click on a new page
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
-	
-		// DFCT0010949
-		var label = $sp.getParameter("label");
-		data.title = (input || {}).title || (options || {}).title || label;
 
-    if (!input) // asynch load list
-        return;
+	// DFCT0010949
+	var label = $sp.getParameter("label");
+	// STRY0135701 - if getParentIdFromUrl  is true, use the sys_id on the url with the parent field as the filter
+	var url_sys_id = $sp.getParameter("sys_id");
+	data.title = (input || {}).title || (options || {}).title || label;
 
-    data.msg = {};
-    data.msg.sortingByAsc = gs.getMessage("Sorting by ascending");
-    data.msg.sortingByDesc = gs.getMessage("Sorting by descending");
-		// STRY0120403
-		var msgKeyTaskFilter24 = "Tasker - " + data.page_id + " - TaskFilter24.svg";
-		var msgTaskFilter24 = gs.getMessage(msgKeyTaskFilter24);
-		// if the key and message are the same, then no message for this page, load the default message
-		if(msgTaskFilter24 == msgKeyTaskFilter24){
-			msgTaskFilter24 = gs.getMessage("Tasker - Show results for this Task only");		
-		}
-		data.TaskFilter24 = {"src":'TaskFilter24.svg', "title": msgTaskFilter24, "alt": msgTaskFilter24};
+	if (!input) // asynch load list
+		return;
 
-		// STRY0120403
-		var msgKeyTaskFilterList24 = "Tasker - " + data.page_id + " - TaskFilterList24.svg";
-		var msgTaskFilterList24 = gs.getMessage(msgKeyTaskFilterList24);
-		// if the key and message are the same, then no message for this page, load the default message
-		if(msgTaskFilterList24 == msgKeyTaskFilterList24){
-			msgTaskFilterList24 = gs.getMessage("Tasker - Show results for this Task and all descendants");
+	data.msg = {};
+	data.msg.sortingByAsc = gs.getMessage("Sorting by ascending");
+	data.msg.sortingByDesc = gs.getMessage("Sorting by descending");
+	// STRY0120403
+	var msgKeyTaskFilter24 = "Tasker - " + data.page_id + " - TaskFilter24.svg";
+	var msgTaskFilter24 = gs.getMessage(msgKeyTaskFilter24);
+	// if the key and message are the same, then no message for this page, load the default message
+	if(msgTaskFilter24 == msgKeyTaskFilter24){
+		msgTaskFilter24 = gs.getMessage("Tasker - Show results for this Task only");		
+	}
+	data.TaskFilter24 = {"src":'TaskFilter24.svg', "title": msgTaskFilter24, "alt": msgTaskFilter24};
 
-		}
-		data.TaskFilterList24 = {"src":'TaskFilterList24.svg', "title": msgTaskFilterList24, "alt": msgTaskFilterList24};
+	// STRY0120403
+	var msgKeyTaskFilterList24 = "Tasker - " + data.page_id + " - TaskFilterList24.svg";
+	var msgTaskFilterList24 = gs.getMessage(msgKeyTaskFilterList24);
+	// if the key and message are the same, then no message for this page, load the default message
+	if(msgTaskFilterList24 == msgKeyTaskFilterList24){
+		msgTaskFilterList24 = gs.getMessage("Tasker - Show results for this Task and all descendants");
 
-		// STRY0128070
-		data.Divider = {"src":'Divider_Black.svg', "title": "", "alt": ""};
-		data.newModalTitle = (input || {}).newModalTitle || (options || {}).newModalTitle || undefined;
-		data.newModalView = (input || {}).newModalView || (options || {}).newModalView || undefined;
-		data.newModalQuery = (input || {}).newModalQuery || (options || {}).newModalQuery || undefined;
-	
-		data.newIconName = options.newIconName || input.newIconName || 'GenericAdd16.svg';
-		// DFCT0011268 - use addIconTitle if provided, otherwise use newModalTitle (New Email uses a different tooltip than the title)
-		var addIconTitle = (input || {}).addIconTitle || (options || {}).addIconTitle || undefined;
-		if(!addIconTitle){
-			addIconTitle = data.newModalTitle;
-		}		
-		data.addIcon = {"src":data.newIconName, "title": addIconTitle, "alt": ""};
-	
-    data.fromModal = input.fromModal || '';
+	}
+	data.TaskFilterList24 = {"src":'TaskFilterList24.svg', "title": msgTaskFilterList24, "alt": msgTaskFilterList24};
 
-    /*
+	// STRY0128070
+	data.Divider = {"src":'Divider_Black.svg', "title": "", "alt": ""};
+	data.newModalTitle = (input || {}).newModalTitle || (options || {}).newModalTitle || undefined;
+	data.newModalView = (input || {}).newModalView || (options || {}).newModalView || undefined;
+	data.newModalQuery = (input || {}).newModalQuery || (options || {}).newModalQuery || undefined;
+
+	data.newIconName = options.newIconName || input.newIconName || 'GenericAdd16.svg';
+	// DFCT0011268 - use addIconTitle if provided, otherwise use newModalTitle (New Email uses a different tooltip than the title)
+	var addIconTitle = (input || {}).addIconTitle || (options || {}).addIconTitle || undefined;
+	if(!addIconTitle){
+		addIconTitle = data.newModalTitle;
+	}		
+	data.addIcon = {"src":data.newIconName, "title": addIconTitle, "alt": ""};
+
+	data.fromModal = input.fromModal || '';
+
+	/*
      * data.table = the table
      * data.p = the current page starting at 1
      * data.o = the order by column
@@ -1251,15 +1258,15 @@ tbody tr:last-child {
      * data.window_size = the number of rows to show
      * data.filter = the encoded query
      */
-    // copy to data[name] from input[name] || option[name]
-    optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
-    optCopy(['platform_view', 'relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
-		// STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
+	// copy to data[name] from input[name] || option[name]
+	optCopy(['table', 'p', 'o', 'd', 'filter', 'filterACLs', 'fields', 'keywords', 'view']);
+	optCopy(['platform_view', 'relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
+	// STRY0120403 - Delegation Layout- Add buttons to filter "This Task" and "All Descendant Tasks"
 	//                 breadcrumbs are passed in through input when they are set using spUtil.get
-		//               updated server and client to receive this setting from input or options
-		optCopy(['show_breadcrumbs', 'showStatesMultipleBar', 'hideTaskFilter', 'parentField', 'task_id' , 'originalFilter']);
-		// DFCT0011271
-	optCopy(['u_servicenow_form_view']);
+	//               updated server and client to receive this setting from input or options
+	optCopy(['show_breadcrumbs', 'showStatesMultipleBar', 'hideTaskFilter', 'parentField', 'task_id' , 'originalFilter']);
+	// DFCT0011271, STRY0135701 - added additionalFilter, includeParent, getParentIdFromUrl
+	optCopy(['u_servicenow_form_view', 'additionalFilter', "includeParent", "getParentIdFromUrl"]);
 
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
@@ -1268,302 +1275,346 @@ tbody tr:last-child {
 	// STRY0128070
 	data.parentWidget = (input || {}).parentWidget || (options || {}).parentWidget || undefined;
 
-	// save the oringal filter for the switch from task to all descendants
-	if(!data.originalFilter){
-		data.originalFilter=data.filter;
-	}
-	
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
 	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
 	// STRY0131197
 	data.showLongDates = (input || {}).showLongDates || (options || {}).showLongDates || false;
-	
+
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
-	convertToBool(['bifold', 'isModal', 'isTopWidget', 'showLongDates']);
-	
-    data.showInactiveProcess = input.showInactiveProcess;
-    //data.view = data.view || 'mobile';
-    //KT - RLS - STRY0065050: 04/01/2020: Added
-		// 2.7.0 | 2021-07-24 - added $sp.getParameter() on the calls to pull from URL when everything else is blank
-		// 2.7.1 | 2021-12-20 - DFCT0010593 - the change above caused overrode input passed in as the view
-    data.view = data.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
-		// DFCT0010593
-		data.platform_view = data.platform_view || data.view;
-		data.table = data.table || $sp.getValue('table') || $sp.getParameter('table');
-		// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
-		//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
-		//               this prevented the user from completely clearing the filter
-		//               a new variable was added in the client script when the filter is changed from the breadcrumb
-		//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
-		if(input.breadcrumb_change==true){
-				data.filter = input.filter;
-		} else {
-			data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
+	convertToBool(['bifold', 'isModal', 'isTopWidget', 'showLongDates', 'includeParent']);
+
+
+	// STRY0135701 - if getParentIdFromUrl  is true, use the sys_id on the url with the parent field as the filter
+	// this was added for when the data table is the main widget and the calling page is not adding the filter to the URL
+	// NOTE: for this to work, the parent field MUST be set also
+	if(data.getParentIdFromUrl){
+		if((data.parentField && data.parentField != "") &&
+			 (url_sys_id && url_sys_id != undefined && url_sys_id != "")){
+			data.filter = "^" + data.parentField + "=" + url_sys_id;
+			// if task_id not passed in from parent widget, set it to url_sys_id
+			if(!data.task_id || data.task_id == undefined || data.task_id == ""){
+				data.task_id = url_sys_id;
+			}
+				
 		}
-    data.keywords = data.keywords || $sp.getValue('keywords') || $sp.getParameter('keywords');
-    data.p = data.p || $sp.getValue('p') || $sp.getParameter('p') || 1;
-    data.p = parseInt(data.p);
-		// STRY0125255 STRY0123997 - find the selected item
-		data.selectedId = $sp.getValue("selectedId") || $sp.getParameter('sys_id');
-		data.page_id = $sp.getParameter("id");
-
-    data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by') || $sp.getParameter('order_by') || $sp.getParameter('o');
-    data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction') || $sp.getParameter('order_direction') || $sp.getParameter('d');
-	
-    data.page_index = data.p - 1;
-		// STRY0108599
-    data.show_new = (input.show_new == true || input.show_new == "true" ||
-        options.show_new == true || options.show_new == "true");
-		data.open_new_in_modal = (input.open_new_in_modal == true || input.open_new_in_modal == "true" || options.open_new_in_modal == true || options.open_new_in_modal == "true"); 
-    data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" || options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
-    data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
-        options.enable_filter == true || options.enable_filter == "true");
-
-		// 2.7.0 | 2021-07-24 - move after the $sp pulls values from the URL
-    if (!data.table) {
-        data.invalid_table = true;
-        data.table_label = "";
-        return;
-    }
-		// 2.7.0 | 2021-07-21 | raj | STRY0106159 Platform view is accessible from context list menus on Existing Tasks forms
-		data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
-    if (!data.fields) {
-        if (data.view)
-            data.fields = $sp.getListColumns(data.table, data.view);
-        else
-            data.fields = $sp.getListColumns(data.table);
-    }
-	
-		// DFCT0010593
-		if(data.platform_view != data.view){
-			data.platform_fields = $sp.getListColumns(data.table, data.platform_view);
+	}
+	// STRY0135701 - if there is includeParet is add the task_id as an or to the filter
+	// set up original filter before setting the original filter
+	var includeParentFilter = "";
+	if(data.includeParent){
+		includeParentFilter = "sys_id=" + data.task_id;
+		// replace filter with parent fitler when user selectes task only
+		if(data.filter  && data.filter != undefined && data.filter != ""){
+			data.filter += "^OR" + includeParentFilter;
 		} else {
-			data.platform_fields = data.fields;
+			data.filter = "^" + includeParentFilter;
 		}
-	
-    var windowSize = data.window_size || $sp.getValue('maximum_entries') || 20;
-    windowSize = parseInt(windowSize);
-    if (isNaN(windowSize) || windowSize < 1)
-        windowSize = 20;
-    data.window_size = windowSize;
+		
+	}
+	// STRY0135701 - if there is an additional fitler add it to both the task and the all descendents and any other filter
+	// set up original filter before setting the original filter
+	var additionalFilter = "";
+	if(data.additionalFilter && data.additionalFilter!=""){
+		additionalFilter = "^" + data.additionalFilter;
+		data.filter += additionalFilter;
+	}
 
-    var gr;
-    ///if (gs.getProperty("glide.security.ui.filter") == "true" || GlideTableDescriptor.get(data.table).getED().hasAttribute("glide.security.ui.filter")) { // From Global. KTorres
-    if (gs.getProperty("glide.security.ui.filter") == "true") {
-        gr = new FilteredGlideRecord(data.table);
-        gr.applyRowSecurity();
-    } else
-        gr = new GlideRecordSecure(data.table);
-    if (!gr.isValid()) {
-        data.invalid_table = true;
-        data.table_label = data.table;
-        return;
-    }
+	// save the oringal filter for the switch from task to all descendants
+	if(!data.originalFilter){
+		data.originalFilter=data.filter;
+	}
+
+	data.showInactiveProcess = input.showInactiveProcess;
+	//data.view = data.view || 'mobile';
+	//KT - RLS - STRY0065050: 04/01/2020: Added
+	// 2.7.0 | 2021-07-24 - added $sp.getParameter() on the calls to pull from URL when everything else is blank
+	// 2.7.1 | 2021-12-20 - DFCT0010593 - the change above caused overrode input passed in as the view
+	data.view = data.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
+	// DFCT0010593 - STRY0135701 - if platform view not provided, set platform view to data view
+	if(!data.platform_view || data.platform_view == ""){
+		data.platform_view = data.view;
+	}
+
+	data.table = data.table || $sp.getValue('table') || $sp.getParameter('table');
+	// DFCT0010709 - when user cleared the filter using breadcrumb, the data.filter would be blank.
+	//               when the filter was blank, it would reload the filter from the Option Copy call below resetting the fitler to the value passed in the options
+	//               this prevented the user from completely clearing the filter
+	//               a new variable was added in the client script when the filter is changed from the breadcrumb
+	//               this variable is checked in the if statement below to delete the filter from optionis instead of resetting to the filter passed in options
+	if(input.breadcrumb_change==true){
+		data.filter = input.filter;
+	} else {
+		data.filter = data.filter || $sp.getValue('filter') || $sp.getParameter('filter');
+	}
+	data.keywords = data.keywords || $sp.getValue('keywords') || $sp.getParameter('keywords');
+	data.p = data.p || $sp.getValue('p') || $sp.getParameter('p') || 1;
+	data.p = parseInt(data.p);
+	// STRY0125255 STRY0123997 - find the selected item
+	data.selectedId = $sp.getValue("selectedId") || $sp.getParameter('sys_id');
+	data.page_id = $sp.getParameter("id");
+
+	data.o = data.o || $sp.getValue('o') || $sp.getValue('order_by') || $sp.getParameter('order_by') || $sp.getParameter('o');
+	data.d = data.d || $sp.getValue('d') || $sp.getValue('order_direction') || $sp.getParameter('order_direction') || $sp.getParameter('d');
+
+	data.page_index = data.p - 1;
+	// STRY0108599
+	data.show_new = (input.show_new == true || input.show_new == "true" ||
+									 options.show_new == true || options.show_new == "true");
+	data.open_new_in_modal = (input.open_new_in_modal == true || input.open_new_in_modal == "true" || options.open_new_in_modal == true || options.open_new_in_modal == "true"); 
+	data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" || options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
+	data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
+												options.enable_filter == true || options.enable_filter == "true");
+
+	// 2.7.0 | 2021-07-24 - move after the $sp pulls values from the URL
+	if (!data.table) {
+		data.invalid_table = true;
+		data.table_label = "";
+		return;
+	}
+	// 2.7.0 | 2021-07-21 | raj | STRY0106159 Platform view is accessible from context list menus on Existing Tasks forms
+	data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
+	if (!data.fields) {
+		if (data.view)
+			data.fields = $sp.getListColumns(data.table, data.view);
+		else
+			data.fields = $sp.getListColumns(data.table);
+	}
+
+	// DFCT0010593
+	if(data.platform_view != data.view){
+		data.platform_fields = $sp.getListColumns(data.table, data.platform_view);
+	} else {
+		data.platform_fields = data.fields;
+	}
+
+	var windowSize = data.window_size || $sp.getValue('maximum_entries') || 20;
+	windowSize = parseInt(windowSize);
+	if (isNaN(windowSize) || windowSize < 1)
+		windowSize = 20;
+	data.window_size = windowSize;
+
+	var gr;
+	///if (gs.getProperty("glide.security.ui.filter") == "true" || GlideTableDescriptor.get(data.table).getED().hasAttribute("glide.security.ui.filter")) { // From Global. KTorres
+	if (gs.getProperty("glide.security.ui.filter") == "true") {
+		gr = new FilteredGlideRecord(data.table);
+		gr.applyRowSecurity();
+	} else
+		gr = new GlideRecordSecure(data.table);
+	if (!gr.isValid()) {
+		data.invalid_table = true;
+		data.table_label = data.table;
+		return;
+	}
 
 	// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; use passed in show_new
-    // data.canCreate = gr.canCreate();
-    data.newButtonUnsupported = data.table == "sys_attachment";
-    data.table_label = gr.getLabel();
-    //data.table_plural = gr.getPlural(); // From Global. KTorres
-    data.table_plural = data.title || data.table_label;
+	// data.canCreate = gr.canCreate();
+	data.newButtonUnsupported = data.table == "sys_attachment";
+	data.table_label = gr.getLabel();
+	//data.table_plural = gr.getPlural(); // From Global. KTorres
+	data.table_plural = data.title || data.table_label;
 
-			// STRY0120403
-		data.taskFilter = "TaskOnly";
-		if(input && input.taskFilter){
-			data.taskFilter = input.taskFilter;
-			// when scope change clicked reset base filter to original filter
-			data.filter = data.originalFilter;
-		}
-		// STRY0120403
-		var filterDesc = '';
-		var showDesc = false;
-		if(data.taskFilter=='TaskAndDescendents'){
-			showDesc = true;
-			filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.task_id;
-		}
-	
-		// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
-		if(filterDesc !='') {
-			if(data.task_id && data.task_id!=-1 &&
-				data.table == 'x_153465_discovert_route_task_instance') {
-				// for subtasks on the task table, change the filter used//		
-				data.filter = data.filter + "^OR" + data.parentField + '.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksCONTAINS' + data.task_id;
-			}
+	// STRY0120403
+	data.taskFilter = "TaskOnly";
+	if(input && input.taskFilter){
+		data.taskFilter = input.taskFilter;
+		// when scope change clicked reset base filter to original filter
+		data.filter = data.originalFilter;
+	}
+	// STRY0120403
+	var filterDesc = '';
+	var showDesc = false;
+	if(data.taskFilter=='TaskAndDescendents'){
+		showDesc = true;
+		filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.task_id;
+	}
 
-			if(data.table=='x_153465_discovert_activity_view'){
-				if(data.task_id && data.task_id!=-1){
-					// STRY0120403
-					if(showDesc){
-						// DFCT0011345
-						data.filter = 'taskid_sys_id=' + data.task_id + '^ORtaskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.task_id;
-					} else {
-						data.filter = 'taskid_sys_id=' + data.task_id;
-					}
-				}
-			} else {
-				// add the descendants filter to the field
-				data.filter = data.filter + "^OR" + data.parentField + "." + filterDesc; 
-			}
-		}
-
-    if (data.filter) {
-        if (data.filterACLs)
-            gr = $sp.addQueryString(gr, data.filter);
-        else
-            gr.addEncodedQuery(data.filter);
-    }
-
-    if (data.keywords) {
-        gr.addQuery('123TEXTQUERY321', data.keywords);
-        data.keywords = null;
-    }
-	
-		data.filter = gr.getEncodedQuery();
-
-    if (data.relationship_id) {
-        var rel = GlideRelationship.get(data.relationship_id);
-        var target = new GlideRecord(data.table);
-        var applyTo = new GlideRecord(data.apply_to);
-        applyTo.get("sys_id", data.apply_to_sys_id);
-        rel.queryWith(applyTo, target); // put the relationship query into target
-        gr.addEncodedQuery(target.getEncodedQuery()); // get the query the relationship made for us
-    }
-	
-    if (data.o) {
-        if (data.d == "asc"){
-					gr.orderBy(data.o);
+	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
+	if(filterDesc !='') {
+		if(data.task_id && data.task_id!=-1 &&
+			 data.table == 'x_153465_discovert_route_task_instance') {
+			// for subtasks on the task table, change the filter used//		
+			data.filter = data.filter +					
+				"^NQ" +
+				data.parentField + '.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksCONTAINS' + data.task_id +					
+				"^OR" + additionalFilter;
+		} else if(data.table=='x_153465_discovert_activity_view'){
+			if(data.task_id && data.task_id!=-1){
+				// STRY0120403
+				if(showDesc){
+					// DFCT0011345
+					data.filter = 'taskid_sys_id=' + data.task_id + 
+						additionalFilter +
+						'^NQtaskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.task_id +
+						additionalFilter;
 				} else {
-					gr.orderByDesc(data.o);
+					data.filter = 'taskid_sys_id=' + data.task_id +
+						additionalFilter;
 				}
-    }
-	
-    // only show active process ----------------------
-    if (data.table == 'x_153465_discovert_discover_routing_template' && data.showInactiveProcess != true) {
-        gr.addQuery('u_active', true);
-    }
+			}
+		} else {
+			// add the descendants filter to the field
+			data.filter = data.filter + "^OR" + data.parentField + "." + filterDesc; 
+		}
+	}
 
-		// DFCT0010740  - MANY Tables throughout the system - Sort does NOT work on multiple columns
-    data.pfm_filter = gr.getEncodedQuery();
+	if (data.filter) {
+		if (data.filterACLs)
+			gr = $sp.addQueryString(gr, data.filter);
+		else
+			gr.addEncodedQuery(data.filter);
+	}
 
-    data.window_start = data.page_index * data.window_size;
-    data.window_end = (data.page_index + 1) * data.window_size;
-    gr.chooseWindow(data.window_start, data.window_end);
-    gr._query();
+	if (data.keywords) {
+		gr.addQuery('123TEXTQUERY321', data.keywords);
+		data.keywords = null;
+	}
 
-    data.row_count = gr.getRowCount();
-    data.num_pages = Math.ceil(data.row_count / data.window_size);
-    data.column_labels = {};
-    data.fields_array = data.fields.split(',');
+	data.filter = gr.getEncodedQuery();
 
-    // use GlideRecord to get field labels vs. GlideRecordSecure
-    var grForLabels = new GlideRecord(data.table);
-    for (var i in data.fields_array) {
-        var field = data.fields_array[i];
-        var ge = grForLabels.getElement(field);
+	if (data.relationship_id) {
+		var rel = GlideRelationship.get(data.relationship_id);
+		var target = new GlideRecord(data.table);
+		var applyTo = new GlideRecord(data.apply_to);
+		applyTo.get("sys_id", data.apply_to_sys_id);
+		rel.queryWith(applyTo, target); // put the relationship query into target
+		gr.addEncodedQuery(target.getEncodedQuery()); // get the query the relationship made for us
+	}
 
-        //---------------------------------------------
-        //STRY0071963: Servcienow Server JavaScript error getLabel in object null.
-        /*if (ge == null)
+	if (data.o) {
+		if (data.d == "asc"){
+			gr.orderBy(data.o);
+		} else {
+			gr.orderByDesc(data.o);
+		}
+	}
+
+	// only show active process ----------------------
+	if (data.table == 'x_153465_discovert_discover_routing_template' && data.showInactiveProcess != true) {
+		gr.addQuery('u_active', true);
+	}
+
+	// DFCT0010740  - MANY Tables throughout the system - Sort does NOT work on multiple columns
+	data.pfm_filter = gr.getEncodedQuery();
+
+	data.window_start = data.page_index * data.window_size;
+	data.window_end = (data.page_index + 1) * data.window_size;
+	gr.chooseWindow(data.window_start, data.window_end);
+	gr._query();
+
+	data.row_count = gr.getRowCount();
+	data.num_pages = Math.ceil(data.row_count / data.window_size);
+	data.column_labels = {};
+	data.fields_array = data.fields.split(',');
+
+	// use GlideRecord to get field labels vs. GlideRecordSecure
+	var grForLabels = new GlideRecord(data.table);
+	for (var i in data.fields_array) {
+		var field = data.fields_array[i];
+		var ge = grForLabels.getElement(field);
+
+		//---------------------------------------------
+		//STRY0071963: Servcienow Server JavaScript error getLabel in object null.
+		/*if (ge == null)
         	continue;
-        	
+
         data.column_labels[field] = ge.getLabel();
         */
-        try {
-            if (ge == null)
-                continue;
+		try {
+			if (ge == null)
+				continue;
 
-            data.column_labels[field] = ge.getLabel();
-        } catch (ex) {
-            var message = ex.message;
-            gs.error("Tasker error in Tasker Data Table Widget - field : " + message + " | field: " + field + " | ge: " + ge + " | i :" + i);
-        }
-        //---------------------------------------------
-    }
+			data.column_labels[field] = ge.getLabel();
+		} catch (ex) {
+			var message = ex.message;
+			gs.error("Tasker error in Tasker Data Table Widget - field : " + message + " | field: " + field + " | ge: " + ge + " | i :" + i);
+		}
+		//---------------------------------------------
+	}
 
-    data.list = [];
-		// STRY0135276 - used to hold all of the user information
-		data.usersPhotoInfo = {};
-		data.userProfiles = {};
+	data.list = [];
+	// STRY0135276 - used to hold all of the user information
+	data.usersPhotoInfo = {};
+	data.userProfiles = {};
 
-    while (gr._next()) {
-        var record = {};
-        $sp.getRecordElements(record, gr, data.fields);
-        //if (gr instanceof FilteredGlideRecord) {  //From Global. KTorres
-        // FilteredGlideRecord doesn't do field-level
-        // security, so take care of that here
-        for (var f in data.fields_array) {
-            var fld = data.fields_array[f];
-            if (!gr.isValidField(fld))
-                continue;
-            if (!gr[fld].canRead()) {
-                record[fld].value = null;
-                record[fld].display_value = null;
-            }
-					// STRY0135276 - get Pic for each person into an array
-					if(record[fld].type == "reference"){
-						var refTable = gr[fld].getReferenceTable();
-						if(refTable == "sys_user"){
-							// NOTE: to handle OoO indicator we need to set the key for 
-							//       task to include task GUID and User GUID
-							var user_sys_id = record[fld].value;
-							record[fld].isUser = true;
-							if(!data.usersPhotoInfo[user_sys_id]){
-								// user not in array yet
-								var photoInfo = new UserInfoScripts().loadPhotoInfo(user_sys_id);
-								data.usersPhotoInfo[user_sys_id] = photoInfo;
-								// initialize profile object
-								data.userProfiles[user_sys_id] = {};
-								data.userProfiles[user_sys_id].sys_id = photoInfo.sys_id;
-								data.userProfiles[user_sys_id].photo = photoInfo.photo;
-								data.userProfiles[user_sys_id].name = photoInfo.name;
-								data.userProfiles[user_sys_id].loaded = false;
+	while (gr._next()) {
+		var record = {};
+		$sp.getRecordElements(record, gr, data.fields);
+		//if (gr instanceof FilteredGlideRecord) {  //From Global. KTorres
+		// FilteredGlideRecord doesn't do field-level
+		// security, so take care of that here
+		for (var f in data.fields_array) {
+			var fld = data.fields_array[f];
+			if (!gr.isValidField(fld))
+				continue;
+			if (!gr[fld].canRead()) {
+				record[fld].value = null;
+				record[fld].display_value = null;
+			}
+			// STRY0135276 - get Pic for each person into an array
+			if(record[fld].type == "reference"){
+				var refTable = gr[fld].getReferenceTable();
+				if(refTable == "sys_user"){
+					// NOTE: to handle OoO indicator we need to set the key for 
+					//       task to include task GUID and User GUID
+					var user_sys_id = record[fld].value;
+					record[fld].isUser = true;
+					if(!data.usersPhotoInfo[user_sys_id]){
+						// user not in array yet
+						var photoInfo = new UserInfoScripts().loadPhotoInfo(user_sys_id);
+						data.usersPhotoInfo[user_sys_id] = photoInfo;
+						// initialize profile object
+						data.userProfiles[user_sys_id] = {};
+						data.userProfiles[user_sys_id].sys_id = photoInfo.sys_id;
+						data.userProfiles[user_sys_id].photo = photoInfo.photo;
+						data.userProfiles[user_sys_id].name = photoInfo.name;
+						data.userProfiles[user_sys_id].loaded = false;
 
-							}
-						}
-					}
-					
-        }
-        //} //From Global 
-        record.sys_id = gr.getValue('sys_id');
-			
-				// STRY0125255 STRY0123997 - find the selected item
-				if(data.selectedId){
-					if(record.sys_id==data.selectedId){
-						record.selected=true;
 					}
 				}
-        data.list.push(record);
-    }
+			}
 
-		//------------------------------------------------------------------------------------------------------------------------
-		// STRY0120403- TAB: PROGRESS BAR
-		//------------------------------------------------------------------------------------------------------------------------
-		// 
-		// would be nice to eventually make this a boolean eventually
-		data.widgetInstanceMultipleBars=[];
-		if(data.showStatesMultipleBar){
-			var widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
-				table: data.table,
-				sys_id: data.task_id,
-				showDesc: showDesc
-			});
-			data.widgetInstanceMultipleBars.push(widgetInstanceMultipleBar);
 		}
+		//} //From Global 
+		record.sys_id = gr.getValue('sys_id');
 
-    var breadcrumbWidgetParams = {
-        table: data.table,
-        query: data.filter,
-        enable_filter: data.enable_filter
-    };
-    data.filterBreadcrumbs = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
+		// STRY0125255 STRY0123997 - find the selected item
+		if(data.selectedId){
+			if(record.sys_id==data.selectedId){
+				record.selected=true;
+			}
+		}
+		data.list.push(record);
+	}
 
-    // copy to data from input or options
-    function optCopy(names) {
-        names.forEach(function(name) {
-            data[name] = input[name] || options[name];
-        });
-    }
-	
+	//------------------------------------------------------------------------------------------------------------------------
+	// STRY0120403- TAB: PROGRESS BAR
+	//------------------------------------------------------------------------------------------------------------------------
+	// 
+	// would be nice to eventually make this a boolean eventually
+	data.widgetInstanceMultipleBars=[];
+	if(data.showStatesMultipleBar){
+		var widgetInstanceMultipleBar = $sp.getWidget('discovertasker-statesmultiplebar', {
+			table: data.table,
+			sys_id: data.task_id,
+			showDesc: showDesc
+		});
+		data.widgetInstanceMultipleBars.push(widgetInstanceMultipleBar);
+	}
+
+	var breadcrumbWidgetParams = {
+		table: data.table,
+		query: data.filter,
+		enable_filter: data.enable_filter
+	};
+	data.filterBreadcrumbs = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
+
+	// copy to data from input or options
+	function optCopy(names) {
+		names.forEach(function(name) {
+			data[name] = input[name] || options[name];
+		});
+	}
+
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; added
 	function convertToBool(names) {
 		names.forEach(function(name) {
@@ -1577,14 +1628,14 @@ tbody tr:last-child {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1562</sys_mod_count>
+        <sys_mod_count>1578</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-08 00:00:54</sys_updated_on>
+        <sys_updated_on>2023-03-11 18:59:19</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 

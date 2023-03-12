@@ -12,14 +12,24 @@
 	// STRY0122687
 	c.currentTab = null;
 	$scope.countRelatedListsTabs = 0;
+	// STRY0135701
+	$scope.hasAdditionalLists = c.data.additionalLists && c.data.additionalLists.length>0;
+	
 	// DFCT0011062 - count the related lists including attachments that are being shown
-	if (c.data.f._related_lists) {
+	// STRY0135701
+	if(!c.data.hideRelatedLists  || !c.data.hideDocuments || $scope.hasAdditionalLists){
     $scope.countRelatedListsTabs = c.data.f._related_lists.filter(
 			function(rl) {
 				if (rl.showList) {
 					return rl;
 				}
 			}).length;
+	}
+
+	// STRY0135701 - all related lists are in one array.  Need to count for case where no related lists are shown, but additional lists are
+	var baseTabIndex = 0;
+	if(c.data.hideRelatedLists && $scope.hasAdditionalLists){
+		baseTabIndex = c.data.f._related_lists.length - c.data.additionalLists.length;
 	}
 
 	$scope.countDocumentTabs = 0;
@@ -290,6 +300,19 @@
 		}
 
 	}
+	
+	// STRY0120403 if filter changed, then record count will change and we will need to receive an updated count
+	$scope.$on("discovertasker-widget-data-table-update_count", function (event, e) {
+		if (e && e.title) {
+			for (var i in $scope.data.f._related_lists) {
+				var rl = $scope.data.f._related_lists[i];
+				if(e.title == rl.title && rl.count != e.count){
+					rl.count = e.count;
+				}
+			}
+		}
+	});
+	
 	//extension
 	//This runs at first load.
 	$scope.$on("docint.update_count", function (event, e) {
@@ -1762,8 +1785,12 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                       changed taskform-classification-banner- to use {{data.classificationValue}}
 //                                      In Server script, added data.classificationValue set with getValue("classification")
 //                                      Changes made in HTML and Server script.
-// 2.8 | 2023-01-22 | raj  | STRY0134743 - Out of Office Message on Task Request Form
+// 2.8.1 | 2023-01-22 | raj  | STRY0134743 - Out of Office Message on Task Request Form
 //																			Changes in Server Script and HTML
+// 2.8.1 | 2023-03-09 | raj | STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+//                                      In Server script, added ability to add lists that are not in the view's related list group
+//										In Client Controller added Additional List logic
+//										In HTML added Additional list logic
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1804,6 +1831,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.emptyStateTemplate = options.empty_state_template;
 	data.disableUIActions = options.disableUIActions === "true";
 	data.hideRelatedLists = options.hideRelatedLists || false;
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	data.additionalLists = options.additionalLists;
+	
 	// STRY0108629
 	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
 	
@@ -2270,6 +2300,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.u_servicenow_form_view = rec.getValue("u_servicenow_form_view");
 	}
 	
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	var taskData = new TaskWidgetData();
+	var allTabs = data.f._related_lists;
+
 	// STRY0120403 - STRY0122687
 	// DFCT0011062 need to process related lists to show documents if documents are not hidden
 	if(data.sys_id!=-1 && (!data.hideRelatedLists || !data.hideDocuments)){
@@ -2302,10 +2336,21 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			// DFCT0011217
 			canAttach: data.canAttach
 		};	
-		data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
-		// STRY0122687 - count tabs
-		data.tabCount += data.f._related_lists.length;		
+
+		// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+		allTabs = taskData.loadRelatedLists(rlParams);
+
 	}
+	
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	if(data.additionalLists){
+		allTabs = taskData.loadAdditionalLists(data.additionalLists, allTabs, rec, data.u_servicenow_form_view,data.isModal, data.bifold, data.task_id);
+	}
+	// STRY0122687 - count tabs
+	data.f._related_lists = allTabs;
+	data.tabCount += allTabs.length;
+
+	
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
 		var page = new GlideRecord('sp_page');
@@ -2456,14 +2501,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4672</sys_mod_count>
+        <sys_mod_count>4675</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-25 06:52:25</sys_updated_on>
+        <sys_updated_on>2023-03-11 23:24:22</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2484,10 +2529,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 </div>
 <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to if !data.f._view.length -->
 <div ng-if="data.isValid && !data.f._view.length" class="panel-shift">
-  <div ng-if="!data.f._view.length && data.hideRelatedLists && data.emptyStateTemplate">
+  <div class="" ng-if="!data.f._view.length && !data.hideRelatedLists && !hasAdditionalLists && data.emptyStateTemplate">
     <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
   </div>
-  <div ng-if="!data.f._view.length && data.hideRelatedLists && !data.emptyStateTemplate">
+  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && !hasAdditionalLists && !data.emptyStateTemplate">
     <div class="panel panel-default">
       <div class="panel-heading">
         <span ng-if="data.page_id != 'discovertasker_officehierarchy' && data.sys_id.length > 2" class="panel-title">{{data.f.title}}<span ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view] </span></span>
@@ -2508,7 +2553,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 </div>
 
 <div ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-modal-relative':data.isModal==true}">
-  <div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists"
+  <div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists || hasAdditionalLists"
        ng-class="getPanelPanelCssByPageId()">
     <!-- 1 row Flexbox START -->
 
@@ -2722,7 +2767,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
               <!-- Other Tabs -->
               <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
               <!-- // STRY0128070 - updates for new button, while working on this story, noticed Template Tasks hidden on Template forms -->
-              <a ng-if="!rl.hideRelatedList"
+              <a ng-if="!data.hideRelatedLists || hasAdditionalLists"
                  ng-switch-default data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" data-toggle="tab" >{{rl.title}}
                 <span class="label label-as-badge label-primary" ng-if="rl.count">{{rl.count}}</span>
               </a>

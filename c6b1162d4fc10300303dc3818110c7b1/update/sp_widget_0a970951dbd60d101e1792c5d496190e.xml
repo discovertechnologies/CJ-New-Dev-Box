@@ -11,16 +11,24 @@
 	//c.allowSubTask = false;
 	// STRY0122687
 	$scope.countRelatedListsTabs = 0;
+	// STRY0135701
+	$scope.hasAdditionalLists = c.data.additionalLists && c.data.additionalLists.length>0;
 
 	// DFCT0011062 - count the related lists including attachments that are being shown
 	// DFCT0011434 added check for hide documents
-	if(!c.data.hideRelatedLists  || !c.data.hideDocuments){
+	// STRY0135701
+	if(!c.data.hideRelatedLists  || !c.data.hideDocuments || $scope.hasAdditionalLists){
 		$scope.countRelatedListsTabs =
 			$scope.c.data.f._related_lists.filter(function(rl) {
 			if (rl.showList) {
 				return rl;
 			}
 		}).length;		
+	}
+	// STRY0135701 - all related lists are in one array.  Need to count for case where no related lists are shown, but additional lists are
+	var baseTabIndex = 0;
+	if(c.data.hideRelatedLists && $scope.hasAdditionalLists){
+		baseTabIndex = c.data.f._related_lists.length - c.data.additionalLists.length;
 	}
 
 	$scope.countDocumentTabs = 0;
@@ -57,7 +65,7 @@
 
 	$scope.isActiveTab = function( tabName, index ){
 		var activeTab = $scope.getActiveTab();
-		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
+		return ( activeTab === tabName || ( activeTab === null && index === baseTabIndex ) );
 	};
 
 	
@@ -928,6 +936,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                       changed taskform-classification-banner- to use {{data.classificationValue}}
 //                                      In Server script, added data.classificationValue set with getValue("classification")
 //                                      Changes made in HTML and Server script.
+// 2.8.1 | 2023-03-09 | raj | STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+//                                      In Server script, added ability to add lists that are not in the view's related list group
+//																			In Client Controller added Additional List logic
+//																			In HTML added Additional list logic
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -971,6 +983,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added; add || false
 	// data.isModal = (input || {}).isModal || (options || {}).isModal;
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+	// STRY0135701 - this was added for Task List Full screen
+	data.isTopWidget = (input || {}).isTopWidget || (options || {}).isTopWidget || false;
 
 	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs to match the standard layout for flexing header-body-footer; set bifold
 	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
@@ -1313,7 +1327,11 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	data.hideActivity = options.hideActivity;
 	data.hideDocuments = options.hideDocuments;
 	data.hideRelatedLists = options.hideRelatedLists;
-	
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	data.additionalLists = options.additionalLists;
+	var taskData = new TaskWidgetData();
+	var allTabs = data.f._related_lists;
+
 	// STRY0122687 - count tabs
 	data.tabCount = 0;
 
@@ -1355,10 +1373,19 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 			// DFCT0011217
 			canAttach: data.canAttach			
 		};	
-		data.f._related_lists = new TaskWidgetData().loadRelatedLists(rlParams);
-		// STRY0122687 - count tabs
-		data.tabCount += data.f._related_lists.length;
+		
+		// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+		allTabs = taskData.loadRelatedLists(rlParams);
+		
 	}
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	if(data.additionalLists){
+		allTabs = taskData.loadAdditionalLists(data.additionalLists, allTabs, rec, data.u_servicenow_form_view,data.isModal, data.bifold, data.task_id);
+	}
+	// STRY0122687 - count tabs
+	data.f._related_lists = allTabs;
+	data.tabCount += allTabs.length;
+
 	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
 	if (options.page) {
 		var page = new GlideRecord('sp_page');
@@ -1509,14 +1536,15 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-03-16 18:29:34</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>0a970951dbd60d101e1792c5d496190e</sys_id>
+        <sys_mod_count>404</sys_mod_count>
         <sys_name>Tasker Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0a970951dbd60d101e1792c5d496190e</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-03-12 00:20:30</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -1535,10 +1563,10 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 </div>
 <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to if !data.f._view.length -->
 <div ng-if="data.isValid && !data.f._view.length" class="panel-shift">
-  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && data.emptyStateTemplate">
+  <div class="" ng-if="!data.f._view.length && !data.hideRelatedLists && !hasAdditionalLists && data.emptyStateTemplate">
     <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
   </div>
-  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && !data.emptyStateTemplate">
+  <div class="" ng-if="!data.f._view.length && data.hideRelatedLists && !hasAdditionalLists && !data.emptyStateTemplate">
     <div class="panel panel-default">
       <div class="panel-heading">
         <span ng-if="data.page_id == 'discovertasker_officehierarchy' && !data.sys_id" class="panel-title">Organizational Unit</span>
@@ -1556,9 +1584,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
     </div>
   </div>
 </div>
-
-<div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists"
-     ng-class="{'dtech-topstick-posabso flex-column ':data.bifold==true}">
+<div ng-class="{'flex-column flex-grow dtech-overflow-hidden':data.isTopWidget==true}">
+<div class="panel panel-{{::options.color}}" ng-if="data.f._view.length || !data.hideRelatedLists || hasAdditionalLists"
+     ng-class="{'dtech-topstick-posabso flex-column ':data.bifold==true || data.isTopWidget==true}">
   
   <!-- 1 row Flexbox START -->
   <div class="dtech-panel-heading-min-height-standard dtech-flex-grow-0 panel-heading" ng-if="data.f.title.length > 0 && !data.omitHeader" sp-context-menu="getUIActionContextMenu(event)">
@@ -1691,8 +1719,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
                ng-click="setActiveTab(rl.targetId)">
 
 
-
-
             <!-- STRY0042042 | DI Integration: Turn on/off DocInt Attachments and SNOW OOB Attachments -->
             <!-- STRY0061245 | In the My Attachments and Shared Attachments tabs, the information message will state "Attachments are stored in ServiceNow" -->
             <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
@@ -1724,7 +1750,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
             <!-- Other Tabs -->
             <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
             <a ng-switch-default 
-               ng-if="!data.hideRelatedLists"
+               ng-if="!data.hideRelatedLists || hasAdditionalLists"
                data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" data-toggle="tab" >{{rl.label}}                    
               <span class="label label-as-badge label-primary" ng-if="rl.count">{{rl.count}}</span>
             </a>
@@ -1858,6 +1884,6 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
   </div>
 </div>
-]]></template>
+</div>]]></template>
     </sp_widget>
 </record_update>
