@@ -1798,6 +1798,11 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      and "Action icons" on the right side 
 //                                      In Client controller, add if not undefined check on f._related_lists
 //                                      Changes made in Client controller.
+// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - Tech Debt (Release 2.8.1) - Update Tasker App to set CSS Style for Classification based on Value
+//                                      In HTML,  in top Ribbon section updated to use classificationValue or data.f._fields.classification.value;
+//                                       in Bottom Ribbon section  updated to use classificationValue or data.f._fields.classification.value;
+//                                      In Server script, added classificationValue and restrictedGroup in a few places
+//                                      Changes made in HTML and Server script.
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2037,28 +2042,9 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	if (!data.isValid)
 		return;
 	
-	// STRY0126024 set classification and restricted group for Template
-	if(data.table == 'x_153465_discovert_discover_routing_template' ||
-		data.table == 'x_153465_discovert_route_tasks' ||
-		data.table == 'x_153465_discovert_discover_routing_runtime'){
-		// STRY0126208 - Simple Task Form- Add Classification and Restricted Group ribbon
-		data.classification = rec.getDisplayValue("classification");
-		// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added
-		data.classificationValue = rec.getValue("classification");
-		if(data.table == 'x_153465_discovert_route_tasks'){
-			data.restrictedGroup = rec.getDisplayValue("assigned_to_group");
-		} else {
-			data.restrictedGroup = rec.getDisplayValue("u_restricted_group");
-		}
-	}
 	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
 	// moved this logic below the record get so the record state could be used in the logic
 	if(data.table == 'x_153465_discovert_route_task_instance'){
-		// STRY0126208 - Simple Task Form- Add Classification and Restricted Group ribbon
-		data.classification = rec.getDisplayValue("classification");
-		// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added
-		data.classificationValue = rec.getValue("classification");
-		data.restrictedGroup = rec.getDisplayValue("assignment_group");
 		
 		// STRY0119580 - if data.taskFormView was not set by input above, set here
 		if(data.taskFormView){
@@ -2168,6 +2154,41 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 	}
 		
 
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value, new location	
+	// if customer takes classification off the form, the customer is not using classification.
+	// when DTech adds a simple form for Templates, we will need to address this with Rec for existing records
+	// STRY0126024 set classification and restricted group for Template
+	if(data.table == 'x_153465_discovert_discover_routing_template' ||
+		data.table == 'x_153465_discovert_route_tasks' ||
+		data.table == 'x_153465_discovert_discover_routing_runtime'){
+		
+		if(data.table == 'x_153465_discovert_route_tasks'){
+			data.restrictedGroup = data.f._fields.assigned_to_group.displayValue;
+		} else {
+			data.restrictedGroup = data.f._fields.u_restricted_group.displayValue;
+		}
+
+	}
+
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; new location and use of grParentTask
+	if (data.table == 'x_153465_discovert_tasker_requests') {
+		var parentId = data.f._fields.parent.value;
+		if (parentId) {
+			var grParentTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if (grParentTask.get(parentId)) {
+				if (grParentTask.getDisplayValue("classification") != undefined) {
+					data.classification = grParentTask.getDisplayValue("classification");
+					// Force object to a string
+					data.classificationValue = "" + grParentTask.classification;
+				}
+
+				if (grParentTask.getDisplayValue("assignment_group") != undefined) {
+					data.restrictedGroup = grParentTask.getDisplayValue("assignment_group");
+				}
+			}
+		}
+	}
+
 
 	// STRY0063505 | in debugging the process docs story, we realized data.isActive was only set if the field was on the form.
 	data.isActive = false;
@@ -2236,34 +2257,82 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		data.sharedAttachTableName = 'x_153465_discovert_discover_routing_template';
 	}
 
-	if (data.table == "x_153465_discovert_war_sar_reporting" && data.sys_id != -1) {
-		if (data.f._fields.classification) {
-			// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added 2
-			// data.f.classification = data.f._fields.classification.displayValue;
-			data.classification = data.f._fields.classification.displayValue;
-			data.classificationValue = data.f._fields.classification.value;
-		}
-	}
-
-	//In preparation to go-live with Delivery Customization: 04.18.20
-	if (data.table == "x_153465_discovert_route_task_instance" && data.sys_id != -1) {
-		if (data.f._fields.number) {
-			data.number = data.f._fields.number.displayValue;
-		}
+// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; start commented out blocked
+// 	if (data.table == "x_153465_discovert_war_sar_reporting" && data.sys_id != -1) {
+// 		if (data.f._fields.classification) {
+// 			// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added 2
+// 			// data.f.classification = data.f._fields.classification.displayValue;
+// 			data.classification = data.f._fields.classification.displayValue;
+// 			data.classificationValue = data.f._fields.classification.value;
+// 		}
+// 	}
+//
+// 	//In preparation to go-live with Delivery Customization: 04.18.20
+// 	if (data.table == "x_153465_discovert_route_task_instance" && data.sys_id != -1) {
+// 		if (data.f._fields.number) {
+// 			data.number = data.f._fields.number.displayValue;
+// 		}
 		
-		// STRY0051139
-		data.task_name = rec.task_name; //data.number + ": " + data.f._fields['short_description']["displayValue"];
-		data.f.task_instance__state = '';
+// 		// STRY0051139
+// 		data.task_name = rec.task_name; //data.number + ": " + data.f._fields['short_description']["displayValue"];
+// 		data.f.task_instance__state = '';
 
-		if (data.f._fields.classification) {
-			// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added 2
-			// data.f.classification = data.f._fields.classification.displayValue;
-			data.classification = data.f._fields.classification.displayValue;
-			data.classificationValue = data.f._fields.classification.value;
-		}
+// 		if (data.f._fields.classification) {
+// 			// 2.8.1 | 2022-12-09 | mmcc | STRY0133733 - Update Tasker App to set CSS Style for Classification based on Value; added 2
+// 			// data.f.classification = data.f._fields.classification.displayValue;
+// 			data.classification = data.f._fields.classification.displayValue;
+// 			data.classificationValue = data.f._fields.classification.value;
+// 		}
 		
-		if (data.f._fields.assignment_group) {
-			data.f.assignment_group = data.f._fields.assignment_group.displayValue;
+// 		if (data.f._fields.assignment_group) {
+// 			data.f.assignment_group = data.f._fields.assignment_group.displayValue;
+// 		}
+
+// 		// 2.7.0 | 2021-11-1 | mmcc | DFCT0010601 - Deleting the Top Task logs an error: The Task Tree was not created for Task
+// 		if (!rec.u_task_tree && rec.number.length > 0) {
+// 			gs.error('The Task Tree was not created for Task: ' + rec.number + '.  Please contact your Tasker administrator to check on the fix script.');
+// 		}
+// 		setBreadcrumbs(data.page_id, data.task_name);
+// 	}
+// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; end commented out blocked
+	
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; new version
+	if (data.table == "x_153465_discovert_route_task_instance") {
+		if (data.sys_id == -1) {
+			if (data.f._fields.parent) {
+				var parentID = data.f._fields.parent.value;
+				var parentRec = new GlideRecord("x_153465_discovert_route_task_instance");
+				if (parentRec.get(parentID)) {
+					if (parentRec.getDisplayValue("classification") != undefined) {
+						data.classification = parentRec.getDisplayValue("classification");
+						data.classificationValue = parentRec.getValue("classification");
+						// Force object to a string
+						data.classificationValue2 = "" + parentRec.classification;
+
+					}
+
+					if (parentRec.getDisplayValue("assignment_group") != undefined) {
+						data.restrictedGroup = parentRec.getDisplayValue("assignment_group");
+					}
+				}
+			}
+		} else {
+			if (data.f._fields.number) {
+				data.number = data.f._fields.number.displayValue;
+			}
+
+			// STRY0051139
+			data.task_name = rec.task_name; //data.number + ": " + data.f._fields['short_description']["displayValue"];
+			data.f.task_instance__state = '';
+
+			data.classification = rec.getDisplayValue("classification");
+			data.classificationValue = rec.getValue("classification");
+
+			if (data.f._fields.assignment_group != undefined && data.f._fields.assignment_group.displayValue != undefined) {
+				data.restrictedGroup = data.f._fields.assignment_group.displayValue;
+			} else {
+				data.restrictedGroup = rec.getDisplayValue("assignment_group");
+			}
 		}
 
 		// 2.7.0 | 2021-11-1 | mmcc | DFCT0010601 - Deleting the Top Task logs an error: The Task Tree was not created for Task
@@ -2272,7 +2341,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 		}
 		setBreadcrumbs(data.page_id, data.task_name);
 	}
-
+	
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; start orig
 	if (data.table == "x_153465_discovert_discover_routing_template" & data.sys_id != -1) {
 		if (data.f._fields.template_name) {
 			data.f.template_name = data.f._fields.template_name.displayValue;
@@ -2509,7 +2579,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4677</sys_mod_count>
+        <sys_mod_count>4682</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
@@ -2517,7 +2587,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-03-15 15:04:47</sys_updated_on>
+        <sys_updated_on>2023-03-16 18:26:09</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2717,11 +2787,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
     <!-- 1 row Flexbox END -->
 
     <!-- Ribbon section start -->
-    <div ng-if="data.classification.length>0">
-      <div class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
-        <div title="Classification: {{data.classification}}">
-          {{data.classification}}
-        </div>
+    <div ng-if="data.f._fields.classification.displayValue == undefined" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
+      <div title="Classification: {{data.classification}}">
+        {{data.classification}}
+      </div>
+    </div>
+    <div ng-if="data.f._fields.classification.displayValue != undefined && data.f._fields.classification.value != ''" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.f._fields.classification.value}}"> 
+      <div title="Classification: {{data.f._fields.classification.displayValue}}">
+        {{data.f._fields.classification.displayValue}}
       </div>
     </div>
     <div ng-if="data.restrictedGroup.length>0">
@@ -2883,10 +2956,15 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
     <!-- Bottom Ribbon section start -->
     <div ng-if="data.isBottomRibbonShown">
-      <div ng-if="data.isModal==false && data.bifold==false && data.classification.length>0">
-        <div class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
+      <div ng-if="data.isModal==false && data.bifold==false">
+        <div ng-if="data.f._fields.classification.displayValue == undefined" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
           <div title="Classification: {{data.classification}}">
             {{data.classification}}
+          </div>
+        </div>
+        <div ng-if="data.f._fields.classification.displayValue != undefined && data.f._fields.classification.value != ''" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.f._fields.classification.value}}"> 
+          <div title="Classification: {{data.f._fields.classification.displayValue}}">
+            {{data.f._fields.classification.displayValue}}
           </div>
         </div>
       </div>
