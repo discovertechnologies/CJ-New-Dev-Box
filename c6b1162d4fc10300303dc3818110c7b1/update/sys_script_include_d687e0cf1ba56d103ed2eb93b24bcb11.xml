@@ -1,0 +1,542 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.tasker_search</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script handles search capability for the Tasker Application&#13;
+</description>
+        <name>tasker_search</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+//*************************************************************************************************
+// NOTE: This file should be read only.
+//       In the 2.8 release, the Search Source was protected.  So, this file was not locked down.
+//       When the the search source is unprotected, this file will become read only
+//       The recomendation to customers when they want to customize will be to duplicate this file as a customer specific file.
+//       Then make desired chanages to the customer file as this will eliminate conflicts on upgrades.
+//*************************************************************************************************
+// Script Continued Below
+
+var tasker_search = Class.create();
+// can be overwritten using setResultFieldList method
+tasker_search.CONST_RESULT_FIELD_LIST = ["u_top_task", "task_name", "short_description", "parent", "classification", "state", "status", "risk_flag", "primary_assignee", "tasking_authority", "primary_office", "active", "assigned_to"];
+
+// can be overwritten using setFacetFieldList method
+// NOTE:  to get results, all fields in the facet need to also be in the result field list
+tasker_search.CONST_FACET_FIELD_LIST = {
+	"u_top_only":{
+		"active": true,
+		"includeCount": true,
+		"order": 100,  // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Filter Top Tasks"),
+		"booleanTrueCaption": gs.getMessage("Show Top Only"),
+		"booleanFalseCaption": gs.getMessage("Show All Tasks"),
+		"multiselect": false  // this should always be false for top only
+	},
+	"active":{
+		"active": true,
+		"includeCount": true,
+		"order": 200,  // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Filter on Active"),
+		"multiselect": false,  // this should always be false for top only
+		"isBoolean": true,
+		"booleanTrueCaption": gs.getMessage("Active Only"),
+		"booleanFalseCaption": gs.getMessage("Closed Only")
+	},
+	"tasking_authority":{
+		"active": true,
+		"includeCount": true,
+		"order": 300, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Tasking Authority"),
+		"multiselect": true
+	},
+	"primary_office":{
+		"active": true,
+		"includeCount": true,
+		"order": 400, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Primary Office"),
+		"multiselect": true
+	},
+	"primary_assignee":{
+		"active": true,
+		"includeCount": true,
+		"order": 500, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Primary Assignee"),
+		"multiselect": true
+	},
+	"u_task_requester":{
+		"active": true,
+		"includeCount": true,
+		"order": 600, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Task Owner"),
+		"multiselect": true
+	},
+	"assigned_to":{
+		"active": true,
+		"includeCount": true,
+		"order": 700, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Assigned Member"),
+		"multiselect": true
+	},
+	"u_reviewer":{
+		"active": true,
+		"includeCount": true,
+		"order": 800, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Reviewer"),
+		"multiselect": true
+	},
+	"suspense_date":{
+		"isDate": true,
+		"active": true,
+		"includeCount": true,
+		"order": 900, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Suspense Date"),
+		"multiselect": false  // note: dates should not be multiselect, it can lead to strange results
+	},
+	"sys_created_on":{
+		"isDate": true,
+		"active": true,
+		"includeCount": true,
+		"order": 1000, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Created"),
+		"multiselect": false  // note: dates should not be multiselect, it can lead to strange results
+	},
+	"sys_updated_on":{
+		"isDate": true,
+		"active": true,
+		"includeCount": true,
+		"order": 1100, // NOTE: if 2 have the same value, only the first one will show up
+		"caption": gs.getMessage("Updated"),
+		"multiselect": false  // note: dates should not be multiselect, it can lead to strange results
+	}	
+};
+
+// NOTE: dates are intersting.  If customers want different values for different types of dates we have options for future releases:
+// Option 1: repeat this JSON for each date and modify the Facet creation to use a different JSON for each field
+// Option 2: create a few options and have date fields use one of the options.  This seems like a better approach as it is flexible without too much redundancy
+tasker_search.CONST_FACET_DATE_RANGES = {
+	"yesterday":{
+		"active": true,
+		"caption": gs.getMessage("Yesterday"),
+		"dateFunction": "ONYesterday@javascript:gs.beginningOfYesterday()@javascript:gs.endOfYesterday()", // javascript date function
+		"order": 100 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"today":{
+		"active": true,
+		"caption": gs.getMessage("Today"),
+		"dateFunction": "ONToday@javascript:gs.beginningOfToday()@javascript:gs.endOfToday()", // javascript date function
+		"order": 200 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"thisweek":{
+		"active": true,
+		"caption": gs.getMessage("This Week"),
+		"dateFunction": "ONThis week@javascript:gs.beginningOfThisWeek()@javascript:gs.endOfThisWeek()", // javascript date function
+		"order": 300 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"lastweek":{
+		"active": true,
+		"caption": gs.getMessage("Last Week"),
+		"dateFunction": "ONLast week@javascript:gs.beginningOfLastWeek()@javascript:gs.endOfLastWeek()", // javascript date function
+		"order": 400 // NOTE: if 2 have the same value, only the first one will show up
+	},	
+	"thismonth":{
+		"active": true,
+		"caption": gs.getMessage("This Month"),
+		"dateFunction": "ONThis month@javascript:gs.beginningOfThisMonth()@javascript:gs.endOfThisMonth()", // javascript date function
+		"order": 500 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"lastmonth":{
+		"active": true,
+		"caption": gs.getMessage("Last Month"),
+		"dateFunction": "ONLast month@javascript:gs.beginningOfLastMonth()@javascript:gs.endOfLastMonth()", // javascript date function
+		"order": 600 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"thisyear":{
+		"active": true,
+		"caption": gs.getMessage("This Year"),
+		"dateFunction": "ONThis year@javascript:gs.beginningOfThisYear()@javascript:gs.endOfThisYear()", // javascript date function
+		"order": 700 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"lastyear":{
+		"active": true,
+		"caption": gs.getMessage("Last Year"),
+		"dateFunction": "ONLast year@javascript:gs.beginningOfLastYear()@javascript:gs.endOfLastYear()", // javascript date function
+		"order": 800 // NOTE: if 2 have the same value, only the first one will show up
+	},
+	"older":{  // NOTE: if used, this should be adjusted to be older than all other items
+		"active": true,
+		"caption": gs.getMessage("Older"),
+		"dateFunction": "<javascript:gs.beginningOfLastYear()", // javascript date function
+		"order": 900 // NOTE: if 2 have the same value, only the first one will show up
+	}
+};
+
+tasker_search.prototype = {
+
+	initialize: function() {
+		this.resultFieldList=tasker_search.CONST_RESULT_FIELD_LIST;
+		this.facetFieldList=this._filterByActiveSortByOrder(tasker_search.CONST_FACET_FIELD_LIST);
+		this.facetDateRanges=this._filterByActiveSortByOrder(tasker_search.CONST_FACET_DATE_RANGES);
+	},
+
+	setDateRangesList: function(param_date_range_list) {
+		if(param_date_range_list && param_date_range_list.length>0){
+			this.facetDateRanges = param_date_range_list;
+		}else{
+			this.facetDateRanges = tasker_search.CONST_FACET_DATE_RANGES;
+			// leave field list as is, log error
+			gs.warn("Tasker Search Source - setDateRangesList called without providing a list of date ranges, default used instead.  The default date range list is: " + JSON.stringify(this.facetDateRanges));				
+		}
+	},
+
+	setResultFieldList: function(param_result_field_list) {
+		if(param_result_field_list && param_result_field_list.length>0){
+			this.resultFieldList = param_result_field_list;
+		}else{
+			this.resultFieldList = tasker_search.CONST_RESULT_FIELD_LIST;
+			// leave field list as is, log error
+			gs.warn("Tasker Search Source - setResultFieldList called without providing a list of fields, default used instead.  The default result field list is: " + JSON.stringify(this.resultFieldList));				
+		}
+	},
+
+	// this function can be called to reset the facet list without calling cache.do
+	setFacetFieldList: function(param_facet_field_list) {
+		var facetDefs;
+		if(param_facet_field_list && param_facet_field_list.length>0){
+			facetDefs = param_facet_field_list;
+		}else{
+			facetDefs = tasker_search.CONST_FACET_FIELD_LIST;
+			// leave field list as is, log error
+			gs.warn("Tasker Search Source - setFacetFieldList called without providing a list of fields, default used instead.  The default facet field list is: " + JSON.stringify(this.facetFieldList));				
+		}
+		this.facetFieldList = this._filterByActiveSortByOrder(facetDefs);
+	},
+
+	fetchSearchData: function(query, queryLocation, count, data, facets, $sp) {
+		var results = [];
+		/* Calculate your results here. */
+		var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+		// DFCT0010695
+		var userPreferences = oUserPref.loadMyFormPreferences();
+		
+		var taskerGR = new GlideRecord("x_153465_discovert_route_task_instance");
+		taskerGR.addQuery('123TEXTQUERY321', query);
+		
+		// Here, we are utilizing queryLocation to implement pagination.
+		// In practice, there are many other ways to use the
+		// query_location value of the last item in the previous
+		// result set to implement pagination. Your implementation
+		// will vary by use case.
+		taskerGR.chooseWindow(queryLocation-1, queryLocation - 1 + count, true);
+		taskerGR = this._addFacetsFilter(taskerGR, facets);
+		var encodedQuery = taskerGR.getEncodedQuery();
+		taskerGR.query();
+		var resultCount = 0;
+		while(taskerGR.next() && resultCount < count + 1) {
+			if (!$sp.canReadRecord(taskerGR))
+				continue;
+			
+			// TODO, use default page here
+			var defaultView = 'sp';
+			var sys_id = taskerGR.getUniqueValue();
+			var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(sys_id, defaultView);
+			var task = {};
+			task.encodedQuery = encodedQuery;
+			task.text = taskerGR.short_description;
+			task.url = url_Properties.portal_url_ref + '?id=' + url_Properties.pageId + 
+				'&table=x_153465_discovert_route_task_instance' + 
+				'&sys_id=' + sys_id  + 
+				'&view=' + url_Properties.view;
+			
+			// DFCT0010743
+			task.sys_id = sys_id;
+			task.table = taskerGR.getTableName();
+			task.target = '_blank';
+			task.primary = taskerGR.getDisplayValue('task_name');
+			// Here, we are populating the query_location
+			// property of each result item. This is how the
+			// framework knows what value to pass into the
+			// next fetched search result script execution
+			task.query_location = queryLocation + resultCount;
+			task.fields = [];
+			for (i = 0; i < this.resultFieldList.length; i++) {
+				var resultField = this.resultFieldList[i];
+				var taskField = {};
+				taskField.name = resultField;
+				taskField.label = taskerGR[resultField].getLabel();
+				taskField.display_value = taskerGR.getDisplayValue(resultField);
+				taskField.value = taskerGR.getValue(resultField);
+				task.fields.push(taskField);
+			}
+			results.push(task);
+			resultCount++;
+		}
+
+		if (results.length == 0)
+			return results;
+	
+		if(results.length > count) {
+			results.pop();
+		} else {
+			// In order to indicate that a result in the result
+			// set is the final result (that there are
+			// no more results to be fetched), add this property
+			// to the final element in your result set.
+			results[results.length - 1].isLastResult = true;
+		}
+		return results;
+	},
+
+	_addFacetsFilter: function(p_rec, p_facets){
+		// no need to check active here, facet will not be in result if not active
+		for(var _f in p_facets){
+			var _facetDef = this.facetFieldList[_f];
+			if(_facetDef && _facetDef.active==true){
+				this._addFacetFilter(p_rec, _f, _facetDef, p_facets[_f]);
+			}
+		}
+		return p_rec;
+	},
+	
+	_addFacetFilter: function(p_rec, field, p_facetDef, p_facet){
+		if(field == "u_top_only"){
+			// add not null only if ture
+			if(p_facet == true){
+				p_rec.addNullQuery("parent");
+			}
+		} else {
+			if(p_facetDef.isBoolean==true){
+				p_rec.addQuery(field, "=", p_facet);
+			} else if(p_facetDef.isDate==true){
+				p_rec.addEncodedQuery(field + this.facetDateRanges[p_facet].dateFunction);
+			} else {
+				// check for empty values in the list of facet values for standard facets
+				// remove empty from the list and add an or condition to include the null condition with the other items selected
+				var hasEmpty = false;
+				var facetValuesWithoutEmpty = p_facet.filter(function (el) {
+					if(!el || el==null || el==undefined || el==""){
+						hasEmpty=true;
+					} else {
+						return el;
+					}
+				});
+				if(hasEmpty){
+					var nullQuery = p_rec.addNullQuery(field);
+					if(facetValuesWithoutEmpty.length>0){
+						nullQuery.addOrCondition(field, "IN", facetValuesWithoutEmpty);
+					}
+				} else {
+					p_rec.addQuery(field, "IN", p_facet);
+				}
+			}
+		}
+		return p_rec;
+	},
+	
+	generateFacets: function(query, facetService, searchResults) {
+		var facets={};
+
+		facets = this._addFacets(query, facetService, searchResults);
+		return facets;
+	},
+		
+	_addFacets: function(query, facetService, searchResults){
+		var facets = {};
+		var facetDefs = this.facetFieldList;
+		var encodedQuery;
+		// in fetchSearchData the encoded query is stored on each element in the search results
+		if(searchResults && searchResults.length>0){
+			encodedQuery = searchResults[0].encodedQuery;
+		} else {
+			encodedQuery = "123TEXTQUERY321=" + query;
+		}
+		for(var _f in facetDefs){
+			var _facetDef = facetDefs[_f];
+			facets[_f] = this._addFacet(query, facetService, searchResults, encodedQuery, _f, _facetDef);
+		}
+		return facets;
+	},
+	
+	_addFacet: function(query, facetService, searchResults, encodedQuery, _f, _facetDef){
+		var _facet;
+		if(_facetDef.multiselect==true){
+			_facet=facetService.createMultiChoiceFacet(_facetDef.caption, _f);
+		} else {
+			_facet=facetService.createFacet(_facetDef.caption, _f);
+		}
+			
+		
+		if(_f == "u_top_only"){
+			_facet = this._getTopOnOffFacetItems(encodedQuery, _facet, true, _facetDef.booleanTrueCaption, _f, _facetDef);
+			_facet = this._getTopOnOffFacetItems(encodedQuery, _facet, false, _facetDef.booleanFalseCaption, _f, _facetDef);
+		} else if(_facetDef.isBoolean==true){
+			_facet = this._getBooleanFacetItems(encodedQuery, _facet, true, _facetDef.booleanTrueCaption, _f, _facetDef);
+			_facet = this._getBooleanFacetItems(encodedQuery, _facet, false, _facetDef.booleanFalseCaption, _f, _facetDef);
+		} else if(_facetDef.isDate==true){
+			_facet = this._getDateFacetItems(encodedQuery, _facet, _f, _facetDef);
+		} else {
+			_facet = this._getStandardFacetItems(encodedQuery, _facet, _f, _facetDef);
+		}
+		return _facet;
+	},
+	
+	_getBooleanFacetItems: function(encodedQuery, _facet, booleanValue, _caption, _f, _facetDef){
+		var boolCountQuery = encodedQuery;
+		// for boolean, exclude count by default, only include if field value matches base query value or the field is not in the base query
+		var excludeCount = true;
+		var ga_count = new GlideAggregate("x_153465_discovert_route_task_instance");
+		
+		// if boolean, add a filter and query if field is not in the filter
+		if(booleanValue==true){
+			if(!encodedQuery.includes(_f + "=false")){
+				excludeCount = false;
+			}
+			if(!encodedQuery.includes(_f + "=true")){
+				boolCountQuery = _f + "=true^" + boolCountQuery;
+			}
+		} else if(booleanValue==false){
+			if(!encodedQuery.includes(_f + "=true")){
+				excludeCount = false;
+			}
+			if(!encodedQuery.includes(_f + "=false")){
+				boolCountQuery = _f + "=false^" + boolCountQuery;
+			}
+		}
+		ga_count.addAggregate('count'); 
+		ga_count.addEncodedQuery(boolCountQuery); 
+		ga_count.query(); 
+		if(ga_count.next()) {
+			var count = ga_count.getAggregate('count');
+			var facetDisplayValue = _caption;
+			if(_facetDef.includeCount && !excludeCount){
+				facetDisplayValue += " (" + count + ")";					
+			}
+			_facet.addFacetItem(facetDisplayValue, booleanValue);
+		}
+		return _facet;
+	},
+	
+	_getDateFacetItems: function (encodedQuery, _facet, _f, _facetDef){
+		var dateRanges=this.facetDateRanges;
+		for(var _dr in dateRanges){
+			var _drDef = dateRanges[_dr];
+			if(_drDef.dateFunction && _drDef.dateFunction != ""){
+				var ga_count = new GlideAggregate("x_153465_discovert_route_task_instance");
+				var dateEncodedQuery = encodedQuery + "^" + _f + _drDef.dateFunction;
+				ga_count.addAggregate('count'); 
+				ga_count.addEncodedQuery(dateEncodedQuery); 
+				ga_count.query(); 
+				if (ga_count.next()) {
+					var count = ga_count.getAggregate('count');
+					if(count>0){
+						var facetDisplayValue = _drDef.caption;
+						if(_facetDef.includeCount){
+							facetDisplayValue += " (" + count + ")";					
+						}
+						_facet.addFacetItem(facetDisplayValue, _dr);
+					}
+				}
+			}
+		}
+		return _facet;
+	},
+	
+	_getStandardFacetItems: function(encodedQuery, _facet, _f, _facetDef){
+		var ga_facet_items = new GlideAggregate("x_153465_discovert_route_task_instance");
+		// looping through search results does not show all of the options when paging is on
+		// instead call aggregate count grouped by the field and loop through the list returned
+		// this also allows filter on values even if the field isn't shown in the results
+		ga_facet_items.addAggregate('count',_f); 
+		ga_facet_items.orderBy(_f); 
+		ga_facet_items.addEncodedQuery(encodedQuery); 
+		ga_facet_items.query(); 
+		while (ga_facet_items.next()) {
+			var count = ga_facet_items.getAggregate('count', _f);
+			if(count>0){
+				var facetDisplayValue = ga_facet_items.getDisplayValue(_f);
+				if(!facetDisplayValue || facetDisplayValue == ""){
+					facetDisplayValue = "[ " + gs.getMessage("empty") + " ]";
+				}
+				if(_facetDef.includeCount){
+					facetDisplayValue += " (" + count + ")";					
+				}
+				_facet.addFacetItem(facetDisplayValue, ga_facet_items.getValue(_f));
+			}
+		}
+		return _facet;
+	},
+
+	_getTopOnOffFacetItems: function(encodedQuery, _facet, topOnly, _caption, _f, _facetDef){
+		var topCountQuery = encodedQuery;
+		// for top only, we exclude the all tasks count
+		var excludeCount = false;
+		var ga_count = new GlideAggregate("x_153465_discovert_route_task_instance");
+		// if top, add a filter on parent null, if falls add filter for notnull
+		if(topOnly==true && !encodedQuery.includes("parent=NULL")){
+			topCountQuery = "parent=NULL^" + topCountQuery;
+		}
+		if(!topOnly && encodedQuery.includes("parent=NULL")){
+			// for top only, we exclude the all tasks count
+			excludeCount = true;			
+		}
+		ga_count.addAggregate('count'); 
+		ga_count.addEncodedQuery(topCountQuery); 
+		ga_count.query(); 
+		if(ga_count.next()) {
+			var count = ga_count.getAggregate('count');
+			var facetDisplayValue = _caption;
+			if(_facetDef.includeCount && !excludeCount){
+				facetDisplayValue += " (" + count + ")";					
+			}
+			_facet.addFacetItem(facetDisplayValue, topOnly);
+		}
+		return _facet;
+	},
+
+	// this function filters an object of objects by .active = true, then sorts the object by .order
+	_filterByActiveSortByOrder: function(param_obj){
+		// this function block filters the facet field definitions to get only active definitions
+		var filterdActive = Object.keys(param_obj).reduce(function(facet, val) {
+			if(param_obj[val].active == true)  facet[val] = param_obj[val];
+			return facet;
+		}, {});
+		
+		// this function block sorts the facet field definitions by the order property
+		var _sortedByOrder = function(obj) {
+			var order = [], res = {};
+			Object.keys(obj).forEach(function(key){
+				return order[obj[key]['order']] = key;
+			});
+			order.forEach(function(key) {
+				res[key] = obj[key];
+			});
+			return res;
+		};
+		
+		// this calls the sort function above on the filtered facet field list
+		var activeSortedByOrder = _sortedByOrder(filterdActive);
+		return activeSortedByOrder;
+
+	},
+	
+	type: 'tasker_search'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-03-17 12:14:55</sys_created_on>
+        <sys_id>d687e0cf1ba56d103ed2eb93b24bcb11</sys_id>
+        <sys_mod_count>144</sys_mod_count>
+        <sys_name>tasker_search</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_d687e0cf1ba56d103ed2eb93b24bcb11</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-03-21 02:42:04</sys_updated_on>
+    </sys_script_include>
+</record_update>
