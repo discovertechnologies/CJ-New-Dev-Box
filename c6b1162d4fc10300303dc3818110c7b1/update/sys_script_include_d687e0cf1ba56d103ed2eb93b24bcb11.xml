@@ -182,6 +182,7 @@ tasker_search.prototype = {
 		this.resultFieldList=tasker_search.CONST_RESULT_FIELD_LIST;
 		this.facetFieldList=this._filterByActiveSortByOrder(tasker_search.CONST_FACET_FIELD_LIST);
 		this.facetDateRanges=this._filterByActiveSortByOrder(tasker_search.CONST_FACET_DATE_RANGES);
+		this._logQueries = false;  // set this to true to log without being in debug mode
 	},
 
 	setDateRangesList: function(param_date_range_list) {
@@ -223,10 +224,8 @@ tasker_search.prototype = {
 		var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
 		// DFCT0010695
 		var userPreferences = oUserPref.loadMyFormPreferences();
-		
 		var taskerGR = new GlideRecord("x_153465_discovert_route_task_instance");
 		taskerGR.addQuery('123TEXTQUERY321', query);
-		
 		// Here, we are utilizing queryLocation to implement pagination.
 		// In practice, there are many other ways to use the
 		// query_location value of the last item in the previous
@@ -235,6 +234,9 @@ tasker_search.prototype = {
 		taskerGR.chooseWindow(queryLocation-1, queryLocation - 1 + count, true);
 		taskerGR = this._addFacetsFilter(taskerGR, facets);
 		var encodedQuery = taskerGR.getEncodedQuery();
+		// get the total records after applying Facets
+		var totalFilteredRecords = this._getCountOfFilteredRecords(encodedQuery);
+		this._logEncodedQuery("fetchSearchData", "encodedQuery", encodedQuery);
 		taskerGR.query();
 		var resultCount = 0;
 		while(taskerGR.next() && resultCount < count + 1) {
@@ -252,7 +254,6 @@ tasker_search.prototype = {
 				'&table=x_153465_discovert_route_task_instance' + 
 				'&sys_id=' + sys_id  + 
 				'&view=' + url_Properties.view;
-			
 			// DFCT0010743
 			task.sys_id = sys_id;
 			task.table = taskerGR.getTableName();
@@ -276,13 +277,12 @@ tasker_search.prototype = {
 			results.push(task);
 			resultCount++;
 		}
-
 		if (results.length == 0)
 			return results;
 	
 		if(results.length > count) {
 			results.pop();
-		} else {
+		} else if(queryLocation + resultCount >= totalFilteredRecords) {
 			// In order to indicate that a result in the result
 			// set is the final result (that there are
 			// no more results to be fetched), add this property
@@ -292,6 +292,19 @@ tasker_search.prototype = {
 		return results;
 	},
 
+	_getCountOfFilteredRecords: function(encodedQuery){
+		var totalRecords = 0;
+		var ga_count = new GlideAggregate("x_153465_discovert_route_task_instance");
+		ga_count.addAggregate('count'); 
+		ga_count.addEncodedQuery(encodedQuery);
+		this._logEncodedQuery("_getCountOfFilteredRecords", "encodedQuery", encodedQuery);
+		ga_count.query(); 
+		if(ga_count.next()) {
+			totalRecords = ga_count.getAggregate('count');
+		}
+		return totalRecords;
+	},
+	
 	_addFacetsFilter: function(p_rec, p_facets){
 		// no need to check active here, facet will not be in result if not active
 		for(var _f in p_facets){
@@ -314,6 +327,8 @@ tasker_search.prototype = {
 				p_rec.addQuery(field, "=", p_facet);
 			} else if(p_facetDef.isDate==true){
 				p_rec.addEncodedQuery(field + this.facetDateRanges[p_facet].dateFunction);
+				var facetEncodedQuery = p_rec.getEncodedQuery();
+				this._logEncodedQuery("_addFacetFilter", "facetEncodedQuery", facetEncodedQuery);
 			} else {
 				// check for empty values in the list of facet values for standard facets
 				// remove empty from the list and add an or condition to include the null condition with the other items selected
@@ -340,7 +355,6 @@ tasker_search.prototype = {
 	
 	generateFacets: function(query, facetService, searchResults) {
 		var facets={};
-
 		facets = this._addFacets(query, facetService, searchResults);
 		return facets;
 	},
@@ -369,8 +383,6 @@ tasker_search.prototype = {
 		} else {
 			_facet=facetService.createFacet(_facetDef.caption, _f);
 		}
-			
-		
 		if(_f == "u_top_only"){
 			_facet = this._getTopOnOffFacetItems(encodedQuery, _facet, true, _facetDef.booleanTrueCaption, _f, _facetDef);
 			_facet = this._getTopOnOffFacetItems(encodedQuery, _facet, false, _facetDef.booleanFalseCaption, _f, _facetDef);
@@ -386,6 +398,7 @@ tasker_search.prototype = {
 	},
 	
 	_getBooleanFacetItems: function(encodedQuery, _facet, booleanValue, _caption, _f, _facetDef){
+		this._logEncodedQuery("_getBooleanFacetItems", "encodedQuery", encodedQuery);
 		var boolCountQuery = encodedQuery;
 		// for boolean, exclude count by default, only include if field value matches base query value or the field is not in the base query
 		var excludeCount = true;
@@ -397,18 +410,19 @@ tasker_search.prototype = {
 				excludeCount = false;
 			}
 			if(!encodedQuery.includes(_f + "=true")){
-				boolCountQuery = _f + "=true^" + boolCountQuery;
+				boolCountQuery = boolCountQuery + "^" +  _f + "=true";
 			}
 		} else if(booleanValue==false){
 			if(!encodedQuery.includes(_f + "=true")){
 				excludeCount = false;
 			}
 			if(!encodedQuery.includes(_f + "=false")){
-				boolCountQuery = _f + "=false^" + boolCountQuery;
+				boolCountQuery = boolCountQuery + "^" + _f + "=false";
 			}
 		}
 		ga_count.addAggregate('count'); 
 		ga_count.addEncodedQuery(boolCountQuery); 
+		this._logEncodedQuery("_getBooleanFacetItems", "boolCountQuery", boolCountQuery);
 		ga_count.query(); 
 		if(ga_count.next()) {
 			var count = ga_count.getAggregate('count');
@@ -422,6 +436,7 @@ tasker_search.prototype = {
 	},
 	
 	_getDateFacetItems: function (encodedQuery, _facet, _f, _facetDef){
+		this._logEncodedQuery("_getDateFacetItems", "encodedQuery", encodedQuery);
 		var dateRanges=this.facetDateRanges;
 		for(var _dr in dateRanges){
 			var _drDef = dateRanges[_dr];
@@ -430,6 +445,7 @@ tasker_search.prototype = {
 				var dateEncodedQuery = encodedQuery + "^" + _f + _drDef.dateFunction;
 				ga_count.addAggregate('count'); 
 				ga_count.addEncodedQuery(dateEncodedQuery); 
+				this._logEncodedQuery("_getDateFacetItems", "dateEncodedQuery", dateEncodedQuery);
 				ga_count.query(); 
 				if (ga_count.next()) {
 					var count = ga_count.getAggregate('count');
@@ -454,6 +470,7 @@ tasker_search.prototype = {
 		ga_facet_items.addAggregate('count',_f); 
 		ga_facet_items.orderBy(_f); 
 		ga_facet_items.addEncodedQuery(encodedQuery); 
+		this._logEncodedQuery("_getStandardFacetItems", "encodedQuery", encodedQuery);
 		ga_facet_items.query(); 
 		while (ga_facet_items.next()) {
 			var count = ga_facet_items.getAggregate('count', _f);
@@ -472,6 +489,7 @@ tasker_search.prototype = {
 	},
 
 	_getTopOnOffFacetItems: function(encodedQuery, _facet, topOnly, _caption, _f, _facetDef){
+		this._logEncodedQuery("_getStandardFacetItems", "encodedQuery", encodedQuery);
 		var topCountQuery = encodedQuery;
 		// for top only, we exclude the all tasks count
 		var excludeCount = false;
@@ -486,6 +504,7 @@ tasker_search.prototype = {
 		}
 		ga_count.addAggregate('count'); 
 		ga_count.addEncodedQuery(topCountQuery); 
+		this._logEncodedQuery("_getStandardFacetItems", "topCountQuery", topCountQuery);
 		ga_count.query(); 
 		if(ga_count.next()) {
 			var count = ga_count.getAggregate('count');
@@ -505,7 +524,6 @@ tasker_search.prototype = {
 			if(param_obj[val].active == true)  facet[val] = param_obj[val];
 			return facet;
 		}, {});
-		
 		// this function block sorts the facet field definitions by the order property
 		var _sortedByOrder = function(obj) {
 			var order = [], res = {};
@@ -517,11 +535,17 @@ tasker_search.prototype = {
 			});
 			return res;
 		};
-		
 		// this calls the sort function above on the filtered facet field list
 		var activeSortedByOrder = _sortedByOrder(filterdActive);
 		return activeSortedByOrder;
-
+	},
+	
+	_logEncodedQuery: function(functionName, queryVariable, encodedQuery){
+		if(this._logQueries){
+			gs.info("sctipt: tasker_search - function: {0} - queryVariable: {1} - query: {2}", functionName, queryVariable, encodedQuery);
+		} else {
+			gs.debug("sctipt: tasker_search - function: {0} - queryVariable: {1} - query: {2}", functionName, queryVariable, encodedQuery);
+		}
 	},
 	
 	type: 'tasker_search'
@@ -530,13 +554,13 @@ tasker_search.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-03-17 12:14:55</sys_created_on>
         <sys_id>d687e0cf1ba56d103ed2eb93b24bcb11</sys_id>
-        <sys_mod_count>144</sys_mod_count>
+        <sys_mod_count>155</sys_mod_count>
         <sys_name>tasker_search</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_d687e0cf1ba56d103ed2eb93b24bcb11</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-21 02:42:04</sys_updated_on>
+        <sys_updated_on>2023-03-22 00:33:09</sys_updated_on>
     </sys_script_include>
 </record_update>
