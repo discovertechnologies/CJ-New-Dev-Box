@@ -19,13 +19,22 @@
 	// STRY0135701
 	if (!c.data.hideRelatedLists  || !c.data.hideDocuments || $scope.hasAdditionalLists) {
 		// DFCT0011679 - Banner notification right side empty; add if not undefined
+				// DFCT0011681 - Do not Count attachments, they were moved into a block with documents in the HTML
 		if (c.data.f._related_lists != undefined) {
 			$scope.countRelatedListsTabs = c.data.f._related_lists.filter(
 			function(rl) {
-				if (rl.showList) {
+				if (rl.showList && rl.table != "sys_attachment") {
 					return rl;
 				}
 			}).length;
+		
+			// DFCT0011681 - Count attachments, they were moved into a block with documents in the HTML
+			$scope.countAttachmentsTabs = c.data.f._related_lists.filter(
+				function(rl) {
+					if (rl.showList && rl.table == "sys_attachment") {
+						return rl;
+					}
+				}).length;
 		}
 	}
 
@@ -1805,6 +1814,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //                                      Changes made in HTML and Server script.
 // 2.8.1 | 2023-03-24 | raj  | DFCT0011678 - The Information tab & Activity tab should NOT display on the "New Task", and "New Template" forms and Create Subtask. 
 //																			Changes in Server Script to not count related lists on a new Item
+// 2.8.1 | 2023-03-24 | raj  | DFCT0011681 - Placeholder ONLY discussion defect: Duplicate Tabs name should NOT display on the existing Task Form
+// 																			Changes in Server Script and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -2583,14 +2594,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4683</sys_mod_count>
+        <sys_mod_count>4691</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-25 03:26:53</sys_updated_on>
+        <sys_updated_on>2023-03-25 21:59:23</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
@@ -2823,8 +2834,22 @@ Have modal fit the viewport height with its own scrollbar start&#13;
             </li>
             <!-- DFCT0011062 - improved efficiency - NOTE could improve more by moving all logic and labels out of HTML and into the script include  -->
             <!-- STRY0122687 fix active tab issue on reload, add 1 to index for Active Tab -->
-            <li ng-if="rl.showList" 
-                ng-switch="rl.table" 
+            <!-- DFCT0011681 - removed attachments from this loop and put below in another loop with Documents and Activity -->
+            <li ng-if="!data.hideRelatedLists || hasAdditionalLists"
+                ng-class="{'active': isActiveTab(rl.targetId, $index + 1)}"
+                ng-click="setActiveTab(rl.targetId)"
+                ng-repeat="rl in data.f._related_lists" >
+              <!--Non Document Tabs -->
+              <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
+              <!-- // STRY0128070 - updates for new button, while working on this story, noticed Template Tasks hidden on Template forms -->
+              <a ng-if="rl.showList && rl.table!='sys_attachment' && (rl.table != 'x_153465_discovert_tasker_email' || data.emailEnabled==true)"
+                 data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" data-toggle="tab" >{{rl.title}}
+                <span class="label label-as-badge label-primary" ng-if="rl.count">{{rl.count}}</span>
+              </a>
+            </li>
+            
+            <!-- DFCT0011681 - moved attachments to a separate loop -->
+            <li ng-if="rl.showList && rl.table == 'sys_attachment'" 
                 ng-class="{'active': isActiveTab(rl.targetId, $index + 1)}"
                 ng-click="setActiveTab(rl.targetId)"
                 ng-repeat="rl in data.f._related_lists" >
@@ -2832,7 +2857,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
               <!-- STRY0061245 | In the My Attachments and Shared Attachments tabs, the information message will state "Attachments are stored in ServiceNow" -->
               <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
               <!-- STRY0063505 | Add My Attachments on the Process Template, and Process Template Task -->
-              <a ng-switch-when="sys_attachment" ng-if="(data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks') && data.SNAttachmentsON == true && rl.label == 'Attachments'" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">My Attachments
+              <a ng-if="(data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_route_tasks') && data.SNAttachmentsON == true && rl.label == 'Attachments'" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">My Attachments
                 <span class="label label-as-badge label-primary" ng-if="data.myAttachmentWidgetCount">{{data.myAttachmentWidgetCount}}</span>
               </a>
               <!-- STRY0063505 | Add My Attachments on the Process Template is actually Shared Attachments for the Process -->
@@ -2840,31 +2865,24 @@ Have modal fit the viewport height with its own scrollbar start&#13;
               <!--STRY0063505 The Process Template is uring "Attachments" as the "Shared Attachments" for the process Tree -->
               <!-- 			NOTE: TODO - if we are able to change the label on the native pages, then we would not need this statement here. -->
               <!-- 						The backend will be show "Attachments" until we can figure it out -->
-              <a ng-switch-when="sys_attachment" ng-if="(data.table == 'x_153465_discovert_discover_routing_template') && data.SNAttachmentsON == true && data.AttachmentSharedFolderON == true && rl.label == 'Attachments'" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">Shared Attachments
+              <a ng-if="(data.table == 'x_153465_discovert_discover_routing_template') && data.SNAttachmentsON == true && data.AttachmentSharedFolderON == true && rl.label == 'Attachments'" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">Shared Attachments
                 <span class="label label-as-badge label-primary" ng-if="data.myAttachmentWidgetCount">{{data.myAttachmentWidgetCount}}</span>
               </a>
 
               <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
               <!-- STRY0063505 | Add Shared Attachments on the Process Template, and Process Template Task -->
-              <a ng-switch-when="sys_attachment" ng-if="(data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks') && data.SNAttachmentsON == true && rl.label == 'Shared Attachment' && data.AttachmentSharedFolderON == true" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">Shared Attachments
+              <a ng-if="(data.table == 'x_153465_discovert_route_task_instance' || data.table == 'x_153465_discovert_discover_routing_template' || data.table == 'x_153465_discovert_route_tasks') && data.SNAttachmentsON == true && rl.label == 'Shared Attachment' && data.AttachmentSharedFolderON == true" data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" title="Attachments are stored in ServiceNow" data-toggle="tab">Shared Attachments
                 <span class="label label-as-badge label-primary" ng-if="data.sharedAttachmentWidgetCount">{{data.sharedAttachmentWidgetCount}}</span>
               </a>
-              <!-- Other Tabs -->
-              <!-- STRY0059145 | use the new rl.targetId field instead of using rl.table for the target -->
-              <!-- // STRY0128070 - updates for new button, while working on this story, noticed Template Tasks hidden on Template forms -->
-              <a ng-if="!data.hideRelatedLists || hasAdditionalLists"
-                 ng-switch-default data-target="#{{rl.targetId}}" aria-controls="{{rl.table}}" role="tab" data-toggle="tab" >{{rl.title}}
-                <span class="label label-as-badge label-primary" ng-if="rl.count">{{rl.count}}</span>
-              </a>
             </li>
-
+            
             <!-- Controlls which tab label to be seen -->
             <!-- ******************************************************************************** -->
             <!-- For now, copy everything in this code block into widgets that want to use DocInt -->
             <!-- ******************************************************************************** -->
             <li id="sp" ng-show="true" 
                 ng-repeat="rs in data._docint_widget._docint_tabs"
-                ng-class="{'active': isActiveTab(rs.id, countRelatedListsTabs + $index + 1)}"
+                ng-class="{'active': isActiveTab(rs.id, countRelatedListsTabs + countAttachmentsTabs + $index + 1)}"
                 ng-click="setActiveTab(rs.id)"
                 on-click="return false;"
                 ng-if="rs.table != 'sys_attachment' && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')">
@@ -2878,7 +2896,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 
             <!-- STRY0119587 --> 
             <li 
-                ng-class="{'active': isActiveTab('TicketAudit', countRelatedListsTabs + countDocumentTabs + 1)}"
+                ng-class="{'active': isActiveTab('TicketAudit', countRelatedListsTabs + countAttachmentsTabs + countDocumentTabs + 1)}"
                 ng-click="setActiveTab('TicketAudit')"
                 ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'">
               <a data-target="#TicketAudit" aria-controls="TicketAudit" data-toggle="tab">Activity</a> <!-- href="#TicketAudit"  -->
@@ -2921,7 +2939,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <div id="{{rs.id}}" class="tab-pane"
              ng-repeat="rs in data._docint_widget._docint_tabs"
              ng-if="!data.hideDocuments && data.DocIntON == true && (data.sys_id !=-1 && data.sys_id !='') && (data.DocIntShareFolderON || rs.caption != 'Shared Documents')"
-             ng-class="getTabPaneCssByBifoldModal(rs.id, countRelatedListsTabs + $index + 1)">
+             ng-class="getTabPaneCssByBifoldModal(rs.id, countRelatedListsTabs + countAttachmentsTabs + $index + 1)">
           <div ng-class="{'flex-column flex-grow':data.bifold==true||data.isModal==true}">
             <sp-widget widget="rs.widget"></sp-widget>
           </div>
@@ -2931,7 +2949,7 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <!-- Activity -->
         <!-- STRY0119587 --> 
         <div ng-if="!data.hideActivity && data.table == 'x_153465_discovert_route_task_instance'" 
-             ng-class="getTabPaneCssByBifoldModal('TicketAudit', countRelatedListsTabs + countDocumentTabs + 1)"
+             ng-class="getTabPaneCssByBifoldModal('TicketAudit', countRelatedListsTabs + countAttachmentsTabs + countDocumentTabs + 1)"
              class="tab-pane" id="TicketAudit">
 
           <div ng-class="{'flex-column flex-grow':data.bifold==true||data.isModal==true}">
