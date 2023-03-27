@@ -14,6 +14,23 @@
             });
         }
     };
+	
+		// STRY0135710
+    $scope.tableFilterButtonSelected = function(filterSelected){
+      c.data.tableFilterButtonSelected=filterSelected;
+      $scope.loadingData = true;
+      $scope.server.update().then(function() {
+        $scope.loadingData = false;
+        loadFilterWidget();
+        $scope.$emit("discovertasker-widget-data-table-update_count", {
+          count: c.data.row_count,
+          title: c.data.title || c.data.table_plural
+        });
+
+      });
+
+    }
+
     // STRY0120403
     $scope.changeFilter = function(filterToUse) {
         $scope.data.taskFilter = filterToUse;
@@ -1191,10 +1208,14 @@ tbody tr:last-child {
 // 2.8.1 | 2023-03-09 | raj |  STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
 //																			Changes in ServerScript to handle additional fitler better
 //																			Changes in client script to broadcast click on a new page
-//
+// 2.8.1 | 2023-03-26 | raj |  STRY0135710 - Auto-saving User Preferences when Filtering All/Active/Complete
+//																			Changes in Server Script - added count and filter logic
+//																			Changes in Client Script - added change filter logic
+//																			Changes in HTML - added HTML for Table Button Filters
 //------------------------------------------------------------------------------------------------------------------------
 
-(function() {
+(function($sp, input, data, options, gs) {
+  // STRY0135710 - modified function to include $sp and other parameters
 
 	// DFCT0010949
 	var label = $sp.getParameter("label");
@@ -1205,6 +1226,10 @@ tbody tr:last-child {
 	if (!input) // asynch load list
 		return;
 
+	// STRY0135710 - get settings to pick up the saved value for filter selected
+	var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-widget-data-table');
+	data.settings = taskWidgetIconsAndMessage.loadDefaultsAndSettings($sp);
+	
 	data.msg = {};
 	data.msg.sortingByAsc = gs.getMessage("Sorting by ascending");
 	data.msg.sortingByDesc = gs.getMessage("Sorting by descending");
@@ -1499,6 +1524,31 @@ tbody tr:last-child {
 	data.window_start = data.page_index * data.window_size;
 	data.window_end = (data.page_index + 1) * data.window_size;
 	gr.chooseWindow(data.window_start, data.window_end);
+
+	// STRY0135710 - logic for Data Table Filter Buttons
+	if(data.table == "x_153465_discovert_route_task_instance" &&
+		 data.additionalFilter != "active==false"){
+		data.showTableFilterButtons = true;
+
+		// Add new query for All or Top Tasks
+		data.tableFilterButtonSelected = "showAll";
+		data.countAll = _getCountTasks(gr.getEncodedQuery(), "");
+		data.countOpen = _getCountTasks(gr.getEncodedQuery(), "openTasks");			
+		data.countCompleted = _getCountTasks(gr.getEncodedQuery(), "completedTasks");
+
+		if(input && input.tableFilterButtonSelected){
+			data.tableFilterButtonSelected = input.tableFilterButtonSelected;
+			taskWidgetIconsAndMessage.savePreferenceUserDefaultTaskStateTableFilter(input.tableFilterButtonSelected);
+		} else {
+			data.tableFilterButtonSelected = data.settings.userDefaultTaskStateTableFilter;
+		}
+		if(data.tableFilterButtonSelected=="openTasks"){
+			gr.addQuery("active","true");
+		} else if(data.tableFilterButtonSelected=="completedTasks"){
+			gr.addQuery("active","false");
+		}
+	}
+	
 	gr._query();
 
 	data.row_count = gr.getRowCount();
@@ -1608,6 +1658,26 @@ tbody tr:last-child {
 	};
 	data.filterBreadcrumbs = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
 
+		// STRY0135710 - added count function for different table fitler buttons
+		function _getCountTasks(encodedQuery, filterType){
+			var count = 0;
+			var ga_count = new GlideAggregate(data.table);
+			ga_count.addEncodedQuery(encodedQuery);
+			if(filterType=="completedTasks"){
+				ga_count.addQuery("active","false");
+			} else if(filterType=="openTasks"){
+				ga_count.addQuery("active","true");
+			}
+
+			ga_count.addAggregate('COUNT');
+			ga_count.query();
+			if (ga_count.next()) {
+				count = ga_count.getAggregate('COUNT');
+			}
+			return count;
+		}
+
+	
 	// copy to data from input or options
 	function optCopy(names) {
 		names.forEach(function(name) {
@@ -1621,21 +1691,21 @@ tbody tr:last-child {
 			data[name] = data[name] == true || data[name] == 'true';
 		});
 	}
-
-})();]]></script>
+	// STRY0135710 - changed signature
+})($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1578</sys_mod_count>
+        <sys_mod_count>1593</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-11 18:59:19</sys_updated_on>
+        <sys_updated_on>2023-03-27 00:54:53</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -1664,9 +1734,61 @@ tbody tr:last-child {
         <span class="title-ellipsised" uib-tooltip="{{data.title || data.table_plural}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
           <i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>
           {{data.title || data.table_plural}}
-        </span>
+      	</span>
       </span>
-      
+	  <!-- STRY0135710 - filter buttons for All, Open, Completed -->
+      <div class="flex-row"
+           ng-if="data.showTableFilterButtons">
+
+        <div class="dtech-table-filter-container">
+          <button class="dtech-table-filter-btn dtech-btn btn" 
+                  uib-tooltip="${Show results for open and closed tasks}"
+                  ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='showAll'}" 
+                  ng-click="tableFilterButtonSelected('showAll')"> 
+            <div class="flex-row flex-nowrap"> 
+              <div class="dtech-table-filter-label ng-binding">
+                ${All}
+              </div> 
+              <div class="dtech-table-filter-count ng-binding">
+                ({{data.countAll}})
+              </div> 
+            </div>
+          </button>
+        </div>
+        <div class="dtech-table-filter-container">
+          <button class="dtech-table-filter-btn dtech-btn btn" 
+                  uib-tooltip="${Show results for currently open tasks only}"
+                  ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='openTasks'}" 
+                  ng-click="tableFilterButtonSelected('openTasks')"> 
+            <div class="flex-row flex-nowrap"> 
+              <div class="dtech-table-filter-label ng-binding">
+                ${Current}
+              </div> 
+              <div class="dtech-table-filter-count ng-binding">
+                ({{data.countOpen}})
+              </div> 
+            </div>
+          </button>
+        </div>
+      </div>
+        <div class="dtech-table-filter-container">
+          <button class="dtech-table-filter-btn dtech-btn btn" 
+                  uib-tooltip="${Show results for closed tasks only}"
+                  ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='completedTasks'}" 
+                  ng-click="tableFilterButtonSelected('completedTasks')"> 
+            <div class="flex-row flex-nowrap"> 
+              <div class="dtech-table-filter-label ng-binding">
+                ${Completed}
+              </div> 
+              <div class="dtech-table-filter-count ng-binding">
+                ({{data.countCompleted}})
+              </div> 
+            </div>
+          </button>
+        </div>
+      </div>
+
+<!-- RJ - Test -->
       <!-- panel icons section -->
       <div class="dtech-col-7-flex-row-end dtech-max-width-fit-content" >
         <div class="dtech-push-right-flexbox flex-nowrap" 
