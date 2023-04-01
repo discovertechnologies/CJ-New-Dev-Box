@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>STRY0137218 - Fix Script for Action Log&#13;
+- Call upate on all rows to fire the rule that sets the Comment Type&#13;
+&#13;
+Active Tasks - for all active tasks&#13;
+- If there is a Response Comment - add an Action log with the type Response Comment&#13;
+- If there is a Reviewer Comment - add an Action log with the type Reviewer Comment&#13;
+- If there is a Rework Comment - add an Action log with the type Rework Comment&#13;
+- At this point, there is no easy way to add the reopen action log entries</description>
+        <name>2.8.1 - Fix Script - Action Log - Update</name>
+        <record_for_rollback>true</record_for_rollback>
+        <script><![CDATA[var task_uiAction = new Task_uiAction();
+var gr_action_log = new GlideRecord("x_153465_discovert_discover_tasker_response");
+gr_action_log.query();
+while(gr_action_log.next()){
+	gr_action_log.update();
+	// needs to be called 2 times when no value changes
+	gr_action_log.update("2.8.1 - Fix Script - Action Log - Update - set Comment Type");
+}
+
+// Now write log entries for all active items
+var gr_Task = new GlideRecord("x_153465_discovert_route_task_instance");
+
+// ************************************************************************************
+// FIRST HANDLE ALL SENT TO REVIEW ACTIONS
+// ************************************************************************************
+// 14 - In Review, 15 - Rework
+// if a response exists and the task is in review or rework, then add an action log
+// set the action to sent_to_review and the role as assigned_member and the user as the assigned_member user
+//       NOTE: there may be cases wehre the Task Owner that sent it to review, but we would not know that looking at the record
+var encodedQuery = "active=true^tasker_type.u_value=standard^stateIN14,15^responseISNOTEMPTY";
+// IF rework not empty and the task is active, then the task must have been sent to review
+// set the action to sent_to_review and the role as assigned_member and the user as the assigned_member user
+// And write a log entry for all active items
+// ************************************************************************************
+// adding the query above to this query and handling ALL Active Sent To Review Writes
+// ************************************************************************************
+// -3 - Waiting, -5 - Unassigned, 1 - Assigned, 10 - Accepted, 13 - Work in Progrees, 14 - In Review, 15 - Rework
+encodedQuery += "^NQactive=true^tasker_type.u_value=standard^stateIN-3,-5,1,10,13,14,15^comments_dtISNOTEMPTY^ORrework_commentsISNOTEMPTY";
+gr_Task.addEncodedQuery(encodedQuery);
+var countSentToReviewActions = 0;
+gr_Task.query();
+while(gr_Task.next()){
+	task_uiAction._addResponseLog(gr_Task, "assigned_member", gr_Task.getValue("assigned_to"), "sent_to_review", gr_Task.response);
+	countSentToReviewActions++;
+	gs.info("2.8.1 - Fix Script - Action Log - Update - Tasker: " + gr_Task.task_name + " - Number: " + gr_Task.number + " - Added Sent To Review Action");
+}
+gs.info("2.8.1 - Fix Script - Action Log - Update - Number of Sent to Review Action Log entries added: " + countSentToReviewActions);
+
+gr_Task  = new GlideRecord("x_153465_discovert_route_task_instance");
+// ************************************************************************************
+// SECOND HANDLE ALL SENT TO REWORK ACTIONS
+// ************************************************************************************
+// IF rework not empty and the task is in any open state, set the reviewer as the role and reviewer user as the user.
+// And write an entry to the log for Sent to Rework all active items
+// -3 - Waiting, -5 - Unassigned, 1 - Assigned, 10 - Accepted, 13 - Work in Progrees, 14 - In Review, 15 - Rework
+encodedQuery = "active=true^tasker_type.u_value=standard^stateIN-3,-5,1,10,13,14,15^rework_commentsISNOTEMPTY";
+// reset glide record
+gr_Task.addEncodedQuery(encodedQuery);
+countSentToReworkActions = 0;
+gr_Task.query();
+while(gr_Task.next()){
+	// TODO - add action log entry here
+	task_uiAction._addResponseLog(gr_Task, "reviewer", gr_Task.getValue("u_reviewer"), "sent_to_rework", gr_Task.rework_comments);
+	gs.info("2.8.1 - Fix Script - Action Log - Update - Tasker: " + gr_Task.task_name + " - Number: " + gr_Task.number + " - Added Sent To Rework Action");
+	countSentToReworkActions++;
+}
+gs.info("2.8.1 - Fix Script - Action Log - Update - Number of Sent to Review Action Log entries added: " + countSentToReworkActions);
+]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-03-27 04:49:39</sys_created_on>
+        <sys_id>30965e0e1b3569503ed2eb93b24bcbda</sys_id>
+        <sys_mod_count>11</sys_mod_count>
+        <sys_name>2.8.1 - Fix Script - Action Log - Update</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_fix_30965e0e1b3569503ed2eb93b24bcbda</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-04-01 05:36:50</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
