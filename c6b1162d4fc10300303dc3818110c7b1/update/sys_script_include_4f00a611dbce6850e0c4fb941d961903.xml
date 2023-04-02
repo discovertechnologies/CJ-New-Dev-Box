@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8.1    | 2022-11-25 - raj -  DFCT0010881 - Re-opening a task with "Option 3: Re-open all tasks based on date/time" is NOT looking at the difference in time when re-opening sub tasks.&#13;
+        <description>2.8.1    | 2023-04-02 - raj -  STRY0137204 - Define when Comment is Logged in Action Log&#13;
+2.8.1    | 2022-11-25 - raj -  DFCT0010881 - Re-opening a task with "Option 3: Re-open all tasks based on date/time" is NOT looking at the difference in time when re-opening sub tasks.&#13;
 2.8.1    | 2022-11-20 - raj -  DFCT0011240 - Cancelling a "Info/Ack Task" does not cancel its descendants tasks if a "Completed Info/Ack Task" is in the way&#13;
 2.8.1    | 2022-10-24 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office - this script really only changes the Org User to match the Org Member&#13;
 2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table&#13;
@@ -484,6 +485,19 @@ Task_uiAction.prototype = {
 		}
 		gr_task_reopen.update();
 		
+		// STRY0137204 - Define when Comment is Logged in Action Log
+		var currentUser =  gs.getUserID();
+		var isTaskOwner = gr_task_reopen.u_task_requester == currentUser;
+		var isReviewer = gr_task_reopen.u_reviewer == currentUser;
+		var isAssignedMember = gr_task_reopen.assigned_to == currentUser;
+		var isOnBehalfOf = gr_task_reopen.on_behalf_of == currentUser;
+		var isOriginator = gr_task_reopen.originator == currentUser;
+		var role = '';
+        role = isAssignedMember ? 'assigned_member' : isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : '';
+		
+		// TODO - update this before shipping, hopefully just get the reopen comment field to replase the reopen note
+		this._addResponseLog(gr_task_reopen, role, currentUser, 'reopened', gs.getMessage("Task Reoponed"));
+
 
         if (reopenSubtasks) {
             // Glide Record Secure will break this b/c of the Task Table.
@@ -840,16 +854,18 @@ Task_uiAction.prototype = {
 		// DFCT0010577 - this was moved out of the business rule and performed here
 		this._clearOpenRequestsForTask(task);
 		var currentUser =  gs.getUserID();
-        var isTaskeOwner = task.u_task_requester == currentUser;
+        var isTaskOwner = task.u_task_requester == currentUser;
         var isReviewer = task.u_reviewer == currentUser;
         var isAssignedMember = task.assigned_to == currentUser;
+		var isOnBehalfOf = task.on_behalf_of == currentUser;
+		var isOriginator = task.originator == currentUser;
 		
 		// DFCT0010577 
 		var role = '';
 		if (stateClosedFrom == '14') {
-            role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
+            role = isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : '';
         } else {
-            role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
+            role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
         }
 		this._addResponseLog(task, role, currentUser, actionTaken, task.comments_dt);
 
@@ -861,10 +877,12 @@ Task_uiAction.prototype = {
 
     uiAction_MarkTaskCompleteAndUpdateResponseLog: function(task) {
         // may need to compare to the function above there is a lot of overlap
-        var stateClosedFrom = task.getValue('state');
-        var isTaskeOwner = task.u_task_requester == gs.getUserID();
-        var isReviewer = task.u_reviewer == gs.getUserID();
-        var isAssignedMember = task.assigned_to == gs.getUserID();
+		var currentUser =  gs.getUserID();
+        var isTaskOwner = task.u_task_requester == currentUser;
+        var isReviewer = task.u_reviewer == currentUser;
+        var isAssignedMember = task.assigned_to == currentUser;
+		var isOnBehalfOf = task.on_behalf_of == currentUser;
+		var isOriginator = task.originator == currentUser;
 
         task.decision = 'N/A';
         task.state = 3;
@@ -887,25 +905,11 @@ Task_uiAction.prototype = {
 		var role = '';
 		var respondedBy = '';
 		var actionTaken = '';
-        if (stateClosedFrom == '14') {
-            // making the entery for sent to review for the assigned member if state 14
-            role = 'assigned_member';
-            respondedBy = task.assigned_to;
-            actionTaken = 'sent_to_review';
-        } else {
-            // making the entery for sent to review for the assigned member if state 14
-            role = isAssignedMember ? 'assigned_member' : isTaskeOwner ? 'task_owner' : isReviewer ? 'reviewer' : '';
-            respondedBy = gs.getUserID();
-            actionTaken = 'completed';
-        }
+		// making the entery for sent to review for the assigned member if state 14
+		role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
+		respondedBy = gs.getUserID();
+		actionTaken = 'completed';
 		this._addResponseLog(task, role, respondedBy, actionTaken, task.response);
-
-        // now create the Reviewer entre IF the state is 14
-        if (stateClosedFrom == '14') {
-            role = isReviewer ? 'reviewer' : isTaskeOwner ? 'task_owner' : '';
-            actionTaken = 'completed';
-			this._addResponseLog(task, role, gs.getUserID(), actionTaken, task.comments_dt);
-        }
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
 		// DFCT0010577 - this was moved out of the business rule and performed here
@@ -1463,6 +1467,21 @@ Task_uiAction.prototype = {
 
         task.state = 14;
         task.update();
+		
+		// STRY0137204 - Define when Comment is Logged in Action Log
+		var currentUser =  gs.getUserID();
+		var isAssignedMember = task.assigned_to == currentUser;
+		var isReviewer = task.u_reviewer == currentUser;
+		var isTaskOwner = task.u_task_requester == currentUser;
+		var isOnBehalfOf = task.on_behalf_of == currentUser;
+		var isOriginator = task.originator == currentUser;
+
+		var role = "";
+		// if user is not the assigned member, check to see if taskit is the owner and change to task owner
+		// if the assinged_member and task owner are the same person leave the role as assigned_member
+		// if it isn't the assigned_member or the task owner, set it to the reviewer b/c that is the role the person took
+		role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
+		this._addResponseLog(task, role, currentUser, "sent_to_review", task.response);
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to review'));
     },
@@ -1474,6 +1493,22 @@ Task_uiAction.prototype = {
 			gs.getMessage('Tasker -  (Comment):') + this.trimComments(task.rework_comments);
         task.state = 15;
         task.update();
+		
+		// STRY0137204 - Define when Comment is Logged in Action Log
+		var currentUser =  gs.getUserID();
+		var isAssignedMember = task.assigned_to == currentUser;
+		var isReviewer = task.u_reviewer == currentUser;
+		var isTaskOwner = task.u_task_requester == currentUser;
+		var isOnBehalfOf = task.on_behalf_of == currentUser;
+		var isOriginator = task.originator == currentUser;
+		
+		var role = "";
+		// if user is not the reviewer, check to see if task owner and change to task owner
+		// if the reviewer and task owner are the same person leave the role as reviewer
+		// if it isn't the reviewer or the task owner, set it to the reviewer b/c that is the role the person took
+		role = isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isAssignedMember ? 'assigned_member' : '';
+
+		this._addResponseLog(task, role, currentUser, "sent_to_rework", task.rework_comments);
         gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to rework'));
     },
 
@@ -1624,13 +1659,13 @@ Task_uiAction.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>296</sys_mod_count>
+        <sys_mod_count>306</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-11-26 04:11:26</sys_updated_on>
+        <sys_updated_on>2023-04-02 18:34:05</sys_updated_on>
     </sys_script_include>
 </record_update>
