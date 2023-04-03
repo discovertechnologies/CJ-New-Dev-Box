@@ -5,7 +5,12 @@
         <api_name>x_153465_discovert.Task_uiAction</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8.1    | 2023-04-02 - raj -  STRY0137204 - Define when Comment is Logged in Action Log&#13;
+        <description>2.8.1    | 2023-04-02 - raj -  Tech Debt - cleaned up all multilanguage issues&#13;
+2.8.1    | 2023-04-02 - raj -  STRY0137375 - (STRETCH- MVP) Automated Reopen Comment 		&#13;
+2.8.1    | 2023-04-02 - raj -  STRY0137379 - (STRETCH) Automated Message when Closed-Incompleted&#13;
+2.8.1    | 2023-04-02 - raj -  STRY0137421 - (STRETCH) Automated Message when Parent Tasks Cascade Completes your Task&#13;
+2.8.1    | 2023-04-02 - raj -  STRY0137422 - (STRETCH) Automated Message when Parent Tasks Cascade Cancels your Task&#13;
+2.8.1    | 2023-04-02 - raj -  STRY0137204 - Define when Comment is Logged in Action Log&#13;
 2.8.1    | 2022-11-25 - raj -  DFCT0010881 - Re-opening a task with "Option 3: Re-open all tasks based on date/time" is NOT looking at the difference in time when re-opening sub tasks.&#13;
 2.8.1    | 2022-11-20 - raj -  DFCT0011240 - Cancelling a "Info/Ack Task" does not cancel its descendants tasks if a "Completed Info/Ack Task" is in the way&#13;
 2.8.1    | 2022-10-24 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office - this script really only changes the Org User to match the Org Member&#13;
@@ -96,7 +101,42 @@ var Task_uiAction = Class.create();
 Task_uiAction.prototype = {
     initialize: function() {
         this.tableRouteTaskInstance = 'x_153465_discovert_route_task_instance';
+		// STRY0137375, STRY0137379, STRY0137421, STRY0137422  
+		this.cascadingActionLog = {"cascadeStarted": false, "role": "", "respondedBy": "", "actionTaken": "", "comment": ""};
     },
+		
+	// STRY0137375, STRY0137379, STRY0137421, STRY0137422
+	_setCascadingNote: function(task, actionTaken, defaultRole) {
+		var currentUser =  gs.getUserID();
+
+		// default to assinged member as the default
+		
+		var role = this._getRole(task, defaultRole);
+
+		var cascadingActionLog = {};
+		cascadingActionLog.cascadeStarted = true;
+		cascadingActionLog.role = role;
+		cascadingActionLog.respondedBy = currentUser;
+		cascadingActionLog.actionTaken = actionTaken;
+		var comment = "";
+		switch(actionTaken){
+			case "reopened":
+				// TODO - update message before shipping
+				comment = gs.getMessage("This task has been reoponed");
+				break;
+			case "completed":
+				comment = gs.getMessage("Tasker - This task has been automatically closed due to {0} being marked complete with the comment: {1}", [task.task_name, task.response]);
+				break;
+			case "cancelled":
+				comment = gs.getMessage("Tasker - This task has been automatically cancelled due to {0} being cancelled with the comment: {1}", [task.task_name, task.u_cancellation_reason]);
+				break;
+			default:
+				comment = gs.getMessage("Tasker - This task has been automatically closed due to a rejected approval on {0} with the comment: {1}", [task.task_name, task.comments_dt]);
+				break;
+		}
+		cascadingActionLog.comment = comment;		
+		return cascadingActionLog;
+	},
 	
 	// DFCT0010577 
 	_addResponseLog: function (task, role, respondedBy, actionTaken, response) {
@@ -150,8 +190,8 @@ Task_uiAction.prototype = {
 				if(grParent.work_item_type == "review_item" && task.decision == sRejected){
 					// Parent task is also a task with an approve reject task type, cancel the parent
 					// *************************************************************************************
-					// DFCT0010460 
-					grParent.work_notes = 'This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by ' + gs.getMessage('Tasker - (Reviewer):') + " " + gs.getUserDisplayName() + gs.getMessage('Tasker -  (Comment):') + task.comments;
+					// DFCT0010460 - Tech Debt multilanguage 
+					grParent.work_notes = gs.getMessage('Tasker - This Task was an Approval Task dependent on subtask completion.  A subtask was rejected causing this task to also be rejected by (Reviewer): {0} (Comment): {1}', [gs.getUserDisplayName(), task.comments]);
 					grParent.decision = sRejected;
 					grParent.state = 4; // closed incomplete this should be in an application constant
 					grParent.active = 'false';
@@ -164,8 +204,11 @@ Task_uiAction.prototype = {
 					//var gdt = new GlideDateTime();
 					//grParent.work_end = gdt.getValue();
 					grParent.update();
-					// TODO: TO MOVE IT TO POPUP IN MULTILANGUAGE. KTORRES
-					gs.addInfoMessage(grParent.number + ' has been successfully '+ sRejected +' and marked as Completed');
+					// STRY0137379
+					this._addResponseLog(grParent, this.cascadingActionLog.role, this.cascadingActionLog.respondedBy, this.cascadingActionLog.actionTaken, this.cascadingActionLog.comment);
+					
+					// Tech Debt - multilanguage
+					gs.addInfoMessage(gs.getMessage('Tasker - {0} has been successfully {1} and marked as Completed', [grParent.number, sRejected]));
 					// If we want to add parent close response log entry when a child rejection closes it, make the call right here
 					// DFCT0010577 - recursively move up
 					this._closeRelatedTasks(grParent);
@@ -240,7 +283,8 @@ Task_uiAction.prototype = {
 	// STRY0111263 - Rejecting an Approval Task- Enhance cascade closing tasks to 'Descendants of Parent Approval' and 'Task Order'
 	_closeSibling:function(grSibling, task){
 		var sRejected = 'Rejected';
-		grSibling.work_notes = 'This Task was an Approval Task dependent on a sibling completion.  A sibling was rejected causing this task to also be rejected by ' + gs.getMessage('Tasker - (Reviewer):') + " " + gs.getUserDisplayName() + gs.getMessage('Tasker -  (Comment):') + task.comments;
+		// Tech Debt - Multilanguage
+		grSibling.work_notes = gs.getMessage('Tasker - This Task was an Approval Task dependent on a sibling completion.  A sibling was rejected causing this task to also be rejected by (Reviewer): {0} (Comment): {1}', [gs.getUserDisplayName(),task.comments]);
 		grSibling.decision = sRejected;
 		grSibling.state = 4; // closed incomplete this should be in an application constant
 		grSibling.active = 'false';
@@ -253,8 +297,13 @@ Task_uiAction.prototype = {
 		//var gdt = new GlideDateTime();
 		//grParent.work_end = gdt.getValue();
 		grSibling.update();
-		// TODO: MULTILANGUAGE
-		gs.addInfoMessage(grSibling.number + ' has been successfully '+ sRejected +' and marked as Completed');
+		
+		// STRY0137379
+		this._addResponseLog(grSibling, this.cascadingActionLog.role, this.cascadingActionLog.respondedBy, this.cascadingActionLog.actionTaken, this.cascadingActionLog.comment);
+
+		// Tech Debt Multilanguage
+		gs.addInfoMessage(gs.getMessage("{0} has been successfully {1] and marked as Completed",[grSibling.number, sRejected]));
+		
 		// DFCT0011225 - when closing siblings, also close or delete subtasks of siblings
 		this._closeSubTasksRecursive(grSibling);
 	},
@@ -310,17 +359,20 @@ Task_uiAction.prototype = {
 			grSubTasks.closed_by = task.closed_by;
 			grSubTasks.setValue('work_end', task.getValue('work_end'));
 
-			// TODO, change text to pull from message for multi language support
-			var msg = 'Parent set to:';
+			// Tech Debt Multilanguage
+			var msg = gs.getMessage("Tasker - Parent set to:");
 			// check to see if parent information is already in the close note.
 			// this should only be added at the top level
 			// as it flows down the chain, the top message pushes down
 			if(task.close_notes.toString().indexOf(msg)==0)
-				grSubTasks.close_notes = msg + ' (' + task.state + ') - Organizational Unit: (' + task.primary_assignee + ') - Close Note:'  + task.close_notes;
+				grSubTasks.close_notes = msg + ' ' + gs.getMessage("Tasker - ({0}) - Organizational Unit: ({1}) - Close Note: {2}", [task.state, task.primary_assignee, task.close_notes]);
 			else
 				grSubTasks.close_notes = task.close_notes;
 
 			grSubTasks.update();
+			// STRY0137379
+			this._addResponseLog(grSubTasks, this.cascadingActionLog.role, this.cascadingActionLog.respondedBy, this.cascadingActionLog.actionTaken, this.cascadingActionLog.comment);
+
 			// If we want to add subtask close response log entry when parent closes it, make the call right here
 			this._closeSubTasksRecursive(grSubTasks);
 		}
@@ -393,6 +445,13 @@ Task_uiAction.prototype = {
     // STRY0108861 - DIA- Cancel from Top Task Notification
     _cancelTasks: function(task, cancellationReason, cancelDateTime) {
         try {
+			var actionTaken = "cancelled";
+			var isTopCancelledTask = false;
+			// due to recursion, the top task is processed last, so set a flag to say it is top task
+			if(this.cascadingActionLog.cascadeStarted!=true){
+				isTopCancelledTask = true;
+				this.cascadingActionLog = this._setCascadingNote(task, actionTaken, 'assigned_member');
+			}
             cancellationReason = cancellationReason.replace(/<\/?[^>]+(>|$)/g, "");
             var grSubTasks = new GlideRecord(this.tableRouteTaskInstance);
 			var draft = -6;
@@ -440,6 +499,16 @@ Task_uiAction.prototype = {
 
 				task.state = 7;
 				task.update();
+				
+				// STRY0137422
+				if(isTopCancelledTask){
+					var currentUser =  gs.getUserID();
+					var role = this._getRole(task, 'assigned_member');
+					this._addResponseLog(task, role, currentUser, actionTaken, task.u_cancellation_reason);
+				} else {
+					this._addResponseLog(task, this.cascadingActionLog.role, this.cascadingActionLog.respondedBy, this.cascadingActionLog.actionTaken, this.cascadingActionLog.comment);
+				}
+				
 				// DFCT0010850
 				this._clearOpenRequestsForTask(task);
 			}
@@ -450,7 +519,30 @@ Task_uiAction.prototype = {
             gs.error('Error in Task_uiAction.cancelTasks(); Number: {0} \nMessage: {1}', taskNumber, message);
         }
     },
+	
+	_getRole: function(task, defaultRole){
+		var currentUser =  gs.getUserID();
+		var isTaskOwner = task.u_task_requester == currentUser;
+		var isReviewer = task.u_reviewer == currentUser;
+		var isAssignedMember = task.assigned_to == currentUser;
+		var isOnBehalfOf = task.on_behalf_of == currentUser;
+		var isOriginator = task.originator == currentUser;
 
+		// default to assinged member as the default
+		var role = '';
+		
+		
+		switch(defaultRole){
+			case 'reviewer':
+				// change default from assinged member to reviewer
+				role =  isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isAssignedMember ? 'assigned_member' : '';
+				break;
+			default:
+				role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
+				break;
+		}
+		return role;
+	},
 
     // STRY0076598: New method to Reopen a Task - STRY0114416 - 5 - GlideRecordSecure - changing current
     reopenTaskInernal: function(gr_task_reopen, reopenSubtasks, taskClosedDate) {
@@ -487,18 +579,17 @@ Task_uiAction.prototype = {
 		
 		// STRY0137204 - Define when Comment is Logged in Action Log
 		var currentUser =  gs.getUserID();
-		var isTaskOwner = gr_task_reopen.u_task_requester == currentUser;
-		var isReviewer = gr_task_reopen.u_reviewer == currentUser;
-		var isAssignedMember = gr_task_reopen.assigned_to == currentUser;
-		var isOnBehalfOf = gr_task_reopen.on_behalf_of == currentUser;
-		var isOriginator = gr_task_reopen.originator == currentUser;
-		var role = '';
-        role = isAssignedMember ? 'assigned_member' : isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : '';
+		var role = this._getRole(gr_task_reopen, 'assigned_member');
+
+		// STRY0137375
+		if(this.cascadingActionLog.cascadeStarted==true){
+				this._addResponseLog(gr_task_reopen, this.cascadingActionLog.role, this.cascadingActionLog.respondedBy, this.cascadingActionLog.actionTaken, this.cascadingActionLog.comment);			
+		} else {
+			// TODO - update this before shipping, hopefully just get the reopen comment field to replase the reopen note
+			this._addResponseLog(gr_task_reopen, role, currentUser, 'reopened', gs.getMessage("Task Reoponed"));
+			this.cascadingActionLog = this._setCascadingNote(gr_task_reopen, 'reopened', 'assigned_member');
+		}
 		
-		// TODO - update this before shipping, hopefully just get the reopen comment field to replase the reopen note
-		this._addResponseLog(gr_task_reopen, role, currentUser, 'reopened', gs.getMessage("Task Reoponed"));
-
-
         if (reopenSubtasks) {
             // Glide Record Secure will break this b/c of the Task Table.
             // TODO: research this and determine the right Dictionary override to allow the use of glide record secure
@@ -558,11 +649,11 @@ Task_uiAction.prototype = {
     // STRY0105845 - DFCT0010781 moved the info message out of this method and into the ui action so it isn't called for all sub tasks
 	// STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'
     uiAction_PublishDraftTasks: function(task, process) {
-        // TODO - multilanguage
+        // Tech Debt Multilanguage
         // set the state to 0 then, call the update state method.
         task.state = -5;
         task.state = new TaskerHelpers().getUpdatedState(task);
-        task.work_notes = "Task Published by " + gs.getUserDisplayName();
+        task.work_notes = gs.getMessage("Tasker - Task Published by") + " " + gs.getUserDisplayName();
         task.update();
 
 		// STRY0122882 - all subtasks should publish all subtasks
@@ -597,16 +688,16 @@ Task_uiAction.prototype = {
         } else { //Other Task Types
             task.state = 14; // In Review
         }
-        // TODO - multilanguage
-        task.work_notes = "Assignment Accepted by " + task.assigned_to.getDisplayValue();
+        // Tech Debt Multilanguage
+        task.work_notes = gs.getMessage("Tasker - Assignment Accepted by") + " " + task.assigned_to.getDisplayValue();
         task.update();
-        // TODO - multilanguage
-        gs.addInfoMessage(task.number + ' has been Accepted');
+        // Tech Debt Multilanguage
+		gs.addInfoMessage(task.number + ' ' + gs.getMessage("Tasker - has been Accepted"));
     },
 
     uiAction_AcceptExtensionRequest: function(request) {
-        // TODO - multilanguage
-        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
+        // Tech Debt Multilanguage
+        var errorMessage = gs.getMessage("Tasker - Request  {0} did not meet the conditions to submit a Reject Extension", [request.number]);
         // TODO - multilanguage
         // we will need to make the request type field able to support multilanguage and then use a code here instead of a text value
         if (request.u_request_type == "Extension") {
@@ -617,10 +708,8 @@ Task_uiAction.prototype = {
                 var allow = new uiConditionCheck().RespondExtension(grTask);
                 if (allow) {
                     // STRY0097883 - DFCT0010462
-                    // TODO - multilanguage
-                    var taskWorkNotes = 'Extension Request has been approved by ' + gs.getUserDisplayName() +
-                        ' with the following comments: ' + this.trimComments(request.u_response_comments) +
-                        ' and the suspense date was ' + request.parent.suspense_date + '.  The extension date requested was ' + request.getDisplayValue('u_requested_suspense_date') + ' the new suspense date approved is ' + request.getDisplayValue('requested_suspense_date_approved');
+                    // Tech Debt Multilanguage
+                    var taskWorkNotes = gs.getMessage("Tasker - Extension Request has been approved by {0} with the following comments: {1} and the suspense date was {2}.  The extension date requested was {3} the new suspense date approved is {4}",[gs.getUserDisplayName(), this.trimComments(request.u_response_comments), request.parent.suspense_date, request.getDisplayValue('u_requested_suspense_date'), request.getDisplayValue('requested_suspense_date_approved')]);
 
                     // TODO - multilanguage
                     grTask.extension_approval = 'Approved';
@@ -629,8 +718,8 @@ Task_uiAction.prototype = {
                     //---
                     if (grTask.original_suspense_date == '') {
                         grTask.original_suspense_date = grTask.suspense_date;
-                        // TODO - multilanguage
-                        grTask.work_notes = "The Original Suspense Date was: " + grTask.original_suspense_date;
+                        // Tech Debt Multilanguage
+                        grTask.work_notes = gs.getMessage("Tasker - The Original Suspense Date was:") + "" + grTask.original_suspense_date;
                     }
                     grTask.previous_suspense_date = grTask.suspense_date;
                     grTask.suspense_date = request.u_requested_suspense_date;
@@ -661,8 +750,8 @@ Task_uiAction.prototype = {
     },
 
     uiAction_AcceptReassignmentRequest: function(request) {
-        // TODO - multilanguage
-        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
+        // Tech Debt Mulitilanguage
+        var errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Reject Reassignment", [request.number]);
 
         // TODO - multilanguage
         // STRY0102985 
@@ -674,10 +763,9 @@ Task_uiAction.prototype = {
                 var allow = new uiConditionCheck().RespondReassignment(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    var taskWorkNotes = 'Reassignment Request has been accepted by ' + gs.getUserDisplayName() +
-                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
-
+                    // Tech Debt Multilanguage
+                    var taskWorkNotes = gs.getMessage("Tasker - Reassignment Request has been accepted by {0} with the following comments: {1}",[gs.getUserDisplayName(), this.trimComments(request.u_response_comments)]);
+					
                     // TODO - multilanguage
                     grTask.reassignment_approval = 'Approved';
                     grTask.reassignment_requested = false;
@@ -712,9 +800,8 @@ Task_uiAction.prototype = {
     uiAction_AcceptReverseApproval: function(task) {
         task.state = 14;
         task.update();
-        // TODO - multilanguage
-        gs.addInfoMessage(task.number + ' has been sent to review');
-
+        // Tech Debt Multilanguage
+        gs.addInfoMessage(task.number + gs.getMessage("Tasker - has been sent to review"));
     },
 
 	// STRY0128565 - check and prompt for draft under ack and info only
@@ -754,6 +841,7 @@ Task_uiAction.prototype = {
 		task.extended_suspense_date = null;
 
         task.update();
+		
 		// STRY0124728
 		this._clearOpenRequestsForTask(task);
 		
@@ -809,7 +897,6 @@ Task_uiAction.prototype = {
         } else task.u_completed_on_time = true;
 	},
 
-
     uiAction_UpdateTaskAndResponseLog: function(DecisionToClose, actionTaken, task) {
         var stateClosedFrom = task.state;
         task.decision = DecisionToClose;
@@ -820,8 +907,8 @@ Task_uiAction.prototype = {
 
         switch (actionTaken) {
 			case 'abstain':
-				// TODO - multilanguage
-				task.work_notes = "Reviewer Decision: " + task.decision + " by " + task.assigned_to.getDisplayValue().toString();
+				// Tech Debt Multilanguage
+				task.work_notes = gs.getMessage("Tasker - Reviewer Decision: {0} by {1}", [task.decision, task.assigned_to.getDisplayValue().toString()]);
 				break;
             case 'reject':
                 // STRY0097883 - DFCT0010460 
@@ -854,20 +941,18 @@ Task_uiAction.prototype = {
 		// DFCT0010577 - this was moved out of the business rule and performed here
 		this._clearOpenRequestsForTask(task);
 		var currentUser =  gs.getUserID();
-        var isTaskOwner = task.u_task_requester == currentUser;
-        var isReviewer = task.u_reviewer == currentUser;
-        var isAssignedMember = task.assigned_to == currentUser;
-		var isOnBehalfOf = task.on_behalf_of == currentUser;
-		var isOriginator = task.originator == currentUser;
 		
 		// DFCT0010577 
-		var role = '';
+		var defaultRole='';
 		if (stateClosedFrom == '14') {
-            role = isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : '';
+			defaultRole = 'reviewer';
         } else {
-            role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
+			defaultRole = 'assigned_member';
         }
+		var role = this._getRole(task, defaultRole);
 		this._addResponseLog(task, role, currentUser, actionTaken, task.comments_dt);
+		// STRY0137379 
+		this.cascadingActionLog = this._setCascadingNote(task, actionTaken, defaultRole);
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been successfully') + DecisionToClose + gs.getMessage('Tasker - and marked as Completed'));
 		
@@ -902,14 +987,14 @@ Task_uiAction.prototype = {
 		this._clearOpenRequestsForTask(task);
 		
 		// DFCT0010577 
-		var role = '';
-		var respondedBy = '';
-		var actionTaken = '';
-		// making the entery for sent to review for the assigned member if state 14
-		role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
-		respondedBy = gs.getUserID();
-		actionTaken = 'completed';
-		this._addResponseLog(task, role, respondedBy, actionTaken, task.response);
+		var actionTaken = 'completed';
+		var defaultRole = 'assigned_member';
+		var role = this._getRole(task, defaultRole);
+		
+		this._addResponseLog(task, role, currentUser, actionTaken, task.response);
+
+		// STRY0137421
+		this.cascadingActionLog = this._setCascadingNote(task, actionTaken, defaultRole);
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker - has been marked as Completed'));
 		// DFCT0010577 - this was moved out of the business rule and performed here
@@ -931,14 +1016,14 @@ Task_uiAction.prototype = {
             if (task.assigned_to.nil() || task.primary_assignee.nil()) {
                 var assignee = task.primary_assignee.getDisplayValue();
                 task.state = -5;
-                // TODO - multilanguage
-                task.work_notes = "Assigned to " + assignee;
+                // Tech Debt Multilanguage
+                task.work_notes = gs.getMessage("Tasker - Assigned to") + " " + assignee;
                 task.update();
             } else {
                 var assigned_to = task.assigned_to.getDisplayValue();
                 task.state = 1;
-                // TODO - multilanguage
-                task.work_notes = "Assigned to " + assigned_to;
+                // Tech Debt Multilanguage
+                task.work_notes = gs.getMessage("Tasker - Assigned to") + " " + assigned_to;
                 task.update();
             }
         }
@@ -1077,9 +1162,9 @@ Task_uiAction.prototype = {
                 grTasker.tasking_authority = defaultOU;
             }
         }
-        // TODO - multilanguage
-        grTasker.work_notes = "This task was created from Suggested Task #: " + suggestedTask.number.getDisplayValue() +
-            "\n Sender: " + suggestedTask.sender_internal_user.name + "\n Sender Email: " + suggestedTask.senderemail + "\n Subject Line: " + suggestedTask.email_subject + "\n Date Emailed: " + suggestedTask.sys_created_on + "\n Number of attachments: " + numAttachments;
+        // Tech Debt Multilanguage
+        grTasker.work_notes = gs.getMessage("Tasker - This task was created from Suggested Task #: {0} \n Sender: {1} \n Sender Email: {2} \n Subject Line: {3} \n Date Emailed: {4} \n Number of attachments: {5}",[suggestedTask.number.getDisplayValue(), suggestedTask.sender_internal_user.name, suggestedTask.senderemail, suggestedTask.email_subject, suggestedTask.sys_created_on, numAttachments]);
+		
         // STRY0084599 - Need a way for deliver and customers to better synchronize field updates and changes
         grTasker = new CustomTaskerFieldHelper().mapFieldDataOnAction('suggestedTasktoTask', suggestedTask, grTasker);
         grTasker.insert();
@@ -1091,13 +1176,13 @@ Task_uiAction.prototype = {
 		var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
 		var userPreferences = oUserPref.loadMyFormPreferences();
 		var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(grTasker.sys_id,'sp');
-        // TODO - multilanguage
+        // Tech Debt Multilanguage
         var infoMsg = '<a href="../' + url_Properties.portal_url_ref + 
 			'?id=' + url_Properties.pageId + '&table=' + taskerTable + 
 			'&sys_id=' + grTasker.sys_id + '&spa=1" target="_top" >' + 
 			suggestedTask.u_created_task.getDisplayValue() + 
-			' has been created based on this suggestion' + 
-			'</a>. Please Wait. You are being redirected to the new Task.';
+			' ' + gs.getMessage("Tasker - has been created based on this suggestion") +
+			'</a>. ' + gs.getMessage("Tasker - Please Wait. You are being redirected to the new Task.");
         gs.addInfoMessage(infoMsg);
         // Redirect
         if (typeof spModal == 'undefined') {
@@ -1116,8 +1201,8 @@ Task_uiAction.prototype = {
         var now = new GlideDateTime();
         if (gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true') {
             if (now > task.suspense_date && task.suspense_date != "") {
-                // TODO - multilanguage
-                gs.addErrorMessage('The suspense date must be in the future.');
+                // Tech Debt Multilanguage
+                gs.addErrorMessage(gs.getMessage("Tasker - The suspense date must be in the future."));
                 bDateOk = false;
             }
         }
@@ -1148,8 +1233,8 @@ Task_uiAction.prototype = {
         
 		if (gs.getProperty('x_153465_discovert.Suspense Dates and Expected Start Dates must be in the future') == 'true') {
             if (now > task.suspense_date && task.suspense_date != "") {
-                // TODO - multilanguage
-                gs.addErrorMessage('The suspense date must be in the future.');
+                // Tech Debt Multilanguage
+                gs.addErrorMessage(gs.getMessage("Tasker - The suspense date must be in the future."));
                 bDateOk = false;
             }
         }
@@ -1259,8 +1344,8 @@ Task_uiAction.prototype = {
     },
 
     uiAction_RejectExtensionRequest: function(request) {
-        // TODO - multilanguage
-        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Extension';
+        // Tech Debt Multilanguage
+        var errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Reject Extension", [request.number]);
 
         // TODO - multilanguage
         if (request.u_request_type == "Extension") {
@@ -1271,10 +1356,8 @@ Task_uiAction.prototype = {
                 var allow = new uiConditionCheck().RespondExtension(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    var taskWorkNotes = 'Extension Request has been rejected by ' + gs.getUserDisplayName() +
-                        ' with the following comments: ' + this.trimComments(request.u_response_comments) + '. Note: The suspense date has not been updated.';
-
+                    // Tech Debt Multilanguage
+                    var taskWorkNotes = gs.getMessage("Tasker - Extension Request has been rejected by {0} with the following comments: {1} Note: The suspense date has not been updated.", [gs.getUserDisplayName(), this.trimComments(request.u_response_comments)]);
                     grTask.latest_extension_request_date = request.u_requested_suspense_date;
                     grTask.extended_suspense_date = '';
                     // TODO - multilanguage
@@ -1302,8 +1385,8 @@ Task_uiAction.prototype = {
     },
 
     uiAction_RejectReassignmentRequest: function(request) {
-        // TODO - multilanguage
-        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Reject Reassignment';
+        // Tech Debt Multilanguage
+        var errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Reject Reassignment",[request.number]);
         // STRY0102985 
         if (request.u_request_type == "Reassignment") {
 
@@ -1313,9 +1396,9 @@ Task_uiAction.prototype = {
                 var allow = new uiConditionCheck().RespondReassignment(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    var taskWorkNotes = 'Reassignment Request has been rejected by ' + gs.getUserDisplayName() +
-                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
+                    // Tech Debt Multilanguage
+                    var taskWorkNotes = gs.getMessage("Reassignment Request has been rejected by {0} with the following comments: {1}", [gs.getUserDisplayName(), this.trimComments(request.u_response_comments)]);
+					
                     grTask.reassignment_approval = 'Rejected';
                     grTask.reassignment_requested = false;
                     grTask.work_notes = taskWorkNotes;
@@ -1360,8 +1443,8 @@ Task_uiAction.prototype = {
     uiAction_ReworkinProgress: function(task) {
         task.state = 13;
         task.update();
-        // TODO - multilanguage
-        gs.addInfoMessage(task.number + ' is being reworked');
+        // Tech Debt Multilanguage
+        gs.addInfoMessage(task.number + gs.getMessage("Tasker - is being reworked"));
     },
 
     uiAction_SaveTask: function(task) {
@@ -1371,10 +1454,9 @@ Task_uiAction.prototype = {
 
     uiAction_SaveAsTemplate: function(task) {
         // start the process of creating a new process definition
-        // TODO - multilanguage
         gs.eventQueue('x_153465_discovert.Save_as_Template', task, 'Save as Template', gs.getUserID());
-        // TODO - multilanguage
-        gs.addInfoMessage("'" + task.task_name + "'" + ' has been saved as a Template. You can find it under' + '<a href="?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template&filter=process_level%3Dglobal_process%5ENQprocess_level%3Dou_process%5ENQprocess_level%3Dmy_process%5Eprocess_ownerDYNAMIC90d1921e5f510100a9ad2572f2b477fe%5EEQ"> Personal Templates </a>');
+        // Tech Debt Multilanguage
+        gs.addInfoMessage("'" + task.task_name + "' " + gs.getMessage("Tasker - has been saved as a Template. You can find it under") + '<a href="?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template&filter=process_level%3Dglobal_process%5ENQprocess_level%3Dou_process%5ENQprocess_level%3Dmy_process%5Eprocess_ownerDYNAMIC90d1921e5f510100a9ad2572f2b477fe%5EEQ"> Personal Templates </a>');
 
         var templateName = task.short_description;
         var gr = new GlideAggregate('x_153465_discovert_discover_routing_template');
@@ -1382,8 +1464,8 @@ Task_uiAction.prototype = {
         gr.setLimit(1);
         gr.query();
         if (gr.next()) {
-            // TODO - multilanguage
-            gs.addInfoMessage("There is already a Template with that name.  Saving Template as a copy.");
+            // Tech Debt Multilanguage
+            gs.addInfoMessage(gs.getMessage("Tasker - There is already a Template with that name.  Saving Template as a copy."));
         }
     },
 
@@ -1394,8 +1476,9 @@ Task_uiAction.prototype = {
     },
 
     uiAction_SendClarification: function(request) {
-        // TODO - multilanguage
-        var errorMessage = 'Request ' + request.number + ' did not meet the conditions to provide Clarification';
+        // Tech Debt Multilanguage
+        var errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to provide Clarification",[request.number]);
+		
         if (request.u_request_type == "Clarification") {
             var parentId = request.parent.toString();
             var grTask = new GlideRecord("x_153465_discovert_route_task_instance");
@@ -1403,10 +1486,8 @@ Task_uiAction.prototype = {
                 var allow = new uiConditionCheck().RespondClarification(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    var taskWorkNotes = 'Clarification Request has been provided by ' + gs.getUserDisplayName() +
-                        ' with the following comments: ' + this.trimComments(request.u_response_comments);
-
+                    // Tech Debt Multilanguage
+                    var taskWorkNotes = gs.getMessage("Tasker - Clarification Request has been provided by {0} with the following comments: {1}",[gs.getUserDisplayName(),this.trimComments(request.u_response_comments)]);
                     grTask.u_clarification_requested = false;
                     grTask.work_notes = taskWorkNotes;
                     grTask.update();
@@ -1423,8 +1504,8 @@ Task_uiAction.prototype = {
 
                     //KT: Show Confirmation Message
                     if (gs.isMobile()) {
-                        // TODO - multilanguage
-                        gs.addInfoMessage("Response submitted.");
+                        // Tech Debt Multilanguage
+                        gs.addInfoMessage(gs.getMessage("Tasker - Response submitted."));
                     } else {
                         gs.addInfoMessage(taskWorkNotes);
                     }
@@ -1470,18 +1551,13 @@ Task_uiAction.prototype = {
 		
 		// STRY0137204 - Define when Comment is Logged in Action Log
 		var currentUser =  gs.getUserID();
-		var isAssignedMember = task.assigned_to == currentUser;
-		var isReviewer = task.u_reviewer == currentUser;
-		var isTaskOwner = task.u_task_requester == currentUser;
-		var isOnBehalfOf = task.on_behalf_of == currentUser;
-		var isOriginator = task.originator == currentUser;
 
-		var role = "";
 		// if user is not the assigned member, check to see if taskit is the owner and change to task owner
 		// if the assinged_member and task owner are the same person leave the role as assigned_member
 		// if it isn't the assigned_member or the task owner, set it to the reviewer b/c that is the role the person took
-		role = isAssignedMember ? 'assigned_member' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isReviewer ? 'reviewer' : '';
-		this._addResponseLog(task, role, currentUser, "sent_to_review", task.response);
+		var actionTaken = "sent_to_review";
+		var role = this._getRole(task, 'assigned_member');
+		this._addResponseLog(task, role, currentUser, actionTaken, task.response);
 
         gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to review'));
     },
@@ -1496,18 +1572,11 @@ Task_uiAction.prototype = {
 		
 		// STRY0137204 - Define when Comment is Logged in Action Log
 		var currentUser =  gs.getUserID();
-		var isAssignedMember = task.assigned_to == currentUser;
-		var isReviewer = task.u_reviewer == currentUser;
-		var isTaskOwner = task.u_task_requester == currentUser;
-		var isOnBehalfOf = task.on_behalf_of == currentUser;
-		var isOriginator = task.originator == currentUser;
 		
-		var role = "";
 		// if user is not the reviewer, check to see if task owner and change to task owner
 		// if the reviewer and task owner are the same person leave the role as reviewer
 		// if it isn't the reviewer or the task owner, set it to the reviewer b/c that is the role the person took
-		role = isReviewer ? 'reviewer' : isTaskOwner ? 'task_owner' : isOnBehalfOf ? 'on_behalf_of' : isOriginator ? 'originator' : isAssignedMember ? 'assigned_member' : '';
-
+		var role = this._getRole(task, 'reviewer');
 		this._addResponseLog(task, role, currentUser, "sent_to_rework", task.rework_comments);
         gs.addInfoMessage(task.number + gs.getMessage('Tasker -  has been sent to rework'));
     },
@@ -1517,8 +1586,8 @@ Task_uiAction.prototype = {
         task.work_start = gdt.getValue();
         task.state = 13;
         task.update();
-        // TODO - multilanguage
-        gs.addInfoMessage(task.number + ' has been Started');
+        // Tech Debt Multilanguage
+        gs.addInfoMessage(task.number + ' ' + gs.getMessage("Tasker - has been Started"));
     },
 
     // STRY0108329 - changed a function to make more specific to Task
@@ -1534,8 +1603,8 @@ Task_uiAction.prototype = {
         // Request Clarification
         //----------------------------------------------------------------------------------------------------------
         if (request.u_request_type == "Clarification") {
-            // TODO - multilanguage
-            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Clarification. Please validate that you are either the Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), and that you are not all three the Task Owner, Assigned Member and Reviewer';
+            // Tech Debt - Multilanguage
+            errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Request Clarification.",[request.number]);
 
             parentId = request.parent.toString();
             grTask = new GlideRecord("x_153465_discovert_route_task_instance");
@@ -1543,8 +1612,9 @@ Task_uiAction.prototype = {
                 allow = new uiConditionCheck().RequestClarification(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    taskWorkNotes = 'Clarification Request has been created by ' + gs.getUserDisplayName() + ' with the following comments: ' + this.trimComments(request.u_request_comments);
+                    // Tech Debt Multilanguage
+                    taskWorkNotes = gs.getMessage("Tasker - Clarification Request has been created by {0} with the following comments: {1}",[gs.getUserDisplayName(),this.trimComments(request.u_request_comments)]);
+					
                     grTask.u_clarification_requested = true;
                     grTask.work_notes = taskWorkNotes;
                     grTask.update();
@@ -1593,8 +1663,8 @@ Task_uiAction.prototype = {
         // Request Extension
         //----------------------------------------------------------------------------------------------------------
         if (request.u_request_type == "Extension") {
-            // TODO - multilanguage
-            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Extension';
+            // Tech Debt Multilanguage
+            errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Request Extension", [request.number]);
             // STRY0104349 
             parentId = request.parent.toString();
             grTask = new GlideRecord("x_153465_discovert_route_task_instance");
@@ -1602,8 +1672,9 @@ Task_uiAction.prototype = {
                 allow = new uiConditionCheck().RequestExtension(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    taskWorkNotes = 'Extension Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the requested suspense date: ' + request.u_requested_suspense_date + ' and the following comments: ' + this.trimComments(request.u_request_comments);
+                    // Tech Debt Multilanguage
+                    taskWorkNotes = gs.getMessage("Tasker - Extension Request has been created by {0} (Assignee) with the requested suspense date: {1} and the following comments: {2}",[gs.getUserDisplayName(), request.u_requested_suspense_date]);
+					
                     grTask.extended_suspense_date = request.u_requested_suspense_date;
                     grTask.extension_approval = '';
                     grTask.extension_requested = true;
@@ -1624,8 +1695,8 @@ Task_uiAction.prototype = {
         // Request Reassignment
         //----------------------------------------------------------------------------------------------------------
         if (request.u_request_type == "Reassignment") {
-            // TODO - multilanguage
-            errorMessage = 'Request ' + request.number + ' did not meet the conditions to submit a Request Reassignment';
+            // Tech Debt Multilanguage
+            errorMessage = gs.getMessage("Tasker - Request {0} did not meet the conditions to submit a Request Reassignment", [request.number]);
 
             parentId = request.parent.toString();
             grTask = new GlideRecord("x_153465_discovert_route_task_instance");
@@ -1633,8 +1704,9 @@ Task_uiAction.prototype = {
                 allow = new uiConditionCheck().RequestReassignment(grTask);
                 if (allow) {
                     // STRY0097883
-                    // TODO - multilanguage
-                    taskWorkNotes = 'Reassignment Request has been created by ' + gs.getUserDisplayName() + ' (Assignee) with the following comments: ' + this.trimComments(request.u_request_comments);
+                    // Tech Debt Multilanguage
+                    taskWorkNotes = gs.getMessage("Tasker - Reassignment Request has been created by {0} (Assignee) with the following comments: {1}", [gs.getUserDisplayName(), this.trimComments(request.u_request_comments)]);
+					
                     grTask.reassignment_approval = '';
                     grTask.reassignment_requested = 'true';
                     grTask.work_notes = taskWorkNotes;
@@ -1659,13 +1731,13 @@ Task_uiAction.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-30 22:18:40</sys_created_on>
         <sys_id>4f00a611dbce6850e0c4fb941d961903</sys_id>
-        <sys_mod_count>306</sys_mod_count>
+        <sys_mod_count>321</sys_mod_count>
         <sys_name>Task_uiAction</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_4f00a611dbce6850e0c4fb941d961903</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-04-02 18:34:05</sys_updated_on>
+        <sys_updated_on>2023-04-03 22:34:34</sys_updated_on>
     </sys_script_include>
 </record_update>
