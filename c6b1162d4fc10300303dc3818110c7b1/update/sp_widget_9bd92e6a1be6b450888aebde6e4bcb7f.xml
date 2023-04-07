@@ -9,6 +9,15 @@
         $scope.$parent.$parent.$dismiss();
     };
 	
+		// STRY0137377
+    c.enableSubmitButton = function() {
+        if (c.data.newReopenComment === undefined) {
+            c.data.isSubmitButtonDisabled = true;
+        } else {
+            c.data.isSubmitButtonDisabled = c.data.newReopenComment.length === 0;
+        }
+    };
+	
 		// STRY0116785 - when the label is clicked update the radio button
 		c.labelClick = function(value){
 			c.data.reopenType = value;
@@ -96,6 +105,8 @@
 //                                          Changed HTML and Client Script using this other story so clicking labels will move the radio button
 // 2.8.0 | 2022-08-22 | raj  | DFCT0011121 - (2 issues) General Information modal is "NOT"  closing on "Approval" task types upon clicking the "Reject"& "ReOpen" buttons from the warning modal. 
 //                                          Changes in Client Controller
+// 2.8.1 | 2023-04-06 | raj  |  STRY0137377 - (STRETCH- Prize) Manually Submitted Reopen Comment 
+//                                          Changes in Server script, Client Controller and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -112,6 +123,7 @@
 				// STRY0114416 - 5 (glide record secur) run reopen tasks step
 				var grSelectedTask = new GlideRecord('x_153465_discovert_route_task_instance');
 				if (grSelectedTask.get(input.taskSysId)) {
+					grSelectedTask.reopen_comments = input.newReopenComment;
 					new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, input.reopenType);
 				}
 
@@ -138,6 +150,10 @@
 		// 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX
         // data.msgBody2TasksByDate = gs.getMessage('Tasker - This Task and all Subtasks closed on or after');
 		data.msgBody2TasksByDate = gs.getMessage('Tasker - This Task and {0} Subtasks closed with this task on {1}', [data.descendantsCount, data.closedAt]);
+			
+			// STRY0137377
+			data.msgBody6 = gs.getMessage('Tasker - Reopen Comment');
+			data.msgBody7 = gs.getMessage('Type your reopen comment here');
     }
 
 	/* 2.8 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX; reorder and add taskClosedDate */
@@ -160,6 +176,8 @@
         var grSelTask = new GlideRecord('x_153465_discovert_route_task_instance');
         if (grSelTask.get(data.taskSysId)) {
             data.closedAt = grSelTask.getDisplayValue('closed_at');
+						data.taskHasChildren = 	grSelTask.getValue("calchaschildren") > 0;
+						data.reopenComment = grSelTask.getValue("reopen_comments");
         }
     }
 
@@ -172,9 +190,17 @@
 
     // Use this function to set defaults
     function _setDataDefaults() {
+        data.isSubmitButtonDisabled = true;
         data.submit = false;
 		// set a default radio button as selected
 		data.reopenType = 'taskOnly';
+			// STRY0137377
+			data.newReopenComment = data.reopenComment;
+			if (data.newReopenComment === undefined) {
+				data.isSubmitButtonDisabled = true;
+			} else {
+				data.isSubmitButtonDisabled = data.newReopenComment.length === 0;
+			}			
     }
 })($sp, input, data, options);]]></script>
         <servicenow>false</servicenow>
@@ -182,56 +208,62 @@
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-09-15 13:31:28</sys_created_on>
         <sys_id>9bd92e6a1be6b450888aebde6e4bcb7f</sys_id>
-        <sys_mod_count>64</sys_mod_count>
+        <sys_mod_count>83</sys_mod_count>
         <sys_name>Tasker Modal - Reopen Tasks</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_9bd92e6a1be6b450888aebde6e4bcb7f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-22 14:16:31</sys_updated_on>
+        <sys_updated_on>2023-04-06 18:45:03</sys_updated_on>
         <template><![CDATA[<div class="dtech-modal-widget-body">
-
-  <div class="dtech-text-center dtech-standard-text-color">
+  <div ng-if="data.taskHasChildren"
+       class="dtech-standard-text-color">
     <span>
       {{data.msgBody1}}
     </span>
   </div>
-  <br>
-
   <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="taskOnly" aria-label="{{data.msgBody2TaskOnly}}" ng-model="data.reopenType" value="taskOnly">
-        <label for="taskOnly" 
-               class="dtech-standard-text-color dtech-radio-inline"
-               ng-click="c.labelClick('taskOnly');"
-               >{{data.msgBody2TaskOnly}}</label>
+    <div ng-if="data.taskHasChildren">
+      <div class="row">
+        <div class="col-md-12">
+          <input type="radio" name="reopenType" id="taskOnly" aria-label="{{data.msgBody2TaskOnly}}" ng-model="data.reopenType" value="taskOnly">
+          <label for="taskOnly" 
+                 class="dtech-standard-text-color dtech-radio-inline"
+                 ng-click="c.labelClick('taskOnly');"
+                 >{{data.msgBody2TaskOnly}}</label>
+        </div>
       </div>
-    </div>
 
-    <div class="row">
-      <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="allSubtasks" aria-label="{{data.msgBody2AllSubtasks}}" ng-model="data.reopenType" value="allSubtasks">
-        <label for="allSubtasks" 
-               class="dtech-standard-text-color dtech-radio-inline"
-               ng-click="c.labelClick('allSubtasks');"
-               >{{data.msgBody2AllSubtasks}}</label>
+      <div class="row">
+        <div class="col-md-12">
+          <input type="radio" name="reopenType" id="allSubtasks" aria-label="{{data.msgBody2AllSubtasks}}" ng-model="data.reopenType" value="allSubtasks">
+          <label for="allSubtasks" 
+                 class="dtech-standard-text-color dtech-radio-inline"
+                 ng-click="c.labelClick('allSubtasks');"
+                 >{{data.msgBody2AllSubtasks}}</label>
+        </div>
       </div>
-    </div>
 
-    <div class="row">
-      <div class="col-md-10 col-md-offset-2">
-        <input type="radio" name="reopenType" id="tasksByDate" aria-label="{{data.msgBody2TasksByDate}}" ng-model="data.reopenType" value="tasksByDate"
-               ng-disabled="data.closedAt == ''">
-        <label for="tasksByDate" 
-               class="dtech-standard-text-color dtech-radio-inline"
-               ng-click="c.labelClick('tasksByDate');"
-               >{{data.msgBody2TasksByDate}}</label>									
+      <div class="row">
+        <div class="col-md-12">
+          <input type="radio" name="reopenType" id="tasksByDate" aria-label="{{data.msgBody2TasksByDate}}" ng-model="data.reopenType" value="tasksByDate"
+                 ng-disabled="data.closedAt == ''">
+          <label for="tasksByDate" 
+                 class="dtech-standard-text-color dtech-radio-inline"
+                 ng-click="c.labelClick('tasksByDate');"
+                 >{{data.msgBody2TasksByDate}}</label>									
+        </div>
       </div>
     </div>
-  </div>
-  <br>
+    <br>
+    <div>
+      <label class="asterisk dtech-standard-text-color" for="reopenComment">{{data.msgBody6}}</label>
+      <textarea type="text" class="form-control" id="reopenComment" ng-model="data.newReopenComment" ng-required="true" 
+                ng-change="c.enableSubmitButton()" placeholder="{{data.msgBody7}}" rows="4"></textarea>
+    </div>
+  </div>  
+  
 </div>
 <div id="footer" class="dtech-modal-widget-footer dtech-box">
   <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
@@ -240,7 +272,7 @@
   </button>
 
   <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
-          type="submit" title="{{data.submitButtonTitle}}"
+          type="submit" title="{{data.submitButtonTitle}}" ng-disabled="data.isSubmitButtonDisabled"
           ng-click="c.onSubmit();">{{data.submitButtonText}}
   </button>
 </div>]]></template>

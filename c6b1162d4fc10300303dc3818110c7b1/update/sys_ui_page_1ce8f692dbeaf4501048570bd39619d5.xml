@@ -3,11 +3,27 @@
         <category>general</category>
         <client_script><![CDATA[initPage();
 
+// Use this function to remove the disabled attribute from the submit button
+function enableSubmitButton() {
+	gel('submit').disabled = gel('newReopenComment').value.length == 0;
+}
+
 // Use this function to initialize variables at page load
 function initPage() {
-	// set a default radio button as selected
-	gel('taskOnly').checked = true;
-	gel('tasksByDate').disabled = gel('closedAt').value == '';
+	var childCount = parseInt(gel('taskChildCount').value);
+	if(childCount>0){
+		// set a default radio button as selected
+		gel('taskOnly').checked = true;
+		gel('tasksByDate').disabled = gel('closedAt').value == '';
+	}
+	gel('newReopenComment').value = gel('newReopenComment').value.trim();
+	var commentLength = gel('newReopenComment').value.length;
+	
+	if (commentLength == 0) {
+		gel('submit').disabled = true;
+	} else {
+		gel('submit').disabled = false;
+	}
 }
 
 // dialog_button id="cancel" was clicked, user does not want to reopen the task
@@ -24,7 +40,7 @@ function onSubmit() {
 }
 ]]></client_script>
         <description>New UI Page to prompt from Platform about re-opening completed or cancelled tasks&#13;
-&#13;
+2.8.1 | 2023-04-06 | raj  |  STRY0137377 - (STRETCH- Prize) Manually Submitted Reopen Comment &#13;
 2.8.0 | 2022-04-12 | mmcc | STRY0113587 - Mass Reopen Task Modal- Update Labels for UX&#13;
   In &lt;g:messages&gt;&#13;
     Removed Tasker - This Task and all Subtasks closed on or after&#13;
@@ -72,9 +88,11 @@ function onSubmit() {
 	<g:messages>
 		Tasker - Please choose to reopen only the top task or all of its subtasks as well
 		Tasker - Button - Confirm
+		Tasker - Reopen Comment
 		Tasker - This Task Only
 		Tasker - This Task and all Subtasks
 		Tasker - This Task and {0} Subtasks closed with this task on {1}
+		Type your reopen comment here
 	</g:messages>
 
 	<g:ui_form>
@@ -84,21 +102,40 @@ function onSubmit() {
 		<!-- NOW protocol requires hidden input to make value accessible -->
 		<input type="hidden" id="sysid" name="sysid"  value="${jvar_taskSysId}"/>
 
+		<g:evaluate var="jvar_taskChildCount" jelly="true">
+			var taskChildCount = 0;
+			var	taskSys_id = jelly.jvar_taskSysId;
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTask.get(taskSys_id)){
+				taskChildCount = parseInt(grTask.getValue('calchaschildren'));
+			}
+			taskChildCount;
+		</g:evaluate>
+		
+		<g:evaluate var="jvar_reopenComment" jelly="true">
+			var reopenComment = '';
+			var	taskSys_id = jelly.jvar_taskSysId;
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTask.get(taskSys_id)){
+			  reopenComment = grTask.getDisplayValue('reopen_comments') || '';
+			}
+
+			reopenComment;
+		</g:evaluate>
+		
 		<g:evaluate var="jvar_closedAt" jelly="true">
 			var closedAt = '';
 			var	taskSys_id = jelly.jvar_taskSysId;
 			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
-			grTask.addQuery('sys_id', taskSys_id);
-			grTask.query();
-
-			if (grTask.next()) {
-			closedAt = grTask.getDisplayValue('closed_at');
+			if(grTask.get(taskSys_id)){
+			  closedAt = grTask.getDisplayValue('closed_at');
 			}
 
 			closedAt;
 		</g:evaluate>
 		
 		<input type="hidden" id="closedAt" value="${jvar_closedAt}" />
+		<input type="hidden" id="taskChildCount" value="${jvar_taskChildCount}" />
 		
 		<!-- Get descendants count then build the message to show; keep within the <g:ui_form> -->
 		<g:evaluate var="jvar_messageOpenTasksCount" jelly="true">
@@ -116,68 +153,82 @@ function onSubmit() {
 			
 			messDescendantsCount = gs.getMessage('Tasker - This Task and {0} Subtasks closed with this task on {1}', [descendantsCount, jelly.jvar_closedAt]);
 		</g:evaluate>
-
+		
 		<div class="dtech-modal-widget-body">
-
-			<div class="dtech-text-center dtech-standard-text-color">
-				<span id="msgBody1">
-					${gs.getMessage('Tasker - Please choose to reopen only the top task or all of its subtasks as well')}
-				</span>
-			</div>
-			<br></br>
-
 			<div class="container-fluid">
-				<div class="row">
-					<div class="col-md-10 col-md-offset-2">
-						<input type="radio" name="reopenType" id="taskOnly" 
-							   aria-label="${gs.getMessage('Tasker - This Task Only')}" value="taskOnly"></input>
-						<label id="msgBody2TaskOnly" for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task Only')}</label>
-					</div>
-				</div>
 
-				<div class="row">
-					<div class="col-md-10 col-md-offset-2">
-						<input type="radio" name="reopenType" id="allSubtasks" 
-							   aria-label="${gs.getMessage('Tasker - This Task and all subtasks')}" value="allSubtasks"></input>
-						<label id="msgBody2AllSubtasks" for="allSubtasks" 
-							   class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task and all Subtasks')}
-						</label>
+				<j:if test="${jvar_taskChildCount==0}">
+					<!-- set reopen type to blank if not showing the radio buttons-->
+					<input type="hidden" id="reopenType" name="reopenType" value="taskOnly" />
+				</j:if>
+				<j:if test="${jvar_taskChildCount>0}">
+					<div class="row dtech-standard-text-color">
+						${gs.getMessage('Tasker - Please choose to reopen only the top task or all of its subtasks as well')}
 					</div>
-				</div>
+					<div class="row">
+						<div class="col-md-12">
+							<input type="radio" name="reopenType" id="taskOnly" 
+								   aria-label="${gs.getMessage('Tasker - This Task Only')}" value="taskOnly"></input>
+							<label id="msgBody2TaskOnly" for="taskOnly" class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task Only')}</label>
+						</div>
+					</div>
 
-				<div class="row">
-					<div class="col-md-10 col-md-offset-2">
-						<input type="radio" name="reopenType" id="tasksByDate" 
-							   aria-label="${gs.getMessage('Tasker - This Task and all subtasks closed on or after')} ${jvar_closedAt}" 
-							   value="tasksByDate"></input>
-						<label id="msgBody2TasksByDate" for="tasksByDate" class="dtech-standard-text-color dtech-radio-inline">
-							${jvar_messageOpenTasksCount}
-						</label>
+					<div class="row">
+						<div class="col-md-12">
+							<input type="radio" name="reopenType" id="allSubtasks" 
+								   aria-label="${gs.getMessage('Tasker - This Task and all subtasks')}" value="allSubtasks"></input>
+							<label id="msgBody2AllSubtasks" for="allSubtasks" 
+								   class="dtech-standard-text-color dtech-radio-inline">${gs.getMessage('Tasker - This Task and all Subtasks')}
+							</label>
+						</div>
 					</div>
-				</div>
+
+					<div class="row">
+						<div class="col-md-12">
+							<input type="radio" name="reopenType" id="tasksByDate" 
+								   aria-label="${gs.getMessage('Tasker - This Task and all subtasks closed on or after')} ${jvar_closedAt}" 
+								   value="tasksByDate"></input>
+							<label id="msgBody2TasksByDate" for="tasksByDate" class="dtech-standard-text-color dtech-radio-inline">
+								${jvar_messageOpenTasksCount}
+							</label>
+						</div>
+					</div>
+
+					<br></br>
+				</j:if>
+				<form>
+					<div class="form-group">
+						<label class="asterisk dtech-standard-text-color" for="reopenComment">
+							<g:form_label>
+								${gs.getMessage('Tasker - Reopen Comment')}
+							</g:form_label>
+						</label>
+						<textarea type="text" class="form-control" id="newReopenComment" name="newReopenComment" oninput="enableSubmitButton()"
+								  placeholder="${gs.getMessage('Type your reopen comment here')}" rows="4">${jvar_reopenComment}</textarea>
+					</div>
+
+					<div id="footer" class="dtech-modal-widget-footer dtech-box">
+						<g:dialog_button 
+										 id="cancel"
+										 title="${gs.getMessage('cancel')}"
+										 type="button"
+										 style_class="btn btn-default dtech-max-width-fit-content"
+										 onclick="return onCancel();"
+										 >${gs.getMessage('cancel')}
+						</g:dialog_button>
+						<g:dialog_button 
+										 id="submit"
+										 title="${gs.getMessage('Tasker - Button - Confirm')}"
+										 type="submit"
+										 style_class="btn btn-primary dtech-max-width-fit-content dtech-push-right "
+										 onclick="onSubmit();"
+										 >${gs.getMessage('Tasker - Button - Confirm')}
+						</g:dialog_button>
+					</div>
+				</form>
 			</div>
-			<br></br>
 
 		</div>
-		<div id="footer" class="dtech-modal-widget-footer dtech-box">
-			<g:dialog_button 
-							 id="cancel"
-							 title="${gs.getMessage('cancel')}"
-							 type="button"
-							 style_class="btn btn-default dtech-max-width-fit-content"
-							 onclick="return onCancel();"
-							 >${gs.getMessage('cancel')}
-			</g:dialog_button>
-			<g:dialog_button 
-							 id="submit"
-							 title="${gs.getMessage('Tasker - Button - Confirm')}"
-							 type="submit"
-							 style_class="btn btn-primary dtech-max-width-fit-content dtech-push-right "
-							 onclick="onSubmit();"
-							 >${gs.getMessage('Tasker - Button - Confirm')}
-			</g:dialog_button>
-		</div>
-
 	</g:ui_form>
 </j:jelly>]]></html>
         <name>reopen_task_prompt</name>
@@ -188,8 +239,15 @@ function reopenTasks() {
     grSelectedTask.addQuery('sys_id', sysid); //comes from hidden input tag name attribute
     grSelectedTask.query();
     if (grSelectedTask.next()) {
+		// default to task only for the case where there are no subtasks and the radio buttons are not displayed
+		var reopenChoice = "taskOnly";
         // Calls a Server function
-        new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, reopenType); //comes from radio input tag name attribute
+		if(typeof reopenType != undefined){
+			reopenChoice = reopenType;
+		}
+			
+		grSelectedTask.reopen_comments = newReopenComment;
+        new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, reopenChoice); //comes from radio input tag name attribute
     }
 	
 	response.sendRedirect("/x_153465_discovert_route_task_instance.do?sys_id=" + sysid);
@@ -197,16 +255,14 @@ function reopenTasks() {
         <sys_class_name>sys_ui_page</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2021-09-14 21:21:20</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>1ce8f692dbeaf4501048570bd39619d5</sys_id>
-        <sys_mod_count>99</sys_mod_count>
+        <sys_mod_count>138</sys_mod_count>
         <sys_name>reopen_task_prompt</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_page_1ce8f692dbeaf4501048570bd39619d5</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-04-13 20:19:46</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-04-06 22:33:58</sys_updated_on>
     </sys_ui_page>
 </record_update>
