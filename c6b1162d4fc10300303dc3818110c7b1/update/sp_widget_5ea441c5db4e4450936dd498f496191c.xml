@@ -1258,10 +1258,25 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 //                                      In Client controller, in tableFilterButtonSelected() added missing closing semicolon and format;
 //                                       in getTitle() added missing semicolon and missing closing semicolon
 //                                      Changes made in HTML, Server script and Client controller.
+// 2.8.1 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat
+//																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-07 - raj -   STRY0137373 - (STRETCH) Reopen Icon in Subtask, Detailed Status, Final Response tab
+//																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-07 | raj | STRY0137371 - Icons to Represent Status
+//																			Changes in Server, and HTML and directives
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
+
+		// STRY0137371
+		var taskerStatus = new TaskerStatus();
+		var status_and_reason = {};
+		data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
+
+		// STRY0136617
+		data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
+
     // moved back to the top.  Since this is async, there is no reason to set any values on data
     if (!input) // asynch load list
         return;
@@ -1520,6 +1535,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 		// STRY0135276 - used to hold all of the user information
 		data.usersPhotoInfo = {};
 		data.userProfiles = {};
+		// STRY0137371
+		data.loadedDurationOjbects = {};
 
     data.popOverRecord = {};
     while (gr.next()) {
@@ -1701,8 +1718,13 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 					}
 				}
 			
+				// STRY0137371
+				data.showDTechDuration = false;
         switch (data.table) {
             case 'x_153465_discovert_route_task_instance':
+								record.task_name = gr.getDisplayValue("short_description");
+								record.comment_state = gr.getDisplayValue("state");
+								record.comment_number = ''; // aka task Number
                 record.category = {};
                 record.sub_category = {};
                 record.tasker_type = {};
@@ -1724,11 +1746,18 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                 record.state.value = gr.getValue('state');
 				// 2.8.1 | 2023-04-04 | mmcc | STRY0135723 - Homepage Comments column replaced by Task Commentsc
 				record.comments_dt = gr.getDisplayValue('comments_dt'); // Reviewer	
+								record.comment_number = gr.getDisplayValue('number'); // aka task Number
+								record.response_comments = gr.getDisplayValue('response');
 				record.number = gr.getDisplayValue('number'); // aka task Number
 				record.reject_comment = gr.getDisplayValue('reject_comment');
 				record.reopen_comments = gr.getDisplayValue('reopen_comments');
 				record.rework_comments = gr.getDisplayValue('rework_comments');
-				
+								// STRY0137371
+								data.showDTechDuration = true;
+								data.loadedDurationOjbects[gr.getUniqueValue()] = {}
+								record.duration_status = gr.getDisplayValue("status");
+								record.duration_suspense_date = gr.getDisplayValue("suspense_date");
+								record.duration_modal_title = data.durationTitle + gr.getDisplayValue("task_name");
                 break;
             case 'x_153465_discovert_tasker_requests':
                 record.category = {};
@@ -1945,17 +1974,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1373</sys_mod_count>
+        <sys_mod_count>1376</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-04-04 18:35:44</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-04-11 12:46:02</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -2100,21 +2127,43 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                 {{item[field].display_value}}
               </span>
             </span>
-            <span ng-if="field!=data.hoverField && field!='state' && field!='response' && item[field].isUser!=true">{{item[field].display_value}}</span>
+            <span ng-if="field!=data.hoverField && field!='state' && 
+                         field!='response' && 
+                         item[field].isUser!=true &&
+                         (!data.showDTechDuration || field!='suspense_date')">{{item[field].display_value}}</span>
             <span ng-if="item[field].isUser==true && item[field].display_value!=''">
               <div>
                 <!-- STRY0135276 - User Profile Directive -->
                 <dtech-user dtech-task-title = "getTitle(item);"
                             dtech-field="field"
+                            dtech-is-modal="data.isModal"
                             dtech-user-image-size="24"
+                            dtech-chat-enabled="data.chatEnabled"
                             dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
                             dtech-param-object="data.userProfiles[item[field].value]"
                             table="data.table"
                             parent-sys-id="item.sys_id"
                             />
               </div>
-              <span ng-bind-html="item[field].display_value"/>
             </span>
+            <!-- STRY0137371 -->
+            <span ng-if="data.showDTechDuration && field=='suspense_date'">
+              <dtech-duration dtech-assigned-member="{{item.assigned_to.display_value}}"
+                              dtech-duration-modal-title = "{{item.duration_modal_title}}"
+                              dtech-duration-object = "data.loadedDurationOjbects[item.sys_id]"
+                              dtech-is-modal="data.isModal"
+                              dtech-number="{{item.comment_number}}"
+                              dtech-status-reason="{{item.status_reason}}"
+                              dtech-status="{{item.duration_status}}"
+                              dtech-short-description="{{item.task_name}}"
+                              dtech-suspense-date="{{item.duration_suspense_date}}"
+                              dtech-show-long-dates="{{data.showLongDates}}"
+                              dtech-state="{{item.comment_state}}"
+                              table="{{data.table}}"
+                              task-sys-id="{{item.sys_id}}"                                          
+                              ></dtech-duration>
+            </span>
+            
             <span ng-if="field=='response'">
               <div ng-if="item[field].display_value.length>0 || item.comments_dt.length>0 || item.rework_comments.length>0">
                 <!-- Response Revamp Directive -->

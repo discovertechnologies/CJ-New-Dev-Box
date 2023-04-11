@@ -11,19 +11,111 @@
 /* Special License Rights
 *  The Government's rights to use, display, or disclose this software are restricted.
 *  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. */
+*  or portions thereof marked with this legend must also reproduce the markings. 
+// 2.8.1 | 2023-04-07 | raj | STRY0137371 - Icons to Represent Status
+*/
 // Script Continued Below
 var TaskerStatus = Class.create();
 TaskerStatus.prototype = {
 	initialize: function() {
 	},
 	
-	updateTaskerStatus : function(strquery){
+	// STRY0137371
+	getStatusAndReason: function(task){
+		var status_and_reason = {};
 		var daysBeforeSuspenseDateTaskStatusIsWarning = gs.getProperty("x_153465_discovert.#DaysBeforeSuspenseDateTaskStatusIsWarning");
-		
 		var now = new GlideDateTime();
 		var dateStatus = "";
+		var dateMsg="";
 		var riskStatus = "";
+		var riskMsg = "";
+		var newTaskStatus = "";
+		var newReason = "";
+		if(!task.suspense_date.nil()){
+			// STRY0102134 - NOTE: below warning hours is really warning days.  The field name is hours, but the label is clearly days
+			var warningStartDate = new GlideDate();
+
+			var taskOU = null;
+			if(task.getDisplayValue('primary_office') + '' == ''){
+				taskOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+				if(taskOU.get(task.getValue('primary_office'))){
+					// use OU below
+				} else {
+					taskOU = null;
+				}
+			}
+
+			var tdc = new TaskerDurationCalculator();
+			if(!task.warning_hours.nil()){
+				// count from today the number of warning days
+				warningStartDate = tdc.calculateDateOfAddedBusinessDays(taskOU, task.warning_hours, warningStartDate);
+			}
+			else{
+				warningStartDate = tdc.calculateDateOfAddedBusinessDays(taskOU, daysBeforeSuspenseDateTaskStatusIsWarning, warningStartDate);
+			}
+			var WarningStartTime = warningStartDate.getValue();
+
+			if (now > task.suspense_date){
+				dateStatus = "Overdue";
+				dateMsg = gs.getMessage("Tasker - Task is Overdue");
+			}
+
+			else {
+				// STRY0102134 - above we are adding the number of warning days to today.
+				//               This line of code was changed to compare the suspense date to the warning days instead of now to warning days since we are counting forward instead of backward
+				if (WarningStartTime > task.suspense_date) {
+					dateStatus = "Warning";
+					dateMsg = gs.getMessage("Tasker - Task is due in under {0} days", [task.warning_hours]);
+				}else{
+					dateStatus = "Projected on time";
+					dateMsg = "Projected on time";
+				}
+			}
+		} else {
+			dateStatus = "No Suspense Date";
+		}
+		// Pull Risk Information
+		if(task.risk_flag==2){
+			riskStatus = "High Risk";
+			riskMsg = gs.getMessage("Tasker - Task has been marked High Risk");
+		}
+		else if (task.risk_flag==1) {
+			riskStatus = "Medium Risk";
+			riskMsg = gs.getMessage("Tasker - Task has been marked Medium Risk");
+		}
+		else if (task.risk_flag==0) {
+			riskStatus = "Low Risk";
+		}
+
+		//STRY0071865 | 2.5.13 : Set new task status to variable
+		if ((dateStatus=="Overdue")  || (riskStatus=="High Risk")){
+			newTaskStatus = "Critical";
+
+		} else if ((dateStatus=="Warning")  || (riskStatus=="Medium Risk")){
+			newTaskStatus = "Warning";
+		}
+		else {
+			newTaskStatus = "Projected on time";
+		}
+		
+		if(dateMsg != ""){
+			newReason = dateMsg;
+		}
+		if(riskMsg != ""){
+			if(dateMsg != ""){
+				newReason = dateMsg + " - ";
+			} 
+			newReason += riskMsg;
+		}
+		
+		status_and_reason.status = newTaskStatus;
+		status_and_reason.reason = newReason;
+
+		return status_and_reason;
+	},
+	
+	updateTaskerStatus : function(strquery){
+		var statusAndReason = {};
 		var newTaskStatus = "";   //STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
 		
 		//Added Notifications
@@ -34,93 +126,30 @@ TaskerStatus.prototype = {
 		gr.query();
 		var count=0;
 		
-		
 		while(gr.next()) {
-			//if(gr.active) {
-				// RAJ 2018-03-13 check supsense date before using
-				if(!gr.suspense_date.nil()){
-					// STRY0102134 - NOTE: below warning hours is really warning days.  The field name is hours, but the label is clearly days
-					var warningStartDate = new GlideDate();
-					
-					var grOU = null;
-					if(gr.getDisplayValue('primary_office') + '' == ''){
-						grOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-						if(grOU.get(gr.getValue('primary_office'))){
-							// use OU below
-						} else {
-							grOU = null;
-						}
-					}
-
-					var tdc = new TaskerDurationCalculator();
-					if(!gr.warning_hours.nil()){
-						// count from today the number of warning days
-						warningStartDate = tdc.calculateDateOfAddedBusinessDays(grOU, gr.warning_hours, warningStartDate);
-					}
-					else{
-						warningStartDate = tdc.calculateDateOfAddedBusinessDays(grOU, daysBeforeSuspenseDateTaskStatusIsWarning, warningStartDate);
-					}
-					var WarningStartTime = warningStartDate.getValue();
-		
-					if (now > gr.suspense_date)
-						dateStatus = "Overdue";
-					else {
-						// STRY0102134 - above we are adding the number of warning days to today.
-						//               This line of code was changed to compare the suspense date to the warning days instead of now to warning days since we are counting forward instead of backward
-						if (WarningStartTime > gr.suspense_date) {
-							dateStatus = "Warning";
-						}else{
-							dateStatus = "Projected on time";
-						}
-					}
-				} else {
-					dateStatus = "No Suspense Date";
-				}
-				// Pull Risk Information
-				if(gr.risk_flag==2){
-					riskStatus = "High Risk";
-				}
-				else if (gr.risk_flag==1) {
-					riskStatus = "Medium Risk";
-				}
-				else if (gr.risk_flag==0) {
-					riskStatus = "Low Risk";
-				}
-			
-				//STRY0071865 | 2.5.13 : Set new task status to variable
-				if ((dateStatus=="Overdue")  || (riskStatus=="High Risk")){
-					newTaskStatus = "Critical";
-					
-				}
-				else if ((dateStatus=="Warning")  || (riskStatus=="Medium Risk")){
-					newTaskStatus = "Warning";
-				}
-				else {
-					newTaskStatus = "Projected on time";
-				}
-				
+			statusAndReason = this.getStatusAndReason(gr);
+			newTaskStatus = statusAndReason.status;
 			//STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
-				if (gr.getValue('status') != newTaskStatus){
-					gr.status = newTaskStatus;
-					gr.update();
-				}
-								
+			if (gr.getValue('status') != newTaskStatus){
+				gr.status = newTaskStatus;
+				gr.update();
 			}
-		},
-		
+		}
+	},
+
 		type: 'TaskerStatus'
 	};]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2019-06-27 00:36:37</sys_created_on>
         <sys_id>532e93d1db5eb3002658255c8a96192e</sys_id>
-        <sys_mod_count>52</sys_mod_count>
+        <sys_mod_count>58</sys_mod_count>
         <sys_name>TaskerStatus</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_532e93d1db5eb3002658255c8a96192e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2021-09-09 04:36:08</sys_updated_on>
+        <sys_updated_on>2023-04-09 04:24:08</sys_updated_on>
     </sys_script_include>
 </record_update>

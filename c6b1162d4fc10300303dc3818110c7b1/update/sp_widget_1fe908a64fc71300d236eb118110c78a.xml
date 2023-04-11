@@ -1214,10 +1214,27 @@ tbody tr:last-child {
 //																			Changes in HTML - added HTML for Table Button Filters
 // 2.8.1 | 2023-03-27 | raj |  DFCT0011709 - tbd:  Templates - OOO Gap Out of Office History . banners -  Organizational Hierarchy Tree Bi-Fold
 //																			Changes in HTML - one of the DIV blocks was wrong, this has been corrected
+// 2.8.1 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat
+//																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-07 - raj -   STRY0137373 - (STRETCH) Reopen Icon in Subtask, Detailed Status, Final Response tab
+//																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-07 | raj | STRY0137371 - Icons to Represent Status
+//																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-07 | raj | STRY0137576 - "Response Icons" in the "Response Column" for Subtask tab
+//																			Changes in Server, and HTML and directives
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
+	
+	// STRY0137371
+	var taskerStatus = new TaskerStatus();
+	var status_and_reason = {};
+	data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
+
+	// STRY0136617
+	data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
+	
   // STRY0135710 - modified function to include $sp and other parameters
 
 	// DFCT0010949
@@ -1584,6 +1601,9 @@ tbody tr:last-child {
 	// STRY0135276 - used to hold all of the user information
 	data.usersPhotoInfo = {};
 	data.userProfiles = {};
+	// STRY0137371
+	data.loadedDurationOjbects = {};
+	
 
 	while (gr._next()) {
 		var record = {};
@@ -1624,6 +1644,69 @@ tbody tr:last-child {
 
 		}
 		//} //From Global 
+		
+		// STRY0137373
+		data.showDTechResponseComments = false;
+		// STRY0137371
+		data.showDTechDuration = false;
+		switch (data.table) {
+			case 'x_153465_discovert_route_task_instance':
+				data.showDTechResponseComments = true;
+				record.task_name = gr.getDisplayValue("short_description");
+				record.comment_state = gr.getDisplayValue("state");
+				record.comments_dt = ''; // Reviewer
+				record.comment_number = ''; // aka task Number
+				record.reject_comment = '';
+				record.reopen_comments = '';
+				record.rework_comments = '';
+				record.comments_dt = gr.getDisplayValue('comments_dt'); // Reviewer	
+				record.comment_number = gr.getDisplayValue('number'); // aka task Number
+				record.response_comments = gr.getDisplayValue('response');
+				record.reject_comment = gr.getDisplayValue('reject_comment');
+				record.reopen_comments = gr.getDisplayValue('reopen_comments');
+				record.rework_comments = gr.getDisplayValue('rework_comments');
+				status_and_reason = taskerStatus.getStatusAndReason(gr);
+				record.status_reason = status_and_reason.reason;
+				
+				// STRY0137371
+				data.showDTechDuration = true;
+				data.loadedDurationOjbects[gr.getUniqueValue()] = {}
+				record.duration_status = gr.getDisplayValue("status");
+				record.duration_suspense_date = gr.getDisplayValue("suspense_date");
+				record.duration_modal_title = data.durationTitle + gr.getDisplayValue("task_name");
+				break;
+			// action log table
+			case 'x_153465_discovert_discover_tasker_response':
+				data.showDTechResponseComments = true;
+				record.comments_dt = ''; // Reviewer
+				record.comment_number = ''; // aka task Number
+				record.reject_comment = '';
+				record.reopen_comments = '';
+				record.rework_comments = '';
+				record.task_name = gr.getDisplayValue("u_task");
+				record.comment_number = gr.getDisplayValue("u_task.number");
+				// set state to action taken
+				record.comment_state = gr.getDisplayValue("u_action_taken");
+				var commentType = gr.getValue("u_comment_type");
+				// in the Action Log table, always use the Response column
+				switch(commentType){
+					case "comments_dt":
+						record.comments_dt = gr.getDisplayValue('response');
+						break;
+					case "reopen_comments":
+						record.reopen_comments = gr.getDisplayValue('response');
+						break;
+					case "response":
+						record.response_comments = gr.getDisplayValue('response');
+						break;
+					case "rework_comments":
+						record.rework_comments = gr.getDisplayValue('response');
+						break;
+				}
+				break;
+			default:
+				break;
+		}		
 		record.sys_id = gr.getValue('sys_id');
 
 		// STRY0125255 STRY0123997 - find the selected item
@@ -1697,14 +1780,14 @@ tbody tr:last-child {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1602</sys_mod_count>
+        <sys_mod_count>1634</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-31 21:02:55</sys_updated_on>
+        <sys_updated_on>2023-04-11 12:53:04</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -1878,16 +1961,52 @@ removed :: in the item[field} and data display value lines	 below-->
                 <span ng-switch-default>
                   <span ng-switch="item[field].type">
                     <!-- STRY0131197- if showLongDates is true on date fields, show in long format-->
-                    <span ng-switch-when="glide_date_time">
-                      <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
-                      <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
+                    <span ng-switch-when="glide_date_time"
+                          class="flex-row flex-nowrap">
+                      
+                      <span ng-if="data.showDTechDuration && field=='suspense_date'">
+                          <dtech-duration dtech-assigned-member="{{item.assigned_to.display_value}}"
+                                          dtech-duration-modal-title = "{{item.duration_modal_title}}"
+                                          dtech-duration-object = "data.loadedDurationOjbects[item.sys_id]"
+                                          dtech-is-modal="data.isModal"
+                                          dtech-number="{{item.comment_number}}"
+                                          dtech-status-reason="{{item.status_reason}}"
+                                          dtech-status="{{item.duration_status}}"
+                                          dtech-short-description="{{item.task_name}}"
+                                          dtech-suspense-date="{{item.duration_suspense_date}}"
+                                          dtech-show-long-dates="{{data.showLongDates}}"
+                                          dtech-state="{{item.comment_state}}"
+                                          table="{{data.table}}"
+                                          task-sys-id="{{item.sys_id}}"                                          
+                                          ></dtech-duration>
+                      </span>
+                      <span ng-if="(field!='suspense_date' || !data.showDTechDuration) && !data.showLongDates">{{item[field].display_value}}</span>
+                      <span ng-if="(field!='suspense_date' || !data.showDTechDuration) && data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
                     </span>
                     <span ng-switch-when="glide_date">
                       <span ng-if="!data.showLongDates">{{item[field].display_value}}</span>
                       <span ng-if="data.showLongDates">{{item[field].display_value.substring(0,10)| date : 'MMMM d, y'}}</span>
                     </span>
                     <span ng-switch-when="html">
-                      <span ng-bind-html="item[field].display_value"></span>
+                      <span ng-if="data.showDTechResponseComments==true && field=='response'">
+                        <div ng-if="item.response_comments.length>0 || item.comments_dt.length>0 || item.rework_comments.length>0 || item.reopen_comments.length>0">
+                          <!-- Response Revamp Directive -->
+                          <dtech-response-revamp dtech-assigned-member="{{item.assigned_to.display_value}}"
+                                                 dtech-is-modal="data.isModal"
+                                                 dtech-number="{{item.comment_number}}"
+                                                 dtech-reopen-comments="{{item.reopen_comments}}"
+                                                 dtech-response-comments="{{item.response_comments}}"
+                                                 dtech-reviewer-comments="{{item.comments_dt}}"
+                                                 dtech-rework-comments="{{item.rework_comments}}"
+                                                 dtech-short-description="{{item.task_name}}"
+                                                 dtech-state="{{item.comment_state}}"
+                                                 ></dtech-response-revamp>
+                        </div>
+                      </span>                      
+                      
+                      
+                      <span ng-if="data.showDTechResponseComments!=true || field!='response'"
+                            ng-bind-html="item[field].display_value"></span>
                     </span>
                     <!-- 2.6.0 | 2021-03-25 | mmcc | STRY0096103 Tree Level Print Report: Activity Log; added switch when string-->
                     <span ng-switch-when="string">
@@ -1900,22 +2019,23 @@ removed :: in the item[field} and data display value lines	 below-->
                       <span ng-bind-html="item[field].display_value"/>
                     </span>
                      <span ng-switch-when="reference">
-<div class="flex-row">
-                      <div ng-if="item[field].isUser==true && item[field].display_value!=''">
-                        <!-- STRY0135276 - User Profile Directive -->
-                        <dtech-user dtech-task-title = "getTitle(item);"
-                                    dtech-field="field"
-                                    dtech-is-modal="data.isModal"
-                                    dtech-user-image-size="24"
-                                    dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
-                                    dtech-param-object="data.userProfiles[item[field].value]"
-                                    table="data.table"
-                                    parent-sys-id="item.sys_id"
-                                    />
-                      </div>
-                      <span class="dtech-pad-left-10"
-                            ng-bind-html="item[field].display_value"/>
-</div>  
+                       <div ng-if="item[field].isUser==true && item[field].display_value!=''">
+                         <!-- STRY0135276 - User Profile Directive -->
+                         <dtech-user dtech-task-title = "getTitle(item);"
+                                     dtech-field="field"
+                                     dtech-is-modal="data.isModal"
+                                     dtech-user-image-size="24"
+                                     dtech-chat-enabled="data.chatEnabled"
+                                     dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
+                                     dtech-param-object="data.userProfiles[item[field].value]"
+                                     table="data.table"
+                                     parent-sys-id="item.sys_id"
+                                     />
+                       </div>
+                       <div ng-if="item[field].isUser!=true">
+                         <span class="dtech-pad-left-10"
+                               ng-bind-html="item[field].display_value"/>
+                       </div>
                     </span>
                     <span ng-switch-default>
                       <span>{{item[field].display_value}}</span>
