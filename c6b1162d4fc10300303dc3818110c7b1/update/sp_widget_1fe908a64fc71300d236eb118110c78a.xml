@@ -1222,6 +1222,10 @@ tbody tr:last-child {
 //																			Changes in Server, and HTML and directives
 // 2.8.1 | 2023-04-07 | raj | STRY0137576 - "Response Icons" in the "Response Column" for Subtask tab
 //																			Changes in Server, and HTML and directives
+// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column
+//                                      In HTML, add directive dtech-response-comments
+//                                      In Server script, for Task table and Action Log table get data for directive
+//                                      Changes made in HTML and Server script.
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1330,7 +1334,7 @@ tbody tr:last-child {
 	// NOTE: for this to work, the parent field MUST be set also
 	if(data.getParentIdFromUrl){
 		if((data.parentField && data.parentField != "") &&
-			 (url_sys_id && url_sys_id != undefined && url_sys_id != "")){
+			(url_sys_id && url_sys_id != undefined && url_sys_id != "")){
 			data.filter = "^" + data.parentField + "=" + url_sys_id;
 			// if task_id not passed in from parent widget, set it to url_sys_id
 			if(!data.task_id || data.task_id == undefined || data.task_id == ""){
@@ -1400,11 +1404,13 @@ tbody tr:last-child {
 	data.page_index = data.p - 1;
 	// STRY0108599
 	data.show_new = (input.show_new == true || input.show_new == "true" ||
-									 options.show_new == true || options.show_new == "true");
-	data.open_new_in_modal = (input.open_new_in_modal == true || input.open_new_in_modal == "true" || options.open_new_in_modal == true || options.open_new_in_modal == "true"); 
-	data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" || options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
+						options.show_new == true || options.show_new == "true");
+	data.open_new_in_modal = (input.open_new_in_modal == true || input.open_new_in_modal == "true" ||
+								options.open_new_in_modal == true || options.open_new_in_modal == "true"); 
+	data.open_row_details_in_modal = (input.open_row_details_in_modal == true || input.open_row_details_in_modal == "true" ||
+									options.open_row_details_in_modal == true || options.open_row_details_in_modal == "true"); //New feature added. KTorres
 	data.enable_filter = (input.enable_filter == true || input.enable_filter == "true" ||
-												options.enable_filter == true || options.enable_filter == "true");
+							options.enable_filter == true || options.enable_filter == "true");
 
 	// 2.7.0 | 2021-07-24 - move after the $sp pulls values from the URL
 	if (!data.table) {
@@ -1472,7 +1478,7 @@ tbody tr:last-child {
 	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
 	if(filterDesc !='') {
 		if(data.task_id && data.task_id!=-1 &&
-			 data.table == 'x_153465_discovert_route_task_instance') {
+			data.table == 'x_153465_discovert_route_task_instance') {
 			// for subtasks on the task table, change the filter used//		
 			data.filter = data.filter +					
 				"^NQ" +
@@ -1543,8 +1549,8 @@ tbody tr:last-child {
 
 	// STRY0135710 - logic for Data Table Filter Buttons
 	if(data.table == "x_153465_discovert_route_task_instance" &&
-		 data.additionalFilter != "active==false" &&
-		 data.page_id!="discovertasker_detailsdrilldown"){
+		data.additionalFilter != "active==false" &&
+		data.page_id!="discovertasker_detailsdrilldown"){
 		data.showTableFilterButtons = true;
 
 		// Add new query for All or Top Tasks
@@ -1650,57 +1656,78 @@ tbody tr:last-child {
 		// STRY0137371
 		data.showDTechDuration = false;
 		switch (data.table) {
+			// Task table
 			case 'x_153465_discovert_route_task_instance':
 				data.showDTechResponseComments = true;
 				record.task_name = gr.getDisplayValue("short_description");
 				record.comment_state = gr.getDisplayValue("state");
-				record.comments_dt = ''; // Reviewer
-				record.comment_number = ''; // aka task Number
-				record.reject_comment = '';
-				record.reopen_comments = '';
-				record.rework_comments = '';
-				record.comments_dt = gr.getDisplayValue('comments_dt'); // Reviewer	
+				record.comment_number = ''; // aka task Number					
 				record.comment_number = gr.getDisplayValue('number'); // aka task Number
-				record.response_comments = gr.getDisplayValue('response');
-				record.reject_comment = gr.getDisplayValue('reject_comment');
-				record.reopen_comments = gr.getDisplayValue('reopen_comments');
-				record.rework_comments = gr.getDisplayValue('rework_comments');
 				status_and_reason = taskerStatus.getStatusAndReason(gr);
 				record.status_reason = status_and_reason.reason;
 				
 				// STRY0137371
 				data.showDTechDuration = true;
-				data.loadedDurationOjbects[gr.getUniqueValue()] = {}
+				data.loadedDurationOjbects[gr.getUniqueValue()] = {};
 				record.duration_status = gr.getDisplayValue("status");
 				record.duration_suspense_date = gr.getDisplayValue("suspense_date");
 				record.duration_modal_title = data.durationTitle + gr.getDisplayValue("task_name");
+				
+				// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
+				// use var's just for directive in case those columns are added as fields
+				record.directive_reopen_comments = '';
+				record.directive_response_comments = '';
+				record.directive_reviewer_comments = '';
+				record.directive_rework_comments = '';
+				record.isResponseCommentsDirectiveShown = false;
+				
+				// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
+				// use one var in ngIf for Response Comments Directive
+				if (gr.getElement('comments_dt').getDisplayValue().length > 0 ||
+					gr.getElement('response').getDisplayValue().length > 0 ||
+					gr.getElement('reopen_comments').getDisplayValue().length > 0 ||
+					gr.getElement('rework_comments').getDisplayValue().length > 0) {
+					record.isResponseCommentsDirectiveShown = true;
+					record.directive_reopen_comments = gr.getElement('reopen_comments').getDisplayValue();
+					record.directive_response_comments = gr.getElement('response').getDisplayValue();
+					record.directive_reviewer_comments = gr.getElement('comments_dt').getDisplayValue();
+					record.directive_rework_comments = gr.getElement('rework_comments').getDisplayValue();
+				}
 				break;
-			// action log table
+			// Action Log table
 			case 'x_153465_discovert_discover_tasker_response':
 				data.showDTechResponseComments = true;
-				record.comments_dt = ''; // Reviewer
-				record.comment_number = ''; // aka task Number
-				record.reject_comment = '';
-				record.reopen_comments = '';
-				record.rework_comments = '';
-				record.task_name = gr.getDisplayValue("u_task");
-				record.comment_number = gr.getDisplayValue("u_task.number");
-				// set state to action taken
-				record.comment_state = gr.getDisplayValue("u_action_taken");
+				record.isResponseCommentsDirectiveShown = false;
+
+				// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
+				// use var's just for directive in case those columns are added as fields
+				record.directive_reopen_comments = '';
+				record.directive_response_comments = '';
+				record.directive_reviewer_comments = '';
+				record.directive_rework_comments = '';
+				
 				var commentType = gr.getValue("u_comment_type");
 				// in the Action Log table, always use the Response column
 				switch(commentType){
 					case "comments_dt":
-						record.comments_dt = gr.getDisplayValue('response');
+						// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column
+						record.directive_reviewer_comments = gr.getDisplayValue('response');
+						record.isResponseCommentsDirectiveShown = gr.getElement('response').getDisplayValue().length > 0;
 						break;
 					case "reopen_comments":
-						record.reopen_comments = gr.getDisplayValue('response');
+						// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column
+						record.directive_reopen_comments = gr.getDisplayValue('response');
+						record.isResponseCommentsDirectiveShown = gr.getElement('response').getDisplayValue().length > 0;
 						break;
 					case "response":
-						record.response_comments = gr.getDisplayValue('response');
+						// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column
+						record.directive_response_comments = gr.getElement('response').getDisplayValue();
+						record.isResponseCommentsDirectiveShown = gr.getElement('response').getDisplayValue().length > 0;
 						break;
 					case "rework_comments":
-						record.rework_comments = gr.getDisplayValue('response');
+						// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column
+						record.directive_rework_comments = gr.getDisplayValue('response');
+						record.isResponseCommentsDirectiveShown = gr.getElement('response').getDisplayValue().length > 0;
 						break;
 				}
 				break;
@@ -1759,7 +1786,6 @@ tbody tr:last-child {
 			return count;
 		}
 
-	
 	// copy to data from input or options
 	function optCopy(names) {
 		names.forEach(function(name) {
@@ -1779,15 +1805,17 @@ tbody tr:last-child {
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1634</sys_mod_count>
+        <sys_mod_count>1667</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
-        <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-04-11 12:53:04</sys_updated_on>
+        <sys_updated_by>mmccune</sys_updated_by>
+        <sys_updated_on>2023-04-19 20:11:05</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -1989,22 +2017,19 @@ removed :: in the item[field} and data display value lines	 below-->
                     </span>
                     <span ng-switch-when="html">
                       <span ng-if="data.showDTechResponseComments==true && field=='response'">
-                        <div ng-if="item.response_comments.length>0 || item.comments_dt.length>0 || item.rework_comments.length>0 || item.reopen_comments.length>0">
-                          <!-- Response Revamp Directive -->
-                          <dtech-response-revamp dtech-assigned-member="{{item.assigned_to.display_value}}"
-                                                 dtech-is-modal="data.isModal"
-                                                 dtech-number="{{item.comment_number}}"
-                                                 dtech-reopen-comments="{{item.reopen_comments}}"
-                                                 dtech-response-comments="{{item.response_comments}}"
-                                                 dtech-reviewer-comments="{{item.comments_dt}}"
-                                                 dtech-rework-comments="{{item.rework_comments}}"
-                                                 dtech-short-description="{{item.task_name}}"
-                                                 dtech-state="{{item.comment_state}}"
-                                                 ></dtech-response-revamp>
+                        <div ng-if="item.isResponseCommentsDirectiveShown==true">
+                          <!-- Response Comments Directive -->
+                          <dtech-response-comments dtech-is-modal="data.isModal"
+                                                   dtech-reopen-comments="{{item.directive_reopen_comments}}"
+                                                   dtech-response-comments="{{item.directive_response_comments}}"
+                                                   dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
+                                                   dtech-rework-comments="{{item.directive_rework_comments}}"
+                                                   dtech-sys-id="{{item.sys_id}}"
+                                                   dtech-table="{{data.table}}"
+                                                   ></dtech-response-comments>
                         </div>
-                      </span>                      
-                      
-                      
+                      </span>
+
                       <span ng-if="data.showDTechResponseComments!=true || field!='response'"
                             ng-bind-html="item[field].display_value"></span>
                     </span>

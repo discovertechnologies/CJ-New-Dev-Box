@@ -1,87 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
     <sp_angular_provider action="INSERT_OR_UPDATE">
-        <name>dtechResponseRevamp</name>
+        <name>dtechResponseComments</name>
         <script><![CDATA[/* Use this Directive to add icons for the different types of Comments a Task can have to a table cell with a hover popover function
 Note: AngularJS normalizes case-sensitive camelCase to case-insensitive kebab-case for the DOM.
 Usage in a widget's HTML:
-	<dtech-response-revamp dtech-assigned-member="{{item.assigned_to.display_value}}"
-		dtech-is-modal="data.isModal"
-		dtech-number="{{item.number}}"
-        dtech-reopen-comments="{{item.reopen_comments}}"
-        dtech-response-comments="{{item[field].display_value}}"
-        dtech-reviewer-comments="{{item.comments_dt}}"
-        dtech-rework-comments="{{item.rework_comments}}"
-        dtech-short-description="{{item.short_description.display_value}}"
-        dtech-state="{{item.state.display_value}}"
-		></dtech-response-revamp>
+	<dtech-response-comments dtech-is-modal="data.isModal"
+        dtech-reopen-comments="{{item.directive_reopen_comments}}"
+        dtech-response-comments="{{item.directive_response_comments}}"
+        dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
+        dtech-rework-comments="{{item.directive_rework_comments}}"
+		dtech-sys-id="{{item.sys_id}}"
+		dtech-table="{{data.table}}"
+		></dtech-response-comments>
 
 	The HTML for the directive is in	
-	templateUrl: getTemplateUrl('x_153465_discovert_dtechResponseRevamp.html')
+	templateUrl: getTemplateUrl('x_153465_discovert_dtechResponseComments.html')
 //
 // Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
 // Script Continued Below
 // 2.8.1 | 2023-04-04 | mmcc | STRY0135723 - Homepage Comments column replaced by Task Comments
-//  Created Directive								   
+//  Created Directive
+// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
+//  Rename directive and change usage of User to Response
+//  Updated above Usage in a widget's HTML section to show use of new var names, item.directive_reopen_comments
+//  Added dtechSysId, dtechTable and _openModalResponseComments()
+//
 */
-function dtechResponseRevamp(getTemplateUrl, spModal, $timeout, $window) {
+function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 	var CONST_TEMP_WAIT_DURATION = 400;
-	var dtUser = {
+	var dtResponse = {
 		restrict: 'E',
 		replace: true,
 		// @: string 1 way, =: object 2 way, <: object 1 way
 		scope: {
-			dtechAssignedMember: '@',
 			dtechIsModal: "=",
-			dtechNumber: '@',
 			dtechReopenComments: '@',
 			dtechResponseComments: '@',
 			dtechReviewerComments: '@',
 			dtechReworkComments: '@',
-			dtechShortDescription: '@',
-			dtechState: '@'
+			dtechSysId: '@',
+			dtechTable: '@'
 		},
-		controller: userCtrl,
+		controller: responseCtrl,
 		link: link,
 		controllerAs: 'd',
-		templateUrl: getTemplateUrl('x_153465_discovert_dtechResponseRevamp.html')
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechResponseComments.html')
 	};
-	return dtUser;
+	return dtResponse;
 
-	function userCtrl($scope, $attrs, $animate) {
+	function responseCtrl($scope, $attrs, $animate) {
 		var d = this;	
 		d._isOverTooltip = false;
 		d.dtechResponseToolTipOpen = _dtechResponseToolTipOpen;
 		
 		// passed in data section
-		d.dtechAssignedMember = _dtechAssignedMember;
 		d.dtechIsModal = _dtechIsModal;
-		d.dtechNumber = _dtechNumber;
 		d.dtechReopenComments = _dtechReopenComments;
 		d.dtechResponseComments = _dtechResponseComments;
 		d.dtechReviewerComments = _dtechReviewerComments;
 		d.dtechReworkComments = _dtechReworkComments;
-		d.dtechShortDescription = _dtechShortDescription;
-		d.dtechState = _dtechState;
+		d.dtechSysId = _dtechSysId;
+		d.dtechTable = _dtechTable;
 		
 		// directive's functional section
 		d.enterTooltip = _enterTooltip;
 		d.init = _init;
 		d.leaveTooltip = _leaveTooltip;
-		d.openModal= _openModal;
-		d.openUserProfileModal= _openUserProfileModal;
+		d.openModal = _openModal;
+		d.openModalResponseComments = _openModalResponseComments;
 		d.parentMouseLeave = _parentMouseLeave;
 		d.showResponse = _showResponse;
-
-		function _dtechAssignedMember() {
-			return $scope.dtechAssignedMember;
-		}
 		
 		function _dtechIsModal() {
 			return $scope.dtechIsModal;
-		}
-		
-		function _dtechNumber() {
-			return $scope.dtechNumber;
 		}
 		
 		function _dtechReopenComments() {
@@ -100,18 +91,18 @@ function dtechResponseRevamp(getTemplateUrl, spModal, $timeout, $window) {
 			return $scope.dtechReworkComments;
 		}
 		
-		function _dtechShortDescription() {
-			return $scope.dtechShortDescription;
-		}
-		
-		function _dtechState() {
-			return $scope.dtechState;
-		}
-		
 		function _dtechResponseToolTipOpen(){
 			return $scope.dtechResponseToolTipOpen;
 		}
 
+		function _dtechSysId() {
+			return $scope.dtechSysId;
+		}
+		
+		function _dtechTable() {
+			return $scope.dtechTable;
+		}
+		
 		// when the user hovers over the tooltip set overtooltip flag
 		function _enterTooltip() {
 			d._isOverTooltip = true;
@@ -138,30 +129,37 @@ function dtechResponseRevamp(getTemplateUrl, spModal, $timeout, $window) {
 		// this function is called from Template html
 		// it is called when a user clicks on the open link
 		function _openModal(event) {
-			_openUserProfileModal(event);
+			_openModalResponseComments(event);
+			
 		}
 		
-		function _openUserProfileModal(event){
-			alert('Showing comments coming here soon...');
-// 			var title = 'Tasker User Settings Container';
-// 			var widget = 'tasker_user_settings_container';
-// 			spModal.open({
-// 				title: title,
-// 				backdrop: 'static',
-// 				widget: widget,
-// 				widgetInput: {
-// 					// orig sys_id: $scope.dtechUserPhotoInfo.sys_id,
-// 					sys_id: 'ab0894771bec3010888aebde6e4bcb54',
-// 					isModal: true
-// 				},
-// 				size: 'lg',
-// 				buttons: [],
-// 				footerStyle: {
-// 					'display': 'none'
-// 				}
-// 			});
+		function _openModalResponseComments(event) {
+			var title = '';
+			var widget = 'tasker_modal_response_comments';
+			spModal.open({
+				title: title,
+				backdrop: 'static',
+				widget: widget,
+				widgetInput: {
+					isModal: _dtechIsModal(),
+					sys_id: _dtechSysId(),
+					table:  _dtechTable()
+				},
+				size: 'lg',
+				buttons: [],
+				headerStyle: {
+					'border-bottom': 'none',
+					'padding': '20px 15px 0 20px'
+				},
+				footerStyle: {
+					'display': 'none'
+				}
+			});
+			
 			// modal is openened stop the row or cell click form raising
 			event.stopPropagation();
+			
+			_leaveTooltip();
 		}
 		
 		// _parentMouseLeave
@@ -179,15 +177,14 @@ function dtechResponseRevamp(getTemplateUrl, spModal, $timeout, $window) {
 			$scope.dtechResponseToolTipOpen = true;
 		}
 		
-	} // end function userCtrl
+	} // end function responseCtrl
 	
 	// Link function links local methods to parent controller methods
 	// see the list of events being monitored
-	function link(scope, element, attrs, userCtrl) {
+	function link(scope, element, attrs, responseCtrl) {
 		// initialize the control
-		userCtrl.init(element);			
+		responseCtrl.init(element);			
 		scope.$on('$destroy',_destroy);
-		// get the location of the element hovering over
 
 		function _destroy() {
 			element.remove();
@@ -200,15 +197,15 @@ function dtechResponseRevamp(getTemplateUrl, spModal, $timeout, $window) {
         <sys_created_on>2023-03-24 19:12:48</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>725846151bf1a110888aebde6e4bcb00</sys_id>
-        <sys_mod_count>55</sys_mod_count>
-        <sys_name>dtechResponseRevamp</sys_name>
+        <sys_mod_count>96</sys_mod_count>
+        <sys_name>dtechResponseComments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_725846151bf1a110888aebde6e4bcb00</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-04-04 18:40:33</sys_updated_on>
+        <sys_updated_on>2023-04-19 20:40:32</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>
