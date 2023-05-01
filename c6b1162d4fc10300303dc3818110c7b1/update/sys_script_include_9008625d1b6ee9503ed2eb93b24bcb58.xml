@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.task_privacy</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script is used for the initial release of Task Privacy&#13;
+After the initial release, some of this may move into other functions</description>
+        <name>task_privacy</name>
+        <script><![CDATA[var task_privacy = Class.create();
+task_privacy.prototype = {
+    initialize: function() {
+		this.userInfo = new UserInfoScripts();
+    },
+	
+	userCanAccessOU: function(officeId){
+		var currentUserId = gs.getUserID();
+		var isUserInGroup = false;
+		var isOpenOrg = false;
+		var organizationalPrivacy;
+		var userCanReadOU = false;
+
+		organizationalPrivacy = this.getTopOUOrganizationalPrivacy(officeId);
+		isOpenOrg = organizationalPrivacy == 'open';
+		var isUserTaskerApplicationAdmin = this.userInfo.UserHasRole('x_153465_discovert.tasker_application_admin');
+		if(isOpenOrg || isUserTaskerApplicationAdmin){
+			userCanReadOU=true;
+		} else {
+			isUserInGroup = this.isUserInOrgStructure(officeId,currentUserId);
+			if(isUserInGroup){
+				userCanReadOU = true;
+			}
+		}
+		return userCanReadOU;
+	},
+	
+	getTopOUOrganizationalPrivacy: function(ouID){
+		var organizationalPrivacy = "open";
+		var grOfficeOU = new GlideRecord("x_153465_discovert_discover_office_hierarchy");
+		if(grOfficeOU.get(ouID)){
+			// now get Top OU
+			topOUId = grOfficeOU.getValue("u_top_ou");
+			var grTopOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+			if(grTopOU.get(topOUId)){
+				organizationalPrivacy = grTopOU.getValue("u_organizational_privacy");
+			}
+		}
+		return organizationalPrivacy;
+	},
+	
+	// NOTE: this should move into UserInfo or Oganizational Scripts after initial release
+	isUserInOrgStructure: function (ouID, userID){
+		var answer = false;
+		// get the top ID and use it to see if user is in the org structure
+		var grOfficeOU = new GlideRecord("x_153465_discovert_discover_office_hierarchy");
+		if(grOfficeOU.get(ouID)){
+			// now get Top OU
+			topOUId = grOfficeOU.getValue("u_top_ou");
+
+			//Query organizational unit members to see if the user is a member
+			// RAJ - STRY0011695 - change to use Glide Aggregate
+			var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+			grMembers.addEncodedQuery("discover_office_hierarchy.u_top_ou=" + topOUId + "^office_member=" + userID);
+			// RAJ - STRY0011695 - change to use Glide Aggregate
+			grMembers.addAggregate('COUNT');
+			grMembers.query();
+
+			if(grMembers.next()){
+				// RAJ - STRY0011695 - change to use Glide Aggregate
+				if (grMembers.getAggregate('COUNT') > 0){
+					answer = true;
+				}
+			}
+		}
+		return answer;
+	},
+
+
+    type: 'task_privacy'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-05-01 04:09:40</sys_created_on>
+        <sys_id>9008625d1b6ee9503ed2eb93b24bcb58</sys_id>
+        <sys_mod_count>10</sys_mod_count>
+        <sys_name>task_privacy</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_9008625d1b6ee9503ed2eb93b24bcb58</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-05-01 05:04:18</sys_updated_on>
+    </sys_script_include>
+</record_update>
