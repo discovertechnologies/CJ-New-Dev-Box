@@ -8,39 +8,193 @@
         <description>This Script is used for the initial release of Task Privacy&#13;
 After the initial release, some of this may move into other functions&#13;
 &#13;
-2.8.x   | 2023-05-01 - raj -  DFCT0011800 - TAA &gt; click &gt;  Organizational Hierarchy Tree Bi-Fold . ERROR DISPLAY (or any  ATF users) </description>
+2.8.x   | 2023-05-01 - raj -  DFCT0011800 - TAA &gt; click &gt;  Organizational Hierarchy Tree Bi-Fold . ERROR DISPLAY (or any  ATF users) &#13;
+2.8.x | 2023-05-04 - raj -   STRY0139614 - Modify Task Assignment with a Private OU - Selecting Users for users not dependent on Primary Assignee&#13;
+2.8.x | 2023-05-04 - raj -   STRY0139615 - Modify Template Assignment with a Private OU  - Selecting Users for users not dependent on Primary Assignee&#13;
+2.8.x | 2023-05-04 - raj -   STRY0139616 - Modify Template Assignment with a Open OU  - Selecting Users for users not dependent on Primary Assignee&#13;
+2.8.x | 2023-05-04 - raj -   STRY0139617 - Modify Task Assignment with a Open - Selecting Users for users not dependent on Primary Assignee&#13;
+2.8.x | 2023-05-04 - raj -   STRY0139618 - Modify Task Assignment with a Private - Selecting Primary Assignee Office&#13;
+2.8.x | 2023-05-04 - raj -   STRY0139619 - Modify Template Assignment with a Private OU  - Selecting Primary Assignee&#13;
+</description>
         <name>task_privacy</name>
         <script><![CDATA[var task_privacy = Class.create();
 task_privacy.prototype = {
     initialize: function() {
 		this.userInfo = new UserInfoScripts();
+		this.taskingScripts = new tasking_System_Settings_Scripts();
+		this.au = new global.ArrayUtil();
     },
 	
-	userCanAccessOU: function(officeId){
-		var currentUserId = gs.getUserID();
-		var isUserInGroup = false;
-		var isOpenOrg = false;
-		var organizationalPrivacy;
-		var userCanReadOU = false;
+	// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617 
+	// This function is used in dynamnic filters
+	// The current object is the record of the field the fitler applies to
+	// do not use this function outside of dynamic filters
+	getAllUsersAdminsCanTask: function(){
+		var returnNone=false;
+		// string for member sys_ids, default to get no users
+		var memArr = [];
+		var primary_ou = this._getPrimaryOUforAnyRecordType(current);
+		var top_ou = this._getTopOU(primary_ou);
+		// using gliderecord secure here will return only people this user can see
+		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		// get all members of all open office structures and all members of office structures this user is a member of
+		var queryAllOpenOUMembers = "discover_office_hierarchy.u_organizational_privacyISEMPTY^ORdiscover_office_hierarchy.u_organizational_privacy=open";
+		var userCanTaskQuery = "";
+		var recordPrivacyLevel = current.getValue("u_privacy");
+		switch(recordPrivacyLevel){
+			case "open": case "": case undefined:
+				// set query to return usrs in all open orgs
+				userCanTaskQuery = queryAllOpenOUMembers;
+				break;
+			case "restricted": 
+				// get all members of the restricted  org structure of the Primary Office
+				userCanTaskQuery = "discover_office_hierarchy.u_top_ou=" + top_ou;
+				break;
+			
+			case "ou_private":
+				// get all members of the private org structure of the Primary Office
+				userCanTaskQuery = "discover_office_hierarchy.u_top_ou=" + top_ou;
+				
+				// future, will need to allow this case to be broader than just primary office to support crossover private tasking
 
-		organizationalPrivacy = this.getTopOUOrganizationalPrivacy(officeId);
-		isOpenOrg = organizationalPrivacy == 'open';
-		var isUserTaskerApplicationAdmin = this.userInfo.UserHasRole('x_153465_discovert.tasker_application_admin');
-		if(isOpenOrg || isUserTaskerApplicationAdmin){
-			userCanReadOU=true;
-		} else {
-			isUserInGroup = this.isUserInOrgStructure(officeId,currentUserId);
-			if(isUserInGroup){
-				userCanReadOU = true;
+				break;
+			
+				
+			// future, here need to account for private tasks where only members of the task tree are loaded
+			// case "private":
+				
+			default:
+				// return no items
+				returnNone=true;
+		}
+		if(!returnNone){
+			grMembers.addEncodedQuery(userCanTaskQuery);
+			grMembers.query();
+			while(grMembers.next()){
+				memArr.push(grMembers.getValue("office_member"));
+			}
+			if(memArr.length==0){
+				memArr.push("none");
 			}
 		}
-		return userCanReadOU;
+		return memArr;
+	},
+
+	retrieveTaskOUsPrivacyFiltered: function(userId){
+		var offices = [];
+		var privacyFilterOffices = [];
+		offices = this.taskingScripts.retrieveTaskOUs(userId);
+		privacyFilterOffices = this._getPrivacyFilteredOffice();
+		// only return the intersecting offices with the privacy filter
+		offices = this.au.intersect(offices, privacyFilterOffices);
+		return offices;  
+	},	
+	
+	retrieveTemplateOUsPrivacyFiltered: function (userID, template_level, template_ou){
+		var offices = [];
+		var privacyFilterOffices = [];
+		offices = this.taskingScripts.retrieveTemplateOUs(userID, template_level, template_ou);
+		privacyFilterOffices = this._getPrivacyFilteredOffice();
+		// only return the intersecting offices with the privacy filter
+		offices = this.au.intersect(offices, privacyFilterOffices);
+		return offices;  
+	},
+
+	// This method is called from a dynamic filter and needs the current object to have a Primary Office field
+	// this method calls the method previously used, then fitlers based on the new privacy settings
+	getMyOUTaskManagersPrivacyFiltered: function() {
+	
+		var offices = [];
+		var privacyFilterOffices = [];
+		// get the list of offices this user manages
+		offices = this.taskingScripts.getMyOUTaskManagers();
+		privacyFilterOffices = this._getPrivacyFilteredOffice();
+		// only return the intersecting offices with the privacy filter
+		offices = this.au.intersect(offices, privacyFilterOffices);
+		return offices;  
 	},
 	
+	getPermissiveOUsPrivacyFiltered: function() {
+		var offices = [];
+		var privacyFilterOffices = [];
+		offices = this.taskingScripts.getPermissiveOUs();
+		privacyFilterOffices = this._getPrivacyFilteredOffice();
+
+		// only return the intersecting offices with the privacy filter
+		offices = this.au.intersect(offices, privacyFilterOffices);
+		return offices;  
+	},
+
+	// this is called only from filters and will have a current object to pull Primary Office from
+	_getPrivacyFilteredOffice: function(){
+		var returnNone=false;
+		var privacyOffices = [];
+		var grPrivateOUs = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+
+		var queryAllOpenOUs = "u_organizational_privacyISEMPTY^ORu_organizational_privacy=open";
+		var officesCanTaskQuery = "";
+		var primary_ou = this._getPrimaryOUforAnyRecordType(current);
+		var top_ou = this._getTopOU(primary_ou);
+		var recordPrivacyLevel = current.getValue("u_privacy");
+		switch(recordPrivacyLevel){
+			case "open": case "": case undefined:
+				// set query to return usrs in all open orgs
+				officesCanTaskQuery = queryAllOpenOUs;
+				break;
+			case "restricted": 
+				// get all members of the restricted  org structure of the Primary Office
+				officesCanTaskQuery = "u_top_ou=" + top_ou;
+				break;
+			
+			case "ou_private":
+				// get all members of the private org structure of the Primary Office
+				officesCanTaskQuery = "u_top_ou=" + top_ou;
+				
+				// future, will need to allow this case to be broader than just primary office to support crossover private tasking
+
+				break;
+			
+				
+			// future, here need to account for private tasks where only members of the task tree are loaded
+			// case "private":
+				
+			default:
+				// return no items
+				returnNone=true;
+		}
+		if(!returnNone){
+			grPrivateOUs.addEncodedQuery(officesCanTaskQuery);
+			grPrivateOUs.query();
+			while(grPrivateOUs.next()){
+				privacyOffices.push(grPrivateOUs.getUniqueValue());
+			}
+			if(privacyOffices.length==0){
+				privacyOffices.push("none");
+			}
+		}
+		return privacyOffices;
+	},
+
+	_getTopOU: function (ouId){
+		var topOU = "";
+		var grOfficeOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		// in dynamnic filters, current object is the record of the field the fitler applies to
+		if(grOfficeOU.get(ouId)){
+			topOU = grOfficeOU.getValue("u_top_ou");
+		}
+		return topOU;
+	},
+	
+	_getPrimaryOUforAnyRecordType: function(gr){
+		var primary_ou_id = gr.getValue("primary_office");
+		var u_primary_ou_id = gr.getValue("u_primary_office");
+		var primary_office_id = primary_ou_id || u_primary_ou_id;
+		return primary_office_id;
+	},
+		
 	getTopOUOrganizationalPrivacy: function(ouID){
 		var organizationalPrivacy = "open";
 		// DFCT0011800 - this is used to determine permissions, using GlideRecord Secure causes an ACL Loop
-      	
 		var grOfficeOU = new GlideRecord("x_153465_discovert_discover_office_hierarchy");
 		if(grOfficeOU.get(ouID)){
 			// now get Top OU
@@ -82,6 +236,27 @@ task_privacy.prototype = {
 		return answer;
 	},
 
+	userCanAccessOU: function(officeId){
+		var currentUserId = gs.getUserID();
+		var isUserInGroup = false;
+		var isOpenOrg = false;
+		var organizationalPrivacy;
+		var userCanReadOU = false;
+
+		organizationalPrivacy = this.getTopOUOrganizationalPrivacy(officeId);
+		isOpenOrg = organizationalPrivacy == 'open';
+		var isUserTaskerApplicationAdmin = this.userInfo.UserHasRole('x_153465_discovert.tasker_application_admin');
+		if(isOpenOrg || isUserTaskerApplicationAdmin){
+			userCanReadOU=true;
+		} else {
+			isUserInGroup = this.isUserInOrgStructure(officeId,currentUserId);
+			if(isUserInGroup){
+				userCanReadOU = true;
+			}
+		}
+gs.info("RJ - testing userCanReadOU: " + userCanReadOU);
+		return userCanReadOU;
+	},
 
     type: 'task_privacy'
 };]]></script>
@@ -89,13 +264,13 @@ task_privacy.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-05-01 04:09:40</sys_created_on>
         <sys_id>9008625d1b6ee9503ed2eb93b24bcb58</sys_id>
-        <sys_mod_count>13</sys_mod_count>
+        <sys_mod_count>43</sys_mod_count>
         <sys_name>task_privacy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9008625d1b6ee9503ed2eb93b24bcb58</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-01 18:48:58</sys_updated_on>
+        <sys_updated_on>2023-05-07 23:43:12</sys_updated_on>
     </sys_script_include>
 </record_update>
