@@ -7,7 +7,7 @@
         <client_callable>false</client_callable>
         <description>This Script is used for the initial release of Task Privacy&#13;
 After the initial release, some of this may move into other functions&#13;
-&#13;
+2.8.x | 2023-05-12 - raj -   DFCT0011850 - With Organizational Privacy turned on &gt; Global Templates &gt; clear the "Primary Assignee &gt; different private OU member are displaying "Reviewer", "Assigned Member&#13;
 2.8.x   | 2023-05-01 - raj -  DFCT0011800 - TAA &gt; click &gt;  Organizational Hierarchy Tree Bi-Fold . ERROR DISPLAY (or any  ATF users) &#13;
 2.8.x | 2023-05-04 - raj -   STRY0139614 - Modify Task Assignment with a Private OU - Selecting Users for users not dependent on Primary Assignee&#13;
 2.8.x | 2023-05-04 - raj -   STRY0139615 - Modify Template Assignment with a Private OU  - Selecting Users for users not dependent on Primary Assignee&#13;
@@ -89,21 +89,25 @@ task_privacy.prototype = {
 		offices = this.au.intersect(offices, privacyFilterOffices);
 		return offices;  
 	},	
-	
-	retrieveTemplateOUsPrivacyFiltered: function (userID, template_level, template_ou){
+	// DFCT0011850 - add primary office and record privacy
+	retrieveTemplateOUsPrivacyFiltered: function (userID, primary_office, recordPrivacy, template_level, template_ou){
 		var offices = [];
 		var privacyFilterOffices = [];
 		offices = this.taskingScripts.retrieveTemplateOUs(userID, template_level, template_ou);
-		privacyFilterOffices = this._getPrivacyFilteredOffice();
-		// only return the intersecting offices with the privacy filter
-		offices = this.au.intersect(offices, privacyFilterOffices);
+		// DFCT0011850 - add primary office, but only for this call ignore for others
+		privacyFilterOffices = this._getPrivacyFilteredOffice(primary_office, recordPrivacy);
+		if(offices.length>0){
+			// only return the intersecting offices with the privacy filter
+			offices = this.au.intersect(offices, privacyFilterOffices);
+		} else {
+			offices = privacyFilterOffices;
+		}
 		return offices;  
 	},
 
 	// This method is called from a dynamic filter and needs the current object to have a Primary Office field
 	// this method calls the method previously used, then fitlers based on the new privacy settings
 	getMyOUTaskManagersPrivacyFiltered: function() {
-	
 		var offices = [];
 		var privacyFilterOffices = [];
 		// get the list of offices this user manages
@@ -126,16 +130,24 @@ task_privacy.prototype = {
 	},
 
 	// this is called only from filters and will have a current object to pull Primary Office from
-	_getPrivacyFilteredOffice: function(){
+	// DFCT0011850 - add primary office, but only for this call ignore for others
+	_getPrivacyFilteredOffice: function(primary_office, recordPrivacy){
 		var returnNone=false;
 		var privacyOffices = [];
 		var grPrivateOUs = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
 
 		var queryAllOpenOUs = "u_organizational_privacyISEMPTY^ORu_organizational_privacy=open";
 		var officesCanTaskQuery = "";
-		var primary_ou = this._getPrimaryOUforAnyRecordType(current);
+		// DFCT0011850 - add primary office
+		var primary_ou = primary_office;
+		var recordPrivacyLevel = recordPrivacy; 
+		if(primary_ou==undefined && current != null){
+			primary_ou = this._getPrimaryOUforAnyRecordType(current);
+		}
+		if(recordPrivacyLevel==undefined && current != null){
+			recordPrivacyLevel = current.getValue("u_privacy");
+		}
 		var top_ou = this._getTopOU(primary_ou);
-		var recordPrivacyLevel = current.getValue("u_privacy");
 		switch(recordPrivacyLevel){
 			case "open": case "": case undefined:
 				// set query to return usrs in all open orgs
@@ -149,15 +161,10 @@ task_privacy.prototype = {
 			case "ou_private":
 				// get all members of the private org structure of the Primary Office
 				officesCanTaskQuery = "u_top_ou=" + top_ou;
-				
 				// future, will need to allow this case to be broader than just primary office to support crossover private tasking
-
 				break;
-			
-				
 			// future, here need to account for private tasks where only members of the task tree are loaded
 			// case "private":
-				
 			default:
 				// return no items
 				returnNone=true;
@@ -263,13 +270,13 @@ task_privacy.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-05-01 04:09:40</sys_created_on>
         <sys_id>9008625d1b6ee9503ed2eb93b24bcb58</sys_id>
-        <sys_mod_count>44</sys_mod_count>
+        <sys_mod_count>58</sys_mod_count>
         <sys_name>task_privacy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9008625d1b6ee9503ed2eb93b24bcb58</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-10 00:40:14</sys_updated_on>
+        <sys_updated_on>2023-05-13 08:01:28</sys_updated_on>
     </sys_script_include>
 </record_update>
