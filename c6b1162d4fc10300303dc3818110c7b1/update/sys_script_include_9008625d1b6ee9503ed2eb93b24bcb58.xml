@@ -4,9 +4,11 @@
         <active>true</active>
         <api_name>x_153465_discovert.task_privacy</api_name>
         <caller_access/>
-        <client_callable>false</client_callable>
+        <client_callable>true</client_callable>
         <description>This Script is used for the initial release of Task Privacy&#13;
 After the initial release, some of this may move into other functions&#13;
+2.8.x | 2023-05-19 - raj -   DFCT0011843 - Viewing Report ~ TA should NOT see tasks from different OUs in the "Task Administrator" ~ "Open Top Tasks" Dashboard&#13;
+&#13;
 2.8.x | 2023-05-16 - raj -   DFCT0011847- With Organizational Privacy turned On ~ Different Private OU Global Templates are displayed for the "CE"&#13;
 2.8.x | 2023-05-12 - raj -   DFCT0011850 - With Organizational Privacy turned on &gt; Global Templates &gt; clear the "Primary Assignee &gt; different private OU member are displaying "Reviewer", "Assigned Member&#13;
 2.8.x   | 2023-05-01 - raj -  DFCT0011800 - TAA &gt; click &gt;  Organizational Hierarchy Tree Bi-Fold . ERROR DISPLAY (or any  ATF users) &#13;
@@ -22,10 +24,127 @@ After the initial release, some of this may move into other functions&#13;
 task_privacy.prototype = {
     initialize: function() {
 		this.userInfo = new UserInfoScripts();
-		this.taskingScripts = new tasking_System_Settings_Scripts();
-		this.au = new global.ArrayUtil();
+		this.isUserTaskerApplicationAdmin = this.userInfo.UserHasRole('x_153465_discovert.tasker_application_admin');
+		this.orgTable = 'x_153465_discovert_discover_office_hierarchy';
+		this.memberTable = 'x_153465_discovert_discover_office_members';
     },
 	
+	// DFCT0011843 - this gets all top OUs where the user is a Task Administrator
+	getUserTopOUTaskAdminOrExec: function() {
+		var userId = gs.getUserID();
+		var offices = [];
+		offices = this._getUserOUTaskAdminOrExec(userId, true, true);
+		return offices;
+	},
+		
+	// DFCT0011843 - this gets all OUs where the user is a Task Administrator
+	getUserOUTaskAdminOrExec: function() {
+		var userId = gs.getUserID();
+		var offices = [];
+		offices = this._getUserOUTaskAdminOrExec(userId, false, true);
+		return offices;
+	},
+
+	// DFCT0011843 - this is called by both functions above to return values based on how it is called
+	_getUserOUTaskAdminOrExec: function (userId, topOnly, includeExternal){
+		var offices = [];
+		var grOUs = new GlideRecordSecure(this.orgTable);
+		var grMembers = new GlideRecordSecure(this.memberTable);
+		var grAllOUs;
+		var allOrgStructureOUs;
+
+		// get the open offices
+		offices = this._getAdminOrExecOpenOUs(userId, topOnly, includeExternal);
+
+		// the first query needs to get all offices for the user.  There are cases where the user is an Administrator, but only in a sub ou
+		var queryAdminOUsNotOpen = "office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe" +
+			"^discover_office_hierarchy.active=true" +
+			"^u_organizational_user.is_task_administrator=true" +
+			"^ORu_organizational_user.is_task_executive=true" + 
+			"^ORu_organizational_user.is_tasker_application_administrator=true" + 
+			"^discover_office_hierarchy.u_top_ou.u_organizational_privacy=ou_private" + 
+			"^ORdiscover_office_hierarchy.u_top_ou.u_organizational_privacy=restricted";
+		
+		if(!includeExternal){
+			queryAdminOUsNotOpen = "discover_office_hierarchy.u_top_ou.u_external_flag=false" + "^" + queryAdminOUsNotOpen;
+		}
+		
+		grMembers.addEncodedQuery(queryAdminOUsNotOpen);
+		grMembers.query();
+		while(grMembers.next()){
+			var grMemberOrg = new GlideRecordSecure(this.orgTable);
+			if(grMemberOrg.get(grMembers.discover_office_hierarchy)){
+				if(topOnly){
+					// add the top OU instead of the current OU
+					offices.push(grMemberOrg.getValue('u_top_ou'));
+				} else {
+					allOrgStructureOUs = "active=true^u_top_ou=" + grMemberOrg.getValue('u_top_ou');
+					// reset glide record
+					grAllOUs = new GlideRecordSecure(this.orgTable);
+					grAllOUs.addEncodedQuery(allOrgStructureOUs);
+					grAllOUs.query();
+					while(grAllOUs.next()){
+						offices.push(grAllOUs.getUniqueValue());
+					}			
+				}				
+			}
+		}
+		if (offices.length > 0){
+			var au = new global.ArrayUtil();
+			offices = au.unique(offices);
+		}
+		return offices;
+	},
+	
+	// DFCT0011843 - this is called by both functions above to return values based on how it is called
+	// NOTE: if we want to change open to be just offices where the Admin is a member of it, this is the query we would change for dynamic filters
+	_getAdminOrExecOpenOUs: function(userId, topOnly, includeExternal){
+		var offices = [];
+		var countOUs = 0;
+		var grOUs = new GlideRecordSecure(this.orgTable);
+		var gaOUs = new GlideAggregate(this.memberTable);
+
+		// get all members of all open office structures and all members of office structures this user is a member of
+		var queryAdminOrExecOpenOUs = "office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe" +
+			"^discover_office_hierarchy.active=true" +
+			"^discover_office_hierarchy.u_top_ou.u_organizational_privacy!=ou_private" + 
+			"^discover_office_hierarchy.u_top_ou.u_organizational_privacy!=restricted";
+		// tasker application Admin sees all open, so only add the additional filter if NOT application admin
+		if(!this.isUserTaskerApplicationAdmin){
+			queryAdminOrExecOpenOUs = queryAdminOrExecOpenOUs +
+				"^u_organizational_user.is_task_administrator=true^ORu_organizational_user.is_task_executive=true";
+		}
+
+		var queryAllOpenOUs = "u_top_ou.u_organizational_privacy!=ou_private" + 
+			"^u_top_ou.u_organizational_privacy!=restricted";
+
+		if(!includeExternal){
+			queryAdminOrExecOpenOUs = "discover_office_hierarchy.u_external_flag=false" + "^" + queryAdminOrExecOpenOUs;
+			queryAllOpenOUs = "u_external_flag=false" + "^" + queryAllOpenOUs;
+		}
+		
+		// if the count of offices for this user is true, then return all open OUs for the user
+		gaOUs.addEncodedQuery(queryAdminOrExecOpenOUs);
+		gaOUs.addAggregate("COUNT");
+		gaOUs.query();
+		if(gaOUs.next()){
+			countOUs = gaOUs.getAggregate('COUNT');
+		}
+		if(countOUs>0){
+			grOUs.addEncodedQuery(queryAllOpenOUs);
+			grOUs.query();
+			while(grOUs.next()){
+				if(topOnly){
+					// add the top OU instead of the current OU
+					offices.push(grOUs.getValue('u_top_ou'));
+				} else {
+					offices.push(grOUs.getUniqueValue());
+				}
+			}
+		}
+		return offices;
+	},
+
 	// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617 
 	// This function is used in dynamnic filters
 	// The current object is the record of the field the fitler applies to
@@ -39,7 +158,9 @@ task_privacy.prototype = {
 		// using gliderecord secure here will return only people this user can see
 		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		// get all members of all open office structures and all members of office structures this user is a member of
-		var queryAllOpenOUMembers = "discover_office_hierarchy.u_organizational_privacyISEMPTY^ORdiscover_office_hierarchy.u_organizational_privacy=open";
+		var queryAllOpenOUMembers = "discover_office_hierarchy.u_top_ou.u_organizational_privacy!=ou_private" + 
+			"^discover_office_hierarchy.u_top_ou.u_organizational_privacy!=restricted";
+
 		var userCanTaskQuery = "";
 		var recordPrivacyLevel = current.getValue("u_privacy");
 		switch(recordPrivacyLevel){
@@ -81,28 +202,31 @@ task_privacy.prototype = {
 		return memArr;
 	},
 
+	// DFCT0011843 
+	retrieveAdminTaskOUsPrivacyFiltered: function(){
+		var offices = [];
+		offices = this.getUserOUTaskAdminOrExec();
+		// returns intersection of offices found and privacy flitered by Primary Office
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
+		return offices;  
+	},
+	
 	retrieveTaskOUsPrivacyFiltered: function(userId){
 		var offices = [];
-		var privacyFilterOffices = [];
-		offices = this.taskingScripts.retrieveTaskOUs(userId);
-		privacyFilterOffices = this._getPrivacyFilteredOffice();
-		// only return the intersecting offices with the privacy filter
-		offices = this.au.intersect(offices, privacyFilterOffices);
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		offices = taskingScripts.retrieveTaskOUs(userId);
+		// returns intersection of offices found and privacy flitered by Primary Office
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
 		return offices;  
-	},	
+	},
+	
 	// DFCT0011850 - add primary office and record privacy
 	retrieveTemplateOUsPrivacyFiltered: function (userID, primary_office, recordPrivacy, template_level, template_ou){
 		var offices = [];
-		var privacyFilterOffices = [];
-		offices = this.taskingScripts.retrieveTemplateOUs(userID, template_level, template_ou);
-		// DFCT0011850 - add primary office, but only for this call ignore for others
-		privacyFilterOffices = this._getPrivacyFilteredOffice(primary_office, recordPrivacy);
-		if(offices.length>0){
-			// only return the intersecting offices with the privacy filter
-			offices = this.au.intersect(offices, privacyFilterOffices);
-		} else {
-			offices = privacyFilterOffices;
-		}
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		offices = taskingScripts.retrieveTemplateOUs(userID, template_level, template_ou);
+		// returns intersection of offices found and privacy flitered by Primary Office
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
 		return offices;  
 	},
 
@@ -110,34 +234,49 @@ task_privacy.prototype = {
 	// this method calls the method previously used, then fitlers based on the new privacy settings
 	getMyOUTaskManagersPrivacyFiltered: function() {
 		var offices = [];
-		var privacyFilterOffices = [];
 		// get the list of offices this user manages
-		offices = this.taskingScripts.getMyOUTaskManagers();
-		privacyFilterOffices = this._getPrivacyFilteredOffice();
-		// only return the intersecting offices with the privacy filter
-		offices = this.au.intersect(offices, privacyFilterOffices);
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		offices = taskingScripts.getMyOUTaskManagers();
+		// returns intersection of offices found and privacy flitered by Primary Office
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
 		return offices;  
 	},
 	
 	getPermissiveOUsPrivacyFiltered: function() {
 		var offices = [];
 		var privacyFilterOffices = [];
-		offices = this.taskingScripts.getPermissiveOUs();
-		privacyFilterOffices = this._getPrivacyFilteredOffice();
-
-		// only return the intersecting offices with the privacy filter
-		offices = this.au.intersect(offices, privacyFilterOffices);
+		var taskingScripts = new tasking_System_Settings_Scripts();
+		offices = taskingScripts.getPermissiveOUs();
+		// returns intersection of offices found and privacy flitered by Primary Office
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
 		return offices;  
 	},
 
+	_getOfficesPrivacyFitleredByPrimaryOffice: function (offices){
+		var privacyFilterOffices = [];
+		// get the task record values
+		var primary_ou = this._getPrimaryOUforAnyRecordType(current);
+		var recordPrivacyLevel = current.getValue("u_privacy");
+		if(primary_ou && primary_ou != undefined && primary_ou != ""){
+			privacyFilterOffices = this._getPrivacyFilteredOffice(primary_ou, recordPrivacyLevel);
+			// undefined is returned if the Primary Office is not set for the task record
+			// only return the intersecting offices with the privacy filter
+			var au = new global.ArrayUtil();
+
+			offices = au.intersect(offices, privacyFilterOffices);
+		}
+		return offices;	
+	},
+	
 	// this is called only from filters and will have a current object to pull Primary Office from
 	// DFCT0011850 - add primary office, but only for this call ignore for others
 	_getPrivacyFilteredOffice: function(primary_office, recordPrivacy){
 		var returnNone=false;
 		var privacyOffices = [];
 		var grPrivateOUs = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		var queryAllOpenOUs = "u_top_ou.u_organizational_privacy!=ou_private" + 
+			"^u_top_ou.u_organizational_privacy!=restricted";
 
-		var queryAllOpenOUs = "u_organizational_privacyISEMPTY^ORu_organizational_privacy=open";
 		var officesCanTaskQuery = "";
 		// DFCT0011850 - add primary office
 		var primary_ou = primary_office;
@@ -253,8 +392,7 @@ task_privacy.prototype = {
 
 		organizationalPrivacy = this.getTopOUOrganizationalPrivacy(officeId);
 		isOpenOrg = organizationalPrivacy == 'open';
-		var isUserTaskerApplicationAdmin = this.userInfo.UserHasRole('x_153465_discovert.tasker_application_admin');
-		if(isOpenOrg || isUserTaskerApplicationAdmin){
+		if(isOpenOrg || this.isUserTaskerApplicationAdmin){
 			userCanReadOU=true;
 		} else {
 			isUserInGroup = this.isUserInOrgStructure(officeId,currentUserId);
@@ -271,13 +409,13 @@ task_privacy.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-05-01 04:09:40</sys_created_on>
         <sys_id>9008625d1b6ee9503ed2eb93b24bcb58</sys_id>
-        <sys_mod_count>61</sys_mod_count>
+        <sys_mod_count>103</sys_mod_count>
         <sys_name>task_privacy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9008625d1b6ee9503ed2eb93b24bcb58</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-16 15:30:07</sys_updated_on>
+        <sys_updated_on>2023-05-22 22:00:48</sys_updated_on>
     </sys_script_include>
 </record_update>
