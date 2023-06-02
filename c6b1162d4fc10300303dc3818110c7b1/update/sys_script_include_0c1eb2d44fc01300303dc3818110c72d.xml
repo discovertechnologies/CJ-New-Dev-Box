@@ -28,7 +28,64 @@ var OrganizationalScripts = Class.create();
 OrganizationalScripts.prototype = {
 	initialize: function() {
 	},
+	
+	// STRY0140267 - get the members with Tasking Authority from the current Org Structure only
+	setTopOUTaskAdministrators: function(current){
+		var orgUser = current.getUniqueValue();
+		var ouMemberRecords = new GlideRecordSecure("x_153465_discovert_discover_office_members");
+		ouMemberRecords.addQuery("u_organizational_user", orgUser);
+		ouMemberRecords.query();
+		while(ouMemberRecords.next()){
+			// STRY0140267 - get the members with Tasking Authority from the current Org Structure only
+			var memberOU = ouMemberRecords.getValue("discover_office_hierarchy");
+			this.setTopOUTaskAdministratorsForOU(memberOU);
+		}
+	},
+	
+	// STRY0140267 - get the members with Tasking Authority from the current Org Structure only
+	setTopOUTaskAdministratorsForOU:function(ouId){
+		//first, calculate all GTA members
+		var ouMemberRecords = new GlideRecordSecure("x_153465_discovert_discover_office_members");
+		var grMemberOU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
+		var topOU = "";
+		if(grMemberOU.get(ouId)){
+			topOU = grMemberOU.getValue("u_top_ou");
+		}
+		ouMemberRecords.addQuery("discover_office_hierarchy.u_top_ou", topOU);
+		ouMemberRecords.addQuery("u_organizational_user.is_task_administrator", true);
+		// sorted by office member name
+		ouMemberRecords.orderBy("office_member.name");
+		ouMemberRecords.query();
+		var ouMembers = '';
+		// accumulate all global ta members to a variable
+		while (ouMemberRecords.next()) {
+			if (ouMembers === '') {
+				ouMembers = ouMemberRecords.office_member;
+			} else {
+				ouMembers = ouMembers + "," + ouMemberRecords.office_member;
+			}
+		}
+		//remove duplicates from the list Global Tasking Authorities
+		var lyst = ouMembers.split(",");
+		var dupes = {};
+		for (var x = 0; x < lyst.length; x++) {
+			if (!dupes[lyst[x]]) {
+				dupes[lyst[x]] = lyst[x];
+			}
+		}
+		var keys = Object.keys(dupes);
+		var gta_list = keys.toString();
+		//next set all ou with the same variable
+		// STRY0140267 - set tasking authorities on top ou only
+		var orgUnit = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		orgUnit.addQuery("u_top_ou", topOU);
+		orgUnit.query();
+		while (orgUnit.next()) {
+			orgUnit.u_global_authorities = gta_list;
+			orgUnit.update();
+		}
 
+	},
 	//---------------------------------------------------------------------------------------------
 	// Get ancestors for OUs
 	// STRY0137140 - added to simplify queries and improve performance
@@ -339,13 +396,13 @@ OrganizationalScripts.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-30 07:11:25</sys_created_on>
         <sys_id>0c1eb2d44fc01300303dc3818110c72d</sys_id>
-        <sys_mod_count>176</sys_mod_count>
+        <sys_mod_count>181</sys_mod_count>
         <sys_name>OrganizationalScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_0c1eb2d44fc01300303dc3818110c72d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-03-17 04:52:44</sys_updated_on>
+        <sys_updated_on>2023-06-01 23:43:46</sys_updated_on>
     </sys_script_include>
 </record_update>

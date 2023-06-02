@@ -5,11 +5,15 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.1 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat&#13;
-2.8.1 | 2022-12-23 - raj -   DFCT0011531 - Group management error displayed ErrorServer JavaScript error "property" is not defined. This is a technical defect&#13;
-2.8.1 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
-2.8.1 | 2022-11-04 - raj - changed to use gs.setProperty as the scope issue seems to be resolved as of San Diego&#13;
+        <description>2.8.5 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat&#13;
+2.8.5 | 2022-12-23 - raj -   DFCT0011531 - Group management error displayed ErrorServer JavaScript error "property" is not defined. This is a technical defect&#13;
+2.8.5 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
+2.8.5 | 2022-11-04 - raj - changed to use gs.setProperty as the scope issue seems to be resolved as of San Diego&#13;
 &#13;
+2.8.3 | 2023-05-29 - raj -    DFCT0011596 - Number of records in "Open Task by My OU to Others" &amp; "Tasks by My OU to Others" widget does not correlate with the actual number of records. &#13;
+2.8.3 | 2023-05-29 - raj -    DFCT0011596- Number of records in "Open Task by My OU to Others" &amp; "Tasks by My OU to Others" widget does not correlate with the actual number of records. &#13;
+2.8.3 | 2023-05-26 - raj -    STRY0139617 - update for this story to handle case where Tasking is Open&#13;
+2.8.3 | 2023-05-26 - raj -    DFCT0011912 - Open/Matrixed TMs and Basic Users cannot task any other OUs in the Primary Assignee selection.&#13;
 2.8    | 2022-09-22 - raj -  STRY0130090 - 2.8 Certifier requested updates -10. Hardcoded Data :  Avoid using hard-coded URLs in scripts. &#13;
 2.8    | 2022-09-08 - raj -  STRY0129041 - Block Search for User if Groups are Selected but aren't Configured&#13;
 2.8    | 2022-09-08 - raj -  STRY0129039 - OU Hierarchy Group Not Configured for Role Warning&#13;
@@ -997,7 +1001,27 @@ tasking_System_Settings_Scripts.prototype = {
 		}
 		return defaultDateTime;
 	},
-		
+	
+	// DFCT0011596 - new filter to reduce sys_ids in queries
+	getOUsWereIamNotAMember: function(){
+		var userMyOUs = this.getOUsWhereIamAMember();
+		var offices = [];
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+
+		if(userMyOUs && userMyOUs.length>0){
+			grOUs.addEncodedQuery("sys_idNOT IN" + userMyOUs.join(","));
+			grOUs.query();
+			while(grOUs.next()){  
+				offices.push(grOUs.getUniqueValue());
+			}
+		}
+		if (offices.length > 0){
+			var au = new global.ArrayUtil();
+			offices = au.unique(offices);
+		}
+		return offices;		
+	},
+	
 	//  STRY0099083 added new script for getting OUs that does not need a .join as it returns a string.
 	// DFCT0010669 
 	getOUsWhereIamAMember: function(){
@@ -1222,8 +1246,9 @@ tasking_System_Settings_Scripts.prototype = {
 		var systemControlSetting = this.systemControlSetting(); 
 		// Until we have a system setting that can be used, use the temp global setting
 		if(systemControlSetting.Open == true){
-			// send back no filter
-			return [];
+			// DFCT0011912 - STRY0139617 update for this story to handle case where Tasking is Open
+			// send back no filter - added for Privacy Filter, calling function will check for all
+			return ['all'];
 		}
 		// Get all of the tasking ous for a person.  
 		// Get all the OUs where the user is a Task Manager
@@ -1253,20 +1278,25 @@ tasking_System_Settings_Scripts.prototype = {
 	// STRY0065247 - load the list of offices for template design fields
 	retrieveTemplateOUs: function(user, templateLevel, templateOU){
 		var UserPermissions  = new UserInfoScripts();
+		// DFCT0011912 - STRY0139617 update, need to return all for Priavcy Filtering to work
+		var allOUsNoFilter = ['all']; // loads all OUs
+
 		var allOUs = ['none'];  // loads no OUs
 		var userOffices = [];
 		// Check global setting (Open, Controlled, Flexible)
 		var systemControlSetting = this.systemControlSetting(); 
 		// Until we have a system setting that can be used, use the temp global setting
 		if(systemControlSetting.Open == true){
-			return [];
+			// DFCT0011912 - STRY0139617 update, need to return all for Priavcy Filtering to work
+			return allOUsNoFilter; // loads all OUs
 		}
 		
 		// if Template Level is Global or personal, the user should have Global Template Desinger Permissions.
 		// if the user has the right permissions show all OUs, if not show none.
 		if (templateLevel == 'global_process'){
 			if (UserPermissions.userHasGlobalProcessRights()) {
-				return [];  // loads all OUs
+				// DFCT0011912 - STRY0139617 update, need to return all for Priavcy Filtering to work
+				return allOUsNoFilter; // loads all OUs
 			} else {
 				return ['none'];  // loads no OUs
 			}
@@ -1282,7 +1312,7 @@ tasking_System_Settings_Scripts.prototype = {
 			}
 		} else if (templateLevel == 'my_process'){
 			if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive()){
-				return [];  // Loads all OUs
+				return allOUsNoFilter; // loads all OUs
 			} else {
 				// Get all the OUs where the user is a Task Manager
 				// DFCT0010669 
@@ -1497,13 +1527,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>362</sys_mod_count>
+        <sys_mod_count>354</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-04-04 20:51:47</sys_updated_on>
+        <sys_updated_on>2023-05-31 01:36:30</sys_updated_on>
     </sys_script_include>
 </record_update>
