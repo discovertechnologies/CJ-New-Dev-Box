@@ -7,11 +7,12 @@
         <client_callable>true</client_callable>
         <description>This Script is used for the initial release of Task Privacy&#13;
 After the initial release, some of this may move into other functions&#13;
+2.8.3 | 2023-06-05 - raj -   DFCT0011928 - GTD, TPA, TE, and TA's in a Private OU can see and modify all global templates even if they are from an open OU.&#13;
+2.8.3 | 2023-06-05 - raj -   DFCT0011926 - In New Task/Subtask Form, choosing an Assigned Member while the Primary Assignee is empty does NOT auto-populate to the Default OU of the Assigned Member&#13;
 2.8.3 | 2023-05-29 - raj -    DFCT0011849 - On new template form~ Adding an "Assigned Member" is clearing the "Primary Assignee" field  and causes the reviewer field to be empty&#13;
 2.8.3 | 2023-05-26 - raj -    STRY0139617 update for this story to handle case where Tasking is Open&#13;
 2.8.3 | 2023-05-26 - raj -    DFCT0011912 - 	Open/Matrixed TMs and Basic Users cannot task any other OUs in the Primary Assignee selection.2.8.x | 2023-05-19 - raj -   DFCT0011843 - Viewing Report ~ TA should NOT see tasks from different OUs in the "Task Administrator" ~ "Open Top Tasks" Dashboard&#13;
 &#13;
-2.8.x | 2023-05-19 - raj -   DFCT0011843 - Viewing Report ~ TA should NOT see tasks from different OUs in the "Task Administrator" ~ "Open Top Tasks" Dashboard&#13;
 2.8.x | 2023-05-16 - raj -   DFCT0011847- With Organizational Privacy turned On ~ Different Private OU Global Templates are displayed for the "CE"&#13;
 2.8.x | 2023-05-12 - raj -   DFCT0011850 - With Organizational Privacy turned on &gt; Global Templates &gt; clear the "Primary Assignee &gt; different private OU member are displaying "Reviewer", "Assigned Member&#13;
 2.8.x   | 2023-05-01 - raj -  DFCT0011800 - TAA &gt; click &gt;  Organizational Hierarchy Tree Bi-Fold . ERROR DISPLAY (or any  ATF users) &#13;
@@ -52,7 +53,7 @@ task_privacy.prototype = {
 	_getUserOUTaskAdminOrExec: function (userId, topOnly, includeExternal){
 		var offices = [];
 		var grOUs = new GlideRecordSecure(this.orgTable);
-		var grMembers = new GlideRecordSecure(this.memberTable);
+		var grMembers = new GlideRecordSecure(this.memberTable);		
 		var grAllOUs;
 		var allOrgStructureOUs;
 
@@ -62,16 +63,16 @@ task_privacy.prototype = {
 		// the first query needs to get all offices for the user.  There are cases where the user is an Administrator, but only in a sub ou
 		var queryAdminOUsNotOpen = "office_memberDYNAMIC90d1921e5f510100a9ad2572f2b477fe" +
 			"^discover_office_hierarchy.active=true" +
-			"^u_organizational_user.is_task_administrator=true" +
-			"^ORu_organizational_user.is_task_executive=true" + 
-			"^ORu_organizational_user.is_tasker_application_administrator=true" + 
+			"^is_global_tasking_authority=true" +
+			"^ORis_task_executive=true" + 
+			"^ORis_tasker_application_admin=true" + 
 			"^discover_office_hierarchy.u_top_ou.u_organizational_privacy=ou_private" + 
 			"^ORdiscover_office_hierarchy.u_top_ou.u_organizational_privacy=restricted";
 		
 		if(!includeExternal){
 			queryAdminOUsNotOpen = "discover_office_hierarchy.u_top_ou.u_external_flag=false" + "^" + queryAdminOUsNotOpen;
 		}
-		
+
 		grMembers.addEncodedQuery(queryAdminOUsNotOpen);
 		grMembers.query();
 		while(grMembers.next()){
@@ -115,7 +116,7 @@ task_privacy.prototype = {
 		// tasker application Admin sees all open, so only add the additional filter if NOT application admin
 		if(!this.isUserTaskerApplicationAdmin){
 			queryAdminOrExecOpenOUs = queryAdminOrExecOpenOUs +
-				"^u_organizational_user.is_task_administrator=true^ORu_organizational_user.is_task_executive=true";
+				"^is_global_tasking_authority=true^ORis_task_executive=true";
 		}
 
 		var queryAllOpenOUs = "u_top_ou.u_organizational_privacy!=ou_private" + 
@@ -205,21 +206,24 @@ task_privacy.prototype = {
 		return memArr;
 	},
 
-	// DFCT0011843 
-	retrieveAdminTaskOUsPrivacyFiltered: function(){
+	// DFCT0011843 - DFCT0011926 - pass information down from screen instead of pulling from current record
+	retrieveAdminTaskOUsPrivacyFiltered: function(primary_office, recordPrivacy){
 		var offices = [];
 		offices = this.getUserOUTaskAdminOrExec();
 		// returns intersection of offices found and privacy flitered by Primary Office
-		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
+		// DFCT0011926 - pass information down from screen instead of pulling from current record
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices, primary_office, recordPrivacy);
 		return offices;  
 	},
 	
-	retrieveTaskOUsPrivacyFiltered: function(userId){
+	// DFCT0011926 - pass information down from screen instead of pulling from current record
+	retrieveTaskOUsPrivacyFiltered: function(userId, primary_office, recordPrivacy){
 		var offices = [];
 		var taskingScripts = new tasking_System_Settings_Scripts();
 		offices = taskingScripts.retrieveTaskOUs(userId);
 		// returns intersection of offices found and privacy flitered by Primary Office
-		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices);
+		// DFCT0011926 - pass information down from screen instead of pulling from current record
+		offices = this._getOfficesPrivacyFitleredByPrimaryOffice(offices, primary_office, recordPrivacy);
 		return offices;  
 	},
 	
@@ -404,6 +408,47 @@ task_privacy.prototype = {
 		return answer;
 	},
 
+	// DFCT0011928 - templates check if user is in any open org structure before showing templates
+	isUserInAnyOpenOrgStructure: function (userID){
+		var answer = false;
+
+		//Query organizational unit members to see if the user is a member of any open offices
+		var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
+		grMembers.addEncodedQuery("discover_office_hierarchy.u_top_ou.u_privacy!=restricted^discover_office_hierarchy.u_top_ou.u_privacy!=ou_private^office_member=" + userID);
+		grMembers.addAggregate('COUNT');
+		grMembers.query();
+		if(grMembers.next()){
+			if (grMembers.getAggregate('COUNT') > 0){
+				answer = true;
+			}
+		}
+		return answer;
+	},
+
+	// DFCT0011928 - Templates require different access than all other records in the app.  
+	// admins should not be able to see open templates unless they are in at least one open ou structure
+	userCanAccessTemplate: function(officeId){
+		var currentUserId = gs.getUserID();
+		var isUserInGroup = false;
+		var isUserInAnyOpenOrg = false;
+		var isOpenOrg = false;
+		var organizationalPrivacy;
+		var userCanReadOU = false;
+	
+		// DFCT0011928 - is user in any open Org Structure
+		isUserInAnyOpenOrg = this.isUserInAnyOpenOrgStructure(currentUserId);
+		if(isUserInAnyOpenOrg || this.isUserTaskerApplicationAdmin){
+			userCanReadOU=true;
+		} else {
+			isUserInGroup = this.isUserInOrgStructure(officeId,currentUserId);
+			if(isUserInGroup){
+				userCanReadOU = true;
+			}
+		}
+		return userCanReadOU;
+		
+	},
+		
 	userCanAccessOU: function(officeId){
 		var currentUserId = gs.getUserID();
 		var isUserInGroup = false;
@@ -430,13 +475,13 @@ task_privacy.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-05-01 04:09:40</sys_created_on>
         <sys_id>9008625d1b6ee9503ed2eb93b24bcb58</sys_id>
-        <sys_mod_count>122</sys_mod_count>
+        <sys_mod_count>125</sys_mod_count>
         <sys_name>task_privacy</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_9008625d1b6ee9503ed2eb93b24bcb58</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-31 00:23:08</sys_updated_on>
+        <sys_updated_on>2023-06-05 20:11:49</sys_updated_on>
     </sys_script_include>
 </record_update>
