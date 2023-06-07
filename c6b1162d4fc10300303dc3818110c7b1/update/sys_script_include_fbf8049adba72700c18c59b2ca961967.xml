@@ -7,6 +7,7 @@
         <client_callable>false</client_callable>
         <description>Collection of functions often used in a UI Action within the field Condition, returning a boolean which decides to run the action's script or not. &#13;
 These functions may also be called in Script Includes, Access Controls and Business Rules.&#13;
+2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
 2.8.3 | 2023-05-24 |raj |  STRY0140267 - Task Administrator Email &#13;
 2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table&#13;
 &#13;
@@ -212,13 +213,15 @@ uiConditionCheck.prototype = {
 		var isMemberRequestType = (requestType.indexOf('member') != -1);
 
 		var OUsWhereIamAMemberAdmin = new tasking_System_Settings_Scripts().getMyOUMemberAdmins();
-		var isMemberAdminOfOU = (OUsWhereIamAMemberAdmin.indexOf(request.getValue('u_ou_parent')) != -1);
-
-		return (isRequestInProgress && 
-				(userScript.IsUserOUAdministrator(request.u_ou_parent, gs.getUserID())  ||
-				userScript.UserHasRole('x_153465_discovert.tasker_organizational_admin') || 
-				(isMemberRequestType && isMemberAdminOfOU)));
+		// DFCT0011930 
+		var ouId = request.getValue('u_ou_parent');
+		var isMemberAdminOfOU = (OUsWhereIamAMemberAdmin.indexOf(ouId) != -1);
+		var isUserOUAdmin = userScript.IsUserOUAdministrator(ouId, gs.getUserID());
+		var isUserGHAforOU = userScript.userIsOrgAdminForOU(ouId);
 		
+
+		return (isRequestInProgress && (isUserOUAdmin  || isUserGHAforOU || (isMemberRequestType && isMemberAdminOfOU)));
+
 	},
 	
 	// STRY0107408
@@ -230,49 +233,36 @@ uiConditionCheck.prototype = {
 	
 	canAddMember: function (gr){
 		// only users able to create sub OUs should see the Create Sub OU button
-		var currentUser = gs.getUser();
-		var userHasGlobalRole = currentUser.hasRole("x_153465_discovert.tasker_organizational_admin");
+		var currentUserId = gs.getUserID();
 		var answer = false;
-		// Global Admin doesn't need to make requests
-		if(userHasGlobalRole)
-			answer = true;
+		// DFCT0011930 
+		var ouId = gr.getUniqueValue();
 		var userScript = new UserInfoScripts();
+		var isUserGHAforOU = userScript.userIsOrgAdminForOU(ouId);
+		var isUserOUAdmin = userScript.IsUserOUAdministrator(ouId,currentUserId);
+		var isUserOUMemberAdmin = userScript.IsUserMemberAdministrator(ouId,currentUserId);
+
 		// if the user has permissions to change return false
-		if(userScript.IsUserOUAdministrator(gr.getUniqueValue(),currentUser.getID()) ||
-			userScript.IsUserMemberAdministrator(gr.getUniqueValue(),currentUser.getID()))
-			answer = true;
+		answer = isUserGHAforOU || isUserOUAdmin || isUserOUMemberAdmin;
 		return answer;		
 	},
 	canCreateSubOU: function(gr){
 		// only users able to create sub OUs should see the Create Sub OU button
-		var currentUser = gs.getUser();
-		var userHasGlobalRole = currentUser.hasRole("x_153465_discovert.tasker_organizational_admin");
 		var answer = false;
-		// Global Admin doesn't need to make requests
-		if(userHasGlobalRole)
-			answer = true;
+		// DFCT0011930 
+		var ouId = gr.getUniqueValue();
 		var userScript = new UserInfoScripts();
+		var isUserGHAforOU = userScript.userIsOrgAdminForOU(ouId);
+		var isUserOUAdmin = userScript.IsUserOUAdministrator(ouId,currentUserId);
+
 		// if the user has permissions to change return false
-		if(userScript.IsUserOUAdministrator(gr.getUniqueValue(),currentUser.getID()))
-			answer = true;
+		answer = isUserGHAforOU || isUserOUAdmin;
+		
 		return answer;		
 	},
 	
 	
 	canRequestOrganizationalChange: function(gr){
-		// 2.8 | 2022-04-18 | mmcc | STRY0119470  - All Tasker users (even GHA and TAA) access to use organization requests (button currently hidden from GHA and TAA; comment out old code
-// 		// only users unable to make updates to the OU should see the request button
-// 		var currentUser = gs.getUser();
-// 		var userHasGlobalRole = currentUser.hasRole("x_153465_discovert.tasker_organizational_admin");
-// 		var answer = currentUser.hasRole("x_153465_discovert.tasker_user");
-// 		// Global Admin doesn't need to make requests
-// 		if(userHasGlobalRole)
-// 			answer = false;
-// 		var userScript = new UserInfoScripts();
-// 		// if the user has permissions to change return false
-// 		if(userScript.IsUserOUAdministrator(gr.getUniqueValue(),currentUser.getID()))
-// 			answer = false;
-		
 		var currentUser = gs.getUser();
 		var answer = currentUser.hasRole("x_153465_discovert.tasker_user");
 		
@@ -375,11 +365,18 @@ uiConditionCheck.prototype = {
 			var isProcessOwner = grTemp.getValue('process_owner') == gs.getUserID();
 			var processLevel = grTemp.getValue('process_level');
 			var UserPermissions  = new UserInfoScripts();
+			// DFCT0011930
+			var primary_office = grTemp.getValue('u_primary_office');
+			// DFCT0011930 - user primary office to determine Task Administrator permissions
+			var isTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+			// DFCT0011930 - user primary office to determine Task Executive permissions
+			var isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+			
 			// STRY0085827
 			if(isActive && isRestrictedGroupAllowed){
 				//STRY0112587 
 				if (processLevel == 'global_process') 
-					return UserPermissions.IsUserTaskAdministrator(gs.getUserID()) || UserPermissions.IsUserTaskExecutive(gs.getUserID());
+					return isTaskAdministrator || isTaskExecutive;
 				else if (processLevel == 'ou_process')
 					return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemp.getValue('process_ou'));
 				else if (processLevel == 'my_process')
@@ -1071,6 +1068,8 @@ uiConditionCheck.prototype = {
 	},
 	
 	RespondExtension: function(current){
+		// DFCT0011930
+		var primary_office;
 		var canRead;
 		var isActive;
 		var state;
@@ -1089,6 +1088,8 @@ uiConditionCheck.prototype = {
 			// STRY0127550 - get the value instead of the display value and compare to a constant instead of a hard coded string
 			tasker_type = current.getDisplayValue("tasker_type.u_value");
 			work_type = current.tasker_type.work_type;
+			// DFCT0011930
+			primary_office = current.getValue('primary_office');
 		}
 		//KT: current is from Request table: uses current.parent -> Task
 		if (current.getTableName() == "x_153465_discovert_tasker_requests") {
@@ -1100,6 +1101,9 @@ uiConditionCheck.prototype = {
 			// STRY0127550 - get the value instead of the display value and compare to a constant instead of a hard coded string
 			tasker_type = current.getDisplayValue("parent.tasker_type.u_value");
 			work_type = current.parent.tasker_type.work_type;
+			// DFCT0011930
+			primary_office = current.parent.primary_office;
+			
 		}
 		// STRY0104533
 		var isTaskOwner = currentUser == taskOwner;
@@ -1117,9 +1121,12 @@ uiConditionCheck.prototype = {
 		
 		// see if User is a task manager for the Task owner
 		var isTaskManagerOfTaskOwner = new UserInfoScripts().IsUserOUTAOfAnotherUser(taskOwner, currentUser);
-		var isUserTaskAdministrator =  new UserInfoScripts().IsUserTaskAdministrator(currentUser);
-		//STRY0112587 
-		var isUserTaskExecutive =  new UserInfoScripts().IsUserTaskExecutive(currentUser);
+		
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var isUserTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+		var isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+		
 		//STRY0112587 
 		if(canRead && isActive == true && UserCanRespond && extension_requested == true && (isTaskOwner || isTaskManagerOfTaskOwner || isUserTaskAdministrator || isUserTaskExecutive)){
 			return true;
@@ -1129,6 +1136,15 @@ uiConditionCheck.prototype = {
 	},
 		
 	RequestClarification: function(current){
+		// DFCT0011930 
+		var arrayUtil = new global.ArrayUtil();
+		var UserPermissions = new UserInfoScripts();
+		var arrayPrimaryAssigneeOUTAs = [];
+		var primary_office;
+		var isGTA;
+		var isTE;
+		var listOfPrimaryAssigneeOUTAs;
+		var isPrimaryAssigneeOUTA;
 		
 		var currentUser = gs.getUserID();
 		var clarificationRequested;
@@ -1169,14 +1185,15 @@ uiConditionCheck.prototype = {
 			}
 			else  {
 				//KT - STRY0050724
-				var arrayUtil = new global.ArrayUtil();
-				var arrayPrimaryAssigneeOUTAs = [];
-				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-				// STRY0112587
-				var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
-				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
+				// DFCT0011930 
+				primary_office = current.getValue("primary_office") + '';
+				// DFCT0011930 - user primary office to determine Task Administrator permissions
+				isGTA = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+				// STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+				isTE = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+				listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
 				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
-				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
+				isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
 				// As an Assigned Member or Reviewer or Primary Assignee Task Manager(OUTA) OR Task Administrator (GTA),
 				// I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
 				// STRY0112587
@@ -1214,14 +1231,15 @@ uiConditionCheck.prototype = {
 			}
 			else  {
 				//KT - STRY0050724
-				var arrayUtil = new global.ArrayUtil();
-				var arrayPrimaryAssigneeOUTAs = [];
-				var isGTA = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-				// STRY0112587
-				var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
-				var listOfPrimaryAssigneeOUTAs  =  current.primary_assignee.tasking_authorities;
+				primary_office = current.parent.primary_office;
+				// DFCT0011930 - user primary office to determine Task Administrator permissions
+				isGTA = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+				// STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+				isTE = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+				
+				listOfPrimaryAssigneeOUTAs  =  current.parent.primary_assignee.tasking_authorities;
 				arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
-				var isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
+				isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); //new UserInfoScripts().sysIdInList(currentUser, listOfPrimaryAssigneeOUTAs);
 				
 				//As an Assigned Member OR Reviewer OR Primary Assignee Task Manager (OUTA) OR Task Administrator (GTA), I can click the "Request Clarification" UI Action on tasks that are in the following states, so that I am clear on the assignment.
 				// STRY0112587
@@ -1389,12 +1407,14 @@ uiConditionCheck.prototype = {
 	// This function expects to receive the Template record
 	runTemplateUIAction: function(gr)
 	{
+		// DFCT0011930
+		var primary_office;
+		
 		// DFCT0010539 changed the condition removed sys_ref_list check from condition here
 		var sysparm_view =  gs.action.getGlideURI().get('sysparm_view');
 		if(sysparm_view == 'sys_ref_list'){
 			return false;
 		}
-		
 		
 		var canRead = gr.canRead();
 		var newRecord = gr.sys_id;
@@ -1427,11 +1447,18 @@ uiConditionCheck.prototype = {
 		var isProcessOwner = grTemplate.getValue('process_owner') == gs.getUserID();
 		var processLevel = grTemplate.getValue('process_level');
 		var UserPermissions  = new UserInfoScripts();
+		// DFCT0011930
+		primary_office = grTemplate.getValue('u_primary_office');
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var isUserTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+		var isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+		
 		// STRY0085827
 		if(canRead && (newRecord != -1) && isActive == true ){
 			//STRY0112587 
 			if (processLevel == 'global_process') 
-				return UserPermissions.IsUserTaskAdministrator(gs.getUserID()) || UserPermissions.IsUserTaskExecutive(gs.getUserID());
+				return isUserTaskAdministrator || isUserTaskExecutive;
 			else if (processLevel == 'ou_process')
 				return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemplate.getValue('process_ou'));
 			else if (processLevel == 'my_process')
@@ -1445,11 +1472,19 @@ uiConditionCheck.prototype = {
 	// This function expects to receive the Task record
 	runTemplateFromTaskUIAction: function(gr)
 	{
+		// DFCT0011930
+		var primary_office;
 		// use the standard UserInfo scripts to check user permissions
 		var UserPermissions  = new UserInfoScripts();
-		//var tasker_process_template_global = UserPermissions.userHasGlobalProcessRights();
+		// DFCT0011930
+		primary_office = gr.getValue('primary_office');
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var isUserTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+		var isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+		
 		//STRY0112587 
-		var tasker_process_template_global = UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive();
+		var tasker_process_template_global = isUserTaskAdministrator || isUserTaskExecutive;
 		
 		var task_process_template_ou = false;
 		if(gr.getValue('primary_assignee') + '' != ''){
@@ -1485,33 +1520,7 @@ uiConditionCheck.prototype = {
 		var currentUserIsReviewer = (gr.u_reviewer == currentUser);
 		// STRY0123180  - originator used for draft task
 		var originator = (gr.originator == currentUser);
-		//var arrayTaskingAuthorityOUTAs = [];
-		//var listOfTaskingAuthorityOUTAs;
-		//var isTaskingAuthorityOUTA;
-		//var arrayPrimaryOfficeOUTAs = [];
-		//var listOfPrimaryOfficeOUTAs;
-		//var isPrimaryOfficeOUTA;
-		//var arrayPrimaryAssigneeOUTAs = [];
-		//var listOfPrimaryAssigneeOUTAs;
-		//var isPrimaryAssigneeOUTA;
-		//
-		//if(current.tasking_authority + '' != ''){
-		//	listOfTaskingAuthorityOUTAs = current.tasking_authority.tasking_authorities;
-		//	arrayTaskingAuthorityOUTAs = listOfTaskingAuthorityOUTAs.toString().split(",");
-		//	isTaskingAuthorityOUTA = arrayUtil.contains(arrayTaskingAuthorityOUTAs, currentUser);
-		//}
-		//
-		//if(current.primary_office + '' != ''){
-		//	listOfPrimaryOfficeOUTAs = current.primary_office.tasking_authorities;
-		//	arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
-		//	isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser);
-		//}
-		//if(current.primary_assignee + '' != ''){
-		//	listOfPrimaryAssigneeOUTAs = current.primary_assignee.tasking_authorities;
-		//	arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
-		//	isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
-		//}
-		//if(canRead && !isNewRecord &&(task_process_template_admin || tasker_process_template_global || task_process_template_ou || tasker_process_template_user)){
+
 		// STRY0085827
 		if (isActive && canRead && !isNewRecord &&(tasker_process_template_global || task_process_template_ou || tasker_process_template_user)) {
 			// STRY0117108, STRY0123180 
@@ -1558,9 +1567,12 @@ uiConditionCheck.prototype = {
 			var taskOwner = taskRecord.u_task_requester;
 			var taskOwnerAllowed = (taskOwner == user);
 			var isTaskOwnerOUTA = uis.IsUserOUTAOfAnotherUser(taskOwner, user);
-			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-			// STRY0112587
-			var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");
+			// DFCT0011930 - get primary office
+			var primary_office = taskRecord.primary_office;
+			// DFCT0011930 - user primary office to determine Task Administrator permissions
+			var globalTAAllowed = uis.userIsTaskAdministratorForOU(primary_office);
+			// STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+			var isTE = uis.userIsTaskExecutiveForOU(primary_office);
 			
 			var onBehalfOfAllowed = ((taskRecord.parent && taskRecord.parent.on_behalf_of == user) || (!taskRecord.parent && taskRecord.on_behalf_of == user));
 			// STRY0112587
@@ -1579,6 +1591,7 @@ uiConditionCheck.prototype = {
 			return true;
 		}
 		try{
+			var uis = new UserInfoScripts();
 			var user = gs.getUserID();
 			var ous = new OrganizationalScripts();
 			var taskOwner = taskRecord.u_task_requester;
@@ -1586,11 +1599,15 @@ uiConditionCheck.prototype = {
 			var assignee = taskRecord.assigned_to;
 			var assigneeAllowed = (assignee == user);
 			var assigneeOU = ous.GetUserDefaultOU(assignee);
-			var isAssigneeOUTA = new UserInfoScripts().IsUserTaskingAuthority(assigneeOU, user);
-			var globalTAAllowed = gs.getUser().hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-			// STRY0112587
-			var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");			
-			
+			// DFCT0011930 - get primary office
+			var primary_office = taskRecord.primary_office;
+
+			var isAssigneeOUTA = new uis.IsUserTaskingAuthority(assigneeOU, user);
+			// DFCT0011930 - user primary office to determine Task Administrator permissions
+			var globalTAAllowed = uis.userIsTaskAdministratorForOU(primary_office);
+			// STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+			var isTE = uis.userIsTaskExecutiveForOU(primary_office);
+		
 			if(globalTAAllowed || isTE || isAssigneeOUTA || taskOwnerAllowed || assigneeAllowed ) {
 				return true;
 			}
@@ -1601,9 +1618,10 @@ uiConditionCheck.prototype = {
 		return false;
 	},
 	MarkCompletedOnTimeLateUIAction: function(gr){
+		var uis = new UserInfoScripts();
 		var canRead = gr.canRead();
 		var isCompleted = gr.state;
-		var isGlobalTA_OR_OUTA = new UserInfoScripts().IsUserTaskingAuthority(gr.primary_assignee, gs.getUserID());
+		var isGlobalTA_OR_OUTA = uis.IsUserTaskingAuthority(gr.primary_assignee, gs.getUserID());
 		var taskOwner = gr.u_task_requester;
 		var state = gr.state;
 		
@@ -1618,6 +1636,7 @@ uiConditionCheck.prototype = {
 	},
 	
 	UserCanReopenCompletedTask: function(task) {
+		var uis = new UserInfoScripts();
 		var isNewRecord = task.isNewRecord();
 		var canRead = task.canRead();
 		var isActive = task.active;
@@ -1629,9 +1648,13 @@ uiConditionCheck.prototype = {
 		var isAssignedMember = (task.assigned_to == userId);
 		
 		var isOnBehalfOf = (task.on_behalf_of && task.on_behalf_of == userId);
-		var isTaskAdministrator = user.hasRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-		// STRY0112587
-		var isTE = gs.getUser().hasRole("x_153465_discovert.Task_Executive");			
+		// DFCT0011930 - get primary office
+		var primary_office = task.primary_office;
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var isTaskAdministrator = uis.userIsTaskAdministratorForOU(primary_office);
+		// STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+		var isTE = uis.userIsTaskExecutiveForOU(primary_office);
+		
 		// STRY0112587
 		var userCanReOpen = (isTaskOwner || isOnBehalfOf || isReviewer || isAssignedMember || isTaskAdministrator || isTE);
 		var answer = canRead && !isNewRecord && !isActive && userCanReOpen;
@@ -1673,7 +1696,7 @@ uiConditionCheck.prototype = {
 		return ou;
 	},
 	
-	saveTaskAsProcessTemplate: function(gr){
+	saveTaskAsProcessTemplate: function(grTask){
 		// use the standard UserInfo scripts to check user permissions
 		var UserPermissions  = new UserInfoScripts();
 		var tasker_process_template_global = UserPermissions.userHasGlobalProcessRights();
@@ -1683,27 +1706,33 @@ uiConditionCheck.prototype = {
 		var tasker_process_template_user = UserPermissions.userHasPersonalProcessRights();
 		var task_process_template_admin = UserPermissions.userHasProcessTemplateAdminRights();
 
-		var isNewRecord = gr.isNewRecord();
+		var isNewRecord = grTask.isNewRecord();
 		var arrayUtil = new global.ArrayUtil();
-		var canRead = current.canRead();
+		var canRead = grTask.canRead();
 		var currentUser =  gs.getUserID();
 		var clarificationRequested;
 		var isTopTask;
 		//if task is in any of the below states
-		var unassigned = (current.state == "-5");
-		var assigned  = (current.state == "1");
-		var accepted = (current.state == "10");
-		var workInProgress = (current.state == "13");
-		var inReview = (current.state == "14");
-		var reWork = (current.state == "15");
-		//check the to see if the current logged in user has any of the following tasker roles
-		var userIsTaskAdministrator = UserPermissions.IsUserTaskAdministrator(currentUser);
-		//STRY0112587 
-		var isUserTaskExecutive =  new UserInfoScripts().IsUserTaskExecutive(currentUser);
+		var unassigned = (grTask.state == "-5");
+		var assigned  = (grTask.state == "1");
+		var accepted = (grTask.state == "10");
+		var workInProgress = (grTask.state == "13");
+		var inReview = (grTask.state == "14");
+		var reWork = (grTask.state == "15");
+		
+		// DFCT0011930
+		var primary_office;
+		// DFCT0011930
+		primary_office = grTask.getValue('primary_office');
+		
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var userIsTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+		var isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
 		
 		var taskOwner = (current.u_task_requester == currentUser);
-		var currentUserIsAssignedMember = (current.assigned_to == currentUser);
-		var currentUserIsReviewer = (current.u_reviewer == currentUser);
+		var currentUserIsAssignedMember = (grTask.assigned_to == currentUser);
+		var currentUserIsReviewer = (grTask.u_reviewer == currentUser);
 		var arrayTaskingAuthorityOUTAs = [];
 		var listOfTaskingAuthorityOUTAs;
 		var isTaskingAuthorityOUTA;
@@ -1714,19 +1743,19 @@ uiConditionCheck.prototype = {
 		var listOfPrimaryAssigneeOUTAs;
 		var isPrimaryAssigneeOUTA;
 
-		if(current.tasking_authority + '' != ''){
-			listOfTaskingAuthorityOUTAs = current.tasking_authority.tasking_authorities;
+		if(grTask.tasking_authority + '' != ''){
+			listOfTaskingAuthorityOUTAs = grTask.tasking_authority.tasking_authorities;
 			arrayTaskingAuthorityOUTAs = listOfTaskingAuthorityOUTAs.toString().split(",");
 			isTaskingAuthorityOUTA = arrayUtil.contains(arrayTaskingAuthorityOUTAs, currentUser);
 		}
 
-		if(current.primary_office + '' != ''){
-			listOfPrimaryOfficeOUTAs = current.primary_office.tasking_authorities;
+		if(grTask.primary_office + '' != ''){
+			listOfPrimaryOfficeOUTAs = grTask.primary_office.tasking_authorities;
 			arrayPrimaryOfficeOUTAs = listOfPrimaryOfficeOUTAs.toString().split(",");
 			isPrimaryOfficeOUTA = arrayUtil.contains(arrayPrimaryOfficeOUTAs, currentUser);
 		}
-		if(current.primary_assignee + '' != ''){
-			listOfPrimaryAssigneeOUTAs = current.primary_assignee.tasking_authorities;
+		if(grTask.primary_assignee + '' != ''){
+			listOfPrimaryAssigneeOUTAs = grTask.primary_assignee.tasking_authorities;
 			arrayPrimaryAssigneeOUTAs = listOfPrimaryAssigneeOUTAs.toString().split(",");
 			isPrimaryAssigneeOUTA = arrayUtil.contains(arrayPrimaryAssigneeOUTAs, currentUser); 
 		}
@@ -1853,10 +1882,10 @@ uiConditionCheck.prototype = {
 				gs.getUser().savePreference("CurrentOU", ouId.toString());
 				var uis = new UserInfoScripts();
 				var userIsInOu = uis.IsUserInOU(ouId, userId);
-				var userHasGlobalRole = currentUser.hasRole("x_153465_discovert.tasker_organizational_admin");
+				// DFCT0011930 
+				var isUserGHAforOU = uis.userIsOrgAdminForOU(ouId);
 				
-				
-				if(userHasGlobalRole || userIsInOu) {
+				if(isUserGHAforOU || userIsInOu) {
 					result = true;
 				}
 			}
@@ -1901,13 +1930,13 @@ uiConditionCheck.prototype = {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>562</sys_mod_count>
+        <sys_mod_count>567</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-25 03:52:15</sys_updated_on>
+        <sys_updated_on>2023-06-07 00:57:42</sys_updated_on>
     </sys_script_include>
 </record_update>

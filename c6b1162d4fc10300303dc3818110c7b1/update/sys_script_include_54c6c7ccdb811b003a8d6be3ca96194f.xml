@@ -6,7 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script include&#13;
-&#13;
+2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
 2.8.1 | 2023-04-17 | raj | DFCT0011765 - null: no thrown error -As a Task User error raised when opening member screen&#13;
 2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - move user profile scripts from TaskWidgetData into UerInfoScritps &#13;
 2.8.1    | 2022-10-24 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
@@ -334,84 +334,132 @@ UserInfoScripts.prototype = {
 		return gs.getUser().hasRole(roleName);
 	},	
 	
-	// STRY0076016 - DFCT0011765
-	userCanWriteMem_field_office_task_authority: function(ouID){
+	// DFCT0011930 
+	userIsOrgAdminForOU: function(ouID){
 		var answer = false;
-		answer =  this.UserHasRole('x_153465_discovert.tasker_organizational_admin') ||
-					this.IsUserOUAdministrator(current.discover_office_hierarchy, gs.getUserID());
+		var role = 'x_153465_discovert.tasker_organizational_admin';
+		answer = this._userIsAdminInOrgStructure(ouID, role);
+		return answer;
+	},
+
+	// DFCT0011930 
+	userIsTaskAdministratorForOU: function(ouID){
+		var answer = false;
+		var role = 'x_153465_discovert.tasker_global_Tasking_Authority_member_admin';
+		answer = this._userIsAdminInOrgStructure(ouID, role);
+
+		return answer;
+	},
+
+	// DFCT0011930 
+	userIsTaskExecutiveForOU: function(ouID){
+		var answer = false;
+		var role = 'x_153465_discovert.tasker_global_Tasking_Authority_member_admin';
+		answer = this._userIsAdminInOrgStructure(ouID, role);
+
 		return answer;
 	},
 	
+	// DFCT0011930 
+	_userIsAdminInOrgStructure: function (ouID, role){
+		var answer = false;
+		var taskPrivacy = new task_privacy();
+		var currentUser = gs.getUserID();
+
+		var userHasRoleTAA = this.UserHasRole('x_153465_discovert.tasker_application_admin');
+		var userHasRole = this.UserHasRole(role);
+		var userIsInOrgStructure = taskPrivacy.userIsInOrgStructureForOU(ouID,currentUser);
+
+		answer =  userHasRoleTAA || (userHasRole && userIsInOrgStructure);
+
+		return answer;
+		
+	},
+
 	// STRY0076016 - DFCT0011765
+	userCanWriteMem_field_office_task_authority: function(ouID){
+		// DFCT0011930 
+		var answer = this.userIsOrgAdminForOU(ouID);		
+		return answer;
+	},
+
+	// STRY0076016 - DFCT0011765 - DFCT0011930
 	userCanWriteMem_field_is_office_administrator: function(ouID){
 		var answer = false;
-		answer =  this.UserHasRole('x_153465_discovert.tasker_organizational_admin') ||
-					this.IsUserOUAdministrator(current.discover_office_hierarchy, gs.getUserID());
+		var currentUser = gs.getUserID();
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var userHasRoleTAA = this.UserHasRole('x_153465_discovert.tasker_application_admin');
+		var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+		answer =  userHasRoleTAA || isUserGHAforOU || isUserOUAdmin;
 		
 		return answer;
 	},
 	
-	// STRY0076016
+	// STRY0076016 - DFCT0011930
 	userCanWriteMem_field_can_manage_ou_members: function(ouID){
 		var answer = false;
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin') || this.UserHasRole('x_153465_discovert.tasker_application_admin')){
-			answer = true;
-		} else {
-			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
-		}
+		var currentUser = gs.getUserID();
+		var userHasRoleTAA = this.UserHasRole('x_153465_discovert.tasker_application_admin');
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+		var isUserMemberAdmin = this.IsUserMemberAdministrator(ouID, gs.getUserID());
+		answer = isUserGHAforOU || userHasRoleTAA ||  isUserOUAdmin || isUserMemberAdmin;
+
 		return answer;
 	},
 	
-	// STRY0076016
+	// STRY0076016 - DFCT0011930
 	// this is used to set the row level write
 	userCanWriteMem: function(ouID){
 		var answer = false;
+		var currentUser = gs.getUserID();
 		// DFCT0010580 - if ouID not set, then return false
 		if(ouID && ouID != ''){
+			var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+			var userHasRoleTAA = this.UserHasRole('x_153465_discovert.tasker_application_admin');
+			var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+			var isUserTaskAdminforOU = this.userIsTaskAdministratorForOU(ouID);
+			var isUserTemplateAdministrator = this.UserHasRole('x_153465_discovert.tasker_process_template_admin');
+			var isUserMemberAdmin = this.IsUserMemberAdministrator(ouID, currentUser);
 		
-			if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin') || this.UserHasRole('x_153465_discovert.tasker_application_admin') || this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin') || this.UserHasRole('x_153465_discovert.tasker_process_template_admin')){
-				answer = true;
-			} else {
-				answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
-			}
+			answer = isUserGHAforOU || userHasRoleTAA || isUserTaskAdminforOU || isUserTemplateAdministrator ||  isUserOUAdmin || isUserMemberAdmin;
 		}
 		return answer;
 	},
 	
-	// STRY0076016
+	// STRY0076016 - DFCT0011930
 	// this is used to set the Add and Delete ACLs
 	userCanCreateMem: function(ouID){
 		var answer = false;
+		var currentUser = gs.getUserID();
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+		var isUserMemberAdmin = this.IsUserMemberAdministrator(ouID, currentUser);
 		// DFCT0010580 - if ouID not set, then return false
 		if(ouID && ouID != ''){
-			if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
-				answer = true;
-			} else {
-				answer =  this.IsUserOUAdministrator(ouID, gs.getUserID()) || this.IsUserMemberAdministrator(ouID, gs.getUserID());
-			}
+			answer = isUserGHAforOU || isUserOUAdmin || isUserMemberAdmin;
 		}
 		return answer;
 	},
 
-	// STRY0050440
+	// STRY0050440 - DFCT0011930
 	userCanWriteOU: function(ouID){
 		var answer = false;
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
-			answer = true;
-		} else {
-			answer =  this.IsUserOUAdministrator(ouID, gs.getUserID());		
-		}
+		var currentUser = gs.getUserID();
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+		answer = isUserGHAforOU || isUserOUAdmin;		
+		
 		return answer;
 	},
 	
-	// STRY0050440
+	// STRY0050440 - DFCT0011930
 	userCanCreateOU: function(ouID){
 		var answer = false;
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
-			answer = true;
-		} else if (this.IsUserOUAdministrator(ouID, gs.getUserID())){
-			answer = true;
-		}
+		var currentUser = gs.getUserID();
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var isUserOUAdmin = this.IsUserOUAdministrator(ouID, currentUser);
+		answer = isUserGHAforOU || isUserOUAdmin;
 		return answer;
 	},
 	
@@ -434,14 +482,16 @@ UserInfoScripts.prototype = {
 		return answer;
 	},
 	
-	// STRY0131148 - this is used to determine if the user can create/write/delete from the Organizational Users table
+	// DFCT0011930 - STRY0131148 - this is used to determine if the user can create/write/delete from the Organizational Users table
 	userCanWrite_organizational_members_table: function(){
 		var answer = false;
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin') || this.UserHasRole('x_153465_discovert.tasker_application_admin')){
-			answer = true;
-		} else {
-			answer =  this.userHasRoleOUHieararchyAdminOrOUMember(gs.getUserID());
-		}
+		var ouID = current.discover_office_hierarchy;
+		var currentUser = gs.getUserID();
+		var isUserGHAforOU = this.userIsOrgAdminForOU(ouID);
+		var userHasRoleTAA = this.UserHasRole('x_153465_discovert.tasker_application_admin');
+		var userIsOfficeAdminOrMemberAdimn = this.userHasRoleOUHieararchyAdminOrOUMember(currentUser);
+
+		answer =  isUserGHAforOU || userHasRoleTAA || userIsOfficeAdminOrMemberAdimn;
 		return answer;		
 	},
 	
@@ -466,7 +516,6 @@ UserInfoScripts.prototype = {
 	IsUserOUAdministrator: function(ouID,userID)
 	{
 		var answer = false;
-		
 		// STRY0059849 - use new method that looks for the OUHA responsible, then checks to see if this user is in the list
 		var ouHA_responsible = new OrganizationalScripts().getOUHA_responsible(ouID);
 		// OUHA_responsible = {OU:{value:'', displayValue:''}, Administrators: {value:'', displayValue: ''}};
@@ -475,62 +524,57 @@ UserInfoScripts.prototype = {
 		return answer;
 	},
 	
-	// STRY0131148 
+	// DFCT0011930
+	isUserOrgAdminForUser: function(user){
+		var answer = false;
+		var OUID;
+		var isUserGHAforOU;
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		grOUs.addQuery('office_member', user);
+		grOUs.query();
+		while(grOUs.next()){
+			OUID = grOUs.getValue('discover_office_hierarchy');
+			isUserGHAforOU = this.userIsOrgAdminForOU(OUID);
+			if(isUserGHAforOU){
+				answer = true;
+				break;
+			}
+		}
+		return answer;  
+	},
+
+	// STRY0131148 - DFCT0011930
 	canChangeUserDefaultOU: function(ORG_User_Sys_Id, userID)
 	{
 		var answer = false;
 		var grOrgUsers = new GlideRecordSecure('x_153465_discovert_organization_user');
-		// is the user a Global Hierarchy Admin
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
-			answer = true;
-		} else if(grOrgUsers.get(ORG_User_Sys_Id)){
+		if(grOrgUsers.get(ORG_User_Sys_Id)){
 			var OrgUserID = grOrgUsers.u_tasker_user;
-			// is this the current user
-			if(userID == OrgUserID){
-				answer = true;
-			}
-			
-			// TODO - write query to handle this
-/*			// OU Hierarchy Admin
-			// STRY0050440 - STRY0057846
-			if(this.IsUserOUAdministrator(OUID, userID)){
-				answer = true;
-			}
-			// OU Member Admin 
-			// STRY0057846
-			if(this.IsUserMemberAdministrator(OUID, userID)){
-				answer = true;
-			}
-*/			
+			var isMemberUserGiven = userID == OrgUserID;
+			// is the user a Global Hierarchy Admin for user
+			var isOrgAdminForUser = this.isUserOrgAdminForUser(OrgUserID);
+			answer = isMemberUserGiven || isOrgAdminForUser;
 		}
 		return answer;
 	},
 	
-	// STRY0057846 
+	// STRY0057846 - DFCT0011930
 	canChangeDefaultOU: function(mem_Sys_Id, userID)
 	{
 		var answer = false;
 		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-		// is the user a Global Hierarchy Admin
-		if(this.UserHasRole('x_153465_discovert.tasker_organizational_admin')){
-			answer = true;
-		} else if(grMembers.get(mem_Sys_Id)){
+		if(grMembers.get(mem_Sys_Id)){
 			var OUID = grMembers.discover_office_hierarchy;
 			var MemID = grMembers.office_member;
-			// is this the current user
-			if(userID == MemID){
-				answer = true;
-			}
-			// OU Hierarchy Admin
+			var isUserGHAforOU = this.userIsOrgAdminForOU(OUID);
+			// is the user a Global Hierarchy Admin
+			var isUserOUAdmin = this.IsUserOUAdministrator(OUID, userID);
+			var isUserMemberAdmin = this.IsUserMemberAdministrator(OUID, userID);
+			var isMemberUserGiven = userID == MemID;
+			
 			// STRY0050440 - STRY0057846
-			if(this.IsUserOUAdministrator(OUID, userID)){
-				answer = true;
-			}
-			// OU Member Admin 
-			// STRY0057846
-			if(this.IsUserMemberAdministrator(OUID, userID)){
-				answer = true;
-			}
+			// is this the current user or User is OU Hierarchy Admin, or OU Member Admin
+			answer = isMemberUserGiven || isUserOUAdmin || isUserMemberAdmin;
 		}
 		return answer;
 	},
@@ -925,25 +969,11 @@ UserInfoScripts.prototype = {
 		
 		var answer;
 		//var gsUser = gs.getUser(userID).;answer		
-		if(this.UserHasRole('x_153465_discovert.tasker_global_Tasking_Authority_member_admin') 
-			|| this.UserHasRole('x_153465_discovert.Task_Executive')){
-			answer = true;	
-		}
-		else{
-			// RAJ - STRY0011695 - change to use Glide Aggregate
-			var grMembers = new GlideAggregate('x_153465_discovert_discover_office_members');
-			grMembers.addQuery('discover_office_hierarchy', ouID);
-			grMembers.addQuery('office_member', userID);
-			grMembers.addQuery('office_task_authority', true);
-			grMembers.addAggregate('COUNT');			
-			grMembers.query();
-			answer = false;
-			if(grMembers.next()){
-				if (grMembers.getAggregate('COUNT') > 0){
-					answer = true;
-				}
-			}
-		}
+		var isUserTaskAdminforOU = this.userIsTaskAdministratorForOU(ouID);
+		var isUserTaskExecutiveforOU = this.userIsTaskExecutiveForOU(ouID);
+		var isUserTaskManager = this.IsUserOUTA(userID, ouID);
+		// DFCT0011930 
+		answer = isUserTaskAdminforOU ||  isUserTaskExecutiveforOU || isUserTaskManager;
 		return answer;
 	},
 	
@@ -1300,13 +1330,13 @@ UserInfoScripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>377</sys_mod_count>
+        <sys_mod_count>385</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-04-17 11:28:15</sys_updated_on>
+        <sys_updated_on>2023-06-07 01:18:50</sys_updated_on>
     </sys_script_include>
 </record_update>

@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3 | 2023-06-05 - raj -   DFCT0011926 - In New Task/Subtask Form, choosing an Assigned Member while the Primary Assignee is empty does NOT auto-populate to the Default OU of the Assigned Member&#13;
+        <description>2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
+2.8.3 | 2023-06-05 - raj -   DFCT0011926 - In New Task/Subtask Form, choosing an Assigned Member while the Primary Assignee is empty does NOT auto-populate to the Default OU of the Assigned Member&#13;
 2.8.3 | 2023-06-05 - raj -   DFCT0011927 - ONLY Global Template~ if a TA empties the primary assignee field, the choice list of Assigned Member becomes empty. &#13;
 2.8.3 | 2023-05-29 - raj -   DFCT0011892 - Using Divisional Setting, on OU templates, TMs can clear the Primary Assignee and then select any user from their OUs Tasking Pattern in the Assigned member &#13;
 2.8.x | 2023-05-22 - raj -   DFCT0011848 - With Organizational Privacy turned On ~Top OU DTCOM &gt; "Organization unit is Open". is NOT receiving the Task from a Private OU CE.&#13;
@@ -168,23 +169,35 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617
 		var taskPrivacy = new task_privacy();
 		
+		// DFCT0011930
+		var primary_office = '';
 		// Task Privacy
 		
 		// STRY0079512
 		var restrictedGroup = '';
 		if(current.getTableName() == 'x_153465_discovert_route_task_instance'){
 			restrictedGroup = current.assignment_group + '';
+			// DFCT0011930
+			primary_office = current.primary_office + '';
+
 		} else{
 			var templateData = {};
 			templateData = this.getTemplateInfo();
 			restrictedGroup = templateData.restricted_group == null ? '': templateData.restricted_group;
+			// DFCT0011930
+			primary_office = templateData.primary_office;
 		}
 		
 		var ouMemArr = [];
 		var arrOUs = [];
+		// DFCT0011930 - user primary office to determine Task Administrator permissions
+		var isTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		// DFCT0011930 - user primary office to determine Task Executive permissions
+		var isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+		
 		// if user is a Task Administrator, return all users
-		// STRY0112587
-		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive()){
+		// STRY0112587 - DFCT0011930
+		if (isTaskAdministrator || isTaskExecutive){
 			// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
 			// STRY0078831 - fixed issue where Adminstrators would see all users when a restricted group was selected.
 			if (restrictedGroup != '') {
@@ -444,9 +457,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 			// NOTE: this routine handles all roles and accounts for Restricted Groups
 			return this.getAllMembersCurrentUserCanTask();
 		}
+		// DFCT0011930 - user primary assignee to determine Task Administrator permissions
+		var isTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_assignee);
+		// DFCT0011930 - user primary assignee to determine Task Executive permissions
+		var isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_assignee);
 		
-		// STRY0112587 - STRY0112462
-		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive() || taskingScripts.ouIsPermissive(primary_assignee)){
+		// STRY0112587 - STRY0112462 - DFCT0011930
+		if (isTaskAdministrator || isTaskExecutive || taskingScripts.ouIsPermissive(primary_assignee)){
 			arrOUs.push(primary_assignee);
 			// based on note above, if this isn't limitted to primary assignee, just return that load
 			ouMemArr = taskingScripts.retrieveMembersInOus(arrOUs);
@@ -613,9 +630,14 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		} else if (arrUserOUs.length > 0) {
 			aOUResrcictAndUserOnly = arrUserOUs;
 		}
-		
+
+		// DFCT0011930 - user primary assignee to determine Task Administrator permissions
+		var isTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+		// DFCT0011930 - user primary assignee to determine Task Executive permissions
+		var isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+
 		// STRY0112587
-		if (UserPermissions.IsUserTaskAdministrator() || UserPermissions.IsUserTaskExecutive()){
+		if (isTaskAdministrator || isTaskExecutive){
 			// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617 - DFCT0011926 - pass information down from screen instead of pulling from current record
 			ArrOUs = taskPrivacy.retrieveAdminTaskOUsPrivacyFiltered(primary_office, recordPrivacy);
 		} else {
@@ -658,6 +680,8 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var templateData = {};
 		var restrictedGroup = '';
 		var primaryAssignee = '';
+		// DFCT0011930
+		var primary_office = '';
 		var templateLevel = '';
 		var templateOU = '';
 		var tempDef = '';
@@ -670,6 +694,8 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				templateOU = current.getValue('process_ou');
 			}
 			primaryAssignee = current.getValue('u_primary_assignee');
+			// DFCT0011930
+			primary_office = current.getValue('u_primary_office');
 			restrictedGroup = current.getValue('u_restricted_group');
 		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
 			tempDef = current.getValue('tasker_process_definition');
@@ -680,6 +706,8 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				}
 			}
 			primaryAssignee = current.getValue('primary_assignee');
+			// DFCT0011930
+			primary_office = current.getValue('primary_office');
 			restrictedGroup = current.getValue('assigned_to_group'); 
 		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
 			tempDef = current.getValue('routing_template_ref');
@@ -690,6 +718,9 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				}
 			}
 			primaryAssignee = current.getValue('u_primary_assignee');
+			// DFCT0011930
+			primary_office = current.getValue('u_primary_office');
+
 			restrictedGroup = current.getValue('u_restricted_group');
 		}
 		// STRY0079512 3
@@ -697,7 +728,9 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		
 		templateData.template_level = templateLevel;  
 		templateData.template_ou = templateOU;  
-		templateData.primary_assignee = primaryAssignee;  
+		templateData.primary_assignee = primaryAssignee;
+		// DFCT0011930
+		templateData.primary_office = primary_office;
 		templateData.restricted_group = restrictedGroup;  			
 		
 		return templateData;
@@ -869,54 +902,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		}
 		return strArrOUs; 
 	},
-	// STRY0111621 - Removed for full list of users the user can task above
-// 	getOnBehalfOf: function() {
-// 		// STRY0064991 - get users for onBehalfOf
-// 		// TODO NOTE: if we remove the dependency on Prmiary Assignee, then we will need to get All OUs for Task Administrator
-// 		//            and all members for all ous (set return value to all).  If Task manager of multiple OUs, then 
-// 		//            get all OUs where user is a Task Manager and pull all members from all of them.
-// 		var taskingScripts = new tasking_System_Settings_Scripts();
-// 		var UserPermissions  = new UserInfoScripts();
-// 		var onBehalfArr = [];
-// 		var strArrOUs = [];
 
-// 		// if user is a Task Administrator, return all users
-// 		if (UserPermissions.IsUserTaskAdministrator()){
-// 			if (current.getValue('primary_assignee') != ''){
-// 				strArrOUs.push(current.getValue('primary_assignee'));
-// 				// based on note above, if this isn't limitted to primary assignee, just return that load
-// 				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-// 			} else{
-// 				// If no Primary assignee set, then return no records
-// 				onBehalfArr = [];
-// 			}
-// 		}
-// 		// now determine if user is a the Task Manager for the selected Primary Assignee
-// 		else if(UserPermissions.IsUserTaskingAuthority(current.primary_assignee,gs.getUserID())){
-// 			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
-// 			if (current.getValue('primary_assignee') != ''){
-// 				strArrOUs.push(current.getValue('primary_assignee'));
-// 				// based on note above, if this isn't limitted to primary assignee, just return that load
-// 				onBehalfArr = taskingScripts.retrieveMembersInOus(strArrOUs);
-// 			} else{
-// 				// If no Primary assignee set, then return no records
-// 				onBehalfArr = [];
-// 			}
-// 		// if user is not a Task Administrator and the user is not a Task Manager in the OU 
-// 		// NOTE :if we drop Primary assignee, this would be a Task Manager in any OU
-// 		// Return this user only as they can work on behalf of
-// 		} else { //} if(UserPermissions.IsUserInOU(current.primary_assignee,gs.getUserID())){
-// 			onBehalfArr.push(gs.getUserID());
-// 		}			
-// 		// now limit to restricted group, if necessary
-// 		if ( current.getValue('assignment_group') != '') 
-// 			onBehalfArr = this.limitUsersToRestrictedGroup(onBehalfArr, current.getValue('assignment_group'));
-// 		// turn array into a comma delimitted string.
-// 		var sOnBehalfOf = onBehalfArr.join(',');
-// 		// RJ - STRY0065162 - fix issue where all active users was returned for members, instead of only users with Task_User role were returned
-// 		return 'sys_id IN ' + sOnBehalfOf  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 
-// 	},	
-	
 	// receives memberArr and restricted group
 	// returnes a memberArr restricted to people in the restricted group
 	limitUsersToRestrictedGroup: function(userArr, restricted_group) {
@@ -948,13 +934,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>408</sys_mod_count>
+        <sys_mod_count>409</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-06-05 18:01:42</sys_updated_on>
+        <sys_updated_on>2023-06-06 23:16:23</sys_updated_on>
     </sys_script_include>
 </record_update>
