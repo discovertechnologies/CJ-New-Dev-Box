@@ -5,13 +5,9 @@
         <api_name>x_153465_discovert.UserInfoScripts</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script include&#13;
+        <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+2.8.3 | 2023-06-08 | raj | DFCT0011928 - GTD, TPA, TE, and TA's in a Private OU can see and modify all global templates even if they are from an open OU.&#13;
 2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
-2.8.1 | 2023-04-17 | raj | DFCT0011765 - null: no thrown error -As a Task User error raised when opening member screen&#13;
-2.8.1 | 2023-01-30 | raj | STRY0135276 - POC - Data Table - Response Comment Update - User Profile Directive - move user profile scripts from TaskWidgetData into UerInfoScritps &#13;
-2.8.1    | 2022-10-24 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
-&#13;
-2.8    | 2022-09-19 - raj -  STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
 2.8    | 2022-09-19 - raj -  DFCT0011294 - Errors display when adding a user to the OU. (User should not be part of any group)&#13;
 2.8    | 2022-09-08 - raj -  STRY0129041 - Block Search for User if Groups are Selected but aren't Configured&#13;
 2.8    | 2022-09-08 - raj -  STRY0129039 - OU Hierarchy Group Not Configured for Role Warning&#13;
@@ -49,26 +45,15 @@ v 2.5.16 P2&#13;
 // this keeps all of the code and logic in one place
 var UserInfoScripts = Class.create();
 // STRY0129041 - format for this is "rolename = key and field name in the member table is value"
-// STRY0131148 - moved the table for personal permissions and changed names 
-// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-//											Updated loadPhotoInfo() to use sys_user; Added getConnectEnabled();
-//											in loadProfileInfo() added mobilePhone, contactPageHref, photo, emailSubject, buttonText and icons;
-//											Changed phone to businessPhone
-// 2.8 | 2022-03-24 | mmcc | STRY0115677 - Org Hierarchy Full Screen- Process Request Indicator- Popover Styling
-//											loadProfileInfo() var userProfile deleted unused fields
-//											_setStyleBackgroundImage(photo) as calling with 2nd param asBackgroundImage
-// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel
-//											Cleaned up getConnectEnabled(); Added object pages; 
-//											Removed emailSubject and buttonText as they will added to the pages object
 UserInfoScripts.CONST_ARRAY_GLOBAL_ROLES_MEMBER_TABLE_MAPPING = {
 	'x_153465_discovert.tasker_user': '',
-	'x_153465_discovert.tasker_process_template_user': 'has_personal_template_rights',
+	'x_153465_discovert.tasker_process_template_user': 'has_personal_process_rights',
 	'x_153465_discovert.Task_Executive': 'is_task_executive',
-	'x_153465_discovert.tasker_global_Tasking_Authority_member_admin' : 'is_task_administrator',
-	'x_153465_discovert.tasker_process_template_global': 'can_manage_global_template',
-	'x_153465_discovert.tasker_process_template_admin': 'can_manage_template_permissions',
-	'x_153465_discovert.tasker_organizational_admin': 'is_global_hierarchy_administrator',
-	'x_153465_discovert.tasker_application_admin': 'is_tasker_application_administrator',
+	'x_153465_discovert.tasker_global_Tasking_Authority_member_admin' : 'is_global_tasking_authority',
+	'x_153465_discovert.tasker_process_template_global': 'can_manage_global_processes',
+	'x_153465_discovert.tasker_process_template_admin': 'can_manage_process_permissions',
+	'x_153465_discovert.tasker_organizational_admin': 'user_is_organization_admin',
+	'x_153465_discovert.tasker_application_admin': 'is_tasker_application_admin',
 	'admin': ''
 	}
 ;
@@ -76,134 +61,6 @@ UserInfoScripts.prototype = {
 	initialize: function() {
 	},
 	
-	// STRY0135276 
-	loadPhotoInfo: function(userGUID, asBackgroundImage) {
-		var strFirstName = '';
-		var strLastName = '';
-		var photo;
-		var displayName = '';
-		var isUserOoO = false;
-		var photoInfo = {
-			name: '',
-			photo: undefined
-		};
-		// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was GlideRecord("live_profile");
-		var grProfile = new GlideRecord("sys_user");
-		if (grProfile.get(userGUID)) {
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was .getDisplayValue("photo");
-			photo = grProfile.getValue("avatar");
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; was if (photo.length > 0) {
-			if (photo != undefined) {
-				photo = photo + '.iix?t=small';
-			}
-			displayName = grProfile.getValue('name');
-			if(asBackgroundImage){
-				// if it is a background image set to background image
-				if (photo == undefined) {
-					photo = "Profile16.svg";
-				}
-
-				photo = this._setStyleBackgroundImage(photo);
-			}
-			photoInfo.photo = photo;
-			photoInfo.name = displayName;
-			photoInfo.sys_id = userGUID;
-			
-			isUserOoO = new Out_of_Office().isUserOutOfOffice(userGUID);
-			photoInfo.isOoO = isUserOoO;
-		}
-		return photoInfo;
-	},
-
-	// STRY0114453  - STRY0135276 
-	loadProfileInfo: function(userGUID) {
-		var userProfile = {
-			sys_id: userGUID,
-			name: '',
-			first_name: '',
-			last_name: '',
-			middle_name: '',
-			email: '',
-			businessPhone: '',
-			mobilePhone: '',
-			location: '',
-			time_zone: '',
-			contactPageHref: '',
-			photo: '',
-			connectEnabled: '',
-			liveProfileId: '',
-			messages: {},
-			icons: {}
-		};
-		
-		var grUser = new GlideRecord('sys_user');
-		if(grUser.get(userGUID)){
-			// 2.8 | 2022-03-04 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-			//  added getDisplayValue to many, .contactPageHref, mobile phone; Changed phone to businessPhone, add call to get Connect Chat fields
-			userProfile.name = grUser.getDisplayValue('name');
-			userProfile.first_name = grUser.getDisplayValue('first_name');
-			userProfile.last_name = grUser.getDisplayValue('last_name');
-			userProfile.middle_name = grUser.getDisplayValue('middle_name');
-			userProfile.email = grUser.getDisplayValue('email');
-			userProfile.businessPhone = grUser.getDisplayValue('phone');
-			userProfile.mobilePhone = grUser.getDisplayValue('mobile_phone');
-			userProfile.location = grUser.getDisplayValue('location');
-			userProfile.contactPageHref = '?id=user_profile&sys_id=' + userGUID;
-			
-			// if no user time zone, but location is loaded
-			if(grUser.time_zone){
-				userProfile.time_zone = grUser.getDisplayValue('time_zone'); // + '';
-			} else if(grUser.location && grUser.location.time_zone){
-				userProfile.time_zone = gs.getMessage("Tasker - (location) - ") + userProfile.location.time_zone;
-			}
-			// Connect Chat 
-			var chat = this.getConnectEnabled(userGUID);
-			userProfile.connectEnabled = chat.connectEnabled;
-			userProfile.liveProfileId = chat.liveProfileId;
-		}
-		return userProfile;
-	},
-	
-	// 2.8 | 2022-03-10 | mmcc | STRY0114453 - Org Hierarchy Full Screen- Tree Node- Avatar Control- Popover Panel; 
-	// Get info about the plugin being active and if live_profile has a record get the live profile ID for the useer
-	getConnectEnabled: function(userId) {
-		var chat = {
-			connectEnabled: false,
-			liveProfileId: ''
-		};
-
-		// is chat active?
-		chat.connectEnabled = GlidePluginManager().isActive('com.glide.connect');
-		
-		// Check if logged in user has a live profile for sending connect messages
-		if (GlidePluginManager().isActive('com.glideapp.live_common')) {
-			var liveProfileGR = new GlideRecord("live_profile");
-			liveProfileGR.addQuery("document", userId);
-			liveProfileGR.query();
-			if (liveProfileGR.next()) {
-				chat.liveProfileId = liveProfileGR.getValue("sys_id");
-// 				data.liveProfileModel = $sp.getForm("live_profile", data.liveProfileID)._fields;
-// 				// live_profile short_description is shown here as "Bio", so popup label/hint must reflect that
-// 				if (data.liveProfileModel.short_description) {
-// 					data.liveProfileModel.short_description.label = gs.getMessage("Bio");
-// 					data.liveProfileModel.short_description.hint = gs.getMessage("Biography");
-// 				}
-			} else {
-				chat.connectEnabled = false; // can't find a live profile for this user, so lets not integrate Connect
-			}
-		}
-		
-		return chat;
-	},
-	
-	// Returns a string to set a style tag over in the HTML to  display a persons' photo
-	// Parameter photo is sys_user avatar field with .iix?t=small appended
-	_setStyleBackgroundImage: function(photo) {
-		var imageUrl = '';
-		imageUrl = "background-image: url('" + photo + "');";
-		return imageUrl;
-	},
-
 	// STRY0129039 -  STRY0129041
 	getUserGlobalRolesAndMessages: function(userId){
 		var tsss = new tasking_System_Settings_Scripts();
@@ -252,27 +109,19 @@ UserInfoScripts.prototype = {
 	
 	// DFCT0010296 - if the member was removed from thier default OU, set another default OU
 	setNewDefaultOU: function(member_userid){
-		var newDefaultOU = '';
 		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		grMembers.addQuery('office_member', member_userid);
 		grMembers.query();
 		// get the first OU alphabetically and set that to the default
 		if(grMembers.next()){
-			newDefaultOU = grMembers.discover_office_hierarchy;
-
-		} else {
-			// if no member records left, clear the default OU.
-			newDefaultOU='';
-		}
-		// STRY0131148 move to org User table
-		var grOrgUser = new GlideRecordSecure('x_153465_discovert_organization_user');
-		grOrgUser.addQuery('u_tasker_user', member_userid);
-		grOrgUser.query();
-		if(grOrgUser.next()){
 			// this is the first ou found alphabetically 
-			grOrgUser.u_default_ou = newDefaultOU;
-			grOrgUser.update();
-		}	
+			grMembers.u_default_ou = grMembers.discover_office_hierarchy;
+			// set the new Default OU
+			grMembers.u_isdefaultou = true;
+			grMembers.update();
+			// there is an after update businees rule that runs when the default OU is changed to update all of the member records to the new default OU
+		}
+		// if no member records left, no need to update the default OU.
 	},
 	
 	// STRY0114396
@@ -375,7 +224,7 @@ UserInfoScripts.prototype = {
 		return answer;
 		
 	},
-
+	
 	// STRY0076016 - DFCT0011765
 	userCanWriteMem_field_office_task_authority: function(ouID){
 		// DFCT0011930 
@@ -394,7 +243,7 @@ UserInfoScripts.prototype = {
 		
 		return answer;
 	},
-	
+		
 	// STRY0076016 - DFCT0011930
 	userCanWriteMem_field_can_manage_ou_members: function(ouID){
 		var answer = false;
@@ -441,7 +290,7 @@ UserInfoScripts.prototype = {
 		}
 		return answer;
 	},
-
+	
 	// STRY0050440 - DFCT0011930
 	userCanWriteOU: function(ouID){
 		var answer = false;
@@ -494,7 +343,7 @@ UserInfoScripts.prototype = {
 		answer =  isUserGHAforOU || userHasRoleTAA || userIsOfficeAdminOrMemberAdimn;
 		return answer;		
 	},
-	
+
 	// STRY0131148 - this is used to determine if the user can create/write/delete from the Organizational Users table
 	userHasRoleOUHieararchyAdminOrOUMember: function(userID){
 		var answer = false;
@@ -511,7 +360,7 @@ UserInfoScripts.prototype = {
 		}
 		return answer;		
 	},
-	
+
 	// STRY0050440
 	IsUserOUAdministrator: function(ouID,userID)
 	{
@@ -542,14 +391,14 @@ UserInfoScripts.prototype = {
 		}
 		return answer;  
 	},
-
+	
 	// STRY0131148 - DFCT0011930
 	canChangeUserDefaultOU: function(ORG_User_Sys_Id, userID)
 	{
 		var answer = false;
-		var grOrgUsers = new GlideRecordSecure('x_153465_discovert_organization_user');
+		var grOrgUsers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		if(grOrgUsers.get(ORG_User_Sys_Id)){
-			var OrgUserID = grOrgUsers.u_tasker_user;
+			var OrgUserID = grMembers.office_member;
 			var isMemberUserGiven = userID == OrgUserID;
 			// is the user a Global Hierarchy Admin for user
 			var isOrgAdminForUser = this.isUserOrgAdminForUser(OrgUserID);
@@ -557,23 +406,20 @@ UserInfoScripts.prototype = {
 		}
 		return answer;
 	},
-	
-	// STRY0057846 - DFCT0011930
+
+	// STRY0057846  - DFCT0011930
 	canChangeDefaultOU: function(mem_Sys_Id, userID)
 	{
 		var answer = false;
 		var grMembers = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		if(grMembers.get(mem_Sys_Id)){
 			var OUID = grMembers.discover_office_hierarchy;
-			var MemID = grMembers.office_member;
-			var isUserGHAforOU = this.userIsOrgAdminForOU(OUID);
-			// is the user a Global Hierarchy Admin
+			var isOrgAdminForUser = this.isUserOrgAdminForUser(OrgUserID);
 			var isUserOUAdmin = this.IsUserOUAdministrator(OUID, userID);
-			var isUserMemberAdmin = this.IsUserMemberAdministrator(OUID, userID);
+			var MemID = grMembers.office_member;
 			var isMemberUserGiven = userID == MemID;
-			
-			// STRY0050440 - STRY0057846
-			// is this the current user or User is OU Hierarchy Admin, or OU Member Admin
+			var isUserMemberAdmin = this.IsUserMemberAdministrator(OUID, userID);
+			// is this the current user
 			answer = isMemberUserGiven || isUserOUAdmin || isUserMemberAdmin;
 		}
 		return answer;
@@ -610,6 +456,26 @@ UserInfoScripts.prototype = {
 		}
 			
 		return hasRole;
+	},
+	
+	// DFCT0011928
+	userHasGlobalProcessRightsPrivacyFiltered: function(primary_office){
+		answer = false;
+		var userHasGlobalTemplateRights = this.UserHasRole('x_153465_discovert.tasker_process_template_global');
+		userHasGlobalTemplateRights = userHasGlobalTemplateRights == true || userHasGlobalTemplateRights == 'true';
+		var isUserInOrgStructure = new task_privacy().isUserInOrgStructure(primary_office, gs.getUserID());
+		answer = userHasGlobalTemplateRights && isUserInOrgStructure;
+		return answer;
+	},
+	
+	// DFCT0011928
+	userHasPersonalProcessRightsPrivacyFiltered: function(primary_office){
+		answer = false;
+		var userHasPersonalTemplateRights = this.UserHasRole('x_153465_discovert.tasker_process_template_user');
+		userHasPersonalTemplateRights = userHasPersonalTemplateRights == true || userHasPersonalTemplateRights == 'true';
+		var isUserInOrgStructure = new task_privacy().isUserInOrgStructure(ouID, gs.getUserID());
+		answer = userHasPersonalTemplateRights && isUserInOrgStructure;
+		return answer;
 	},
 	
 	// RAJ 2020.03.18  STRY0063747 - 
@@ -1075,20 +941,12 @@ UserInfoScripts.prototype = {
 	},
 	
 	// STRY0124860 - external function calls 2 internal functions
-	addRole: function(user_id, user_name, role_name){
-		var roleAdded = false;
-		var msgRoleAdded = gs.getMessage("Tasker - Role:{0} - added to user: {1}",[role_name, user_name]);
-
+	addRole: function(user_id, role_name){
 		if(tasking_System_Settings_Scripts.CONST_USES_GROUPS_FOR_ROLES){
-			roleAdded = this._addUserToGroup(user_id, role_name);
+			return this._addUserToGroup(user_id, role_name);
 		} else {
-			roleAdded = this._addUserToRole(user_id, role_name);
+			return this._addUserToRole(user_id, role_name);
 		}
-		if(roleAdded){
-			gs.addInfoMessage(msgRoleAdded);
-		}
-		
-		return roleAdded;
 	},
 	
 	// STRY0124860 - called if groups are being used to manager permissions
@@ -1184,38 +1042,13 @@ UserInfoScripts.prototype = {
 		return roleAdded;
 	},
 	
-	// STRY0131148 - Improve role changes with a function for Add/Remove
-	removeAllGlobalRoles: function(user_id, user_name){
-		this.removeRole(user_id, user_name,'is_tasker_application_administrator', 'x_153465_discovert.tasker_application_admin', 'GlobalRole');
-        this.removeRole(user_id, user_name, 'is_task_administrator', 'x_153465_discovert.tasker_global_Tasking_Authority_member_admin', 'GlobalRole');
-        this.removeRole(user_id, user_name, 'is_task_executive', 'x_153465_discovert.Task_Executive', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'is_global_hierarchy_administrator', 'x_153465_discovert.tasker_organizational_admin', 'GlobalRole');
-		this.removeRole(user_id, user_name, '', 'x_153465_discovert.tasker_single_ou_admin', 'GlobalRole');
-		this.removeRole(user_id, user_name, '', 'x_153465_discovert.tasker_single_ou_member_admin', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'can_manage_template_permissions', 'x_153465_discovert.tasker_process_template_admin', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'can_manage_global_template', 'x_153465_discovert.tasker_process_template_global', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'has_ou_process_rights', 'x_153465_discovert.tasker_process_template_ou', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'has_personal_template_rights', 'x_153465_discovert.tasker_process_template_user', 'GlobalRole');
-		this.removeRole(user_id, user_name, 'can_import_ou_hierarchy', 'x_153465_discovert.tasker_hierarchy_import_user', 'GlobalRole');
-        // this user has been deleted.
-        // Moved to the end so removed last when all roles that inherit it are released
-        this.removeRole(user_id, user_name, '', 'x_153465_discovert.tasker_user', 'GlobalRole');
-	},
-
-	
-	removeRole: function(user_id, user_name, field, role_name, role_type){
-		var roleDeleted = false;
-		var msgRoleRemoved = gs.getMessage("Tasker - Role:{0} - removed from user: {1}",[role_name, user_name]);
+	removeRole: function(user_id, field, role_name, role_type){
 		// the first iteration of groups only uses groups for global roles
 		if(tasking_System_Settings_Scripts.CONST_USES_GROUPS_FOR_ROLES && role_type == 'GlobalRole'){
-			roleDeleted = this._removeUserFromGroup(user_id, field, role_name, role_type);
+			return this._removeUserFromGroup(user_id, field, role_name, role_type);
 		} else {
-			roleDeleted = this._removeUserFromRole(user_id, field, role_name, role_type);
+			return this._removeUserFromRole(user_id, field, role_name, role_type);
 		}	
-		if(roleDeleted){
-			gs.addInfoMessage(msgRoleRemoved);
-		}
-		return roleDeleted;
 	},
 	_removeUserFromRole: function(user_id, field, role_name, role_type)
 	{
@@ -1330,13 +1163,13 @@ UserInfoScripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>385</sys_mod_count>
+        <sys_mod_count>366</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-06-07 01:18:50</sys_updated_on>
+        <sys_updated_on>2023-06-08 17:56:23</sys_updated_on>
     </sys_script_include>
 </record_update>
