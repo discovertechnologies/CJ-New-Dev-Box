@@ -10,6 +10,7 @@
 2.8.5 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
 2.8.5 | 2022-11-04 - raj - changed to use gs.setProperty as the scope issue seems to be resolved as of San Diego&#13;
 &#13;
+2.8.3 | 2023-07-02 - raj -    DFCT0012071 - EH, defect: When creating a personal template as a TM, all permissive OU members are available for selection in the "select all" assignment fields (EX: Reviewer&#13;
 2.8.3 | 2023-06-25 - raj -    DFCT0012041 - Permissive OUs not included correctly in list of users that can be tasked&#13;
 2.8.3 | 2023-06-10 - raj -   DFCT0011913- Permissive OU office selection and member selections are available to all users in a controlled tasker setting even if that OU is outside their tasking pattern.&#13;
 2.8.3 | 2023-05-29 - raj -    DFCT0011596 - Number of records in "Open Task by My OU to Others" &amp; "Tasks by My OU to Others" widget does not correlate with the actual number of records. &#13;
@@ -1240,6 +1241,34 @@ tasking_System_Settings_Scripts.prototype = {
 
 		return systemControlSettings;
 	},
+
+	// DFCT0012071- new fuction name is retrieveTemplateTaskOUsForDesignerPrivacyFiltered based on retrieveTaskOUsPrivacyFiltered
+	// the only people a Template Designer can task are the members of the Template OU and Permissive OUs in their control pattern
+	retrieveTemplateTaskOUsForDesigner: function(template_ou){
+		// Check global setting (Open, Controlled, Flexible)
+		var au = new global.ArrayUtil();
+		var userOffices = [template_ou];
+		var permissiveOUs = [];
+		var relativeOUs = [];
+		var allOUs = [];
+
+		permissiveOUs = this._getAllPermissiveOUs();
+		var systemControlSetting = this.systemControlSetting(); 
+		// Get all of the tasking ous for an OU
+		// Check global setting (Open, Controlled, Flexible)
+		if(systemControlSetting.Open == true){
+			allOUs = permissiveOUs;
+		} else {
+			relativeOUs = this.getAllRelatvieOUs(userOffices);
+			allOUs = au.intersect(relativeOUs, permissiveOUs);
+		}
+		allOUs.push(template_ou);
+		// if any OUs have been returned, parse to get only unique
+		if (allOUs.length > 0){
+			allOUs = au.unique(allOUs);
+		} 
+		return allOUs;
+	},
 	
 	// Retrieve the OUs based on the user provided
 	retrieveTaskOUs: function(user){
@@ -1361,7 +1390,22 @@ tasking_System_Settings_Scripts.prototype = {
 		return isPermissive;
 	},
 	
-	getPermissiveOUs: function() {
+getPermissiveOUs: function() {
+		var au = new global.ArrayUtil();
+		var offices = [];
+		var userTaskingOffices = [];
+		offices = this._getAllPermissiveOUs();
+		if (offices.length > 0){
+			// DFCT0012041 - if control structure, the permissive list is limitted by control structure, if not controlled "all" is returned in the first item of array
+			userTaskingOffices = this.retrieveTaskOUs(gs.getUserID());
+			if(userTaskingOffices.length!=1 || userTaskingOffices[0]!="all"){
+				offices = au.intersect(offices, userTaskingOffices);
+			}
+		}
+		return offices;  
+	},
+
+	_getAllPermissiveOUs: function() {
 		var au = new global.ArrayUtil();
 		var offices = [];
 		var userTaskingOffices = [];
@@ -1375,11 +1419,6 @@ tasking_System_Settings_Scripts.prototype = {
 			}
 			if (offices.length > 0){
 				offices = au.unique(offices);
-			}
-			// DFCT0012041 - if control structure, the permissive list is limitted by control structure, if not controlled "all" is returned in the first item of array
-			userTaskingOffices = this.retrieveTaskOUs(gs.getUserID());
-			if(userTaskingOffices.length!=1 || userTaskingOffices[0]!="all"){
-				offices = au.intersect(offices, userTaskingOffices);
 			}
 		}
 		return offices;  
@@ -1529,13 +1568,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>358</sys_mod_count>
+        <sys_mod_count>359</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-06-26 01:49:34</sys_updated_on>
+        <sys_updated_on>2023-07-06 21:15:19</sys_updated_on>
     </sys_script_include>
 </record_update>
