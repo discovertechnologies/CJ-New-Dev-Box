@@ -249,12 +249,24 @@ tasker_search.prototype = {
 		// DFCT0011844 - DFCT0011824 
 		var taskerGR = new GlideRecordSecure(this.tableName);
 		taskerGR.addQuery('123TEXTQUERY321', query);
+
+		// DFCT0012050 - remove tasks based on OU privacy before initial search so counts and facets are not created
+		var privacyFilter = new task_privacy().getUserTaskPrivacyEncodedQuery();
+		if(privacyFilter && privacyFilter!=''){
+			taskerGR.addEncodedQuery(privacyFilter);
+		}
+		// DFCT0012050 - remove tasks based on restricted groups initial search so counts and facets are not created
+		var restrictedGroupFilter = new taskerDynamicFilters().getUserRestrictedGroupEncodedQuery();
+		if(restrictedGroupFilter && restrictedGroupFilter!=''){
+			taskerGR.addEncodedQuery(restrictedGroupFilter);
+		}
+		
 		// Here, we are utilizing queryLocation to implement pagination.
 		// In practice, there are many other ways to use the
 		// query_location value of the last item in the previous
 		// result set to implement pagination. Your implementation
 		// will vary by use case.
-		taskerGR.chooseWindow(queryLocation-1, queryLocation - 1 + count, true);
+		taskerGR.chooseWindow(queryLocation, queryLocation + count, true);
 		taskerGR = this._addFacetsFilter(taskerGR, facets);
 		var encodedQuery = taskerGR.getEncodedQuery();
 		// get the total records after applying Facets
@@ -516,42 +528,7 @@ tasker_search.prototype = {
 		while (ga_facet_items.next()) {
 			var count = ga_facet_items.getAggregate('count', _f);
 			if(count>0){
-				// DFCT0012050 remove members and OUs the user can't see
-				var showFacetItem = false;
-				var facetValue = ga_facet_items.getValue(_f);
-				var gr_OU = new GlideRecordSecure("x_153465_discovert_discover_office_hierarchy");
-				var gr_Member = new GlideRecordSecure("x_153465_discovert_discover_office_members");
-				switch (_f){
-					case "tasking_authority": case "primary_office": case "primary_assignee":
-						// if user can get the OU, then show it
-						gr_OU.addQuery("sys_id", facetValue);
-						gr_OU.query();
-						if(gr_OU.next()){
-							showFacetItem = true;
-						}
-						break;
-					case "u_task_requester": case "assigned_to": case "u_reviewer":
-						// if user can get the OU Member, then show it
-						gr_Member.addQuery("office_member", facetValue);
-						gr_Member.query();
-						if(gr_Member.next()){
-							showFacetItem = true;
-						}
-						break;
-					default:
-						showFacetItem = true;
-						break;
-				}
-				if(showFacetItem){
-					var facetDisplayValue = ga_facet_items.getDisplayValue(_f);
-					if(!facetDisplayValue || facetDisplayValue == ""){
-						facetDisplayValue = "[ " + gs.getMessage("empty") + " ]";
-					}
-					if(_facetDef.includeCount){
-						facetDisplayValue += " (" + count + ")";					
-					}
-					_facet.addFacetItem(facetDisplayValue, ga_facet_items.getValue(_f));
-				}
+				_facet.addFacetItem(facetDisplayValue, ga_facet_items.getValue(_f));
 			}
 		}
 		return _facet;
@@ -623,13 +600,13 @@ tasker_search.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-03-17 12:14:55</sys_created_on>
         <sys_id>d687e0cf1ba56d103ed2eb93b24bcb11</sys_id>
-        <sys_mod_count>174</sys_mod_count>
+        <sys_mod_count>175</sys_mod_count>
         <sys_name>tasker_search</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_d687e0cf1ba56d103ed2eb93b24bcb11</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-07-07 00:13:15</sys_updated_on>
+        <sys_updated_on>2023-07-09 20:20:49</sys_updated_on>
     </sys_script_include>
 </record_update>

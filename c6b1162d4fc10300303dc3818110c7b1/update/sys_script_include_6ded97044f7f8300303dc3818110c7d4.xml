@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3 | 2023-07-02 - raj -    DFCT0012071 - EH, defect: When creating a personal template as a TM, all permissive OU members are available for selection in the "select all" assignment fields (EX: Reviewer&#13;
+        <description>2.8.3 | 2023-07-09 - raj -    DFCT0012050 - Stretch &amp; known issue-Faceted Search shows OUs and Users from Private OUs when the user is searching from an Open OU. (All OUs are available to be selected)&#13;
+2.8.3 | 2023-07-02 - raj -    DFCT0012071 - EH, defect: When creating a personal template as a TM, all permissive OU members are available for selection in the "select all" assignment fields (EX: Reviewer&#13;
 2.8.3 | 2023-06-25 - raj -    DFCT0012041 - Permissive OUs not included correctly in list of users that can be tasked&#13;
 2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
 2.8.3 | 2023-06-05 - raj -   DFCT0011926 - In New Task/Subtask Form, choosing an Assigned Member while the Primary Assignee is empty does NOT auto-populate to the Default OU of the Assigned Member&#13;
@@ -134,10 +135,61 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		return this.getOUSubTaskMembersInTemplates();
 	},
 	
+// DFCT0012050 
+	getUserRestrictedGroupEncodedQuery: function(){
+		var userRestrictedGroupFitler = '';
+		var myRestrictedGroups = [];
+		myRestrictedGroups = this.getMyRestrictedGroupsArray();
+		userRestrictedGroupFitler = "^assignment_groupISEMPTY";
+		if(myRestrictedGroups.length>0){
+			userRestrictedGroupFitler = userRestrictedGroupFitler + "^ORassignment_groupIN" + myRestrictedGroups.join(",");
+		}
+		return userRestrictedGroupFitler;
+	},
+
+	getMyRestrictedGroupsArray: function(){
+		var myRestrictedGroups = [];
+		var au = new global.ArrayUtil();
+		var objAllUsersGroups = gs.getUser().getMyGroups();
+		var arrAllUsersGroups = au.convertArray(objAllUsersGroups);
+		var arrAllRestrictedGroups = this.getAllRestrictedGroups();
+		myRestrictedGroups = au.intersect(arrAllUsersGroups, arrAllRestrictedGroups);
+		return myRestrictedGroups;		
+	},
+	
+	getAllRestrictedGroups: function(){
+		var arrRestrictedGroups = [];
+		var restrictedGroupID = "";
+		// previously hard coded type id61734f1adb5ea740bb8ee536ca9619c1
+		restrictedGroupID = this.getRestrictedGroupTypeID();
+
+		// have to use glide record b/c user might not have permissions.  We are not returning this list, but only using it to filter another list.
+		var grGroups = new GlideRecord("sys_user_group");
+		var groupQuery = "typeLIKE" + restrictedGroupID;
+		grGroups.addEncodedQuery(groupQuery);
+		grGroups.query();
+		while (grGroups.next()){
+			arrRestrictedGroups.push(grGroups.getUniqueValue());
+		}
+		return arrRestrictedGroups;
+	},
+	
 	// STRY0096033 - Remove restriction group type hardcode sysid in Tasker
 	getMyRestrictedGroups: function() {
+		var filter = '';
 		var myGroups = 'none';
-		var restrictedGroupID = '';
+		var restrictedGroupID = "";
+		// previously hard coded type id61734f1adb5ea740bb8ee536ca9619c1
+		restrictedGroupID = this.getRestrictedGroupTypeID();
+		if(restrictedGroupID!=""){
+			myGroups = gs.getUser().getMyGroups();
+			filter = 'typeLIKE' + restrictedGroupID + '^sys_id IN ' + myGroups;	
+		}
+		return filter; 
+	},
+	
+	getRestrictedGroupTypeID: function(){
+		var restrictedGroupTypeID = '';
 		var groupTypeName = gs.getProperty('x_153465_discovert.Restricted Group Type Name') + '';
 		if( groupTypeName != ''){
 			// look up type by name to get the ID.  ID will be used in query below
@@ -145,14 +197,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 			gr_groupType.addQuery('name', groupTypeName);
 			gr_groupType.query();
 			if(gr_groupType.next()){
-				restrictedGroupID = gr_groupType.getUniqueValue();
-				myGroups = gs.getUser().getMyGroups();
+				restrictedGroupTypeID = gr_groupType.getUniqueValue();
 			}
 		}
-		// previously hard coded type id61734f1adb5ea740bb8ee536ca9619c1
-		var filter = 'typeLIKE' + restrictedGroupID + '^sys_id IN ' + myGroups;
-		return filter; 
+		return restrictedGroupTypeID;
+		
 	},
+
 	
 	// STRY0099013 - change filter for Task Owner
 	getTaskOnwers: function() {
@@ -930,13 +981,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>418</sys_mod_count>
+        <sys_mod_count>419</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-07-06 21:08:21</sys_updated_on>
+        <sys_updated_on>2023-07-09 20:05:32</sys_updated_on>
     </sys_script_include>
 </record_update>
