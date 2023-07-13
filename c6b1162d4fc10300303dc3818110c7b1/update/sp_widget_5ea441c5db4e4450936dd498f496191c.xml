@@ -1280,15 +1280,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 // 2.8.5 | 2023-07-07 | mmcc | STRY0137651 - When to Show Comments on Final Response Tab
 //                                      In Server script, added directive_content_comment and set based on work_item_type
 //                                      Changes made in Server script.
+// 2.8.5 | 2023-07-12 | raj | STRY0141856 - Stretch- PLACEHOLDER- Office Control
+//                                      In Server script, function calls for getDuration and getAssignment on task
+//                                      In HTML added office directive and passed Assignment info
 //
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
-
-		// STRY0137371
-		var taskerStatus = new TaskerStatus();
-		var status_and_reason = {};
-		data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
+		// STRY0141856
+		var api_task = new api_tasker_task();
 
 		// STRY0136617
 		data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
@@ -1557,6 +1557,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 		data.userProfiles = {};
 		// STRY0137371
 		data.loadedDurationOjbects = {};
+		// STRY0141856
+		data.loadedAssignementOjbects = {};
 
     data.popOverRecord = {};
     while (gr.next()) {
@@ -1733,6 +1735,9 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 								//       task to include task GUID and User GUID
 								var user_sys_id = record[fld].value;
 								loadUserPhotoInfo(user_sys_id, fld, record);
+							} else if(refTable == "x_153465_discovert_discover_office_hierarchy"){
+								// STRY0141856
+								record[fld].isOffice = true;
 							}
 						}							
 					}
@@ -1740,9 +1745,13 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 			
 				// STRY0137371
 				data.showDTechDuration = false;
+				// STRY0141856
+				data.showDTechAssignment = false;
+			
         switch (data.table) {
 				// Task table
 			case 'x_153465_discovert_route_task_instance':
+				var task_id = gr.getUniqueValue();
 				record.task_name = gr.getDisplayValue("short_description");
 				record.comment_state = gr.getDisplayValue("state");
 				record.comment_number = ''; // aka task Number
@@ -1763,10 +1772,10 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 				// STRY0137371
 				record.comment_number = gr.getDisplayValue('number'); // aka task Number
 				data.showDTechDuration = true;
-				data.loadedDurationOjbects[gr.getUniqueValue()] = {};
-				record.duration_status = gr.getDisplayValue("status");
-				record.duration_suspense_date = gr.getDisplayValue("suspense_date");
-				record.duration_modal_title = data.durationTitle + gr.getDisplayValue("task_name");
+				// STRY0141856
+				data.loadedDurationOjbects[task_id] = api_task.getDurationInformation(task_id);
+				data.showDTechAssignment = true;
+				data.loadedAssignementOjbects[task_id] = api_task.getAssignmentInformation(task_id);
 
 				// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
 				// use var's just for directive in case those columns are added as fields
@@ -2019,17 +2028,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1396</sys_mod_count>
+        <sys_mod_count>1398</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-07-07 08:58:29</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-07-12 13:16:54</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -2179,7 +2186,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
             <span ng-if="field!=data.hoverField && field!='state' && 
                          field!='response' && 
                          item[field].isUser!=true &&
-                         (!data.showDTechDuration || field!='suspense_date')">{{item[field].display_value}}</span>
+                         (!data.showDTechDuration || field!='suspense_date') &&
+                         (!data.showDTechAssignment || item[field].isOffice!=true)">{{item[field].display_value}}</span>
             <span ng-if="item[field].isUser==true && item[field].display_value!=''">
               <div>
                 <!-- STRY0135276 - User Profile Directive -->
@@ -2195,17 +2203,24 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
                             />
               </div>
             </span>
+            <div ng-if="item[field].isOffice==true">
+              <span ng-if="data.showDTechAssignment">
+                <dtech-office   dtech-task-title = "getTitle(item);"
+                              dtech-assignment-object = "data.loadedAssignementOjbects[item.sys_id]"
+                              dtech-field="field"
+                              dtech-is-modal="data.isModal"
+                              table="{{data.table}}"
+                              parent-sys-id="{{item.sys_id}}"                                          
+                              ></dtech-office>
+              </span>
+            </div>
+            
             <!-- STRY0137371 -->
             <span ng-if="data.showDTechDuration && field=='suspense_date'">
-              <dtech-duration dtech-assigned-member="{{item.assigned_to.display_value}}"
-                              dtech-duration-modal-title = "{{item.duration_modal_title}}"
+              <dtech-duration dtech-task-title = "getTitle(item);"
+                              dtech-assigned-member="{{item.assigned_to.display_value}}"
                               dtech-duration-object = "data.loadedDurationOjbects[item.sys_id]"
                               dtech-is-modal="data.isModal"
-                              dtech-number="{{item.comment_number}}"
-                              dtech-status-reason="{{item.status_reason}}"
-                              dtech-status="{{item.duration_status}}"
-                              dtech-short-description="{{item.task_name}}"
-                              dtech-suspense-date="{{item.duration_suspense_date}}"
                               dtech-show-long-dates="{{data.showLongDates}}"
                               dtech-state="{{item.comment_state}}"
                               table="{{data.table}}"
