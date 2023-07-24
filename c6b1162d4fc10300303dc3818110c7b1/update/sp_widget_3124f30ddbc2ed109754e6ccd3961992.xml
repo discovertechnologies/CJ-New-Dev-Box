@@ -1,13 +1,101 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller=function($scope) {
+        <client_script><![CDATA[api.controller=function($rootScope, $scope, $timeout, spModal, spUtil) {
 	/* widget controller */
 	var c = this;
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	var g_form;
 
 	c.onCancel = function() {
 		$scope.$parent.$parent.$dismiss();
 	};
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	c.onCancelForm = function() {
+		if (c.data.canWriteTable == true) {
+			_confirmModalSubmitForm();
+		} else {
+			c.onCancel();
+		}
+		
+	};
+	
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	function _confirmModalSubmitForm() {
+		// If the form is dirty, ask the user if they would like to save the record
+		var fMsg = '';
+		var serializeChanges = g_form.serialize(true);
+		
+		if(serializeChanges.length > 0) {
+			var changeFieldList = [];
+			
+			for (var field in serializeChanges) {
+				changeFieldList.push(serializeChanges[field].label.trim());
+			}
+			
+			fMsg = changeFieldList.join(', ');
+
+			spModal.confirm("${Tasker - Modal Save Changes Message}  " + fMsg).then(function(confirmed) {
+				if (confirmed == true) {
+					c.onSubmitForm();
+				}
+			});
+		} else {
+			c.onCancel();
+		}
+	}
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+	function _showTrivialMessage(message) {
+		spUtil.addTrivialMessage(message);
+	}
+	
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added onSubmit()
+	c.onSubmit = function() {
+		c.data.submit = true;
+		$scope.server.update().then(function() {
+			// this was opened in a modal, broadcast that the modal closed by submitting form successfully
+			$rootScope.$broadcast('sp.modal.form.complete');
+			$scope.$parent.$parent.$dismiss();
+		});
+		
+		_showTrivialMessage(c.data.updatedMsg);
+
+	};
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	c.onSubmitForm = function() {
+		// save instead of submitting 
+		g_form.save();
+		
+		c.onCancel();
+
+		_showTrivialMessage(c.data.updatedMsg);
+	};
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	$scope.$on('spModel.gForm.initialized', function(e, gFormInstance) {
+		initForm(gFormInstance);
+	});
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	$scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
+		initForm(gFormInstance);
+	});
+
+	/// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; Form
+	function initForm(gFormInstance) {
+		if (gFormInstance.getTableName() == $scope.data.f.table) {
+			g_form = gFormInstance;
+			$scope.isPageReady = true;
+			$timeout(function() {
+				$rootScope.$emit('spModel.gForm.rendered', g_form);
+			}, 175);
+		}
+	}
+
 };]]></client_script>
         <controller_as>c</controller_as>
         <css/>
@@ -46,34 +134,38 @@
 //                                       the Incorrect toot tip as "Cancel"
 //                                      In HTML, update <button> tag's title to use cancelButtonText
 //                                      Changes made in HTML.
+// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal
+//                                      In HTML, added use of sp-tinymce-editor, adjusted bottom padding style and
+//                                       show buttons based on being able to write to a field per ACL;
+//                                        If Page Additional options, JSON format does not include entry then default to form version.
+//                                        If Page Additional options, JSON format does include "responseEditorControl": "directive"
+//                                          then use non-form directive <sp-tinymce-editor>
+//                                      In Server script, added _processInput() and _resetReord(); add use of TaskerTaskACLs();
+//                                       removed _optCopy() and use _setDataDefaults() to set sys_id from input or options; 
+//                                       added gs to open and close ()
+//                                      In Client controller, added functions for non-form and form Cancel's and Submit's
+//                                      Changes made in HTML, Server script and Client controller.
 //
 //------------------------------------------------------------------------------------------------------------------------
 
-(function($sp, input, data, options) {
+(function($sp, input, data, options, gs) {
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added gs and table name var's
+	var actionLogTableName = 'x_153465_discovert_discover_tasker_response';
+	var taskTableName = 'x_153465_discovert_route_task_instance';
+	
 	main();
 
 	function main() {
 		if (input) {
 			if (input.submit == true) {
-				// Save edits
-				// 		example		var grSelectedTask = new GlideRecord('x_153465_discovert_route_task_instance');
-				// 		example		if (grSelectedTask.get(input.taskSysId)) {
-				// 		example			new Task_uiAction().uiAction_ReopenTasks(grSelectedTask, input.reopenType);
-				// 		example		}
+				_processInput();
 
 			} else {
 				_setDataDefaults();
 				_convertToBool(['isModal']);
-				_optCopy(['sys_id']);
 				_buildMessages();
 				_getTaskData();
 			}
-		} else {
-			_setDataDefaults();
-			_convertToBool(['isModal']);
-			_optCopy(['sys_id']);
-			_buildMessages();
-			_getTaskData();
 		}
 	}
 
@@ -82,9 +174,11 @@
 		data.cancelButtonText = gs.getMessage('cancel');
 
 		data.closeButtonText = gs.getMessage('Tasker - Button - Close');
-
-		data.submitButtonText = gs.getMessage('Tasker - Button - Confirm');
-		data.submitButtonTitle = gs.getMessage('Tasker - Button - Confirm');
+		
+		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added Save
+		data.submitButtonText = gs.getMessage('Tasker - Button - Save');
+		data.submitButtonTitle = gs.getMessage('Tasker - Button - Save');
+		data.updatedMsg = gs.getMessage("updated_uppercase");
 
 	}
 
@@ -95,11 +189,8 @@
 	}
 
 	function _getTaskData() {
-		var record = {
-			comments: '',
-			label: '',
-			svg: ''			
-		};
+		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added _resetRecord()
+		var record = _resetReord();
 
 		data.list = [];
 
@@ -107,17 +198,28 @@
 			return;
 		} else {
 			var grTableData = new GlideRecordSecure(data.table);
+
 			data.assignedTo = {};
-			data.canWrite = false;
+			
+			// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added canWriteTable
+			data.canWriteTable = false;
+			
 			data.name = {};
 			data.number = {};
 			data.state = {};
 
 			if (grTableData.get(data.sys_id)) {
+
+				// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added var to get ACLs
+				var TaskACLs = new TaskerTaskACLs(grTableData);
+				// data.canRead = grTableData.canRead();
+				// data.canWrite = grTableData.canWrite();
+
 				switch (data.table) {
-					// Task table
-					case 'x_153465_discovert_route_task_instance':
+					// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added var table name
+					case taskTableName:
 						data.isBadgeShown = true;
+
 						data.assignedTo.displayValue = grTableData.getElement('assigned_to').getDisplayValue();
 						data.assignedTo.label = grTableData.getElement('assigned_to').getLabel();
 
@@ -132,42 +234,62 @@
 
 						// Build an array of Task data for ngRepeat
 						if (grTableData.getElement('response').getDisplayValue().length > 0) {
+							// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit comments; added canWriteField, name and _resetRecord()
+							record.canWriteField = TaskACLs.setResponsePermissions();
 							record.comments = grTableData.getElement('response').getDisplayValue();
 							record.label = grTableData.getElement('response').getLabel();
+							record.name = grTableData.getElement('response').getName();
 							record.svg = 'ResponseComment16.svg';
 							data.list.push(record);
-							record = {};
+							record =  _resetReord();
 						}
 
 						// Reviewer
 						if (grTableData.getElement('comments_dt').getDisplayValue().length > 0) {
+							// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit comments; added canWriteField, name and _resetRecord()
+							record.canWriteField = TaskACLs.setReviewerCommentsPermissions();
 							record.comments = grTableData.getElement('comments_dt').getDisplayValue();
 							record.label = grTableData.getElement('comments_dt').getLabel();
+							record.name = grTableData.getElement('comments_dt').getName();
 							record.svg = 'View16.svg';
 							data.list.push(record);
-							record = {};
+							record =  _resetReord();
 						}
 
 						if (grTableData.getElement('rework_comments').getDisplayValue().length > 0) {
+							// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit comments; added canWriteField, name and _resetRecord()
+							record.canWriteField = TaskACLs.setReworkCommentsPermissions();
 							record.comments = grTableData.getElement('rework_comments').getDisplayValue();
 							record.label = grTableData.getElement('rework_comments').getLabel();
+							record.name = grTableData.getElement('rework_comments').getName();
 							record.svg = 'Rework16.svg';
 							data.list.push(record);
-							record = {};
+							record =  _resetReord();
 						}
 
 						if (grTableData.getElement('reopen_comments').getDisplayValue().length > 0) {
+							// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; canWriteField defaults to false
 							record.comments = grTableData.getElement('reopen_comments').getDisplayValue();
 							record.label = grTableData.getElement('reopen_comments').getLabel();
+							// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; added name and _resetRecord()
+							record.name = grTableData.getElement('reopen_comments').getName();
 							record.svg = 'Reopen16.svg';
 							data.list.push(record);
-							record = {};
+							record =  _resetReord();
 						}
+
+						// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit comments; When the first true canWriteField is found exit loop
+						data.canWriteTable = data.list.some(function(rec) {
+							return rec.canWriteField;
+						});
+
 						break;
 					// Action Log table
-					case 'x_153465_discovert_discover_tasker_response':
+					case actionLogTableName:
+						// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; Action Log will not need to show TinyMCE
+						data.canWriteTable = false;
 						data.isBadgeShown = false;
-						
+
 						data.assignedTo.displayValue = grTableData.getElement('u_responded_by').getDisplayValue();
 						data.assignedTo.label = grTableData.getElement('u_responded_by').getLabel();
 
@@ -180,7 +302,7 @@
 						data.state.displayValue = grTableData.getElement('u_action_taken').getDisplayValue();
 						data.state.label = grTableData.getElement('u_action_taken').getLabel();
 
-						
+
 						var commentType = grTableData.getValue('u_comment_type');
 						// in the Action Log table, always use the Response column
 						switch(commentType){
@@ -190,28 +312,32 @@
 								record.label = grTableData.getElement('u_comment_type').getDisplayValue();
 								record.svg = 'View16.svg';
 								data.list.push(record);
-								record = {};
+								// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; added _resetRecord()
+								record =  _resetReord();
 								break;
 							case 'reopen_comments':
 								record.comments = grTableData.getElement('response').getDisplayValue();
 								record.label = grTableData.getElement('u_comment_type').getDisplayValue();
 								record.svg = 'Reopen16.svg';
 								data.list.push(record);
-								record = {};
+								// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; added _resetRecord()
+								record =  _resetReord();
 								break;
 							case 'response':
 								record.comments = grTableData.getElement('response').getDisplayValue();
 								record.label = grTableData.getElement('u_comment_type').getDisplayValue();
 								record.svg = 'ResponseComment16.svg';
 								data.list.push(record);
-								record = {};
+								// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; added _resetRecord()
+								record =  _resetReord();
 								break;
 							case 'rework_comments':
 								record.comments = grTableData.getElement('response').getDisplayValue();
 								record.label = grTableData.getElement('u_comment_type').getDisplayValue();
 								record.svg = 'Rework16.svg';
 								data.list.push(record);
-								record = {};
+								// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments; added _resetRecord()
+								record =  _resetReord();
 								break;
 						}
 						break;
@@ -222,26 +348,92 @@
 		}
 	}
 
-	// copy to data from input or options
-	function _optCopy(names) {
-		names.forEach(function(name) {
-			data[name] = input[name] || options[name];
-		});
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; save comments
+	function _processInput() {
+		if (input.sys_id) {
+			// Save edits
+			var grSaveTask = new GlideRecordSecure(taskTableName);
+			var needsUpdate = false;
+			
+			if (grSaveTask.get(input.sys_id)) {
+				input.list.forEach(function(record) {
+					if (record.canWriteField) {
+						// put data into the table's column
+						grSaveTask.setValue(record.name, record.comments);
+						needsUpdate = true;
+					}
+				});
+
+				if (needsUpdate) {
+					new Task_uiAction().uiAction_Update(grSaveTask);
+				}
+			}
+		}
 	}
 
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added _resetRecord()
+	function _resetReord() {
+		var record = {
+			canWriteField: false,
+			comments: '',
+			label: '',
+			name: '',
+			svg: ''			
+		};
+
+		return record;
+	}
+	
 	// Use this function to set defaults
 	function _setDataDefaults() {
+		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+		var responseEditorControl = (input || {}).responseEditorControl || (options || {}).responseEditorControl || 'form';
+		
 		data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+		
+		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added submit and sys_id
+		data.submit = false;
+		data.sys_id = (input || {}).sys_id || (options || {}).sys_id;
+		
 		data.table = (input || {}).table || (options || {}).table;
+		
+		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+		var viewForm = _setViewByTable(data.table);
+		data.useTinyMCE = _setUseTinyMCE(responseEditorControl);
+		data.f = $sp.getForm(data.table, data.sys_id, '', viewForm);
 	}
-})($sp, input, data, options);]]></script>
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+	function _setUseTinyMCE(editorControl) {
+		var editorResult = false;
+
+		if (editorControl == 'directive') {
+			editorResult = true;
+		} 
+
+		return editorResult;
+	}
+
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+	function _setViewByTable(table) {
+		var viewResult = '';
+
+		if (table == taskTableName) {
+			viewResult = 'task_all_comments';
+		} else if (table == actionLogTableName) {
+			viewResult = 'response_view';
+		}
+
+		return viewResult;
+	}
+})($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2023-04-05 19:49:09</sys_created_on>
         <sys_customer_update>false</sys_customer_update>
         <sys_id>3124f30ddbc2ed109754e6ccd3961992</sys_id>
-        <sys_mod_count>132</sys_mod_count>
+        <sys_mod_count>171</sys_mod_count>
         <sys_name>Tasker Modal - Response Comments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
@@ -249,7 +441,7 @@
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_3124f30ddbc2ed109754e6ccd3961992</sys_update_name>
         <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-07-17 05:02:57</sys_updated_on>
+        <sys_updated_on>2023-07-24 11:07:47</sys_updated_on>
         <template><![CDATA[<div id="tasker-modal-response-comments" class="dtech-modal-widget-override-modal-body-pad">
 
   <div class="dtech-modal-widget-container-outer">
@@ -276,39 +468,78 @@
 
   <div class="flex-column dtech-border-top-1px-solid-light-gray">
 
-    <div class="dtech-modal-widget-response-container">
-      <div ng-repeat="item in data.list track by $index">
-        <div ng-class-even="'dtech-bg-color-whitesmoke'"
-             class="dtech-modal-widget-text-black-bold dtech-pad-top-20 dtech-pad-left-20 dtech-pad-right-5">
-          <img class="dtech-pad-right-10" src="{{item.svg}}">
-          {{item.label}}
+    <div ng-if="data.useTinyMCE==true" class="flex-column">
+      <div class="flex-column dtech-modal-widget-response-container">
+        <div ng-repeat="item in data.list track by $index">
+          <div ng-class-even="'dtech-bg-color-whitesmoke'"
+               class="dtech-modal-widget-text-black-bold dtech-pad-top-20 dtech-pad-left-20 dtech-pad-right-5">
+            <img class="dtech-pad-right-10" src="{{item.svg}}" alt="{{item.label}}">
+            {{item.label}}
+          </div>
+          <div ng-class-even="'dtech-bg-color-whitesmoke'"
+               class="dtech-pad-top-30 dtech-pad-left-20 dtech-pad-bottom-20 dtech-pad-right-5">
+            <div ng-if="item.canWriteField==false" ng-bind-html="item.comments"></div>
+
+            <sp-tinymce-editor text-id="{{item.name}}" ng-if="item.canWriteField==true" height="200" 
+                               attachment-guid="-1"  record-table-name="taskTableName" id="$index"
+                               ng-model="item.comments" ng-model-options="{debounce: 1000}"></sp-tinymce-editor>
+
+          </div>
         </div>
-        <div ng-class-even="'dtech-bg-color-whitesmoke'"
-             class="dtech-pad-top-30 dtech-pad-left-20 dtech-pad-right-5">
-          <div ng-bind-html="item.comments"></div>
+      </div>
+
+      <div class="dtech-flex-shrink-0 dtech-border-top-1px-solid-light-gray">
+
+        <div id="footer" ng-if="data.canWriteTable==false" class="dtech-pad-all-20 flex-row justify-end">
+          <button id="close" class="btn btn-default dtech-max-width-fit-content"
+                  type="button" title="{{data.closeButtonText}}"
+                  ng-click="c.onCancel()" data-dismiss="modal">{{data.closeButtonText}}
+          </button>
         </div>
+
+        <div id="footer" ng-if="data.canWriteTable==true" class="dtech-pad-all-20 flex-row justify-between">
+          <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
+                  type="button" title="{{data.cancelButtonText}}"
+                  ng-click="c.onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
+          </button>
+          <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
+                  type="submit" title="{{data.submitButtonTitle}}"
+                  ng-click="c.onSubmit();">{{data.submitButtonText}}
+          </button>
+        </div>
+
       </div>
     </div>
 
-    <div class="dtech-flex-shrink-0 dtech-border-top-1px-solid-light-gray">
-      <div id="footer" ng-if="data.canWrite==false" class="dtech-pad-all-20 flex-row justify-end">
-        <button id="close" class="btn btn-default dtech-max-width-fit-content"
-                type="button" title="{{data.closeButtonText}}"
-                ng-click="c.onCancel()" data-dismiss="modal">{{data.closeButtonText}}
-        </button>
+    <!--MWMTest; Form -->
+    <div ng-if="data.useTinyMCE==false" class="flex-column">
+      <div class="flex-column dtech-modal-widget-response-container">
+        <sp-model class="dtech-pad-all-20" form_model="data.f" mandatory="mandatory"></sp-model>
       </div>
-      <div id="footer" ng-if="data.canWrite==true" class="dtech-pad-all-20 flex-row justify-between">
-        <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
-                type="button" title="{{data.cancelButtonText}}"
-                ng-click="c.onCancel()" data-dismiss="modal">{{data.cancelButtonText}}
-        </button>
 
-        <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
-                type="submit" title="{{data.submitButtonTitle}}"
-                ng-click="c.onSubmit();">{{data.submitButtonText}}
-        </button>
+      <div class="dtech-flex-shrink-0 dtech-border-top-1px-solid-light-gray">
+
+        <div id="footer" ng-if="data.canWriteTable==false" class="dtech-pad-all-20 flex-row justify-end">
+          <button id="close" class="btn btn-default dtech-max-width-fit-content"
+                  type="button" title="{{data.closeButtonText}}"
+                  ng-click="c.onCancelForm()" data-dismiss="modal">{{data.closeButtonText}}
+          </button>
+        </div>
+
+        <div id="footer" ng-if="data.canWriteTable==true" class="dtech-pad-all-20 flex-row justify-between">
+          <button id="cancel" class="btn btn-default dtech-max-width-fit-content"
+                  type="button" title="{{data.cancelButtonText}}"
+                  ng-click="c.onCancelForm()" data-dismiss="modal">{{data.cancelButtonText}}
+          </button>
+          <button id="submit" class="btn btn-primary dtech-max-width-fit-content dtech-push-right"
+                  type="submit" title="{{data.submitButtonTitle}}"
+                  ng-click="c.onSubmitForm();">{{data.submitButtonText}}
+          </button>
+        </div>
+
       </div>
     </div>
+    <!--MWMTest; Form-->
 
   </div>
 
