@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>The Tasker User Info Scripts are all in this Script Include.  These fuctions are called from business rules filters and client scripts through the ClientUserInfoScripts script incluide&#13;
+2.8.5 | 2.23-08-11 | raj | DFCT0012124 -  Template List &gt; ErrorServer JavaScript error Cannot find function userCanRunTemplate in object [object Object]. displayed&#13;
 2.8.3 (Tempate Updates Addon) STRY0141844 - DHS S&amp;T - Permissions for running a template from a task&#13;
 2.8.3 | 2023-06-24 | raj  | STRY0141431 - Assigned GHA After Creating Top OU&#13;
 2.8.3 | 2023-06-19 - raj -   DFCT0012024 - TAA cannot create an Organizational Hierarchy structure, on a new install. "Click here to create one" does Not work&#13;
@@ -659,6 +660,214 @@ UserInfoScripts.prototype = {
 		return answer;
 	},
 	
+	// STRY0141844 - New block of methods and updates to manage Who can Run update
+	userCanRunTemplateForTemplateId: function(templateId){
+		if(!templateId) return false;
+		
+		var userHasTemplateRights = false;
+		// this is used in ACL - use GlideRecord here
+		var grTemp = new GlideRecord('x_153465_discovert_discover_routing_template');
+		if(grTemp.get(templateId)){
+			userHasTemplateRights = this.userCanRunTemplate(grTemp);
+		}
+		return userHasTemplateRights;
+	},
+	
+	// this can take Template, Template Task, Template Instance, Scheduled Task
+	userCanRunTemplate: function(record){
+		var userHasRunTemplateRights = false;
+		var userCanRunTemplate = false;
+		// check run permissions (run template permissions calls has template permissions)
+		userHasRunTemplateRights = this.userHasRunTemplatePermissions(record);
+		// user doesn't have the run rights, 
+		// if the template is OU level, then check the who can run permissions
+		if(userHasRunTemplateRights){
+			userCanRunTemplate = userHasRunTemplateRights;
+		} else {
+			userCanRunTemplate = this.userHasWhoCanRunOnTemplate(record);
+		}
+		return userCanRunTemplate;
+	},
+
+	// this function checks the record's who can run value and the user's permissions to determine if the template can be run by the user
+	userHasWhoCanRunOnTemplate: function(record){
+		var userCanRun = false;
+		var countWhoCanRun = 0;
+		var whoCanRunValue;
+		var userId = gs.getUserID();
+		var encodedQuery;
+		var gaUserOUPermissioins;
+		var templateOU_TopOU;
+		var templateLevel = record.getValue("process_level");
+		var isOUTemplate = templateLevel == "ou_process";
+		var templateOU;
+		if(isOUTemplate){
+			gaUserOUPermissioins = new GlideAggregate('x_153465_discovert_discover_office_members');
+			templateOU_TopOU = record.process_ou.u_top_ou;
+			templateOU = record.getValue("process_ou");
+			whoCanRunValue = record.getValue("u_who_can_run");
+			switch (whoCanRunValue){
+				case "template_ou_all_members":
+					// check if user is in office
+					encodedQuery = 	"office_member=" + userId + "^discover_office_hierarchy=" + templateOU;
+					break;
+				case "template_ou_task_managers":
+					// check if user is a task manager of office
+					encodedQuery = 	"office_member=" + userId + "^discover_office_hierarchy=" + templateOU + 
+						"^office_task_authority=true";
+					break;
+				case "template_ou_and_descendants_task_managers":
+					encodedQuery = 	"office_member=" + userId + "discover_office_hierarchy.u_all_ancestors_organizationsLIKE" +
+						templateOU + "^office_task_authority=true";
+					break;
+				case "template_ou_and_descendants_all_members":
+					encodedQuery = 	"office_member=" + userId + "discover_office_hierarchy.u_all_ancestors_organizationsLIKE" +
+						templateOU;
+					break;
+				case "template_ou_org_structure_task_managers":
+					encodedQuery = 	"office_member=" + userId + "discover_office_hierarchy.u_top_ou=" +
+						templateOU_TopOU + "^office_task_authority=true";
+					break;
+				case "template_ou_org_structure_all_members":
+					encodedQuery = 	"office_member=" + userId + "discover_office_hierarchy.u_top_ou=" +
+						templateOU_TopOU;
+					break;
+			}
+			gaUserOUPermissioins.addEncodedQuery(encodedQuery);
+			gaUserOUPermissioins.addAggregate("COUNT");
+			gaUserOUPermissioins.query();
+			if(gaUserOUPermissioins.next()){
+				countWhoCanRun = gaUserOUPermissioins.getAggregate("COUNT");
+				userCanRun = countWhoCanRun > 0;
+			}
+		}
+		
+		return userCanRun;
+	},
+	
+
+	// this function uses the user id passed, if no user id passed, uses the current user
+	userHasWhoCanRunTemplates: function(pUserId){
+		var userCanRun = false;
+		var countWhoCanRun = 0;
+		var userId = pUserId || gs.getUserID();
+		var encodedQuery;
+		var gaTemp = new GlideAggregate('x_153465_discovert_discover_routing_template');
+		// who can run is all members of Template OU, dynmaic is "OUs Where I am a member"
+		encodedQuery = 'process_ouDYNAMIC466104e81bd34190848aa931604bcbe0^u_who_can_run=template_ou_all_members';
+		// who can run is all task managers of Template OU, dynmaic is "OUs Where I am a task manager"
+		encodedQuery = encodedQuery + '^NQprocess_ouDYNAMICf31893201b5f4190848aa931604bcb94^u_who_can_run=template_ou_task_managers';
+		// who can run is all task managers of Template OU and Task Mangers of Descendant OUs, dynmaic is "My Task Manager and Descendant OUs"
+		encodedQuery = encodedQuery + 
+			'^NQprocess_ouDYNAMICd8bcc8791b578d1011a92f40604bcb94^u_who_can_run=template_ou_and_descendants_task_managers';
+		// who can run is all members of Template OU and all members of Descendant OUs, dynmaic is "My OUs and Descendant OUs"
+		encodedQuery = encodedQuery + 
+			'^NQprocess_ouDYNAMIC90931f09d0e03110777ff1f01e0c509e^u_who_can_run=template_ou_and_descendants_all_members';
+		// who can run is all task managers of Template OU's Org Structure, dynmaic is "My Task Managers Org Structure's OUs"
+		encodedQuery = encodedQuery + 
+			'^NQprocess_ouDYNAMICa4eed25dd0ac3110777ff1f01e0c50b3^u_who_can_run=template_ou_org_structure_task_managers';
+		encodedQuery = encodedQuery + 
+			'^NQprocess_ouDYNAMIC767e4211d0ac3110777ff1f01e0c50e3^u_who_can_run=template_ou_org_structure_all_members';
+			
+		gaTemp.addEncodedQuery(encodedQuery);
+		gaTemp.addAggregate("COUNT");
+		gaTemp.query();
+		if(gaTemp.next()){
+			countWhoCanRun = ga.getAggregate("COUNT");
+			userCanRun = countWhoCanRun > 0;
+		}
+		return userCanRun;
+	},
+	
+	userHasRunTemplatePermissionsForTemplateId: function(templateId){
+		if(!templateId) return false;
+		
+		var userHasTemplateRights = false;
+		// this is used in ACL - use GlideRecord here
+		var grTemp = new GlideRecord('x_153465_discovert_discover_routing_template');
+		if(grTemp.get(templateId)){
+			userHasTemplateRights = this.userHasRunTemplatePermissions(grTemp);
+		}
+		return userHasTemplateRights;
+	},
+	
+	// NOTE: this is about permissions based on template level
+	//       This permission is used to give permission for CRUD on Schedules
+	//       This is NOT a CAN the User RUN a template method.  Those are userCanRunTemplate and userCanRunTemplateForTemplateId
+	//       Creating schedules is restricted to people who have tasking permissions.  
+	//       When the Who Can Run capability was added, the rights to run a template and the rights associated with running any template at a given level were separated into 2 calls
+	//       This call returns the result of checking if the user can run any template at that level and thus can manage schedules for the template
+	userHasRunTemplatePermissions: function(record){
+		var grTemp;
+		var userHasTemplateRights = false;
+		var userHasRunTemplateRights = false;
+		var isActive;
+		var isProcessOwner;
+		var isUserTaskAdministrator;
+		var isUserTaskExecutive;
+		var processLevel;
+		var primary_office;
+		var newRecord;
+		var UserPermissions  = new UserInfoScripts();
+		// check template rights
+		grTemp = this._getTemplateRecord("userHasRunTemplatePermissions",record);
+		if(grTemp){
+			userHasTemplateRights = this.userHasProcessRights(grTemp);
+			if(userHasTemplateRights){
+				// now check the template run permissions
+				newRecord = grTemp.sys_id;
+				isActive = grTemp.u_active;
+				isProcessOwner = grTemp.getValue('process_owner') == gs.getUserID();
+				processLevel = grTemp.getValue('process_level');
+				primary_office = grTemp.getValue('u_primary_office');
+				// DFCT0011930 - user primary office to determine Task Administrator permissions
+				isUserTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
+				//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
+				isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
+
+				// STRY0085827
+				if((newRecord != -1) && isActive == true ){
+					//STRY0112587 
+					if (processLevel == 'global_process') 
+						userHasRunTemplateRights = isUserTaskAdministrator || isUserTaskExecutive;
+					else if (processLevel == 'ou_process')
+						userHasRunTemplateRights = UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemp.getValue('process_ou'));
+					else if (processLevel == 'my_process')
+						userHasRunTemplateRights = isProcessOwner;
+				}
+			}
+		}
+
+		return userHasRunTemplateRights;
+	},
+
+	// get the template record for any of the template or schedule records provided
+	_getTemplateRecord: function(callingFunction, record){
+		// this is used in ACL - use GlideRecord here
+		var gr_Template = new GlideRecord("x_153465_discovert_discover_routing_template");
+		var templateId;
+		var recordTable = record.getTableName();
+		if (recordTable == 'x_153465_discovert_discover_routing_template'){
+			// already have template, return it
+			gr_Template = record;
+		} else if(recordTable == 'x_153465_discovert_route_tasks'){
+			templateId = record.getValue("tasker_process_definition");
+		} else if (recordTable == 'x_153465_discovert_discover_routing_runtime'){
+			templateId = record.getValue("routing_template_ref");
+		} else if (recordTable == 'x_153465_discovert_tasker_schedule'){
+			templateId = record.getValue("tasker_process");
+		}
+		// if the original record is not the template record, we will have a template id and need to get the templat record
+		if(templateId){
+			// note, if record not found set the glide record to undefined
+			if(!gr_Template.get(templateId)){
+				gr_Template = undefined;
+				gs.warn("Tasker - a call to x_153465_discovert.UserInfoScripts." + callingFunction + " was made with an invalid record type");
+			}
+		}
+		return gr_Template;
+	},
+	
 	// RJ STRY0073150
 	// TemplateInstance needs a special process right check.  
 	// The Instance create needs to be able to receive the ID of the Template being started.
@@ -673,9 +882,7 @@ UserInfoScripts.prototype = {
 		}
 		return userHasTemplateRights;
 	},
-	
-
-	
+		
 	// KT - RLS - STRY0065050: 03/20/2020
 	UserHasRoleScoped: function(roleName, userId)
 	{
@@ -1442,13 +1649,13 @@ UserInfoScripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-20 05:57:49</sys_created_on>
         <sys_id>54c6c7ccdb811b003a8d6be3ca96194f</sys_id>
-        <sys_mod_count>417</sys_mod_count>
+        <sys_mod_count>419</sys_mod_count>
         <sys_name>UserInfoScripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_54c6c7ccdb811b003a8d6be3ca96194f</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-08-11 13:11:46</sys_updated_on>
+        <sys_updated_on>2023-08-11 20:53:13</sys_updated_on>
     </sys_script_include>
 </record_update>
