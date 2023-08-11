@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Contains scripts for all Tasker Widget javascript functions&#13;
+&#13;
+2.8.3 (Template Updates Addon)  STRY0142161 - Feature allowing for Templates to be copied/cloned</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.DTech_gojs_drag_drop</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+//------------------------------------------------------------------------------------------------------------------------
+// 2.8.5   - 2023-07-22 - raj -  STRY0142159 - Parent Template Task field protection
+//------------------------------------------------------------------------------------------------------------------------
+// Script Continued Below
+var x_153465_discovert = x_153465_discovert || {};
+
+x_153465_discovert.DTech_gojs_drag_drop = (function() {
+	"use strict";
+	var _node_drag_over_allowed_stroke_color = '#A5D6A7';
+	var _node_drag_over_allowed_fill_color = '#4CAF50';
+	var _node_drag_over_not_allowed_stroke_color = '#FFCDD2';
+	var _node_drag_over_not_allowed_fill_color = '#B71C1C';
+	var _node_drag_over_not_cursor = 'not-allowed';
+	
+	var _currentItemSelected = null;
+	var _clipboardSubject;
+	var _saveOriginalDragStrokeValue;
+	var _saveOriginalDragFillValue;
+	var _saveOriginalCursor;
+	var _numItemsSelected;
+	var _apiService;
+	var _diagram;
+	var _spModal;
+	var _widget_data;
+	
+	/* 	set your private variables and functions here. For example: 
+	var privateVar = 0; 
+	function private_function() {
+		return ++privateVar;
+	}
+	*/
+
+	function _pasteFromClipboard(){
+		_insertCopiedItems(_clipboardSubject);
+// the "this" in the next line is not receiving the right thing
+//		go.CommandHandler.prototype.pasteFromClipboard.call(this);
+	}
+
+	function _objectSingleClicked(e){
+		// hold the clipboard for paste
+		_currentItemSelected = e.subject;
+	}
+	
+	function _clipboardChanged(e){
+		// store the clipboard.  This is used in _pastFromClipboard.  
+		// If we can figure out how to get access to the clipboard from the diagram object, we could just use that in the _pastFromClipboard event
+		_clipboardSubject = e.subject;
+	}
+	
+	function _clipboardPasted(e){
+		// if an item is selected, add clipboard items to i
+		_insertCopiedItems(e.subject);
+	}
+	
+	function _insertCopiedItems(subject){
+		if(_currentItemSelected){
+			var numItemsSelected = subject.count;
+			if(subject.count > 0){
+				var itClip = subject.iterator;
+				while(itClip.next()){
+					var clipObj = itClip.value;
+					_copyObject(clipObj, _currentItemSelected, numItemsSelected);
+				}
+			}
+		}		
+	}
+	
+	function _externalObjectsDropped(e){
+		// TODO - multilingual
+		_spModal.alert("Copying objects from another diagram is not currenlty supported.");
+	}
+
+	function _selectionDeleting(e){
+		var countSelected = e.diagram.selection.count;
+		if(countSelected>1){
+			// TODO - MULTILINGUAL
+			_spModal.alert("You have selected [" + countSelected + "] items.  Only one item can be selected for deletion at time.");
+			// todo, to change this, we would have to find a way to loop through selection and prompt for each task selected for deltion
+		} else if(countSelected==1){
+			var delObj = e.diagram.selection.first();
+			if(_widget_data.treeType=="Template"){
+				// NOTE: when adding other trees, might be able to move some logic into confirmation and deal with different trees in confirmation
+				_confirmDeletionTemplateTask(delObj);
+			}
+		}
+		e.diagram.commandHandler.stopCommand();			
+	}
+	
+	
+	// this receives an iterator, if delete confirmed, this will iterate again and call the function until no more items are left to delete
+	function _confirmDeletionTemplateTask(itDelObj) {
+		var templateTaskInfo = itDelObj.part.data;
+		var templateTaskNumberShortDescription = templateTaskInfo.number + ': ' + templateTaskInfo.short_description;
+		// the ${} function looks like a JS compile error, but it gets replaced
+		var messageTitle = _widget_data.messages['Delete'] + ' ' + templateTaskNumberShortDescription + '?';
+		var isTopTemplateTask = false;
+
+		if(!templateTaskInfo.parent || templateTaskInfo.parent == ''){
+			isTopTemplateTask = true;
+		}
+		// Use widget for Portal
+		_spModal.open({
+			title: messageTitle,
+			backdrop: 'static',
+			widget: 'tasker_modal_delete_prompt',
+			widgetInput: {
+				'templateSysId': _widget_data.templateId,  // pulled from data specific to template, could be passed to make this more generic
+				'templateTaskSysId': templateTaskInfo.sys_id,
+				'templateTaskNumberShortDescription': templateTaskNumberShortDescription,
+				'isTopTemplateTask': isTopTemplateTask
+			},
+			buttons: [],
+			// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+			footerStyle: { 'display': 'none' }
+		});
+	}
+	
+	function _mouseDragEnter(e, obj){
+		var mayDrop = _checkAllForMove(e,obj);
+		// only need to check if you can move b/c all items can be copied
+		// NOTE, drop over parent does nothing
+		_styleDragEnter(obj, mayDrop);
+	}
+	
+	function _mouseDragLeave(e, obj){
+		var mayDrop = _checkAllForMove(e,obj);
+		// only need to check if you can move b/c all items can be copied
+		_styleDragLeave(obj, mayDrop);
+	}
+
+	function _checkAllForMove(e,obj){
+		var mayDrop = true;
+		var isControlKeyDown = _checkControlKeyDown();
+		if(!isControlKeyDown){
+			var itDrop = e.diagram.selection.iterator;
+			while(itDrop.next()){
+				var itDropObj = itDrop.value;
+				mayDrop = _mayMoveNode(itDropObj, obj, false);
+				if(!mayDrop){
+					// if any items can't be dropped, then exit
+					break;
+				}
+			}
+		}
+		return mayDrop;
+	}
+
+	function _mouseDrop(e, obj){
+		var dropSuccessful = false;
+		var numItemsSelected = e.diagram.selection.count;
+		var isControlKeyDown = _checkControlKeyDown();
+		var itDrop = e.diagram.selection.iterator;
+		while(itDrop.next()){
+			var itDropObj = itDrop.value;
+			if(isControlKeyDown){
+				dropSuccessful = _copyObject(itDropObj, obj, numItemsSelected);
+			} else {
+				dropSuccessful = _moveObject(itDropObj, obj);
+			}
+			//NOTE: if we want to support undu, then we would change the link and referesh the model isntead of calling the update from here
+			//var incoming = itDropObj.findLinksInto().first();
+			//if (incoming) e.diagram.remove(incoming);
+			//e.diagram.model.addLinkData( { from: obj.key, to: itDropObj.key });
+			// stop commmand so the object is not added to the diagram since we are handling the dorp
+		}
+		// cancel the copy command that places the items on the canvas
+		if(isControlKeyDown){
+			e.diagram.commandHandler.stopCommand();
+		}
+		if(dropSuccessful){
+			e.diagram.clearSelection();
+		} else {
+			e.diagram.commandHandler.stopCommand();
+		}
+		return dropSuccessful;
+	}
+	
+	function _copyObject(gojsCopyObj, gojsCopyToObj, numItemsSelected){
+		var objectCopied = false;
+		var copyObj = _createCopyMoveJSON(gojsCopyObj, gojsCopyToObj);
+		// if more than one item selected only copy the item, not all descendants
+		if(numItemsSelected>1){
+			_apiService.copyTemplateTask(copyObj);
+		} else {
+			_apiService.copyTemplateTaskAndDescendants(copyObj);
+		}
+		console.log("Template Task was copied: " + JSON.stringify(copyObj));
+		objectCopied = true;
+		return objectCopied;
+	}
+	
+	function _moveObject(gojsMoveObj, gojsMoveToObj){
+		var objectMoved = false;
+		var moveObj = _createCopyMoveJSON(gojsMoveObj, gojsMoveToObj);
+		if(_mayMoveNode(gojsMoveObj, gojsMoveToObj, true)){
+			if(_widget_data.treeType=="Template"){
+				_apiService.moveTemplateTask(moveObj);
+				console.log("Template Task was moved: " + JSON.stringify(moveObj));
+				objectMoved= true;
+			}
+		}
+		return objectMoved;
+	}
+
+	function _createCopyMoveJSON(gojsObj, gojsNewParentObj){
+		var copyMoveObj = {};
+		copyMoveObj.objId = gojsObj.part.data.sys_id;
+		copyMoveObj.newParentId = gojsNewParentObj.part.data.sys_id;
+		return copyMoveObj;
+	}
+
+	function _checkControlKeyDown(){
+		var isControlDown = false;
+		var e = _diagram.lastInput;
+		// The meta (Command) key substitutes for "control" for Mac commands
+		var control = e.control || e.meta;
+		isControlDown = control;
+		return isControlDown;
+	}
+		
+	function _mayMoveNode(gojsMoveObj, gojsMoveToObj, showAlert){
+		var lMayMoveNode = false;
+		var alertMsg = '';
+		if(gojsMoveObj.part && gojsMoveObj.part.data){
+			// do nothing if an item is dropped on its parent
+			if(gojsMoveObj.part.data.parent == gojsMoveToObj.part.data.sys_id){
+				// TODO - multilingual
+				alertMsg = "You attempted to move an Item to its parent.  This does not move the item.";
+				
+				// if this is the top node, and has more than one child, the node cannot be dropped as there needs to be a single top node
+			} else if(!gojsMoveObj.part.data.parent && parseInt(gojsMoveObj.part.data.calchaschildren)>1){
+				// TODO - multilingual
+				alertMsg = "You attempted to move top node, but the top node has more than one child.  This is not allowed.";
+
+			} else {
+				lMayMoveNode = true;
+			}
+		}
+		
+		if(!lMayMoveNode && showAlert){
+			_spModal.alert(alertMsg);
+		}
+		return lMayMoveNode;
+	}
+	
+	function _styleDragEnter(obj, mayDrop){
+		// Update style here for all drag in Dtech
+		_saveOriginalDragStrokeValue = obj.stroke;
+		_saveOriginalDragFillValue = obj.fill;
+		_saveOriginalCursor = obj.cursor;
+		if(mayDrop){
+			obj.stroke = _node_drag_over_allowed_stroke_color;
+			obj.fill = _node_drag_over_allowed_fill_color;
+			// don't change cursor for this
+		} else {
+			obj.stroke = _node_drag_over_not_allowed_stroke_color;
+			obj.fill = _node_drag_over_not_allowed_fill_color;
+			obj.cursor = _node_drag_over_not_cursor;
+		}
+	}
+	
+	function _styleDragLeave(obj, mayDrop){
+		// Update style here for all drag in Dtech
+		obj.stroke = _saveOriginalDragStrokeValue;
+		obj.fill = _saveOriginalDragFillValue;
+		obj.cursor = _saveOriginalCursor;
+	}
+	
+/* Share variables between multiple UI scripts by adding them to your scope object. For example: 
+	x_153465_discovert.sharedVar = 0; 
+
+ Then access them in your scripts the same way. For example: 
+	function get_shared() {
+		return x_153465_discovert.sharedVar;
+	}
+*/
+	
+
+	function _init(parm_widget_data, parm_spModal, parm_apiService, parm_diagram){
+		_widget_data = parm_widget_data;
+		_spModal = parm_spModal;
+		_apiService = parm_apiService;
+		_diagram = parm_diagram;
+		_diagram.addDiagramListener("ClipboardPasted", _clipboardPasted);
+		_diagram.addDiagramListener("ClipboardChanged", _clipboardChanged);
+		_diagram.addDiagramListener("ExternalObjectsDropped", _externalObjectsDropped);
+		_diagram.addDiagramListener("SelectionDeleting", _selectionDeleting);
+		_diagram.addDiagramListener("ObjectSingleClicked", _objectSingleClicked);
+		_diagram.commandHandler.pasteFromClipboard = _pasteFromClipboard;		
+	}
+	
+	var dt_gojs_drag_drop = {
+		init: _init,
+		mouseDragEnter: _mouseDragEnter,
+		mouseDrop: _mouseDrop,
+		mouseDragLeave: _mouseDragLeave,
+		type:  "DTech_gojs_drag_drop"
+	};
+	return  dt_gojs_drag_drop;
+	
+})();
+]]></script>
+        <script_name>DTech_gojs_drag_drop</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-07-23 01:31:47</sys_created_on>
+        <sys_id>b1006dccd8d03110777f241b36e1e0bc</sys_id>
+        <sys_mod_count>184</sys_mod_count>
+        <sys_name>x_153465_discovert.DTech_gojs_drag_drop</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_b1006dccd8d03110777f241b36e1e0bc</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-08-11 04:03:46</sys_updated_on>
+        <ui_type>10</ui_type>
+        <use_scoped_format>true</use_scoped_format>
+    </sys_ui_script>
+</record_update>

@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.template_Copy_Move_Methods</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.8.3 (Template Updates Addon)  STRY0142161 - Feature allowing for Templates to be copied/cloned&#13;
+New script created to handle template copy, move and clone&#13;
+Methods to suppprt Template Copy capabilities</description>
+        <name>template_Copy_Move_Methods</name>
+        <script><![CDATA[var template_Copy_Move_Methods = Class.create();
+template_Copy_Move_Methods.prototype = {
+    initialize: function() {
+		this.templateTableName = "x_153465_discovert_discover_routing_template";
+		this.templateTaskTableName = "x_153465_discovert_route_tasks";
+		this.gr_templateTaskToCopyMove;
+		this.gr_templateTaskNewParent;
+		// when recursively copying nodes, hold the full list of descendants only copy that list to avoid infinite loop
+		this.arrTemplateTaskDescendants = [];
+		this.templateTaskNewParent;
+		this.isCopyMoveTaskAncestorOfNewParent = false;
+		this.taskIdToMoveUp;
+    },
+	
+	// TODO - move this into template api script and out of the copy
+	// TODO - this function exists in 2 other places, change to call one function for consitency
+	//            Business Rule - "Template - Change template name" has function - "checkIfNameExists"
+	//            Script Action - "DiscoverTasker_Save_as_Template_Event" has function - "checkIfNameExists"
+	// TODO - the personal level should allow the same name for 2 different owners, should revisit this
+	checkIfNameExists: function(template_name, template_level, template_ou, template_owner){
+		var gr = new GlideAggregate(this.templateTableName);
+		gr.addQuery('template_name', template_name);
+		gr.addQuery('process_level', template_level);
+
+		if(template_level == 'ou_process')
+			gr.addQuery('process_ou', template_ou);
+		
+		if(template_level == 'my_process')
+			gr.addQuery('process_owner', template_owner);
+
+		gr.query();
+
+		if(gr.next()){
+			return true;
+		}else{
+			return false;
+		}
+	},
+
+	cloneTemplate: function(template_id, new_template_name, new_template_owner){
+		var templateCloned = false;
+		templateCloned = this._cloneTemplate(template_id, new_template_name, new_template_owner);
+		return templateCloned;
+	},
+
+	copyTemplateTask: function(templateTaskId, newParentId){
+		var parentTemplateId;
+		var taskCopied = false;
+		var gr_currentTemplateTaskToCopy;
+		var gr_newTemplateTask = new GlideRecordSecure(this.templateTaskTableName);
+		if(this._validateCopyMove("copy", templateTaskId, newParentId)){
+			gr_currentTemplateTaskToCopy = this.gr_templateTaskToCopyMove;
+			parentTemplateId = gr_currentTemplateTaskToCopy.getValue("tasker_process_definition");
+			this._copyTemplateTask(gr_currentTemplateTaskToCopy, newParentId, parentTemplateId);
+		}
+		taskCopied = true;
+		return taskCopied;
+	},
+	
+	copyTemplateTaskAndDescendants: function(templateTaskId, newParentId){
+		var tasksCopied = false;
+		var parentTemplateId;
+		if(this._validateCopyMove("copy", templateTaskId, newParentId)){
+			this._loadDescendantTemplateTaskIds(templateTaskId);
+gs.info("RJ - testing - this.arrTemplateTaskDescendants: " + JSON.stringify(this.arrTemplateTaskDescendants));
+			parentTemplateId = this.gr_templateTaskNewParent.getValue("tasker_process_definition");
+			this._recursivelyCopyTemplateTasks(this.gr_templateTaskToCopyMove, newParentId, parentTemplateId);
+			// recursively copy all descendants
+			gs.debug("Tasker - Template Task Copied with descendants from: templateTaskId: " + templateTaskId + " as a new Template Tasks to newParentId: " + newParentId);
+		}
+		tasksCopied = true;
+		return tasksCopied;
+	},
+
+	moveTemplateTask: function(templateTaskId, newParentId){
+		var templateTaskMoved = false;
+		var moveToId;
+		if(this._validateCopyMove("move", templateTaskId, newParentId)){
+			// if moving down the tree, reset the parent
+			if(this.isCopyMoveTaskAncestorOfNewParent){
+				moveToId = this.gr_templateTaskToCopyMove.getValue("parent");
+				// NOTE: if parent is empty, then business rule should fire to reset template information
+				this._changeParent(this.taskIdToMoveUp, moveToId);
+			}
+			this._changeParent(templateTaskId, newParentId);
+			templateTaskMoved = true;
+		}
+		return templateTaskMoved;
+	},
+	
+	// *********************************************************************************************
+	// Internal Functions below here
+	// *********************************************************************************************
+	_changeParent: function(recordIdToChange, new_parent_id){
+		// using glide record here b/c parent field is read only, app is allowed to change, but user is not allowed to change on screen
+		var gr_recordToChange = new GlideRecord(this.templateTaskTableName);
+		if(gr_recordToChange.get(recordIdToChange)){
+			gr_recordToChange.setValue("parent", new_parent_id);
+			gr_recordToChange.update();
+		}
+	},
+	
+	_cloneTemplate: function(template_id, new_template_name, new_template_owner){
+		var cloneResponse = {};
+		cloneResponse.templateCloned = false;
+		var topTask_id;
+		var new_topTask_id;
+		var parentTemplateId;
+		var gr_TemplateToClone = new GlideRecordSecure(this.templateTableName);
+		var new_template;
+		if(gr_TemplateToClone.get(template_id)){
+			topTask_id = gr_TemplateToClone.getValue("parent_task_def");
+			this._loadDescendantTemplateTaskIds(topTask_id);
+			new_template = this._copyRecord(gr_TemplateToClone);
+			new_template.process_owner = new_template_owner;
+			new_template.template_name = new_template_name;
+			// clear connection to old template tree
+			new_template.parent_task_def = "";
+			new_template.insert();
+			new_topTask_id = new_template.getValue("parent_task_def");
+			parentTemplateId = new_template.getUniqueValue();
+			// template and top template task were created by this step
+			// Now copy descendant tasks from given template to new template
+			this._recursiveCopyGetNextLevel(topTask_id, new_topTask_id, parentTemplateId);
+			cloneResponse.template_id = new_template.getUniqueValue();
+			cloneResponse.template_name = new_template.getValue("template_name");
+			cloneResponse.template_level = new_template.getValue("process_level");
+			cloneResponse.template_level_display_value = new_template.getDisplayValue("process_level");
+			cloneResponse.template_ou = new_template.getValue("process_ou");
+			cloneResponse.template_owner = new_template.getValue("process_owner");
+
+			cloneResponse.templateCloned = true;
+			cloneResponse.new_topTask_id = new_topTask_id;
+		}
+		return cloneResponse;
+	},
+
+	// NOTE: this SHOULD go into a common API method. 
+	//       This method is exactly the same as the method in Task_onInsert_Multiple_Sub_Tasks
+	_copyRecord: function(recordToCopy) {
+		var fields = recordToCopy.getElements();
+		//create a new record
+		var grNewRec = new GlideRecord(recordToCopy.getTableName());
+		grNewRec.initialize();
+		var countCopied = 0;
+		for (var i = 0; i < fields.length; i++) {
+			var glideElement = fields[i];
+			//make sure we don't copy the sys_id
+			var key = glideElement.getName();
+			if(glideElement.getName() != 'sys_id'  && glideElement.getName() != 'number'){
+				// STRY0075989 - date field was off by the Timezone setting of the user.
+				if(glideElement.getED().getInternalType() == 'glide_date_time' ){
+					// STRY0078777 STRY0078784
+					if(!gs.nil(recordToCopy[key])){
+						grNewRec.setValue(key, glideElement.dateNumericValue());
+					}
+					// STRY0084850 - duration was not passed correctly
+				}else if (glideElement.getED().getInternalType() == 'glide_duration'){
+					if(!gs.nil(recordToCopy[key])){
+						var duration = recordToCopy[glideElement.getName()];
+						grNewRec.setValue(key, duration);
+					}
+				}else{
+					grNewRec[key] = recordToCopy.getValue(glideElement.getName());
+				}
+				countCopied= countCopied + 1;
+			}
+		}
+		return grNewRec;
+	},
+
+	// NOTE: template ID needed b/c this function is also used for clone
+	_copyTemplateTask: function(gr_currentTemplateTaskToCopy, newParentId, parentTemplateId){
+		var currentTemplateTaskId = gr_currentTemplateTaskToCopy.getUniqueValue();
+		var gr_newTemplateTask = new GlideRecordSecure(this.templateTaskTableName);
+		gr_newTemplateTask = this._copyRecord(gr_currentTemplateTaskToCopy);
+		// It is ok to set parent here, it is a new record so read only doesn't apply
+		gr_newTemplateTask.setValue("parent",newParentId);
+		// for clone and future copy of different templates, set the template on the new task
+		gr_newTemplateTask.setValue("tasker_process_definition",parentTemplateId);
+		gr_newTemplateTask.insert();
+		gs.debug("Tasker - TemplateTask Copied from: templateTaskId: " + currentTemplateTaskId + " as a child to newParentId: " + newParentId);
+		return gr_newTemplateTask;
+	},
+
+	// use this to get New Parent GlideRecord and Template To GlideRecord
+	_getTemplateTask_gr: function(templateTaskId){
+		var gr_templateTask;
+		var gr_checkTemplateTask = new GlideRecordSecure(this.templateTaskTableName);
+		if(gr_checkTemplateTask.get(templateTaskId)){
+			gr_templateTask = gr_checkTemplateTask;
+		}
+		return gr_templateTask;
+	},
+
+	// start at the newParentId and traverse to the Top Task recursively
+	// if the id of templateTask being copied is found return true
+	// if the id is not found, go to the parent until you reach the top checking
+	_isAncestorTask: function(templateTaskId, checkParentId){
+		var isAncestorTask = false;
+		var gr_taskToCheck = this._getTemplateTask_gr(checkParentId);
+		var nextParentOfId = gr_taskToCheck.getValue("parent");
+		if(nextParentOfId && nextParentOfId != ''){
+			if(nextParentOfId == templateTaskId){
+				isAncestorTask = true;
+				// this task's parent is the task being moved down, so this is the task to move up
+				this.taskIdToMoveUp = gr_taskToCheck.getUniqueValue();
+			} else {
+				// have a parent, not at top, parent is not task moved, go up until top checking
+				isAncestorTask = this._isAncestorTask(templateTaskId, nextParentOfId);
+			}
+		}
+		return isAncestorTask;
+	},
+	
+	_isTaskADescendant: function (tt_copy_id){
+		var isTaskCopyDescendant = false;
+		var filterCopyTask = this.arrTemplateTaskDescendants.filter(function(tt_id){
+			if(tt_copy_id == tt_id){
+				isTaskCopyDescendant = true;
+			}
+		});
+		return isTaskCopyDescendant;
+	},
+
+	_loadDescendantTemplateTaskIds: function(templateTaskId){
+		this.arrTemplateTaskDescendants.push(templateTaskId);
+		var gr_sub_tasks = new GlideRecordSecure(this.templateTaskTableName);
+		gr_sub_tasks.addQuery("parent", templateTaskId);
+		gr_sub_tasks.query();
+		while(gr_sub_tasks.next()){
+			var subTemplateTaskId = gr_sub_tasks.getUniqueValue();
+			this._loadDescendantTemplateTaskIds(subTemplateTaskId);
+		}
+	},
+	
+	// this is used with _recursiveCopyGetNextLevel - so same function could be used for first sublevel in clone where the top task was created by template creation
+	_recursivelyCopyTemplateTasks: function(gr_tt_toCopy, tt_parent, parentTemplateId){
+		var gr_sub_tasks;
+		var new_task;
+		var new_parent_id;
+		var filterCopyTask;
+		if(gr_tt_toCopy){
+			var tt_copy_id = gr_tt_toCopy.getUniqueValue();
+			// this test prevents infinite loop on a copy from an ancestor node to a descendant node 
+			if(this._isTaskADescendant(tt_copy_id)){
+				new_task = this._copyTemplateTask(gr_tt_toCopy, tt_parent, parentTemplateId);
+				if(new_task){
+					new_parent_id = new_task.getUniqueValue();
+					this._recursiveCopyGetNextLevel(tt_copy_id, new_parent_id, parentTemplateId);
+				}
+			}
+		}
+	},
+	
+	// this is used with _recursivelyCopyTemplateTasks - so same function could be used for first sublevel in clone where the top task was created by template creation
+	_recursiveCopyGetNextLevel: function(tt_copy_subs_from_id, new_parent_id, parentTemplateId){
+		var gr_sub_tasks = new GlideRecordSecure(this.templateTaskTableName);
+		gr_sub_tasks.addQuery("parent", tt_copy_subs_from_id);
+		gr_sub_tasks.query();
+		while(gr_sub_tasks.next()){
+			this._recursivelyCopyTemplateTasks(gr_sub_tasks, new_parent_id, parentTemplateId);
+		}
+	},
+	
+	_validateCopyMove: function(validationType, templateTaskId, newParentId){
+		var canCopyMove = false;
+		this.gr_templateTaskToCopyMove = this._getTemplateTask_gr(templateTaskId);
+		this.gr_templateTaskNewParent = this._getTemplateTask_gr(newParentId);
+		if(!this.gr_templateTaskToCopyMove){
+			gs.error("Tasker - unable to " + validationType + " Template Task, Template Task with Id: " + templateTaskId + " not found");
+		}
+		if(!this.gr_templateTaskNewParent){
+			gs.error("Tasker - unable to " + validationType + " Template Task, New Parent Template Task with Id: " + newParentId + " not found");
+		}
+		// have template to copy and new parent record
+		if(this.gr_templateTaskToCopyMove && this.gr_templateTaskNewParent){
+			if(this.gr_templateTaskToCopyMove.getValue("tasker_process_definition") == this.gr_templateTaskNewParent.getValue("tasker_process_definition")){
+				canCopyMove = true;
+				// If New Parent Task a descendant of the Template Task being moved
+				//	set variaables to put the 	   If yes, need to save the parent of the task being moved and set the parent of the new parent to the original parent of the task being copied
+				this.isCopyMoveTaskAncestorOfNewParent = this._isAncestorTask(templateTaskId, newParentId);
+				// TODO - Is the Order By of the Template Task being added to a new parent greater than the max order by of the children of the new parent?
+				//         If yes, need to reduce the order to the max + 1?
+			} else {
+				// TODO - tasks being copied from a different template - additional processing required
+				//        We can turn this on when we do the following on each task template copied:
+				//        - Set the Tasking Authority to the Tasking Authority of the new parent
+				//        - Set the Primary Office to the Primary Office of the new parent
+				//        - Either Clear the Primary Assignee or validate that it is a valid primary assignee for the new template - first pass, clear is probably easier
+				//        - Either Clear the Assigned Member or validate that it is a valid assinged member for the new template - first pass, clear is probably easier
+				gs.error("Tasker - " + validationType + " from one template to another not supported yet.");
+			}
+		}
+		return canCopyMove;
+	},
+	
+    type: 'template_Copy_Move_Methods'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-07-25 22:42:17</sys_created_on>
+        <sys_id>9625980584d47110777f5e44c9b34a23</sys_id>
+        <sys_mod_count>56</sys_mod_count>
+        <sys_name>template_Copy_Move_Methods</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_9625980584d47110777f5e44c9b34a23</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-08-11 04:00:04</sys_updated_on>
+    </sys_script_include>
+</record_update>

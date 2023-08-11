@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, $timeout, $location, $rootScope, amb, spModal, spUtil, htmlToStringService) {
+        <client_script><![CDATA[api.controller = function($scope, $timeout, $location, $rootScope, amb, spModal, spUtil, htmlToStringService, dtechTemplateService) {
     //------------------------------------------------------------------------------------------------------------------------
     // COMPANY: DISCOVER TECHNOLOGIES
     // CUSTOMIZED BY: KARINA TORRES
@@ -22,6 +22,9 @@
 
     var c = this;
     var twjs = x_153465_discovert.twJS;
+	// STRY0142161
+	var drag_drop = x_153465_discovert.DTech_gojs_drag_drop;
+	
     var TREE_CONST;
     var modalObjects;
     var $go; // for conciseness in defining templates
@@ -59,7 +62,6 @@
         }
         // call main function
         main();
-
     }
 
     function main() {
@@ -120,7 +122,6 @@
             node_inactive_bg: '#787878',
             node_selected_border: '#00A4FF',
             node_selected_border_stroke_width: 4,
-
             nodeOuterRectangelWidth: 310,
             nodeOuterRectangelHeight: 80,
             nodeTextPanelMargin: 5,
@@ -654,33 +655,12 @@
     // START EVENTS MONITORED
     // -----------------------------------------------------------------------------------------------------------------
     $rootScope.$on('dataTableClick', function(evt, item) {
-        // TREE FOOTER TOOLBAR
-        // STRY0117600 - does not like diagram posted back to server
-        c.data.widgetTreeFooterToolbars[0].diagram = null;
-        c.data.widgetTreeHeaderToolbars[0].diagram = null;
-
-        $scope.data.selectedId = item.sys_id;
-        $scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
-
-
-        //  UI/UX - STRY0065140 - 2.5 Template List - FIX
-        if (item.process_level) c.data.process_level = item.process_level.display_value;
-        if (item.template_name) c.data.name = item.template_name.display_value;
-
-        //$location.search('table', $scope.data.table).search('sys_id', $scope.data.selectedId).search('spa', 1);
-        spUtil.update($scope).then(function() {
-            // RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-            initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition=" + $scope.data.templateId);
-            // STRY0121782 - settings changed, force reload of the settings
-            if (c.data.widgetTreeHeaderToolbars) {
-                // load orientation from the header widget
-                treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
-            }
-            resetDiagram();
-            // STRY0123864 - changing the selected template updates the URL
-            $location.search('table', $scope.data.table).search('sys_id', item.sys_id).search('spa', 1);
-        });
-
+      	// STRY0142161
+		var objTemplate = {};
+		objTemplate.sys_id = item.sys_id;
+		objTemplate.template_level_display_value = item.process_level.display_value;
+		objTemplate.template_name = item.template_name.display_value;
+		_changeTemplate(objTemplate);
     });
 
     // STRY0093948 - the tasker form with tab is rasing this as a rootscope broadcast, updated to catch
@@ -697,10 +677,99 @@
     // -----------------------------------------------------------------------------------------------------------------
     // END EVENTS MONITORED
     // -----------------------------------------------------------------------------------------------------------------
+		function _changeTemplate(objTemplate){
+			// TREE FOOTER TOOLBAR
+			// STRY0117600 - does not like diagram posted back to server
+			c.data.widgetTreeFooterToolbars[0].diagram = null;
+			c.data.widgetTreeHeaderToolbars[0].diagram = null;
 
+			$scope.data.selectedId = objTemplate.sys_id;
+			$scope.data.table = "x_153465_discovert_discover_routing_template"; //item.table;//"x_153465_discovert_route_tasks";
+
+
+			//  UI/UX - STRY0065140 - 2.5 Template List - FIX
+			if (objTemplate.template_level_display_value) c.data.process_level = objTemplate.template_level_display_value;
+			if (objTemplate.template_name) c.data.name = objTemplate.template_name;
+
+			//$location.search('table', $scope.data.table).search('sys_id', $scope.data.selectedId).search('spa', 1);
+			spUtil.update($scope).then(function() {
+				// RJA 2021.04.14 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+				initRecordWatcher("x_153465_discovert_route_tasks", "tasker_process_definition=" + $scope.data.templateId);
+				// STRY0121782 - settings changed, force reload of the settings
+				if (c.data.widgetTreeHeaderToolbars) {
+					// load orientation from the header widget
+					treeOrientation = c.data.widgetTreeHeaderToolbars[0].data.settings.treeOrientation;
+				}
+				resetDiagram();
+				// STRY0123864 - changing the selected template updates the URL
+				$location.search('table', $scope.data.table).search('sys_id', objTemplate.sys_id).search('spa', 1);
+			});	
+		}
     // -----------------------------------------------------------------------------------------------------------------
     // START ICON MODALS
     // -----------------------------------------------------------------------------------------------------------------
+  	// STRY0142161
+    $scope.openModalCloneTemplate = function() {
+			var newTemplateName = $scope.data.templateInfo.template_name;
+			_promptForTemplateNameAndClone(newTemplateName, true);
+    };
+
+		function _cloneTemplate(templateInfo){
+			// set the new template owner for the cloned template
+			templateInfo.new_template_owner = $scope.data.currentUserId;
+			dtechTemplateService.cloneTemplate(templateInfo).then(
+						function(response){
+							var cloneSuccess = true;
+							if(response && response.success){
+								// need new top task here an push back to server to reload
+								if(response.new_topTask_id  && response.new_topTask_id != ''){
+									// change selected id
+									$scope.data.selectedId = response.new_topTask_id;
+									// reload with cloned template
+									spUtil.update($scope);
+									var objTemplate = {};
+									objTemplate.sys_id = response.template_id;
+									objTemplate.template_level_display_value = response.template_level_display_value;
+									objTemplate.template_name = response.template_name;
+									_changeTemplate(objTemplate);									
+								}
+							}
+							if(!cloneSuccess){
+								// TODO Multilingual
+								spModal.alert("Clone did not return proper redirect information.  There may have been a problem cloning the template");
+							}
+					});
+		}
+
+		// this function prompts for template name and stays in loop until canceled or unique name is entered
+		function _promptForTemplateNameAndClone(name, initialPrompt){
+			// prompt for name until unique
+			var templateInfo= $scope.data.templateInfo;
+			// set the current user as the template owner
+			templateInfo.template_owner = $scope.data.currentUserId;
+			templateInfo.template_name = name;
+// TODO - MULTILINGUAL
+			var cloneNamePrompt = "Enter name for cloned Template";
+			if(!initialPrompt){
+				cloneNamePrompt = "Name entered is not unique. " + cloneNamePrompt;
+			}
+			spModal.prompt(cloneNamePrompt, name).then(
+				function(nameEntered){
+					templateInfo.new_template_name = nameEntered;
+					dtechTemplateService.isTemplateNameUnique(templateInfo).then(
+						function(response){
+							if(response && response.success){
+								if(response.isTemplateNameUnique){
+									_cloneTemplate(templateInfo);
+								} else {
+									// prompt user to try again
+									_promptForTemplateNameAndClone(nameEntered, false);
+								}
+							}
+					});
+				});
+		}
+	
     // RJ - TUP - STRY0068618 - added run template
     $scope.runModalProcessTemplate = function() {
         twjs.openFormModal(spModal, modalObjects.runTemplateForm);
@@ -859,6 +928,9 @@
             // get the initial scale from the footer widget
             diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
         }
+        $scope.data.treeType = "Template";
+        drag_drop.init($scope.data, spModal, dtechTemplateService, diagram);
+
         diagramInitCompleted = true;
     }
     // ***************************************
@@ -1123,17 +1195,24 @@
         // STRY0113936, STRY0111888 - set width and height
         var roundedRectangle =
             $go(go.Shape, "RoundedRectangle", {
+                    // STRY0142161
+                    mouseDragEnter: function(e, obj) { drag_drop.mouseDragEnter(e, obj);},
+                    mouseDrop: function(e, obj) { drag_drop.mouseDrop(e, obj);},
+                    mouseDragLeave: function(e, obj) {drag_drop.mouseDragLeave(e, obj);},
+
                     strokeWidth: TREE_CONST.outlineWidth,
                     width: TREE_CONST.nodeOuterRectangelWidth,
                     height: TREE_CONST.nodeOuterRectangelHeight,
                     fill: TREE_CONST.roundedRectangleFill
                 },
+
                 new go.Binding("stroke", "isSelected", function(s) {
                     if (s)
                         return TREE_CONST.node_selected_border;
                     else
                         return null;
                 }).ofObject(""),
+
                 new go.Binding("fill", "active", function(t) {
                     switch (t) {
                         case false:
@@ -1499,6 +1578,8 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 // 2.8 | 2022-09-19 | mmcc | STRY0129140 - Task/Template Tree- Add "TaskFlow (tm)"
 //                                      In HTML, added 2 div's relative and absolute to position TaskFlowTM_Logo.svg
 //                                      Changes made in HTML.
+// 2.8.3 (Template Updates Addon)  STRY0142161 - Feature allowing for Templates to be copied/cloned
+//										Changes in Server Script, Client Script, and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1577,6 +1658,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         }
 
         _loadTemplateMap(data.topParentTask_id);
+        // STRY0142161
+        // usees data.templateId that is set in the _loadTemplateMap function
+        _loadTemplateInfo();
     }
 
     //------------------------------------------------------------------------------------------------------------------------
@@ -1618,6 +1702,21 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         return topParentTask_id;
     }
     //------------------------------------------------------------------------------------------------------------------------
+  	// STRY0142161
+    function _loadTemplateInfo() {
+      var gr_Template = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+      if(gr_Template.get(data.templateId)){
+        data.templateInfo = {};
+        data.templateInfo.template_id = gr_Template.getUniqueValue();
+        data.templateInfo.template_name = gr_Template.getValue("template_name");
+        data.templateInfo.template_level = gr_Template.getValue("process_level");
+        data.templateInfo.template_level_display_value = gr_Template.getDisplayValue("process_level");
+        data.templateInfo.template_ou = gr_Template.getValue("process_ou");
+        data.templateInfo.template_owner = gr_Template.getValue("process_owner");
+      }
+      // used for cloning
+      data.currentUserId = gs.getUserID();
+    }
 
     function _loadTemplateMap(topParentTask_id) {
         var map = data.map = [];
@@ -1653,20 +1752,20 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>2382</sys_mod_count>
+        <sys_mod_count>2450</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2022-09-21 13:19:33</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-08-11 13:31:42</sys_updated_on>
         <template><![CDATA[<div id="main_body" class="dtech-topstick-posabso flex-column panel panel-default">
   <div id="panel_heading" class="panel-heading dtech-panel-heading-min-height-standard">
     <div class="modal-body text-right" ng-if="data.selectedId" class="pull-right">
+      <a ng-if="data.topParentTask_id" href="javascript:void(0)" 
+         ng-click="openModalCloneTemplate(data.selectedId)" class="btn action-btn btn-default" title="Clone Template" role="link">Clone</a>
 
       <a href="javascript:void(0)"  ng-if="data.canRunTemplate"
          ng-click="runModalProcessTemplate()" class="btn btn-primary" title="Run Template" role="link">Run</a>

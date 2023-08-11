@@ -7,6 +7,7 @@
         <client_callable>false</client_callable>
         <description>Collection of functions often used in a UI Action within the field Condition, returning a boolean which decides to run the action's script or not. &#13;
 These functions may also be called in Script Includes, Access Controls and Business Rules.&#13;
+2.8.3 (Tempate Updates Addon) STRY0141844 - DHS S&amp;T - Permissions for running a template from a task&#13;
 2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
 2.8.3 | 2023-05-24 |raj |  STRY0140267 - Task Administrator Email &#13;
 2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table&#13;
@@ -336,6 +337,8 @@ uiConditionCheck.prototype = {
 	// taskID - (optional) - taskes the ID of the task to check
 	startTemplateUIAction: function(templateID, taskID)
 	{
+      	// STRY0141844
+		var userCanStartTemplate = false;
 		var restrictedGroup = '';
 		var restricted_group_s;
 		if(taskID){
@@ -362,31 +365,14 @@ uiConditionCheck.prototype = {
 					isUserInRestrictedGroup = gs.getUser().getMyGroups().indexOf(templateRestrictedGroup + '') >= 0;
 				}
 			}
-			var isRestrictedGroupAllowed = (!checkRestrictedGroup || (restrictedGroupMatches && isUserInRestrictedGroup)) ;
-			var isProcessOwner = grTemp.getValue('process_owner') == gs.getUserID();
-			var processLevel = grTemp.getValue('process_level');
-			var UserPermissions  = new UserInfoScripts();
-			// DFCT0011930
-			var primary_office = grTemp.getValue('u_primary_office');
-			// DFCT0011930 - user primary office to determine Task Administrator permissions
-			var isTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
-			// DFCT0011930 - user primary office to determine Task Executive permissions
-			var isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
-			
+			var isRestrictedGroupAllowed = (!checkRestrictedGroup || (restrictedGroupMatches && isUserInRestrictedGroup));
 			// STRY0085827
 			if(isActive && isRestrictedGroupAllowed){
-				//STRY0112587 
-				if (processLevel == 'global_process') 
-					return isTaskAdministrator || isTaskExecutive;
-				else if (processLevel == 'ou_process')
-					return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemp.getValue('process_ou'));
-				else if (processLevel == 'my_process')
-					return grTemp.getValue('process_owner') == gs.getUserID();
-				else
-					return false;
-			} else return false;
-			
+              	// STRY0141844
+				userCanStartTemplate = new UserInfoScripts().userCanRunTemplate(grTemp);
+			}
 		}
+		return userCanStartTemplate;
 	},
 	
 	// v2.6
@@ -1408,8 +1394,8 @@ uiConditionCheck.prototype = {
 	// STRY0065020 user can run a template
 	// This controls running a template from the Template area as a new task tree
 	// This function expects to receive the Template record
-	runTemplateUIAction: function(gr)
-	{
+	runTemplateUIAction: function(grTemp){
+		var userCanRunTemplate = false;
 		// DFCT0011930
 		var primary_office;
 		
@@ -1418,63 +1404,16 @@ uiConditionCheck.prototype = {
 		if(sysparm_view == 'sys_ref_list'){
 			return false;
 		}
-		
-		var canRead = gr.canRead();
-		var newRecord = gr.sys_id;
-		var isActive;
-		
-		// STRY0074534 Template Admins can read any template
-		var grTemplate;
-		var grTemp;
-		if (gr.getTableName() == "x_153465_discovert_discover_routing_template") {
-			isActive = gr.u_active;
-			grTemplate = gr;
-		} else if (gr.getTableName() == "x_153465_discovert_route_tasks") {
-			isActive = gr.active;
-			grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
-			if(grTemp.get(gr.tasker_process_definition)){
-				grTemplate = grTemp;
-			} else return false;
-		// STRY0075793 - TUP-Run Template from Task in the Platform Pages
-		} else if (gr.getTableName() == "x_153465_discovert_discover_routing_runtime") {
-			// STRY0079327 - fixed... this had the Template Instance  table name instead of the Template table name
-			grTemp = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
-			if(grTemp.get(gr.routing_template_ref)){
-				isActive = gr.u_active;
-				grTemplate = grTemp;
-			} else return false;
-		} else {
-			return false;
-		} 
-		
-		var isProcessOwner = grTemplate.getValue('process_owner') == gs.getUserID();
-		var processLevel = grTemplate.getValue('process_level');
-		var UserPermissions  = new UserInfoScripts();
-		// DFCT0011930
-		primary_office = grTemplate.getValue('u_primary_office');
-		// DFCT0011930 - user primary office to determine Task Administrator permissions
-		var isUserTaskAdministrator = UserPermissions.userIsTaskAdministratorForOU(primary_office);
-		//STRY0112587 - DFCT0011930 - user primary office to determine Task Executive permissions
-		var isUserTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
-		
-		// STRY0085827
-		if(canRead && (newRecord != -1) && isActive == true ){
-			//STRY0112587 
-			if (processLevel == 'global_process') 
-				return isUserTaskAdministrator || isUserTaskExecutive;
-			else if (processLevel == 'ou_process')
-				return UserPermissions.isGivenUserOUTA(gs.getUserID(), grTemplate.getValue('process_ou'));
-			else if (processLevel == 'my_process')
-				return grTemplate.getValue('process_owner') == gs.getUserID();
-			else
-				return false;
-		} else return false;
+		// STRY0141844
+		userCanRunTemplate = new UserInfoScripts().userCanRunTemplate(grTemp);
+		return userCanRunTemplate;
+
 	},
 
 	// This controls running a template from a Task 
 	// This function expects to receive the Task record
-	runTemplateFromTaskUIAction: function(gr)
-	{
+	runTemplateFromTaskUIAction: function(gr) {
+		
 		// DFCT0011930
 		var primary_office;
 		// use the standard UserInfo scripts to check user permissions
@@ -1497,7 +1436,15 @@ uiConditionCheck.prototype = {
 		// STRY0074534 - Process Template Admin Rights do not have the authority to task individuals.  
 		// As a result, they can only run personal templates or templates where tehy have other permissions.
 		//var task_process_template_admin = UserPermissions.userHasProcessTemplateAdminRights();
-
+      	// STRY0141844
+      	var userCanRunTemplate = false;
+		var userHasRunPermissions = tasker_process_template_global || task_process_template_ou || tasker_process_template_user;
+		if(userHasRunPermissions){
+			userCanRunTemplate = true;
+		} else {
+			userCanRunTemplate = UserPermissions.userHasWhoCanRunTemplates();
+		}
+		
 		var isActive = gr.active;
 		var isNewRecord = gr.isNewRecord();
 		var arrayUtil = new global.ArrayUtil();
@@ -1524,8 +1471,8 @@ uiConditionCheck.prototype = {
 		// STRY0123180  - originator used for draft task
 		var originator = (gr.originator == currentUser);
 
-		// STRY0085827
-		if (isActive && canRead && !isNewRecord &&(tasker_process_template_global || task_process_template_ou || tasker_process_template_user)) {
+		// STRY0085827 - STRY0141844
+		if (isActive && canRead && !isNewRecord &&(userCanRunTemplate)) {
 			// STRY0117108, STRY0123180 
 			// 2.8 | 2022-05-19 | mmcc | STRY0122553 - Task Tree Management- Allow users to Run Template for Draft Tasks; added || draft
 			if ((taskOwner || originator) && (draft)) {
@@ -1933,13 +1880,13 @@ uiConditionCheck.prototype = {
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-02-12 18:46:09</sys_created_on>
         <sys_id>fbf8049adba72700c18c59b2ca961967</sys_id>
-        <sys_mod_count>569</sys_mod_count>
+        <sys_mod_count>577</sys_mod_count>
         <sys_name>uiConditionCheck</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_fbf8049adba72700c18c59b2ca961967</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-06-07 19:24:00</sys_updated_on>
+        <sys_updated_on>2023-08-11 13:20:27</sys_updated_on>
     </sys_script_include>
 </record_update>
