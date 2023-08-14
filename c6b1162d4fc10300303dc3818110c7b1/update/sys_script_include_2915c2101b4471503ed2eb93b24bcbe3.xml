@@ -6,64 +6,249 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>This module contains all of the functions common to the api for the Task object in tasker&#13;
+2.8.5 | 2023-08-14 | raj | STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control&#13;
 2.8.5 | 2023-05-11 | mmcc | STRY0141856 - Stretch- PLACEHOLDER- Office Control&#13;
 </description>
         <name>api_tasker_task</name>
         <script><![CDATA[var api_tasker_task = Class.create();
+api_tasker_task.CONST_DTECH_OFFICE_OBJECT = "officeObject";
+api_tasker_task.CONST_DTECH_DURATION_OBJECT = "durationObject";
+api_tasker_task.CONST_DTECH_STATE_OBJECT = "stateObject";
+api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT = "taskTreeObject";
+api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT = "operationalObject";
+api_tasker_task.CONST_DTECH_RESPONSE_OBJECT = "responseObject";
 api_tasker_task.prototype = {
     initialize: function() {
 		this.api_dtech = new api_dtech_common();
 		this.taskerStatus = new TaskerStatus();
+		this.taskTable = "x_153465_discovert_route_task_instance";
+		this.titleField = "task_name";
     },
+	
+	getTaskRecordObjects: function(taskId, arrObjectList){
+		var taskRecordObject = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			if(arrObjectList){
+				if(arrObjectList[api_tasker_task.CONST_DTECH_OFFICE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_OFFICE_OBJECT] = this.getAssignmentInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_DURATION_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_DURATION_OBJECT] = this.getDurationInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_STATE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_STATE_OBJECT] = this.getStateInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT] = this.getTaskTreeInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT] = this.getOperationalInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_RESPONSE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_RESPONSE_OBJECT] = this.getResponseCommentsGR(gr_task);
+				}				
+			} 
+		}
+		return taskRecordObject;
+	},
 
 	getAssignmentInformation: function(taskId){
+		var lAssignmentInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lAssignmentInfo = this.getAssignmentInformationGR(gr_task);
+		}
+		return lAssignmentInfo;
+	},
+	
+	getAssignmentInformationGR: function(gr_task){
 		var lAssignmentInfo = {};
 		// NOTE: warning hours is actually a number of days, not hours
 		// NOTE: calendar duration is Estimated Effort
 		var arrAssignmentFields = 
-			["tasking_authority", "u_reviewer", "primary_office", "u_task_requester", "primary_assignee", 
+			["task_name", "tasking_authority", "u_reviewer", "primary_office", "u_task_requester", "primary_assignee", 
 			"assigned_to", "u_internal_contact_performing_task", "u_internal_contact", "on_behalf_of", 
 			"outbound", "u_external_ou", "poc_name", "external_task_id_number", "u_external_task_url", 
 			"originator", "sys_created_on"];
-		var gr_task = new GlideRecordSecure("x_153465_discovert_route_task_instance");
-		if(gr_task.get(taskId)){
-			lAssignmentInfo = this.api_dtech.loadObject(gr_task, arrAssignmentFields);
-			// add task id after loaded
-			lAssignmentInfo.taskId = taskId;
-			// NOTE: if the task is not an outbound task, remove outbound and external fields
-			if(lAssignmentInfo.outbound!=true){
-				lAssignmentInfo["outbound"] = undefined;
-				lAssignmentInfo["u_external_ou"] = undefined;
-				lAssignmentInfo["poc_name"] = undefined;
-				lAssignmentInfo["external_task_id_number"] = undefined;
-				lAssignmentInfo["u_external_task_url"] = undefined;
-			}
+
+		lAssignmentInfo = this.api_dtech.loadObject(gr_task, arrAssignmentFields);
+		// add task id after loaded
+		lAssignmentInfo.taskId = gr_task.getUniqueValue();
+		// NOTE: if the task is not an outbound task, remove outbound and external fields
+		if(lAssignmentInfo.outbound!=true){
+			lAssignmentInfo["outbound"] = undefined;
+			lAssignmentInfo["u_external_ou"] = undefined;
+			lAssignmentInfo["poc_name"] = undefined;
+			lAssignmentInfo["external_task_id_number"] = undefined;
+			lAssignmentInfo["u_external_task_url"] = undefined;
 		}
-		return lAssignmentInfo;
+		var title = gr_task.getDisplayValue(this.titleField);
+		lAssignmentInfo.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal') + ': ' + title;
+		return lAssignmentInfo;		
 	},
 
 	getDurationInformation: function(taskId){
 		var lDurationInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lDurationInfo = this.getDurationInformationGR(gr_task);
+		}
+		return lDurationInfo;
+	},
+	
+	getDurationInformationGR: function(gr_task){
+		var lDurationInfo = {};
 		// NOTE: warning hours is actually a number of days, not hours
 		// NOTE: calendar duration is Estimated Effort
 		var arrDurationFields = 
-			["suspense_date", "task_order", "warning_hours", "u_wait_for_subtasks_to_finish", "expected_start", "calendar_duration", 
+			["task_name", "suspense_date", "task_order", "warning_hours", "u_wait_for_subtasks_to_finish", "expected_start", "calendar_duration", 
 			"work_start", "work_end", "outbound", "u_external_due_date", "status"];
-		var gr_task = new GlideRecordSecure("x_153465_discovert_route_task_instance");
+		lDurationInfo = this.api_dtech.loadObject(gr_task, arrDurationFields);
+		var status_and_reason = {};
+		status_and_reason = this.taskerStatus.getStatusAndReason(gr_task);
+		lDurationInfo.status_reason = status_and_reason;
+		// add task id after loaded
+		lDurationInfo.taskId = gr_task.getUniqueValue();
+		// NOTE: if the task is not an outbound task, remove outbound and external due date
+		if(lDurationInfo.outbound!=true){
+			lDurationInfo["outbound"] = undefined;
+			lDurationInfo["u_external_due_date"] = undefined;
+		}
+		var title = gr_task.getDisplayValue(this.titleField);
+		lDurationInfo.durationTitle = gs.getMessage('Tasker - Title - Duration Modal') + ': ' + title;
+		return lDurationInfo;
+	},
+
+	getOperationalInformation: function(taskId){
+		var lOperationalInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
 		if(gr_task.get(taskId)){
-			lDurationInfo = this.api_dtech.loadObject(gr_task, arrDurationFields);
-			var status_and_reason = {};
-			status_and_reason = this.taskerStatus.getStatusAndReason(gr_task);
-			lDurationInfo.status_reason = status_and_reason;
-			// add task id after loaded
-			lDurationInfo.taskId = taskId;
-			// NOTE: if the task is not an outbound task, remove outbound and external due date
-			if(lDurationInfo.outbound!=true){
-				lDurationInfo["outbound"] = undefined;
-				lDurationInfo["u_external_due_date"] = undefined;
-			}
+			lOperationalInfo = this.getOperationalInformationGR(gr_task);
+		}
+		return lOperationalInfo;
+	},
+	
+	getOperationalInformationGR: function(gr_task){
+		var lOperationalInfo = {};
+		var lTopTasklInfo = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+		var arrOperationalFields = 
+			["task_name", "number", "parent", "taskernumber", "classification", "assignement_group", "tasker_type", "short_description", 
+			"instructions", "priority", "state", "urgency",
+			"status", "category", "sub_category", "risk_flag", "risk_impact_description",
+			"risk_impact_factor", "risk_mitigation_strategy", "risk_probability", "risk_probability_description", "risk_reason",
+			"tasker_app_version"];
+		var arrTopTaskFields = ["u_objective"];
+
+		lOperationalInfo = this.api_dtech.loadObject(gr_task, arrOperationalFields);
+		var status_and_reason = {};
+		status_and_reason = this.taskerStatus.getStatusAndReason(gr_task);
+		lOperationalInfo.status_reason = status_and_reason;
+		// add task id after loaded
+		lOperationalInfo.taskId = gr_task.getUniqueValue();
+		var title = gr_task.getDisplayValue(this.titleField);
+		
+
+		lTopTasklInfo = this._getTopTaskFields(gr_task, arrTopTaskFields);
+		lOperationalInfo.u_top_task = lTopTasklInfo;
+		lOperationalInfo.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal') + ': ' + title;		
+		return lOperationalInfo;
+	},
+	
+	_getTopTaskFields: function(gr_task, arrTopTaskFields){
+		var topTaskId = gr_task.getValue("u_top_task");
+		var gr_top_task = new GlideRecordSecure(this.taskTable);
+		var lTopTasklInfo;
+		if(gr_top_task.get(topTaskId)){
+			lTopTasklInfo = this.api_dtech.loadObject(gr_task, arrTopTaskFields);
+		}
+		return lTopTasklInfo;
+	},
+	
+	getResponseComments: function(taskId){
+		var lResponseCommentsInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lResponseCommentsInfo = this.getResponseCommentsGR(gr_task);
+		}
+		return lResponseCommentsInfo;
+	},
+
+	getResponseCommentsGR: function(gr_task){
+		var lResponseCommentsInfo = {};
+		lResponseCommentsInfo.directive_reopen_comments = '';
+		lResponseCommentsInfo.directive_response_comments = '';
+		lResponseCommentsInfo.directive_reviewer_comments = '';
+		lResponseCommentsInfo.directive_rework_comments = '';
+
+		// View Comment on Detailed Status; added
+		lResponseCommentsInfo.directive_content_comment = '';
+
+		lResponseCommentsInfo.isResponseCommentsDirectiveShown = false;
+
+		// use one var in ngIf for Response Comments Directive
+		if (gr_task.getElement('comments_dt').getDisplayValue().length > 0 ||
+			gr_task.getElement('response').getDisplayValue().length > 0 ||
+			gr_task.getElement('reopen_comments').getDisplayValue().length > 0 ||
+			gr_task.getElement('rework_comments').getDisplayValue().length > 0) {
+			lResponseCommentsInfo.isResponseCommentsDirectiveShown = true;
+			lResponseCommentsInfo.directive_reopen_comments = gr_task.getElement('reopen_comments').getDisplayValue();
+			lResponseCommentsInfo.directive_response_comments = gr_task.getElement('response').getDisplayValue();
+			lResponseCommentsInfo.directive_reviewer_comments = gr_task.getElement('comments_dt').getDisplayValue();
+			lResponseCommentsInfo.directive_rework_comments = gr_task.getElement('rework_comments').getDisplayValue();
+		}
+
+		// 2.8.5 | 2023-07-07 | mmcc | STRY0137651 - When to Show Comments on Final Response Tab; added, get returns a string
+		if (gr_task.getElement('work_item_type').getDisplayValue() == 'review_item') {
+			lResponseCommentsInfo.directive_content_comment = lResponseCommentsInfo.directive_reviewer_comments;
+		} else {
+			lResponseCommentsInfo.directive_content_comment = lResponseCommentsInfo.directive_response_comments;
+		}
+		return lResponseCommentsInfo;
+	},
+	
+	getStateInformation: function(taskId){
+		var lStateInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lStateInfo = this.getStateInformationGR(gr_task);
+		}
+		return lStateInfo;
+	},
+	
+	getStateInformationGR: function(gr_task){
+		var lStateInfo = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+		var arrStateFields = 
+			["state"];
+		lStateInfo = this.api_dtech.loadObject(gr_task, arrStateFields);
+		// add task id after loaded
+		lStateInfo.taskId = gr_task.getUniqueValue();
+		return lStateInfo;
+	},
+
+	getTaskTreeInformation: function(taskId){
+		var lTaskTreeInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lTaskTreeInfo = this.getTaskTreeInformationGR(gr_task);
 		}
 		return lDurationInfo;
+	},
+	
+	getTaskTreeInformationGR: function(gr_task){
+		var lTaskTreeInfo = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+		var arrStateFields = 
+			["u_task_tree"];
+		lTaskTreeInfo = this.api_dtech.loadObject(gr_task, arrStateFields);
+		// add task id after loaded
+		lTaskTreeInfo.taskId = gr_task.getUniqueValue();
+		return lTaskTreeInfo;
 	},
 	
     type: 'api_tasker_task'
@@ -72,13 +257,13 @@ api_tasker_task.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-11 12:37:05</sys_created_on>
         <sys_id>2915c2101b4471503ed2eb93b24bcbe3</sys_id>
-        <sys_mod_count>14</sys_mod_count>
+        <sys_mod_count>43</sys_mod_count>
         <sys_name>api_tasker_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_2915c2101b4471503ed2eb93b24bcbe3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-07-13 01:21:04</sys_updated_on>
+        <sys_updated_on>2023-08-14 17:31:54</sys_updated_on>
     </sys_script_include>
 </record_update>
