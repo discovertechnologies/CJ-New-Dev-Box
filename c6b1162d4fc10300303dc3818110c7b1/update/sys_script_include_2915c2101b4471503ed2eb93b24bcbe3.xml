@@ -11,20 +11,27 @@
 </description>
         <name>api_tasker_task</name>
         <script><![CDATA[var api_tasker_task = Class.create();
-api_tasker_task.CONST_DTECH_OFFICE_OBJECT = "officeObject";
 api_tasker_task.CONST_DTECH_DURATION_OBJECT = "durationObject";
-api_tasker_task.CONST_DTECH_STATE_OBJECT = "stateObject";
-api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT = "taskTreeObject";
+api_tasker_task.CONST_DTECH_ITEM_MEMBERS_OBJECT = "itemMembersObject";
+api_tasker_task.CONST_DTECH_OFFICE_OBJECT = "officeObject";
 api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT = "operationalObject";
 api_tasker_task.CONST_DTECH_RESPONSE_OBJECT = "responseObject";
+api_tasker_task.CONST_DTECH_STATE_OBJECT = "stateObject";
+api_tasker_task.CONST_DTECH_SUB_TASKS_OBJECT = "subtasksObject";
+api_tasker_task.CONST_DTECH_TASKER_FILES_OBJECT = "taskerFilesObject";
+api_tasker_task.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT = "ContextMenuActionsObject";
+api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT = "taskTreeObject";
 api_tasker_task.prototype = {
     initialize: function() {
 		this.api_dtech = new api_dtech_common();
 		this.taskerStatus = new TaskerStatus();
 		this.taskTable = "x_153465_discovert_route_task_instance";
+		this.requestTable = "x_153465_discovert_tasker_requests";
 		this.titleField = "task_name";
     },
 	
+	// NOTE: the getUIActions function is not in the inital load yet.
+	//       Looking for a way to use $sp.getForm from here
 	getTaskRecordObjects: function(taskId, arrObjectList){
 		var taskRecordObject = {};
 		var gr_task = new GlideRecordSecure(this.taskTable);
@@ -36,19 +43,32 @@ api_tasker_task.prototype = {
 				if(arrObjectList[api_tasker_task.CONST_DTECH_DURATION_OBJECT]){
 					taskRecordObject[api_tasker_task.CONST_DTECH_DURATION_OBJECT] = this.getDurationInformationGR(gr_task);
 				}
-				if(arrObjectList[api_tasker_task.CONST_DTECH_STATE_OBJECT]){
-					taskRecordObject[api_tasker_task.CONST_DTECH_STATE_OBJECT] = this.getStateInformationGR(gr_task);
-				}
-				if(arrObjectList[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT]){
-					taskRecordObject[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT] = this.getTaskTreeInformationGR(gr_task);
+				if(arrObjectList[api_tasker_task.CONST_DTECH_ITEM_MEMBERS_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_ITEM_MEMBERS_OBJECT] = this.getItemMembersInformationGR(gr_task);
 				}
 				if(arrObjectList[api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT]){
 					taskRecordObject[api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT] = this.getOperationalInformationGR(gr_task);
 				}
 				if(arrObjectList[api_tasker_task.CONST_DTECH_RESPONSE_OBJECT]){
 					taskRecordObject[api_tasker_task.CONST_DTECH_RESPONSE_OBJECT] = this.getResponseCommentsGR(gr_task);
-				}				
-			} 
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_STATE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_STATE_OBJECT] = this.getStateInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_SUB_TASKS_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_SUB_TASKS_OBJECT] = this.getSubTasksInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_TASKER_FILES_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_TASKER_FILES_OBJECT] = this.getTaskerFilesInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT] = this.getTaskTreeInformationGR(gr_task);
+				}
+				if(arrObjectList[api_tasker_task.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT]){
+					taskRecordObject[api_tasker_task.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT] = 
+						this.getContextMenuInformationGR(gr_task);
+				}
+			}
 		}
 		return taskRecordObject;
 	},
@@ -88,6 +108,30 @@ api_tasker_task.prototype = {
 		return lAssignmentInfo;		
 	},
 
+	getContextMenuInformation: function(taskId){
+		var lContextMenuInformation = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lContextMenuInformation = this.getContextMenuInformationGR(gr_task);
+		}
+		return lContextMenuInformation;
+	},
+	
+	// NOTE: this one is backward where if we have the glide record we get the task id and call getContextMenuInformation
+	getContextMenuInformationGR:function (gr_task){
+		var lContextMenuInformation = {};
+		var taskId = gr_task.getUniqueValue();
+		
+		var arrContextMenuFields = 
+			["active"];
+		lContextMenuInformation = this.api_dtech.loadObject(gr_task, arrContextMenuFields);		
+		var form = $sp.getForm(this.taskTable, taskId);
+		var ui_actions = form._ui_actions;
+		lContextMenuInformation.ui_actions = this._load_context_ui_actions(ui_actions, gr_task);
+		lContextMenuInformation.taskId = taskId;
+		return lContextMenuInformation;
+	},
+
 	getDurationInformation: function(taskId){
 		var lDurationInfo = {};
 		var gr_task = new GlideRecordSecure(this.taskTable);
@@ -120,6 +164,36 @@ api_tasker_task.prototype = {
 		return lDurationInfo;
 	},
 
+	getItemMembersInformation: function(taskId){
+		var lItemMembersInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lItemMembersInfo = this.getItemMembersInformationGR(gr_task);
+		}
+		return lItemMembersInfo;
+	},
+	
+	getItemMembersInformationGR: function(gr_task){
+		var lItemMembersInfo = {};
+		var lMembers = {};
+		var arrMembers = [];
+		var arrItemMembersFields = 
+			["assigned_to", "originator", "u_task_requester", "u_reviewer", "on_behalf_of"];
+		lMembers = this.api_dtech.loadObject(gr_task, arrItemMembersFields);
+		
+		// NOTE: additional fields are needed in the member info object, add them after loading the members into an array with photos
+		// turn the member field object into an array and add the photos
+		arrMembers = this._loadPhotosForObjects(lMembers, arrItemMembersFields);
+		lItemMembersInfo.members = arrMembers;
+		
+		// add task id after loaded
+		lItemMembersInfo.taskId = gr_task.getUniqueValue();
+		var title = gr_task.getDisplayValue(this.titleField);
+		lItemMembersInfo.itemMembersTitle = gs.getMessage('Tasker - Title - ItemMembers Modal') + ': ' + title;
+
+		return lItemMembersInfo;
+	},
+	
 	getOperationalInformation: function(taskId){
 		var lOperationalInfo = {};
 		var gr_task = new GlideRecordSecure(this.taskTable);
@@ -156,17 +230,7 @@ api_tasker_task.prototype = {
 		lOperationalInfo.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal') + ': ' + title;		
 		return lOperationalInfo;
 	},
-	
-	_getTopTaskFields: function(gr_task, arrTopTaskFields){
-		var topTaskId = gr_task.getValue("u_top_task");
-		var gr_top_task = new GlideRecordSecure(this.taskTable);
-		var lTopTasklInfo;
-		if(gr_top_task.get(topTaskId)){
-			lTopTasklInfo = this.api_dtech.loadObject(gr_task, arrTopTaskFields);
-		}
-		return lTopTasklInfo;
-	},
-	
+		
 	getResponseComments: function(taskId){
 		var lResponseCommentsInfo = {};
 		var gr_task = new GlideRecordSecure(this.taskTable);
@@ -230,6 +294,95 @@ api_tasker_task.prototype = {
 		return lStateInfo;
 	},
 
+	getSubTasksInformation: function(taskId){
+		var lSubTasksInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lSubTasksInfo = this.getSubTasksInformationGR(gr_task);
+		}
+		return lSubTasksInfo;
+	},
+	
+	getSubTasksInformationGR: function(gr_task){
+		var lSubTasksInfo = {};
+		var arrSubTasksFields = 
+			["calchaschildren"];
+		lSubTasksInfo = this.api_dtech.loadObject(gr_task, arrSubTasksFields);
+		// add task id after loaded
+		lSubTasksInfo.taskId = gr_task.getUniqueValue();
+		var title = gr_task.getDisplayValue(this.titleField);
+		lSubTasksInfo.subTasksTitle = gs.getMessage('Tasker - Title - SubTasks Modal') + ': ' + title;
+		return lSubTasksInfo;
+	},
+
+	getSubTasksInformationWithList: function(taskId){
+		var lSubTasksInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lSubTasksInfo = this.getSubTasksInformationWithListGR(gr_task);
+		}
+		return lSubTasksInfo;
+	},
+	
+	getSubTasksInformationWithListGR: function(gr_task){
+		var lSubTasksInfo = {};
+		// load the subtask information
+		lSubTasksInfo = this.getSubTasksInformationGR(gr_task);
+		// array of subtasks
+		var lsubtasks = [];
+		lsubtasks = this._getSubTaskList(gr_task);
+		lSubTasksInfo.subtasks = lsubtasks;
+		return lSubTasksInfo;
+	},
+	
+	getTaskerFilesInformation: function(taskId){
+		var lTaskerFilesInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lTaskerFilesInfo = this.getTaskerFilesInformationGR(gr_task);
+		}
+		return lTaskerFilesInfo;
+	},
+
+	getTaskerFilesInformationGR: function(gr_task){
+		var lTaskerFilesInfo = {};
+// TODO - NEED TO GET NEW FIELD IN FOR DOCUMENT COUNTS
+		var arrSubTasksFields = 
+			["calchaschildren"];
+		lTaskerFilesInfo = this.api_dtech.loadObject(gr_task, arrSubTasksFields);
+// TODO - NEED TO ADD A CHECK FOR DOCUMENT VS ATTACHMENT SETTING		
+		// add task id after loaded
+		lTaskerFilesInfo.taskId = gr_task.getUniqueValue();
+// TODO - SET TO DOCUMENTS OR ATTACHMENTS BASED ON TASKER SYSTEM SETTINGS 
+// NOTE: if both is on, do we say files instead of having 2 headers?
+// NOTE: do we have something per view or multiple lists in the dropdown, or just show the items associated iwth this file and have the tree have an attachments icon for the tree level folders
+		lTaskerFilesInfo.label = gs.getMessage('Tasker - Documents');
+		var title = gr_task.getDisplayValue(this.titleField);
+		lTaskerFilesInfo.title = gs.getMessage('Tasker - Title - SubTasks Modal') + ': ' + title;
+		return lTaskerFilesInfo;
+	},
+	
+	getTaskerFilesInformationWithFiles: function(taskId){
+		var lTaskerFilesInfo = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			lTaskerFilesInfo = this.getTaskerFilesInformationWithFilesGR(gr_task);
+		}
+		return lTaskerFilesInfo;
+	},
+	
+	getTaskerFilesInformationWithFilesGR: function(gr_task){
+		var lTaskerFilesInfo = {};
+		// load the subtask information
+		lTaskerFilesInfo = this.getTaskerFilesInformationGR(gr_task);
+		// array of files
+		var ltaskerfiles = [];
+// TODO - BUILD FILE NAME LOADER AND ALSO DETERMINE IF WE HAVE MULTIPLE FOLDERS AND IF WE ALSO LOAD THE SIGNATURE IN HERE
+		ltaskerfiles = this._getSubTaskList(gr_task);
+		lTaskerFilesInfo.files = ltaskerfiles;
+		return lTaskerFilesInfo;
+	},
+	
 	getTaskTreeInformation: function(taskId){
 		var lTaskTreeInfo = {};
 		var gr_task = new GlideRecordSecure(this.taskTable);
@@ -250,6 +403,739 @@ api_tasker_task.prototype = {
 		lTaskTreeInfo.taskId = gr_task.getUniqueValue();
 		return lTaskTreeInfo;
 	},
+
+	getUIActionParamaters: function(taskId, action_name, action_sys_id){
+		var params = {};
+		var gr_task = new GlideRecordSecure(this.taskTable);
+		if(gr_task.get(taskId)){
+			params = this.getUIActionParamatersGR(gr_task, action_name, action_sys_id);
+		}
+		return params;
+	},
+	
+	getUIActionParamatersGR: function(gr_task, action_name, action_sys_id){
+		var params = {};
+		var objTaskActions = this._get_ui_actions_icons();
+		var arrItem = Object.keys(objTaskActions).filter(function(key){
+			return objTaskActions[key].action_name==action_name || key==action_sys_id;});
+		if(arrItem[0]){
+			// get the key b/c the sys_id is the key of the array
+			var ui_action_sys_id = arrItem[0];
+			// load ui action parameters
+			params = this._get_ui_actions_params(gr_task, ui_action_sys_id);
+		}
+		return params;
+	},
+	
+	publishTask: function(task_sys_id) {
+		var publishResponse = {};
+		publishResponse.taskPublished = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_task = new GlideRecord(this.taskTable);
+		if(gr_task.get(task_sys_id)){
+			new Task_uiAction().uiAction_PublishDraftTasks(gr_task, 'taskOnly');
+			publishResponse.taskPublished = true;
+		}
+		return publishResponse;
+	},
+
+	_getParentTaskFields: function(gr_task, arrParentTaskFields){
+		var parentTaskId = gr_task.getValue("parent");
+		var gr_parent_task = new GlideRecordSecure(this.taskTable);
+		var lParentTasklInfo;
+		if(gr_parent_task.get(parentTaskId)){
+			lParentTasklInfo = this.api_dtech.loadObject(gr_task, arrParentTaskFields);
+		}
+		return lParentTasklInfo;
+	},
+
+	_loadPhotosForObjects: function(infoObject, fields){
+		var arrMembers = [];
+		var userInfo = new UserInfoScripts();
+		for (i=0; i < fields.length; i++) {
+			var fieldName = fields[i];
+			var field = infoObject[fieldName];
+			field.order = i;
+			if(field.value && field.value!=null && field.value!="null"){
+				field.photoInfo = userInfo.loadPhotoInfo(field.value, true);
+			}
+			arrMembers.push(field);
+		}
+		return arrMembers;
+	},
+	
+	_getSubTaskList: function(gr_task){
+		var lSubTaskInfo = {};
+		var lSubTasks = [];
+		var arrSubTaskListFields = 
+			["short_description", "state", "number"];
+		
+		var gr_subtasks = new GlideRecordSecure(this.taskTable);
+		gr_subtasks.addQuery("parent", gr_task.getUniqueValue());
+		gr_subtasks.query();
+		while(gr_subtasks.next()){
+			lSubTaskInfo = this.api_dtech.loadObject(gr_subtasks, arrSubTaskListFields);
+			// add task id after loaded
+			lSubTaskInfo.taskId = gr_subtasks.getUniqueValue();
+			lSubTasks.push(lSubTaskInfo);
+		}
+		return lSubTasks;
+	},
+
+	_getTopTaskFields: function(gr_task, arrTopTaskFields){
+		var topTaskId = gr_task.getValue("u_top_task");
+		var gr_top_task = new GlideRecordSecure(this.taskTable);
+		var lTopTasklInfo;
+		if(gr_top_task.get(topTaskId)){
+			lTopTasklInfo = this.api_dtech.loadObject(gr_task, arrTopTaskFields);
+		}
+		return lTopTasklInfo;
+	},
+	
+	// NOTE: if we can move icons to an attachment on the ui action, we could reduce this to filtering out separators and pull all list context menu actions
+	_load_context_ui_actions: function(form_ui_actions, gr_task){
+		var arrMenuItems = [];
+		var ui_action_menu_item = {};
+		var arrHCMUI = this._get_ui_actions_context_menu_array();
+		// load ui action icons
+		var ui_actions_icons = this._get_ui_actions_icons();
+		var orderCount = 0;
+		for (actionIndex=0; actionIndex < arrHCMUI.length; actionIndex++) {
+			var addAction = false;
+			var hcm_item = arrHCMUI[actionIndex];
+			if(hcm_item != "separator"){
+				var arrItem = form_ui_actions.filter(function(item){
+					return item.sys_id==hcm_item;});
+				// if the action was not returned, then the user doesn't have permsissions, don't add it
+				if(arrItem[0]){
+					addAction=true;
+					ui_action_menu_item = arrItem[0];
+					ui_action_menu_item.order = actionIndex;
+					ui_action_menu_item.image = undefined;
+					var ui_action_icon = ui_actions_icons[ui_action_menu_item.sys_id];
+					if(ui_action_icon){
+						ui_action_menu_item.image = ui_action_icon.image;
+					}
+					var params = {};
+					// load ui action parameters
+					params = this._get_ui_actions_params(gr_task, ui_action_menu_item.sys_id);
+					ui_action_menu_item.params = params;
+				}
+			} else {
+				addAction=true;
+				ui_action_menu_item = {
+					"sys_id" : "separtor" + actionIndex.toString(),
+					"name": "separator",
+					"order": actionIndex
+				};
+			}
+			if(addAction){
+				arrMenuItems.push(ui_action_menu_item);				
+			}
+		}
+		// now filter out adjacent separators
+		var prevIsSeparator = false;  // defined outside the function so it keeps a flag if the previous item is a spearator
+		arrMenuItems = arrMenuItems.filter(function(item){
+			var include=true;
+			if(prevIsSeparator && item.name=="separator"){
+				// this item and previous are both separators.  Skip and do not include
+				include = false;
+			}
+			prevIsSeparator = item.name=="separator";
+			return include;
+		});
+		// remove leading separators
+		while(arrMenuItems.length>0 && arrMenuItems[0].name=="separator"){
+			arrMenuItems.shift();
+		}
+		while(arrMenuItems.length>0 && arrMenuItems[arrMenuItems.length-1].name=="separator"){
+			arrMenuItems.pop();
+		}
+		return arrMenuItems;
+	},
+
+	// this returns an object with just the id, but could return more data later
+	// NOTE: to allow multiple requests, we would need to update this
+	_get_task_request: function(task_id, requestType, status){	
+		var requestInfo = {};
+		
+		var gr = new GlideRecordSecure(this.requestTable);
+		gr.addQuery('parent', task_id);
+		gr.addQuery('u_request_type', requestType);
+		gr.addQuery('u_status', status);
+		gr.query();
+		
+		while(gr.next()){
+			requestInfo.request_sys_id = gr.getUniqueValue();
+		}
+		return requestInfo;
+	},
+	
+	// NOTE: not sure if we want to burry this in code but, this would be how we would add the separators
+	_get_ui_actions_context_menu_array: function(){
+		var arrActions = [
+			'18b25020db9a5890dd3d6165ca961972', // "name": "Publish Task(s)", "action_name" : "publish_tasks"
+			'0187ab004f181b00303dc3818110c764', // "name": "Start Work" "action_name": "workInProgress"
+			'f97729461b96ccd0358efd16dc4bcb9e', // "name": "Request Clarification" "action_name": "openModalRequestClarificationSP"
+			'66635c24db685850dd3d6165ca9619aa', // "name": "Respond Clarification", "action_name": "openModalRespondClarificationSP"
+			'ded97a314fec5700303dc3818110c7a5', // "name": "Request Extension", "action_name": "openModalRequestExtensionSP"
+			'a8217df7db94d450dd3d6165ca961907', // "name": "Respond Extension Request", "action_name": "openModalRespondExtensionSP"
+			'403b714edbb017003a8d6be3ca961961', // "name": "Assign Task" "action_name": "assigned"
+			'7703adb74f88d700303dc3818110c784', // "name": "Accept Assignment" "action_name": "AcceptAssignment"
+			'268da9334fc8d700303dc3818110c72a', // "name": "Reject Assignment" "action_name": "rejectAssignment"
+			'caf24e87dbeda700c18c59b2ca9619f1', // "name": "Reject Task for Primary Assignee" "action_name": "rejectOUAssignment"
+			'531dde924f68d700303dc3818110c704', // "name": "Request Reassignment", "action_name": "openModalRequestReassignmentSP"
+			'c6e6e812dbd09050dd3d6165ca961990', // "name": "Respond Reassignment", "action_name": "openModalRespondReassignmentSP"
+			'3d8be97cdb58e410936dd498f496197a', // "name": "Send to Review" "action_name": "inReview"
+			'separator', // add a separator
+			'c898f2fbdb41a3c8c18c59b2ca9619e0', // "name": "Abstain", "action_name": "Abstain-SendToReview"
+			'ba139a01db732f00c18c59b2ca96193f', // "name": "Approve", "action_name": "Approve-SendToReview"
+			'ef909466db11e300c18c59b2ca96198e', // "name": "Approve & Sign", "action_name": "ApproveSign-SendToReview"
+			'77477677db41a3c8c18c59b2ca961932', // "name": "Concur", "action_name": "Concur-SendToReview"
+			'2b0abab7db81a3c8c18c59b2ca961992', // "name": "Concur & sign" "action_name": "ConcurSign-SendToReview"
+			'6ca12aa7db052f88c18c59b2ca96192a', // name: "Reject", "action_name": "Reject-Approval"
+			'3469ab804f181b00303dc3818110c77f', // "name": "Send to Review", "action_name": "inReview"
+			'fbe927c04f181b00303dc3818110c7f5', // "name": "Mark Complete" "action_name": "ClosedComplete"
+			'7e48f6f7db41a3c8c18c59b2ca961900', // "name": "NonConcur", "action_name": "NonConcur-SendToReview"
+			'5bb706e5dba33b40c448d1c2ca961983', // "name": "Nonconcur & sign" "action_name": "NonconcurSign-SendToReview"
+			'd237f7974fa28300303dc3818110c7c4', // "name": "Reopen Task", "action_name": "Reopen"
+			'baa96f804f181b00303dc3818110c74e', // "name": "Send to Rework" "action_name": "rework"
+			'separator', // add a separator
+			'9e53d1f8db02f01087f2892d139619ed', // "name": "Delete", (task) , "action_name" : "delete_tasks"
+			'separator', // add a separator
+			'addRequestAccessGuidhere' // "name": "Request Access for Member(s)"  - no guid today
+		];
+		return arrActions;
+	},
+
+	_get_ui_actions_params: function(gr_task, action_sys_id){
+		var params = {};
+		var requestInfo = {};
+		switch (action_sys_id){
+			case '9e53d1f8db02f01087f2892d139619ed': // "name": "Delete", (task), "action_name" : "delete_tasks"
+				params.action_name = "delete_tasks";
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number_name = gr_task.getDisplayValue("taskernumber") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Delete') + ' ' + params.number_name + '?';
+				break;
+			case '18b25020db9a5890dd3d6165ca961972': // "name": "Publish Task(s)", "action_name" : "publish_tasks"
+				params.action_name = "publish_tasks";
+				params.task_sys_id = gr_task.getUniqueValue();
+				// making these objects allows us to just load fields in the ui action function
+				params.state = gr_task.getValue("state");
+				params.calchaschildren = gr_task.getValue("calchaschildren");
+				params.number_name = gr_task.getDisplayValue("taskernumber") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Tasker - Title - Publish Selection for') + params.number_name;
+				break;
+			case '6ca12aa7db052f88c18c59b2ca96192a': // name: "Reject", "action_name": "Reject-Approval"
+				params.action_name = "Reject-Approval";
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.comments_dt = gr_task.getDisplayValue('comments_dt');
+				if(!params.comments_dt || params.comments_dt==null){
+					params.comments_dt = '';
+				}
+				params.number_name = gr_task.getDisplayValue("taskernumber") + ': ' + gr_task.getValue('short_description');
+				params.title = params.number_name + '?';
+				// this is tasker_type value
+				var taskType = gr_task.getDisplayValue("tasker_type.u_value");
+				var taskerTypesConstants = new TaskerTypes().getValueConstants();
+				if (taskType == taskerTypesConstants.approval_with_signature){
+					params.title = gs.getMessage('Tasker - Title - Rejection for Approval with Signature') + ' ' + params.number_name + '?';
+				} else if (taskType == taskerTypesConstants.approval) {
+					params.title = gs.getMessage('Tasker - Title - Rejection for Approval without Signature') + ' ' + params.number_name + '?';
+				}
+				break;
+			case 'd237f7974fa28300303dc3818110c7c4': // "name": "Reopen Task", "action_name": "Reopen"
+				params.action_name = "Reopen";
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.active = gr_task.getDisplayValue('active');
+				params.number = gr_task.getValue('number');
+				params.number_name = gr_task.getDisplayValue("taskernumber") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Tasker - Title - Reopen Selection for') + params.number_name;
+				// initialize parent fields
+				params.parent_sys_id = '';
+				params.parent_active = '';
+				params.parent_number = '';
+				
+				if (!gr_task.parent.nil()){
+					var arrParentTaskFields = ["sys_id", "active", "number"];
+					var lParentTasklInfo = this._getParentTaskFields(gr_task, arrParentTaskFields);
+					params.parentInfo = lParentTasklInfo;
+
+					// parent logic - also in Business Rule Tasker - Tasker - onLoad - set max routes
+					// if we do api call back in the UI Script, could remove from initial load
+					params.parent_sys_id = lParentTasklInfo["sys_id"].value;
+					params.parent_active = lParentTasklInfo["active"].display_value;
+					params.parent_number = lParentTasklInfo["number"].value;
+
+					var url = this._get_URL_for_Task_Based_on_Prefrences(params.parent_sys_id,'sp');
+					url = url + '&state=3&order=1';
+					params.reopenParentMsg = " <b>" + 
+						gs.getMessage('Tasker - Reopen Parent is not active - start') + 
+						" " + '<a href=' + url + '>' + params.parent_number + '</a>' + 
+						' ' + gs.getMessage('Tasker - Reopen Parent is not active - end') + '</b>';
+				}
+				// reopen logic - also in Business Rule Tasker - Tasker - onLoad - set max routes
+				// if we do api call back in the UI Script, could remove from initial load
+				params.closed_to_long_to_reopen = false;
+				params.ReopenMaxDays = gs.getProperty('x_153465_discovert.ReopenMaxDays');
+				params.closed_at = gr_task.closed_at;
+				var closedAt = new GlideDateTime(params.closed_at);
+				// STRY0102134 - Apply Default Schedule to Task Information
+				var maxReopenDate;
+				if(!gr_task.active){
+					var today = new GlideDateTime().getNumericValue();
+					// find the end date in the schedule
+					var tdc = new TaskerDurationCalculator();
+					maxReopenDate = 
+						tdc.calculateDateOfAddedBusinessDays(null, params.ReopenMaxDays, closedAt);
+					params.closed_to_long_to_reopen = 
+						(today > new GlideDateTime(maxReopenDate).getNumericValue());
+				}
+				params.closeTooLongMsg = params.number + ' ' + 
+					gs.getMessage('Tasker - Closed too long to reopen 1') + ' ' + 
+					params.ReopenMaxDays + ' ' + 
+					gs.getMessage('Tasker - Closed too long to reopen 2') + ' ' + 
+					params.closed_at + gs.getMessage('Tasker - Closed too long to reopen 3');
+				
+				break;
+			case 'c898f2fbdb41a3c8c18c59b2ca9619e0': // "name": "Abstain", "action_name": "Abstain-SendToReview"
+			case 'ba139a01db732f00c18c59b2ca96193f': // "name": "Approve", "action_name": "Approve-SendToReview"
+			case '77477677db41a3c8c18c59b2ca961932': // "name": "Concur", "action_name": "Concur-SendToReview"
+			case '7e48f6f7db41a3c8c18c59b2ca961900': // "name": "NonConcur", "action_name": "NonConcur-SendToReview"
+				// the common settings are grouped at the top and another case is below for the differences
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Additional Comments');
+				params.reviewer_comments = gr_task.getDisplayValue('comments_dt');
+				if(!params.reviewer_comments || params.reviewer_comments==null){
+					params.reviewer_comments = '';
+				}
+				params.reviewCommentsRequired = true;
+				params.shared = { 
+					fields: {
+						comments_dt: {
+							value: params.reviewer_comments,
+							displayValue: params.reviewer_comments,
+							sys_mandatory: true,
+							mandatory: true,
+							placeholder: params.placeHolderText,
+							readonly: false
+						}
+					}
+				};
+				
+				// the actions in this block are the same with the exception of the view and the title
+				// so, added a second switch case to make more concise
+				switch (action_sys_id){
+					case 'c898f2fbdb41a3c8c18c59b2ca9619e0': // "name": "Abstain", "action_name": "Abstain-SendToReview"
+						params.action_name = "Abstain-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Abstain') + ' ' + params.number;
+						params.view = 'Abstain_Response';
+						break;
+					case 'ba139a01db732f00c18c59b2ca96193f': // "name": "Approve", "action_name": "Approve-SendToReview"
+						params.action_name = "Approve-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Approve') + ' ' + params.number;
+						params.view = 'Accept_Response';
+						break;
+					case '77477677db41a3c8c18c59b2ca961932': // "name": "Concur", "action_name": "Concur-SendToReview"
+						params.action_name = "Concur-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Concur') + ' ' + params.number;
+						params.view = 'Accept_Response';
+						break;
+						
+					case '7e48f6f7db41a3c8c18c59b2ca961900': // "name": "NonConcur", "action_name": "NonConcur-SendToReview"
+						params.action_name = "NonConcur-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Nonconcur') + ' ' + params.number;
+						params.view = 'Reject_Response';
+						break;						
+				}
+				
+				break;
+			case 'ef909466db11e300c18c59b2ca96198e': // "name": "Approve & Sign", "action_name": "ApproveSign-SendToReview"
+			case '2b0abab7db81a3c8c18c59b2ca961992': // "name": "Concur & sign" "action_name": "ConcurSign-SendToReview"
+			case '5bb706e5dba33b40c448d1c2ca961983': // "name": "Nonconcur & sign" "action_name": "NonconcurSign-SendToReview"
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Additional Comments');
+				params.u_signature_instructions = gr_task.getDisplayValue('u_signature_instructions');
+				if(!params.u_signature_instructions || params.u_signature_instructions==null){
+					params.u_signature_instructions = '';
+				}
+				params.review_sign_comments = gr_task.getValue('comments_dt');
+				if(!params.review_sign_comments || params.review_sign_comments==null){
+					params.review_sign_comments = '';
+				}
+				
+				// STRY0120264
+				params.isSignChecked = gr_task.getValue('u_reviewer_signed');
+				params.shared = {
+					fields: {
+						u_signature_instructions: {
+							value: params.u_signature_instructions,
+							displayValue: params.u_signature_instructions, 
+							sys_mandatory: true, 
+							mandatory: true, 
+							placeholder: params.placeHolderText},
+						// STRY0120264
+						u_reviewer_signed: {value: params.isSignChecked, sys_mandatory: true, mandatory: true},
+						comments_dt: {
+							value: params.review_sign_comments, 
+							displayValue: params.review_sign_comments, 
+							sys_mandatory: true, 
+							mandatory: true}						
+					}
+				};
+				
+				// the actions in this block are the same with the exception of the view and the title
+				// so, added a second switch case to make more concise
+				switch (action_sys_id){
+					case 'ef909466db11e300c18c59b2ca96198e': // "name": "Approve & Sign", "action_name": "ApproveSign-SendToReview"
+						params.action_name = "ApproveSign-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Approve & sign Acknowledgement for') + params.number;
+						params.view = 'Confirm_Signature_Instructions';
+						break;
+					case '2b0abab7db81a3c8c18c59b2ca961992': // "name": "Concur & sign" "action_name": "ConcurSign-SendToReview"
+						params.action_name = "ConcurSign-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Concur & sign') + ' ' + params.number;
+						params.view = 'Confirm_Signature_Instructions';
+						break;
+					case '5bb706e5dba33b40c448d1c2ca961983': // "name": "Nonconcur & sign" "action_name": "NonconcurSign-SendToReview"
+						params.action_name = "NonconcurSign-SendToReview";
+						params.title = gs.getMessage('Tasker - Title - Nonconcur & sign') + ' ' + params.number;
+						params.view = 'Reject_Signature_Instructions';
+						break;
+				}
+
+				
+				break;
+			case '268da9334fc8d700303dc3818110c72a': // "name": "Reject Assignment" "action_name": "rejectAssignment"
+			case 'caf24e87dbeda700c18c59b2ca9619f1': // "name": "Reject Task for Primary Assignee" "action_name": "rejectOUAssignment"
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				
+				params.isPreCompleteShown = false;
+				if (action_sys_id=='268da9334fc8d700303dc3818110c72a'){ // "name": "Reject Assignment" "action_name": "rejectAssignment"
+					params.action_name = "rejectAssignment";
+					params.title = gs.getMessage('Tasker - Title - Reject Assignment') + ' ' + params.number;
+				} else if(action_sys_id == 'caf24e87dbeda700c18c59b2ca9619f1'){ // "name": "Reject Task for Primary Assignee" "action_name": "rejectOUAssignment"
+					params.action_name = "rejectOUAssignment";
+					params.title = gs.getMessage('Tasker - Title - Reject Primary Assignee for Task') + ' ' + params.number;
+				}
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Additional Comments');
+				params.comments = gr_task.getValue('comments');
+				if(!params.comments || params.comments==null){
+					params.comments = '';
+				}
+				params.view = 'Additional_Comments_Modal';
+				params.shared = { 
+					fields: {
+						comments: {
+							value: params.comments, 
+							displayValue: params.comments, 
+							sys_mandatory: true, 
+							mandatory: true, 
+							placeholder: params.placeHolderText}
+					}
+				};
+				
+				
+				break;
+			case '3469ab804f181b00303dc3818110c77f': // "name": "Send to Review", "action_name": "inReview"
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				params.action_name = "inReview";
+				params.isPreCompleteShown = false;
+				
+				params.title = gs.getMessage('Tasker - Title - Send to Review for Task') + ' ' + params.number;
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Response Comments');
+				params.view = 'Send_to_Review';
+				params.response_comments = gr_task.getValue('response');
+				if(!params.response_comments || params.response_comments==null){
+					params.response_comments = '';
+				}
+				params.rework_comments = gr_task.getValue('rework_comments');
+				if(!params.rework_comments || params.rework_comments==null){
+					params.rework_comments = '';
+				}
+				params.provide_response = gr_task.getValue('provide_response');
+				params.shared = { 
+					fields: {
+						response: {
+							value: params.response_comments, 
+							displayValue: params.response_comments, 
+							sys_mandatory: true, 
+							mandatory: true, 
+							placeholder: params.placeHolderText, readonly: false},
+						rework_comments: {
+							value: params.rework_comments, displayValue: params.rework_comments, sys_mandatory: false, mandatory: false},
+						provide_response: {
+							value: params.provide_response, sys_mandatory: true, mandatory: true}
+					}
+				};
+				break;
+			case 'baa96f804f181b00303dc3818110c74e': // "name": "Send to Rework" "action_name": "rework"
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				params.action_name = "rework";
+				params.isPreCompleteShown = false;
+				params.title = gs.getMessage('Tasker - Title - Send to Rework') + ' ' + params.number;
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Rework Comments');
+				params.view = 'Send_to_Rework';
+				params.response_comments = gr_task.getValue('response');
+				if(!params.response_comments || params.response_comments==null){
+					params.response_comments = '';
+				}
+				params.rework_comments = gr_task.getValue('rework_comments');
+				if(!params.rework_comments || params.rework_comments==null){
+					params.rework_comments = '';
+				}
+				params.shared = { 
+					fields: {
+						response: {value: params.response_comments, displayValue: params.response_comments, sys_mandatory: false, mandatory: false},
+						rework_comments: {value: params.rework_comments, displayValue: params.rework_comments, sys_mandatory: true, mandatory: true, placeholder: params.placeHolderText}
+					}
+				};
+				break;
+			case 'fbe927c04f181b00303dc3818110c7f5': // "name": "Mark Complete" "action_name": "ClosedComplete"
+				params.table = this.taskTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.number = gr_task.getValue('number');
+				params.action_name = "ClosedComplete";
+
+				// any user will use this button to close the task
+				params.title = gs.getMessage('Tasker - Title - Mark Complete for Task') + ' ' + params.number;
+				params.placeHolderText = gs.getMessage('Tasker - Please enter Review Comments');
+				params.view = 'Reviewer_Complete';
+				var reviewerCommentsMandatory = (gr_task.getValue('state') == "14");
+				var responseCommentsMandatory = !reviewerCommentsMandatory;
+				params.response_comments = gr_task.getValue('response');
+				if(!params.response_comments || params.response_comments==null){
+					params.response_comments = '';
+				}
+				params.reviewer_comments = gr_task.getValue('comments_dt');
+				if(!params.reviewer_comments || params.reviewer_comments==null){
+					params.reviewer_comments = '';
+				}
+				params.rework_comments = gr_task.getValue('rework_comments');
+				if(!params.rework_comments || params.rework_comments==null){
+					params.rework_comments = '';
+				}
+				params.shared = { 
+					fields: {
+						response: {value: params.response_comments, displayValue: params.response_comments, sys_mandatory: false, mandatory: responseCommentsMandatory},
+						rework_comments: {value: params.rework_comments, displayValue: params.rework_comments, sys_mandatory: false, mandatory: false},
+						comments_dt: {value: params.reviewer_comments, displayValue: params.reviewer_comments, sys_mandatory: reviewerCommentsMandatory, mandatory: reviewerCommentsMandatory}
+					}
+				};
+				
+				break;
+			case 'f97729461b96ccd0358efd16dc4bcb9e': // "name": "Request Clarification" "action_name": "openModalRequestClarificationSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRequestClarificationSP";
+				params.request_sys_id = -1;
+				params.title = gs.getMessage('Tasker - Title - Request Clarification');
+				params.view = 'requesttop';
+				params.isRequest = true;
+				params.request_type = 'Clarification';
+				params.parent = params.task_sys_id;
+				break;
+			case '66635c24db685850dd3d6165ca9619aa': // "name": "Respond Clarification", "action_name": "openModalRespondClarificationSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRespondClarificationSP";
+				params.title = gs.getMessage('Tasker - Title - Respond Clarification Request');
+				params.view = 'responsetop';
+				params.isRequest = false;
+				params.request_type = 'Clarification';
+				params.parent = '';
+				requestInfo = this._get_task_request(params.task_sys_id, params.request_type, "In Progress");
+				params.request_sys_id = requestInfo.request_sys_id;
+				break;
+			case 'ded97a314fec5700303dc3818110c7a5': // "name": "Request Extension", "action_name": "openModalRequestExtensionSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRequestExtensionSP";
+				params.request_sys_id = -1;
+				params.title = gs.getMessage('Tasker - Title - Request Extension');
+				params.view = 'requesttop';
+				params.isRequest = true;
+				params.request_type = 'Extension';
+				params.parent = params.task_sys_id;
+				break; 
+			case 'a8217df7db94d450dd3d6165ca961907': // "name": "Respond Extension Request", "action_name": "openModalRespondExtensionSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRespondExtensionSP";
+				params.title = gs.getMessage('Tasker - Title - Respond Extension Request');
+				params.view = 'responsetop';
+				params.isRequest = false;
+				params.request_type = 'Extension';
+				params.parent = '';
+				requestInfo = this._get_task_request(params.task_sys_id, params.request_type, "In Progress");
+				params.request_sys_id = requestInfo.request_sys_id;
+				break;
+			case '531dde924f68d700303dc3818110c704': // "name": "Request Reassignment", "action_name": "openModalRequestReassignmentSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRequestReassignmentSP";
+				params.request_sys_id = -1;
+				params.title = gs.getMessage('Tasker - Title - Request Reassignment');
+				params.view = 'requesttop';
+				params.isRequest = true;
+				params.request_type = 'Reassignment';
+				params.parent = params.task_sys_id;
+				break;
+			case 'c6e6e812dbd09050dd3d6165ca961990': // "name": "Respond Reassignment", "action_name": "openModalRespondReassignmentSP"
+				params.table = this.requestTable;
+				params.task_sys_id = gr_task.getUniqueValue();
+				params.action_name = "openModalRespondReassignmentSP";
+				params.title = gs.getMessage('Tasker - Title - Respond Reassignment Request');
+				params.view = 'responsetop';
+				params.isRequest = false;
+				params.request_type = 'Reassignment';
+				params.parent = '';
+				requestInfo = this._get_task_request(params.task_sys_id, params.request_type, "In Progress");
+				params.request_sys_id = requestInfo.request_sys_id;
+				break;
+			case '0187ab004f181b00303dc3818110c764': // "name": "Start Work" "action_name": "workInProgress"
+			case '403b714edbb017003a8d6be3ca961961': // "name": "Assign Task" "action_name": "assigned"
+			case '7703adb74f88d700303dc3818110c784': // "name": "Accept Assignment" "action_name": "AcceptAssignment"
+			case 'addRequestAccessGuidhere': // "name": "Request Access for Member(s)"  - no guid today
+				break;
+			default:
+				var errMsg = "Tasker - function: _get_ui_actions_params - an action was requested that isn't implemented.  UI Action sys_id: " + action_sys_id;
+				gs.addErrorMessage(errMsg);
+				break;
+		}
+		return params;
+	
+	},
+	
+	_get_URL_for_Task_Based_on_Prefrences: function(sys_id, current_view){
+		var oUserPref = new tasker_User_Form_Preferences();
+		var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(sys_id,current_view);
+		
+		var task_url;
+		task_url =  
+			'../' + url_Properties.portal_url_ref + 
+			'?id=' + url_Properties.pageId + 
+			'&table=' + this.taskTable + 
+			'&sys_id=' + sys_id +
+			'&view=' + url_Properties.view;
+
+		return task_url;
+	},	
+
+	
+	
+	_get_ui_actions_icons: function(){
+		// create an object with each action that has an icon
+		// object key is uiAction sys_id, name comment added to make it easier to match sys_id to image
+		// NOTE: this also contains the actoin name.  This allows us to use the array to find the sys_id for an action name
+		var uiActionsIcons = {
+			'c898f2fbdb41a3c8c18c59b2ca9619e0':{ // "name": "Abstain", "action_name": "Abstain-SendToReview"
+				"action_name": "Abstain-SendToReview",
+				"image": "Placeholder16.svg"},
+			'ba139a01db732f00c18c59b2ca96193f':{ // "name": "Approve", "action_name": "Approve-SendToReview"
+				"action_name": "Approve-SendToReview",
+				"image": "Placeholder16.svg"},
+			'ef909466db11e300c18c59b2ca96198e':{ // "name": "Approve & Sign", "action_name": "ApproveSign-SendToReview"
+				"action_name": "ApproveSign-SendToReview",
+				"image": "Placeholder16.svg"},
+
+
+			'403b714edbb017003a8d6be3ca961961': { // "name": "Assign Task" "action_name": "assigned"
+				"action_name": "assigned",
+				"image": "x_153465_discovert.Assign16.svg"},
+			'7703adb74f88d700303dc3818110c784': { // "name": "Accept Assignment" "action_name": "AcceptAssignment"
+				"action_name": "AcceptAssignment",
+				"image": "x_153465_discovert.AcceptAssign16.svg"},
+
+			'77477677db41a3c8c18c59b2ca961932':{ // "name": "Concur", "action_name": "Concur-SendToReview"
+				"action_name": "Concur-SendToReview",
+				"image": "Placeholder16.svg"},
+			'2b0abab7db81a3c8c18c59b2ca961992':{ // "name": "Concur & sign" "action_name": "ConcurSign-SendToReview"
+				"action_name": "ConcurSign-SendToReview",
+				"image": "Placeholder16.svg"},
+
+			'9e53d1f8db02f01087f2892d139619ed': { // "name": "Delete", (task), "action_name" : "delete_tasks"
+				"action_name" : "delete_tasks",
+				"image": "x_153465_discovert.DeleteTask16.svg"},
+			
+			'fbe927c04f181b00303dc3818110c7f5': { // "name": "Mark Complete" "action_name": "ClosedComplete"
+				"action_name": "ClosedComplete",
+				"image": "x_153465_discovert.CompleteTask16.svg"},
+
+			'7e48f6f7db41a3c8c18c59b2ca961900':{ // "name": "NonConcur", "action_name": "NonConcur-SendToReview"
+				"action_name": "NonConcur-SendToReview",
+				"image": "Placeholder16.svg"},
+			'5bb706e5dba33b40c448d1c2ca961983':{ // "name": "Nonconcur & sign" "action_name": "NonconcurSign-SendToReview"
+				"action_name": "NonconcurSign-SendToReview",
+				"image": "Placeholder16.svg"},
+
+			'18b25020db9a5890dd3d6165ca961972': { // "name": "Publish Task(s)", "action_name" : "publish_tasks"
+				"action_name" : "publish_tasks",
+				"image": "x_153465_discovert.Publish16.svg"},
+			'6ca12aa7db052f88c18c59b2ca96192a': { // name: "Reject", "action_name": "Reject-Approval"
+				"action_name": "Reject-Approval",
+				"image": "x_153465_discovert.Reject16.svg"},
+			'268da9334fc8d700303dc3818110c72a': { // "name": "Reject Assignment" "action_name": "rejectAssignment"
+				"action_name": "rejectAssignment",
+				"image": "x_153465_discovert.RejectAssign16.svg"},
+			'caf24e87dbeda700c18c59b2ca9619f1': { // "name": "Reject Task for Primary Assignee" "action_name": "rejectOUAssignment"
+				"action_name": "rejectOUAssignment",
+				"image": "x_153465_discovert.RejectTask16.svg"},
+			'd237f7974fa28300303dc3818110c7c4': { // "name": "Reopen Task", "action_name": "Reopen"
+				"action_name": "Reopen",
+				"image": "x_153465_discovert.Reopen16.svg"},
+			'addRequestAccessGuidhere': { // "name": "Request Access for Member(s)"  - no guid today
+				"image": "Placeholder16.svg"},
+			'f97729461b96ccd0358efd16dc4bcb9e': { // "name": "Request Clarification" "action_name": "openModalRequestClarificationSP"
+				"action_name": "openModalRequestClarificationSP",
+				"image": "x_153465_discovert.RequestClarification16.svg"},
+			'66635c24db685850dd3d6165ca9619aa': { // "name": "Respond Clarification", "action_name": "openModalRespondClarificationSP" NOTE: using same image as request.
+				"action_name": "openModalRespondClarificationSP",
+				"image": "x_153465_discovert.RequestClarification16.svg"},
+			
+			'ded97a314fec5700303dc3818110c7a5': { // "name": "Request Extension", "action_name": "openModalRequestExtensionSP"
+				"action_name": "openModalRequestExtensionSP",
+				"image": "Placeholder16.svg"},
+			'a8217df7db94d450dd3d6165ca961907': { // "name": "Respond Extension Request", "action_name": "openModalRespondExtensionSP"
+				"action_name": "openModalRespondExtensionSP",
+				"image": "Placeholder16.svg"},
+			
+			
+			
+			'531dde924f68d700303dc3818110c704': { // "name": "Request Reassignment", "action_name": "openModalRequestReassignmentSP"
+				"action_name": "openModalRequestReassignmentSP",
+				"image": "x_153465_discovert.Reassign16.svg"},
+			
+			'c6e6e812dbd09050dd3d6165ca961990': { // "name": "Respond Reassignment", "action_name": "openModalRespondReassignmentSP" NOTE: using same image as request.
+				"action_name": "openModalRespondReassignmentSP",
+				"image": "x_153465_discovert.Reassign16.svg"},
+
+			
+			
+			'3469ab804f181b00303dc3818110c77f':{ // "name": "Send to Review", "action_name": "inReview"
+				"action_name": "inReview",
+				"image": "x_153465_discovert.SendForReview16.svg"},			
+			'baa96f804f181b00303dc3818110c74e': { // "name": "Send to Rework" "action_name": "rework"
+				"action_name": "rework",
+				"image": "x_153465_discovert.SendForRework16.svg"},
+			'0187ab004f181b00303dc3818110c764': { // "name": "Start Work" "action_name": "workInProgress"
+				"action_name": "workInProgress",
+				"image": "x_153465_discovert.Start16.svg"}			
+		};
+		return uiActionsIcons;
+	},
 	
     type: 'api_tasker_task'
 };]]></script>
@@ -257,13 +1143,13 @@ api_tasker_task.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-11 12:37:05</sys_created_on>
         <sys_id>2915c2101b4471503ed2eb93b24bcbe3</sys_id>
-        <sys_mod_count>43</sys_mod_count>
+        <sys_mod_count>166</sys_mod_count>
         <sys_name>api_tasker_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_2915c2101b4471503ed2eb93b24bcbe3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-08-14 17:31:54</sys_updated_on>
+        <sys_updated_on>2023-09-07 19:37:45</sys_updated_on>
     </sys_script_include>
 </record_update>

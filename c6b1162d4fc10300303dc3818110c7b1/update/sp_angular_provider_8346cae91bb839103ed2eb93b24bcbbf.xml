@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
+    <sp_angular_provider action="INSERT_OR_UPDATE">
+        <name>dtechActions</name>
+        <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
+Note: AngularJS normalizes case-sensitive camelCase to case-insensitive kebab-case for the DOM.
+Usage in a widget's HTML:
+	<dtech-actions 
+		dtech-task-title = "getTitle(item);"
+		dtech-actions-object = "data.loadedActionsOjbects[item.sys_id]"
+			NOTE: This outlines the Actions Object
+		dtech-is-modal="data.isModal"
+        table="{{data.table}}"
+        task-sys-id="{{item.sys_id}}">
+	</dtech-actions>
+
+
+	The HTML for the directive is in	
+	templateUrl: getTemplateUrl('x_153465_discovert_dtechActions.html')
+//
+// Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Script Continued Below
+//
+*/
+function dtechActions(getTemplateUrl, spModal, spUtil, $timeout) {
+	// increase since this is a click and not a hover
+	var CONST_TEMP_WAIT_ACTIONS = 1200; // 600;
+	
+	// reduced to near zero since this is a click, not a hover
+	var CONST_POPOVER_DELAY = 100; // 1200;
+	
+	var dtActions = {
+		restrict: 'E',
+		replace: true,
+		// @: string 1 way, =: object 2 way, <: object 1 way
+		scope: {
+			dtechTaskTitle: "<?",
+			dtechActionsObject: "=",
+			dtechField: "<",
+			dtechShowLabel: "<?",
+			dtechIsModal: "=",
+			loadTaskActions: "=",
+			table: '@',
+			taskSysId: '@'
+		},
+		controller: actionsCtrl,
+		link: link,
+		controllerAs: 'd',
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechActions.html')
+	};
+	return dtActions;
+
+	function actionsCtrl($scope, $rootScope, spModal, spUtil, $attrs, $animate, dtechTaskService) {
+		var d = this;	
+		var g_form;
+
+		d._isOverTooltip = false;
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added, init to false
+		d._isClosing = false;
+		
+		d.dtechActionsToolTipOpen = _dtechActionsToolTipOpen;
+		d.dtechTaskTitle = _dtechTaskTitle;
+		d.dtechField = _dtechField;
+		d.dtechShowLabel = _dtechShowLabel;		
+		
+		// passed in data section
+		d.dtechIsModal = _dtechIsModal;
+		
+		// directive's functional section
+		d.enterTooltip = _enterTooltip;
+		d.init = _init;
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added
+		d.initTooltip = _initTooltip;
+		
+		d.leaveTooltip = _leaveTooltip;
+		d.executeAction = _executeAction;
+		d.parentMouseLeave = _parentMouseLeave;
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added to set popover-popup-delay in the HTML
+		d.popoverDelay = _popoverDelay;
+		
+		d.showActions = _showActions;
+
+		function _dtechField(value){
+			return $scope.dtechField;
+		}
+
+		function _dtechShowLabel(value){
+			return $scope.dtechShowLabel;
+		}
+		
+		function _dtechTaskTitle(value){
+			return $scope.dtechTaskTitle;
+		}
+
+		function _dtechIsModal() {
+			return $scope.dtechIsModal;
+		}
+		
+		function _dtechActionsToolTipOpen(){
+			return $scope.dtechActionsToolTipOpen;
+		}
+
+		// when the user hovers over the tooltip set overtooltip flag
+		function _enterTooltip() {
+			d._isOverTooltip = true;
+		}
+
+
+		function _executeActionWithParameters(action, params) {
+			switch (action.action_name){
+				// abstain
+				case "Abstain-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.abstain(spModal, spUtil, g_form, params);
+					break;
+				// approve
+				case "Approve-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.approve(spModal, spUtil, g_form, params);
+					break;
+				// approveSign
+				case "ApproveSign-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.approveSign(spModal, spUtil, g_form, params);
+					break;
+				// concur
+				case "Concur-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.concur(spModal, spUtil, g_form, params);
+					break;
+				// concurSign
+				case "ConcurSign-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.concurSign(spModal, spUtil, g_form, params);
+					break;
+				// confirmDeleteTask
+				case "delete_tasks":
+					x_153465_discovert.DTech_Task_Actions.confirmDeleteTask(spModal, params);
+					break;
+				// confirmPublishDraftTasks
+				case "publish_tasks":
+					// NOTE: this will only return true if the publish task api should be called
+					var callPublishTask = x_153465_discovert.DTech_Task_Actions.confirmPublishDraftTasks(spModal, spUtil, g_form, params);
+					if(callPublishTask){
+						var publishObj = {};
+						publishObj.task_sys_id = params.task_sys_id;
+						dtechTaskService.publishTask(publishObj);
+					}
+					break;
+				// confirmReopenTasks
+				case "Reopen":
+					x_153465_discovert.DTech_Task_Actions.confirmReopenTasks(spModal, spUtil, g_form, params);
+					break;
+				// markComplete
+				case 'ClosedComplete':
+					x_153465_discovert.DTech_Task_Actions.markComplete(spModal, spUtil, g_form, params);
+					break;					
+				// nonconcur
+				case "NonConcur-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.nonconcur(spModal, spUtil, g_form, params);
+					break;
+				// nonconcurSign
+				case "NonconcurSign-SendToReview":
+					x_153465_discovert.DTech_Task_Actions.nonconcurSign(spModal, spUtil, g_form, params);
+					break;
+				// rejectAssignment
+				case 'rejectAssignment':
+					x_153465_discovert.DTech_Task_Actions.rejectAssignment(spModal, spUtil, g_form, params);
+					break;
+				// rejectOUAssignment
+				case 'rejectOUAssignment':
+					x_153465_discovert.DTech_Task_Actions.rejectOUAssignment(spModal, spUtil, g_form, params);
+					break;
+				// rejectTask
+				case "Reject-Approval":
+					x_153465_discovert.DTech_Task_Actions.rejectTask(spModal, spUtil, g_form, params);
+					break;
+				// requestClarification
+				case 'openModalRequestClarificationSP':
+					x_153465_discovert.DTech_Task_Actions.requestClarification(spModal, spUtil, g_form, params);
+					break;
+				// requestExtension
+				case 'openModalRequestExtensionSP':
+					x_153465_discovert.DTech_Task_Actions.requestExtension(spModal, spUtil, g_form, params);
+					break;
+				// requestReassignment
+				case 'openModalRequestReassignmentSP':
+					x_153465_discovert.DTech_Task_Actions.requestReassignment(spModal, spUtil, g_form, params);
+					break;
+				// respondToClarificationRequest
+				case 'openModalRespondClarificationSP':
+					x_153465_discovert.DTech_Task_Actions.respondToClarificationRequest(spModal, spUtil, g_form, params);
+					break;
+				// respondToExtensionRequest
+				case 'openModalRespondExtensionSP':
+					x_153465_discovert.DTech_Task_Actions.respondToExtensionRequest(spModal, spUtil, g_form, params);
+					break;
+				// respondToReassignmentRequest
+				case 'openModalRespondReassignmentSP':
+					x_153465_discovert.DTech_Task_Actions.respondToReassignmentRequest(spModal, spUtil, g_form, params);
+					break;
+				// sendToReview
+				case 'inReview':
+					x_153465_discovert.DTech_Task_Actions.sendToReview(spModal, spUtil, g_form, params);
+					break;
+				// sendToRework
+				case 'rework':
+					x_153465_discovert.DTech_Task_Actions.sendToRework(spModal, spUtil, g_form, params);
+					break;
+				default:
+					var errMsg = action.name + " - not implemented.  Please report as an issue.";
+					if(spUtil){
+						spUtil.addErrorMessage(errMsg);
+					} else if(g_form){
+						g_form.addErrorMessage(errMsg);
+					}
+					break;
+			}
+		}
+		
+		// executeAction()
+		// this function is called from Template html
+		// it is called when a user clicks on the open link
+		function _executeAction(event, action) {
+			d.isSpinnerShown = true;
+			dtechTaskService.getUIActionParametersByActionName($scope.taskSysId, action.action_name).then(
+				function(response){
+					var params = response.actionParameters;
+					_executeActionWithParameters(action, params);
+					d.isSpinnerShown = false;
+				});
+			event.stopPropagation();
+		}
+		
+		// init()
+		// initialize the control, called from the Link function
+		// gets a reference to the element
+		function _init(element) {
+			
+			d.$element = element;
+			
+			$scope.dtechActionsToolTipOpen = 
+				angular.isDefined($attrs.enterTooltip) ?
+				$scope.$parent.$eval($attrs.dtechActionsToolTipOpen) : false;
+			
+			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set to const
+			d.popoverDelay = CONST_POPOVER_DELAY;
+		}
+
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
+		function _initTooltip() {
+			// if the user moved off of the parent before the tooltip opened, cancel the open
+			if (d._isClosing == true) {
+				_leaveTooltip();
+				// d._isClosing = false;
+			}
+		}
+
+		function _leaveTooltip() {
+			d._isOverTooltip = false;
+			$scope.dtechActionsToolTipOpen = false;
+			
+			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set true
+			d._isClosing = true;
+		}
+
+		// _parentMouseLeave
+		// this is the get function for the direcitve property parentMouseLeave
+		// this function is called when the user hovers off the profile image
+		function _parentMouseLeave() {
+			$timeout(function() {
+				if(!d._isOverTooltip){
+					d.leaveTooltip();
+				}
+			}, CONST_TEMP_WAIT_ACTIONS);
+		}
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
+		function _popoverDelay() {
+			return d.popoverDelay;
+		}
+		
+		function _showActions(event) {
+			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set false
+			d._isClosing = false;
+			
+			$scope.dtechActionsToolTipOpen = true;
+			
+			var ActionsObject = $scope.dtechActionsObject;
+			if(!ActionsObject){
+				ActionsObject = {};
+				ActionsObject.taskId = $scope.taskSysId;
+				// unlike others, always load actions as the task could have changed states
+				//ActionsObject.loaded = false;
+			}
+			d.isSpinnerShown = true;
+			$scope.loadTaskActions();
+			d.isSpinnerShown = false;
+
+			$scope.dtechActionsToolTipOpen = true;
+		}		
+	} // end function actionsCtrl
+	
+	// Link function links local methods to parent controller methods
+	// see the list of events being monitored
+	function link(scope, element, attrs, actionsCtrl) {
+		// initialize the control
+		actionsCtrl.init(element);
+		scope.$on('$destroy',_destroy);
+		// get the location of the element hovering over
+		function _destroy() {
+			element.remove();
+		}
+	}
+
+}]]></script>
+        <sys_class_name>sp_angular_provider</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-08-21 16:41:16</sys_created_on>
+        <sys_id>8346cae91bb839103ed2eb93b24bcbbf</sys_id>
+        <sys_mod_count>52</sys_mod_count>
+        <sys_name>dtechActions</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_angular_provider_8346cae91bb839103ed2eb93b24bcbbf</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-09-08 03:45:57</sys_updated_on>
+        <type>directive</type>
+    </sp_angular_provider>
+</record_update>

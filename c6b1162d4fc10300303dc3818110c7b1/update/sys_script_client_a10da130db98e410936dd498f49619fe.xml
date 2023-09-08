@@ -5,6 +5,7 @@
         <condition/>
         <description>Display a modal that accepts reviewer comments, details will vary based on a form action. Some form actions will show a Pre-Complete template that warns about automatically marking subtasks as complete as well.&#13;
 However, if task has no subtasks then no need for the Pre-Complete template to be shown.&#13;
+2.8.5 | 2023-09-07 | raj  | STRY0136615 - STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control&#13;
 2.8.0 | 2022-08-11 |raj |  DFCT0011152 - Reviewer comments does NOT display when user "Approve and Sign" or "Concur and sign" a task/template task &#13;
 2.8 | 2022-06-27 | raj | STRY0123191 - Warning Modal- Rejecting an Approval Subtask will close all "Approval Dependent Tasks" &#13;
 - removed reject from the modal open&#13;
@@ -57,43 +58,10 @@ Tasker - Modal Save Changes Message</messages>
 // STRY0079375
 function onSubmit() {
 	try{
-		// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-		var isPreCompleteShown = true;
-		// If task has no subtasks then no need for the Pre-Complete template to be shown, set to false
-		if (g_scratchpad.calchaschildren == 0) {
-			isPreCompleteShown = false;
-		}
-		
-		var table = 'x_153465_discovert_route_task_instance';
-		//var taskNumber = g_form.getValue('number');
-		var taskerNumber = g_scratchpad.taskerNumber;
-		var nonconcur_confirmation;
-		var currentUser = g_user.getFullName();
-		var comments= '';
-		var review_sign_comments = '';
-		var commentsRequired = false;
-		var reviewCommentsRequired = false;
-		var response_comments = '';	
-		var reviewer_comments = '';
-		var rework_comments = '';
-		var provide_response = '';
-		
-		var signCheckRequired = false;
-		// STRY0120264
-		var isSignChecked = false;
-		var u_signature_instructions = g_form.getValue('u_signature_instructions') + '';
-		var formAction = '';
-		var shared = {};
 
-		var title = '';
-		var btnLabel = '';
-		var formErrorMsg = '';
-		var view = '';
-		// this is the same for all
-		var placeHolderText = '';
-		
+		var formAction = '';
 		formAction = g_form.getActionName();
-		
+
 		if (formAction == 'Abstain-SendToReview'
 			|| formAction == 'Approve-SendToReview' 
 			|| formAction == 'ApproveSign-SendToReview' 
@@ -108,318 +76,102 @@ function onSubmit() {
 			|| formAction == 'rejectAssignment' 
 			|| formAction == 'rejectOUAssignment' 
 			|| formAction == 'rework') {
-			// If the form is dirty, ask the user if they would like to save the record
-			var saveChangeConfirmation = false;
-			var saveMsg = getMessage('Tasker - Modal Save Changes Message');
-			if(typeof spModal != 'undefined'){
-				var serializeChanges = g_form.serialize(true);
-				if(serializeChanges.length>0){
-					var changeFieldList = [];
-					for (var field in serializeChanges) {
-						changeFieldList.push(serializeChanges[field].label.trim());
-					}
-					var fMsg = "  " + changeFieldList.join(', ');					
-					saveMsg += fMsg;
-					saveChangeConfirmation = true;
-				}
-			} else if (typeof spModal == 'undefined' && g_form.modified) {
-				saveMsg += JSON.stringify(g_form.modifiedFields);
-				saveChangeConfirmation = true;
-			}
 
-			// use the variable set above here to show confirmation message.
-			if(saveChangeConfirmation){				
-				if(confirm(saveMsg)){
-					g_form.save();
-				} else{
-					return false;
-				}
-			}
-			switch (formAction) {
-				case 'Abstain-SendToReview':
-					title = getMessage('Tasker - Title - Abstain') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Abstain_Response';
-					reviewer_comments = g_form.getValue('comments_dt');
-					reviewCommentsRequired = true;
-					break;
-				case 'Approve-SendToReview':
-					title = getMessage('Tasker - Title - Approve') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Accept_Response';
-					reviewer_comments = g_form.getValue('comments_dt');
-					reviewCommentsRequired = true;
-					break;
-				case 'Concur-SendToReview':
-					title = getMessage('Tasker - Title - Concur') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Accept_Response';
-					reviewer_comments = g_form.getValue('comments_dt');
-					reviewCommentsRequired = true;
-					break;
-				case 'NonConcur-SendToReview': 
-					title = getMessage('Tasker - Title - Nonconcur') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Reject_Response';
-					reviewer_comments = g_form.getValue('comments_dt');
-					reviewCommentsRequired = true;
-					break;
-				// STRY0123191
-				// case 'Reject-SendToReview':
-				//	// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-				//	isPreCompleteShown = false;
-				//	
-				//	if (g_scratchpad.taskType == 'Approval with signature'){
-				//		title = getMessage('Tasker - Title - Rejection for Approval with Signature') + ' ' + taskerNumber;
-				//	} else if (g_scratchpad.taskType == 'Approval') {  // STRY0116490 TODO 2.8 - this needs to move into a type value and a type display for multi-language support
-				//		title = getMessage('Tasker - Title - Rejection for Approval without Signature') + ' ' + taskerNumber;
-				//	}
-				//	placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-				//	view = 'Reject_Response';
-				//	reviewer_comments = g_form.getValue('comments_dt');
-				//	reviewCommentsRequired = true;
-				//	break;
-				case 'rejectAssignment':
-					// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-					isPreCompleteShown = false;
-					
-					title = getMessage('Tasker - Title - Reject Assignment') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					comments= g_form.getValue('comments') + '';
-					commentsRequired = true;
-					break;
-				case 'rejectOUAssignment':
-					// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-					isPreCompleteShown = false;
-					
-					title = getMessage('Tasker - Title - Reject Primary Assignee for Task') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					comments= g_form.getValue('comments') + '';
-					commentsRequired = true;
-					break;
-				case 'NonconcurSign-SendToReview': 
-					title = getMessage('Tasker - Title - Nonconcur & sign') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Reject_Signature_Instructions';
-					// STRY0120264
-					isSignChecked = g_form.getValue('u_reviewer_signed');
-					signCheckRequired = true;
-					review_sign_comments = g_form.getValue('comments_dt');
-					break;
-				case 'ApproveSign-SendToReview': 
-					title = getMessage('Tasker - Title - Approve & sign Acknowledgement for') + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Confirm_Signature_Instructions';
-					// STRY0120264
-					isSignChecked = g_form.getValue('u_reviewer_signed');
-					signCheckRequired = true;
-					review_sign_comments = g_form.getValue('comments_dt');
-					break;
-				case 'ConcurSign-SendToReview':
-					title = getMessage('Tasker - Title - Concur & sign') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Additional Comments');
-					view = 'Confirm_Signature_Instructions';
-					// STRY0120264
-					isSignChecked = g_form.getValue('u_reviewer_signed');
-					signCheckRequired = true;
-					review_sign_comments = g_form.getValue('comments_dt');
-					break;
-				case 'inReview':
-					// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-					isPreCompleteShown = false;
-					
-					title = getMessage('Tasker - Title - Send to Review for Task') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Response Comments');
-					view = 'Send_to_Review';
-					response_comments = g_form.getValue('response');
-					rework_comments = g_form.getValue('rework_comments');
-					// DFCT0011152
-					provide_response = false;
-					if(g_form.getControl('provide_response')){
-						provide_response = g_form.getValue('provide_response');
-					}
-					shared = { 
-						fields: {
-							response: {value: response_comments, displayValue: response_comments, sys_mandatory: true, mandatory: true, placeholder: placeHolderText, readonly: false}, 
-							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: false, mandatory: false},
-							provide_response: {value: provide_response, sys_mandatory: true, mandatory: true}
-						}
-					};
-					break;
-				case 'rework':
-					// 2.7.0 | 2021-10-18 | mmcc |  STRY0108860 - DIA- Completed from Top Task Notification
-					isPreCompleteShown = false;
-					
-					title = getMessage('Tasker - Title - Send to Rework') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Rework Comments');
-					view = 'Send_to_Rework';
-					response_comments = g_form.getValue('response');
-					rework_comments = g_form.getValue('rework_comments');
-					shared = { 
-						fields: {
-							response: {value: response_comments, displayValue: response_comments, sys_mandatory: false, mandatory: false},
-							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: true, mandatory: true, placeholder: placeHolderText}
-						}
-					};
-
-					break;
-				case 'ClosedComplete':
-					// any user will use this button to close the task
-					title = getMessage('Tasker - Title - Mark Complete for Task') + ' ' + taskerNumber;
-					placeHolderText = getMessage('Tasker - Please enter Review Comments');
-					view = 'Reviewer_Complete';
-					var reviewerCommentsMandatory = (g_form.getValue('state') == "14");
-					var responseCommentsMandatory = !reviewerCommentsMandatory;
-					response_comments = g_form.getValue('response');					
-					reviewer_comments = g_form.getValue('comments_dt');
-					rework_comments = g_form.getValue('rework_comments');
-					shared = { 
-						fields: {
-							response: {value: response_comments, displayValue: response_comments, sys_mandatory: false, mandatory: responseCommentsMandatory},
-							rework_comments: {value: rework_comments, displayValue: rework_comments, sys_mandatory: false, mandatory: false},
-							comments_dt: {value: reviewer_comments, displayValue: reviewer_comments, sys_mandatory: reviewerCommentsMandatory, mandatory: reviewerCommentsMandatory}
-						}
-					};
-					break;
-				default:
-					// if you got here then none of the UI Actions being handled in the modal have fired
-					return;
-				}
-			if(reviewCommentsRequired){
-				reviewer_comments = g_form.getValue('comments_dt');
-				shared = { 
-					fields: {
-						comments_dt: {value: reviewer_comments, 
-									displayValue: reviewer_comments, 
-									sys_mandatory: true, mandatory: true, 
-									placeholder: placeHolderText, 
-									readonly: false}, 
-					}					
-				};
-			}
-
-			if(commentsRequired){
-				view = 'Additional_Comments_Modal';
-				shared = { 
-					fields: {
-						comments: {value: comments, 
-								displayValue: comments, 
-								sys_mandatory: true, 
-								mandatory: true, 
-								placeholder: placeHolderText}
-					}
-				};
-			}
-			if(signCheckRequired){
-				shared = { 
-					fields: {
-						u_signature_instructions: {value: u_signature_instructions, 
-												displayValue: u_signature_instructions, 
-												sys_mandatory: true, 
-												mandatory: true, 
-												placeholder: placeHolderText},
-						// STRY0120264
-						u_reviewer_signed: {value: isSignChecked, sys_mandatory: true, mandatory: true},
-						comments_dt: {value: review_sign_comments, 
-									displayValue: review_sign_comments, 
-									sys_mandatory: true, 
-									mandatory: true}						
-					}
-				};
-			}
+			var task_id = g_form.getUniqueValue();
 			
-			if (typeof spModal != 'undefined' ) {
+			var saveMsg = getMessage('Tasker - Modal Save Changes Message');
 
-				spModal.open({
-					title: title,
-					message:'',
-					backdrop:'static',
-					widget: 'tasker_modal_additional_information',
-					widgetInput: {
-						table: table, 
-						sys_id: g_form.getUniqueValue(), 
-						view: view, 
-						//disableUIActions: "true",
-						//omitHeaderOptions: 'true',
-						hideRelatedLists: true,
-						omitHeader: 'true',
-						hideAttachmentBtn: true,
-						isModal: true,
-						isPreCompleteShown: isPreCompleteShown 
-					},
-					shared: shared,
-					size:'lg',
-					buttons: [],
-					// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
-					footerStyle: {
-						'display': 'none'
-					}
+			var _spModal;
+			if(typeof spModal != 'undefined'){
+				_spModal = spModal;
+			}
+			var _spUtil;
+			if(typeof spUtil != 'undefined'){
+				_spUtil = spUtil;
+			}
+
+			if(x_153465_discovert.DTech_Task_Actions==undefined){
+				ScriptLoader.getScripts(['x_153465_discovert.DTech_Task_Actions.jsdbx'], function() {
+					_requestParameters(task_id, formAction, handleFormAction);
 				});
 			} else {
-				// This callback is no longer needed.  
-				// The Modals have been updated to include UI Actions that are submitted in the Modal
-				// In addition, Save has been implemented to save the form before opening the modal.  
-				// So, there is no need for a callback
-				var modalForm = new GlideModalForm(title, 'x_153465_discovert_route_task_instance', modalCompleteCallback);
-				//modalForm.setCompletionCallback(modalCompleteCallback);
-				modalForm.setSysID(g_form.getUniqueValue());
-				modalForm.addParm('sysparm_view',view);
-				modalForm.addParm("sysparm_view_forced", true);
-				modalForm.addParm('sysparm_form_only', 'true');
-				modalForm.on("beforeclose", modalCloseCallback);
-				if(view == 'Additional_Comments_Modal'){
-					modalForm.setPreference("sysparm_comments", comments);
-					modalForm.render();
-					if((g_form.getValue('comments') + '')== ''){
-						g_form.showFieldMsg('comments', placeHolderText, 'error', true);
-						return false;
-					}
-				} else if(view == 'Confirm_Signature_Instructions'){
-					modalForm.setPreference("sysparm_u_signature_instructions", u_signature_instructions);
-					modalForm.setPreference("sysparm_comments_dt", review_sign_comments);
-					modalForm.render();
-					return false;
-				} else if(view == 'Reject_Signature_Instructions'){
-					modalForm.setPreference("sysparm_u_signature_instructions", u_signature_instructions);
-					modalForm.setPreference("sysparm_comments_dt", review_sign_comments);
-					modalForm.render();
-					return false;
-				} else if(view == 'Send_to_Review'){
-					modalForm.setPreference("sysparm_response", response_comments);
-					modalForm.setPreference("sysparm_rework_comments", rework_comments);
-					modalForm.render();
-				} else if(view == 'Reject_Response'){
-					modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
-					modalForm.render();
-				} else if(view == 'Accept_Response'){
-					modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
-					modalForm.render();
-				} else if(view == 'Abstain_Response'){
-					modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
-					modalForm.render();
-				} else if(view == 'Send_to_Rework'){
-					modalForm.setPreference("sysparm_response", response_comments);
-					modalForm.setPreference("sysparm_rework_comments", rework_comments);
-					modalForm.render();
-				} else if(view == 'Reviewer_Complete'){
-					modalForm.setPreference("sysparm_response", response_comments);
-					modalForm.setPreference("sysparm_comments_dt", reviewer_comments);
-					modalForm.setPreference("sysparm_rework_comments", rework_comments);
-					modalForm.render();
-				}
+				_requestParameters(task_id, formAction, handleFormAction);
 			}
 			return false;
 		}
-		
 	}catch(e){
 		jslog(e);
 		return false;
 	}
-	// This is no longer needed.  The Modals have been updated to include UI Actions that are submitted in the Modal
-	// In addition, Save has been implemented to save the form before opening the modal.  
-	// So, there is no need for a callback
-	function modalCompleteCallback (action_verb, sys_id, table, displayValue){
-		g_form.submit();
+	
+	function handleFormAction(response){
+		var params = {};
+		var sParams = response.responseXML.documentElement.getAttribute("answer");
+		params = JSON.parse(sParams);
+
+		try{
+			var userCancelled = false;
+			userCancelled = x_153465_discovert.DTech_Task_Actions.checkChangesAndConfirmChange(_spModal, g_form, saveMsg);
+			// stop only if the user cancelled
+			if(userCancelled){
+				return false;
+			}
+
+			switch (formAction) {
+				case 'Abstain-SendToReview':
+					x_153465_discovert.DTech_Task_Actions.abstain(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'Approve-SendToReview':
+					x_153465_discovert.DTech_Task_Actions.approve(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'Concur-SendToReview':
+					x_153465_discovert.DTech_Task_Actions.concur(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'NonConcur-SendToReview':
+					x_153465_discovert.DTech_Task_Actions.nonconcur(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'ApproveSign-SendToReview': 
+					x_153465_discovert.DTech_Task_Actions.approveSign(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'ConcurSign-SendToReview':
+					x_153465_discovert.DTech_Task_Actions.concurSign(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'NonconcurSign-SendToReview': 
+					x_153465_discovert.DTech_Task_Actions.nonconcurSign(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'rejectAssignment':
+					x_153465_discovert.DTech_Task_Actions.rejectAssignment(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'rejectOUAssignment':
+					x_153465_discovert.DTech_Task_Actions.rejectOUAssignment(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'inReview':
+					x_153465_discovert.DTech_Task_Actions.sendToReview(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'rework':
+					x_153465_discovert.DTech_Task_Actions.sendToRework(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				case 'ClosedComplete':
+					x_153465_discovert.DTech_Task_Actions.markComplete(_spModal, _spUtil, g_form, params, modalCloseCallback);
+					break;
+				default:
+					break;
+			}
+			return false;
+
+		}catch(e){
+			jslog(e);
+			return false;
+		}
+	}
+	
+	//NOTE: this may move out into another file to handle all rest calls from UI Script
+	function _requestParameters(task_id, action_name, callback){
+		var ajax  = new GlideAjax('ClientTaskInfo');
+		ajax.addParam('sysparm_name', 'getTaskUIActionParamaters');
+		ajax.addParam('sysparm_task_id', task_id);
+		ajax.addParam('sysparm_action_name', action_name);
+		ajax.getXML(callback);
 	}
 	
 	// STRY0089452, STRY0089339, STRY0089338, STRY0089337, STRY0089336
@@ -427,7 +179,6 @@ function onSubmit() {
 		var iframe = this.$window.find("#dialog_frame")[0];
 		var iframeWindow = iframe.contentWindow ? iframe.contentWindow :iframe.contentDocument.defaultView;
 		var m_form = iframeWindow.g_form;
-		var taskerNumber = g_scratchpad.taskerNumber;
 		if(m_form.modified && confirm(getMessage('Tasker - Modal Save Changes Message'))){
 			for (var field in m_form.modifiedFields) {
 				var fieldName = field + ''; 
@@ -436,7 +187,7 @@ function onSubmit() {
 			}
 			g_form.save();
 		}
-			
+
 	}
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
@@ -445,7 +196,7 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>a10da130db98e410936dd498f49619fe</sys_id>
-        <sys_mod_count>229</sys_mod_count>
+        <sys_mod_count>277</sys_mod_count>
         <sys_name>Task - onSubmit - Modal Open</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -453,7 +204,7 @@ function onSubmit() {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_a10da130db98e410936dd498f49619fe</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-08-11 21:57:56</sys_updated_on>
+        <sys_updated_on>2023-09-08 02:46:58</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>

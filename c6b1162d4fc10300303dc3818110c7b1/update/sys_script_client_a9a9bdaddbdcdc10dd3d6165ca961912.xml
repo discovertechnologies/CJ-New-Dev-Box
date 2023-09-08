@@ -3,7 +3,8 @@
         <active>true</active>
         <applies_extended>false</applies_extended>
         <condition/>
-        <description>2.7.3 | 2022-04-27 | raj  | DFCT0010790 - Opening "Request" modal causes "Warnings" in log: "Invalid query detected, please check logs for details [Unknown field null in table [table]" in function openRequestModal() &#13;
+        <description>2.8.5 | 2023-09-07 | raj  | STRY0136615 - STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control&#13;
+2.7.3 | 2022-04-27 | raj  | DFCT0010790 - Opening "Request" modal causes "Warnings" in log: "Invalid query detected, please check logs for details [Unknown field null in table [table]" in function openRequestModal() &#13;
 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis added  with uib-tooltip control to show full text;&#13;
   Added footer style display none&#13;
 &#13;
@@ -39,18 +40,6 @@ Tasker - Title - Request Reassignment</messages>
 // Script Continued Below
 // KT - REQUEST TYPE
 function onSubmit() {
-	
-	var table = 'x_153465_discovert_tasker_requests';
-	var RequestSysId; 
-	var modalForm;
-	// STRY0103010, STRY0102985, STRY0101757, STRY0104533
-	var title;
-	var view;
-	var isRequest;
-	var parent;
-	var query;
-	var request_type;
-	
 	var formAction = g_form.getActionName();
 
 	// STRY0088787 added if statement to check the submit is a Request submit, then doin save before continuing
@@ -61,154 +50,80 @@ function onSubmit() {
 		|| (formAction == 'openModalRespondReassignmentSP')
 		|| (formAction == 'openModalRequestReassignmentSP')
 		){
-		// If the form is dirty, ask the user if they would like to save the record
-		var saveChangeConfirmation = false;
+		var task_id = g_form.getUniqueValue();
+
 		var saveMsg = getMessage('Tasker - Modal Save Changes Message');
+		
+		
+		var _spModal;
 		if(typeof spModal != 'undefined'){
-			var serializeChanges = g_form.serialize(true);
-			if(serializeChanges.length>0){
-				var changeFieldList = [];
-				for (var field in serializeChanges) {
-					changeFieldList.push(serializeChanges[field].label.trim());
-				}
-				var fMsg = changeFieldList.join(', ');					
-				saveMsg += "  " + fMsg;
-				saveChangeConfirmation = true;
-			}
-		} else if (typeof spModal == 'undefined' && g_form.modified) {
-			saveMsg += JSON.stringify(g_form.modifiedFields);
-			saveChangeConfirmation = true;
+			_spModal = spModal;
+		}
+		var _spUtil;
+		if(typeof spUtil != 'undefined'){
+			_spUtil = spUtil;
 		}
 
-		// use the variable set above here to show confirmation message.
-		if(saveChangeConfirmation){				
-			if(confirm(saveMsg)){
-				g_form.save();
-			} else{
-				return false;
-			}
-		}
-		// STRY0103010, STRY0102985, STRY0101757, STRY0104533
-		// set the varialbes to use in the modal calls below
-		switch(formAction){
-			case 'openModalRequestClarificationSP':
-				title = getMessage('Tasker - Title - Request Clarification');
-				view = 'requesttop';
-				isRequest = true;
-				parent = g_form.getUniqueValue();
-				request_type = 'Clarification';
-				break;
-			case 'openModalRespondClarificationSP':
-				title = getMessage('Tasker - Title - Respond Clarification Request');
-				view = 'responsetop';
-				isRequest = false;
-				parent = '';
-				request_type = 'Clarification';
-				break;
-			case 'openModalRequestExtensionSP':
-				title = getMessage('Tasker - Title - Request Extension');
-				view = 'requesttop';
-				isRequest = true;
-				parent = g_form.getUniqueValue();
-				request_type = 'Extension';
-				break;
-			case 'openModalRespondExtensionSP':
-				title = getMessage('Tasker - Title - Respond Extension Request');
-				view = 'responsetop';
-				isRequest = false;
-				parent = '';
-				request_type = 'Extension';
-				break;
-			case 'openModalRequestReassignmentSP':
-				title = getMessage('Tasker - Title - Request Reassignment');
-				view = 'requesttop';
-				isRequest = true;
-				parent = g_form.getUniqueValue();
-				request_type = 'Reassignment';
-				break;
-			case 'openModalRespondReassignmentSP':
-				title = getMessage('Tasker - Title - Respond Reassignment Request');
-				view = 'responsetop';
-				isRequest = false;
-				parent = '';
-				request_type = 'Reassignment';
-				break;
-		}
-
-		if(isRequest){
-			openRequestModal();
+		if(x_153465_discovert.DTech_Task_Actions==undefined){
+			ScriptLoader.getScripts(['x_153465_discovert.DTech_Task_Actions.jsdbx'], function() {
+				_requestParameters(task_id, formAction, openRequestModal);
+			});
 		} else {
-			getRequestSysId(request_type);
+			_requestParameters(task_id, formAction, openRequestModal);
 		}
 		return false;		
 	}
 
-
-	// STRY0103010, STRY0102985, STRY0101757, STRY0104533
-	// Open the modal, will be called after the call back to get the ID or directly from the form action switch
-	function openRequestModal(){
-		var oWidgetInput = {};
-		if (typeof spModal != 'undefined' ) { 
-			if(isRequest){
-				// DFCT0010643 - DFCT0010790
-				oWidgetInput = {table: table, sys_id: -1, view: view, query: "parent="+parent, u_request_type: request_type, isModal: true, omitHeader: 'true'};
-			} else {
-				oWidgetInput = {table: table, sys_id: RequestSysId, view:view, isModal: true};
-			}
-			spModal.open({
-				title:  title,
-				message:'',
-				backdrop:'static',
-				widget: 'discovertasker-formtab',
-				widgetInput: oWidgetInput,
-				size:'lg',
-				buttons: [],
-				// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
-				footerStyle: {
-					'display': 'none'
-				} 
-			});
-		} else {
-			modalForm = new GlideModalForm(title, table);
-			if(isRequest){
-				modalForm.addParm('sysparm_query','parent='+parent + '^u_request_type=' + request_type);
-			} else {
-				// STRY0103010 - set the ID before render
-				modalForm.setSysID(RequestSysId);
-			}
-			modalForm.addParm('sysparm_view', view); //Specify a form view
-			modalForm.render();
-			if(isRequest){
-				modalForm.setSysID(-1);
-			}
-
-			modalForm.setCompletionCallback(refreshForm);
-		}
-	}
-	
 	// STRY0103010, STRY0102985, STRY0101757, STRY0104533
 	// this is called from the Open Modal callback to refresh the form
 	function refreshForm() {
 		g_form.save();
 	}	
 
-	//-----------------------------------------------------------------------------------------------------------------	
-	function getRequestSysId(SelectedRequestType){
-			var ga = new GlideAjax("ClientTaskRequest");
-			ga.addParam('sysparm_name', 'getRequestIdToOpen');
-			ga.addParam('pTaskSysId', g_form.getUniqueValue());
-			ga.addParam('pRequestType', SelectedRequestType);
-			ga.addParam('pStatus', 'In Progress');
-			
-			ga.getXML(getRequestSysId, null);
+	// STRY0103010, STRY0102985, STRY0101757, STRY0104533
+	// Open the modal, will be called after the call back to get the ID or directly from the form action switch
+	function openRequestModal(response){
+		var params = {};
+		var sParams = response.responseXML.documentElement.getAttribute("answer");
+		params = JSON.parse(sParams);
+		var userCancelled = false;
+		userCancelled = x_153465_discovert.DTech_Task_Actions.checkChangesAndConfirmChange(_spModal, g_form, saveMsg);
+		// stop only if the user cancelled
+		if(userCancelled){
+			return false;
+		}
 		
-			function getRequestSysId(response){
-				var answer = response.responseXML.documentElement.getAttribute("answer");
-				RequestSysId = answer;
-				// STRY0103010, STRY0102985, STRY0101757, STRY0104533
-				openRequestModal();
-			}
+		switch(formAction){
+			case 'openModalRequestClarificationSP':
+				x_153465_discovert.DTech_Task_Actions.requestClarification(_spModal, _spUtil, g_form, params, refreshForm);
+				break;
+			case 'openModalRespondClarificationSP':
+				x_153465_discovert.DTech_Task_Actions.respondToClarificationRequest(_spModal, _spUtil, g_form, params, refreshForm);
+				break;
+			case 'openModalRequestExtensionSP':
+				x_153465_discovert.DTech_Task_Actions.requestExtension(_spModal, _spUtil, g_form, params, refreshForm);
+				break;
+			case 'openModalRespondExtensionSP':
+				x_153465_discovert.DTech_Task_Actions.respondToExtensionRequest(_spModal, _spUtil, g_form, params, refreshForm);
+				break;
+			case 'openModalRequestReassignmentSP':
+				x_153465_discovert.DTech_Task_Actions.requestReassignment(_spModal, _spUtil, g_form, params, refreshForm);
+				break;
+			case 'openModalRespondReassignmentSP':
+				x_153465_discovert.DTech_Task_Actions.respondToReassignmentRequest(_spModal, _spUtil, g_form, params, refreshForm);				
+				break;
+		}
 	}
+	
+	//NOTE: this may move out into another file to handle all rest calls from UI Script
+	function _requestParameters(task_id, action_name, callback){
+		var ajax  = new GlideAjax('ClientTaskInfo');
+		ajax.addParam('sysparm_name', 'getTaskUIActionParamaters');
+		ajax.addParam('sysparm_task_id', task_id);
+		ajax.addParam('sysparm_action_name', action_name);
+		ajax.getXML(callback);
+	}
+
 	
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
@@ -217,7 +132,7 @@ function onSubmit() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>a9a9bdaddbdcdc10dd3d6165ca961912</sys_id>
-        <sys_mod_count>137</sys_mod_count>
+        <sys_mod_count>142</sys_mod_count>
         <sys_name>Task - onSubmit Open Request Modal</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -225,7 +140,7 @@ function onSubmit() {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_a9a9bdaddbdcdc10dd3d6165ca961912</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-04-28 14:12:18</sys_updated_on>
+        <sys_updated_on>2023-09-08 02:41:23</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>

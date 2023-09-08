@@ -1,0 +1,720 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Contains scripts for all Tasker Widget javascript functions&#13;
+&#13;
+STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control&#13;
+</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.DTech_Task_Actions</name>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+//------------------------------------------------------------------------------------------------------------------------
+// 2.8   - 2022-04-05 - raj -  STRY0117600 - Update Templates to match the UI of Org Hierarchy 
+// 2.8.1 - 2023-04-10 - raj - DFCT0011741 - Open the duration modal > blank button should NOT be there
+// 2.8.5 - 2023-09-07 - raj - STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control
+//------------------------------------------------------------------------------------------------------------------------
+// Script Continued Below
+var x_153465_discovert = x_153465_discovert || {};
+
+x_153465_discovert.DTech_Task_Actions = (function() {
+	"use strict";
+	/* 	set your private variables and functions here. For example: 
+	var privateVar = 0; 
+	function private_function() {
+		return ++privateVar;
+	}
+	*/
+
+	var g_defaultSize = 'lg';
+	var g_backdrop = 'static';
+	var g_buttons = [];
+	var g_footerStyle = {'display': 'block'};
+
+	function _defaultSize(param_size){
+		var lSize;
+		// check to see if the size property passed by the caller is populated, if not return large
+		if(!param_size || param_size == 'undefined' || param_size == 'null' || param_size == ''){
+			lSize = g_defaultSize;
+		} else {
+			lSize = param_size;
+		}
+		return lSize;
+	}
+
+	function _defaultBackdrop(param_backdrop){
+		var lBackdrop;
+		// check to see if the size property passed by the caller is populated, if not return large
+		if(!param_backdrop || param_backdrop == 'undefined' || param_backdrop == 'null' || param_backdrop == ''){
+			lBackdrop = g_backdrop;
+		} else {
+			lBackdrop = param_backdrop;
+		}
+		return lBackdrop;
+	}
+	
+	function _defaultButtons(param_buttons){
+		var lButtons;
+		// check to see if the size property passed by the caller is populated, if not return large
+		if(!param_buttons || param_buttons == 'undefined' || param_buttons == 'null' || param_buttons.length == 0){
+			lButtons = g_buttons;
+		} else {
+			lButtons = param_buttons;
+		}
+		return lButtons;
+	}
+
+	function _defaultFooterStyle(isModal, param_footerStyle){
+		var lFooterStyle;
+		// check to see if the size property passed by the caller is populated, if not return large
+		if(!param_footerStyle || param_footerStyle == 'undefined' || param_footerStyle == 'null' || !param_footerStyle.display ||param_footerStyle.display.length == 0){
+			if(!isModal || isModal == 'undefined' || isModal == 'null' || isModal.length == 0 || isModal == 'false'){
+				lFooterStyle = g_footerStyle;
+			} else {
+				// if modal, but still displaying 
+				lFooterStyle = {'display': 'none'};
+			}
+		} else {
+			lFooterStyle = param_footerStyle;
+		}
+		return lFooterStyle;
+	}
+
+	function _isClosedTooLong(spModal, spUtil, g_form, params) {
+		var result = false;
+		// STRY0016025- RAJ 2019-04-20 - Determine if Tasker close date is beyond the allowable reopen days
+		if (params.closed_to_long_to_reopen == 'true' || params.closed_to_long_to_reopen == true) {
+			if (typeof spUtil != 'undefined') {
+				// spModal.alert(params.reopenParentMsg);
+				spUtil.addErrorMessage(params.closeTooLongMsg);
+			} else if(g_form != 'undefined'){
+				g_form.addErrorMessage(params.closeTooLongMsg);
+			}
+
+			result = true;
+		}
+
+		return result;
+	}
+
+	// Task State 3 = Completed; 4 = Closed Incomplete; 7 = Cancelled should have active = 'false'
+	// NOTE: the message is used here to display.  The logic to get active, parent and message are in the onSubmit script and the api_tasker_task
+	function _isNotActiveParent(spModal, spUtil, g_form, params) {
+		var result = false;
+		if (params.parent_sys_id + '' != '' && params.parent_active != 'true') {
+			if (typeof spUtil != 'undefined') {
+				// spModal.alert(params.reopenParentMsg);
+				spUtil.addErrorMessage(params.reopenParentMsg);
+			} else if(g_form != 'undefined'){
+				g_form.addErrorMessage(params.reopenParentMsg);
+			}
+			result = true;
+		}
+		return result;
+	}
+
+	function _checkChangesAndConfirmChange(spModal, g_form, saveMsg){
+		var userCancelled = false;
+		var saveChangeConfirmation = false;
+		//			var saveMsg = getMessage('Tasker - Modal Save Changes Message');
+		if(typeof spModal != 'undefined'){
+			var serializeChanges = g_form.serialize(true);
+			if(serializeChanges.length>0){
+				var changeFieldList = [];
+				for (var field in serializeChanges) {
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+				var fMsg = "  " + changeFieldList.join(', ');					
+				saveMsg += fMsg;
+				saveChangeConfirmation = true;
+			}
+		} else if (typeof spModal == 'undefined' && g_form.modified) {
+			saveMsg += JSON.stringify(g_form.modifiedFields);
+			saveChangeConfirmation = true;
+		}
+
+		// use the variable set above here to show confirmation message.
+		if(saveChangeConfirmation){				
+			if(confirm(saveMsg)){
+				g_form.save();
+			} else{
+				// this is set to true only when user cancels saving chagnes to return to the original form
+				// in all other cases, the user has no changes or has saved changes and the calling code will continue forward
+				userCancelled=true;
+			}
+		}
+		return userCancelled;
+	}
+	
+	function _confirmDeleteTask(spModal, params) {
+		// Use widget for Portal
+		if (typeof spModal != 'undefined') {
+			spModal.open({
+				title: params.title,
+				backdrop: 'static',
+				// STRY0119138 - changed name as it is used for task, template and template task
+				widget: 'tasker_modal_delete_prompt',
+				widgetInput: {
+					'taskSysId': params.task_sys_id,
+					'taskNumberShortDescription': params.number_name
+				},
+				buttons: [],
+				// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+				footerStyle: { 'display': 'none' }
+			}).then(function() {
+				//jslog('numberofsubtasks');
+			});
+			return false;
+		} else if (typeof spModal == 'undefined') {
+			// For Platform use UI Page named: delete_task_prompt
+			// STRY0119138 - changed name as it is used for task, template and template task
+			var gm = new GlideModal('x_153465_discovert_tasker_delete_prompt');
+			gm.setTitle(params.title);
+			gm.setPreference('sysparm_taskNumberShortDescription', params.number_name);
+			gm.setPreference('sysparm_taskSysId', params.task_sys_id);
+			gm.setWidth(550);
+			gm.render();
+		}
+	}
+	
+	// Use this function to show either a widget or UI Page modal
+	function _confirmPublishDraftTasks(spModal, spUtil, g_form, params){
+		var canPublish = true;
+		// this logic needs to be here for the UI Action directive and in the onsubmit for reopen because the platform needs to post back to the server on true
+		if (params.state != -6) {
+			canPublish = false;
+			// there are no subtasks, no need to confirm publish
+		} else if (params.calchaschildren == 0) {
+			canPublish = true;
+		} else {
+			// this will return false to the initial action as the decision is made in the modal
+			canPublish = false;
+
+			// Use widget for Portal
+			if (typeof spModal != 'undefined') {
+				spModal.open({
+					title: params.title,
+					backdrop: 'static',
+					widget: 'tasker_modal_publish_draft_prompt',
+					widgetInput: {
+						'taskSysId': params.task_sys_id
+					},
+					size: 'lg',
+					buttons: [],
+					footerStyle: {
+						'display': 'none'
+					}
+				}).then(function() {
+					//jslog('numberofsubtasks');
+				});
+				return false;
+			} else if (typeof spModal == 'undefined') {
+				// STRY0119137 - STRY0119138 (corrected platform page name while working other story)
+				// For Platform use UI Page named: x_153465_discovert_publiish_draft_task_prompt
+				var gm = new GlideModal('x_153465_discovert_publiish_draft_task_prompt');
+				gm.setTitle(params.title);
+				gm.setPreference('sysparm_taskSysId', params.task_sys_id);
+				gm.setWidth(900);
+				gm.render();
+			}			
+		}
+		return canPublish;
+	}
+
+	// Use this function to show either a widget or UI Page modal
+	function _confirmReopenTasks(spModal, spUtil, g_form, params) {
+		var canReopen = true;
+		if (params.active != 'false') {
+			canReopen = false;
+		}
+
+		if (canReopen && _isNotActiveParent(spModal, spUtil, g_form, params)) {
+			canReopen = false;
+		}
+
+		if (canReopen && _isClosedTooLong(spModal, spUtil, g_form, params)) {
+			canReopen = false;
+		}
+
+		if(canReopen){
+			// Use widget for Portal
+			if (typeof spModal != 'undefined') {
+				spModal.open({
+					title: params.title,
+					backdrop: 'static',
+					widget: 'tasker_modal_reopen_tasks_prompt',
+					widgetInput: {
+						'taskSysId': params.task_sys_id
+					},
+					//2.8.0 | 2022-04-28 | mmcc | DFCT0010879 - Reopen Task button modal should display all options on the same line as the "Radio button"; add size
+					size: 'lg',
+					buttons: [],
+					// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+					footerStyle: {
+						'display': 'none'
+					}
+				}).then(function() {
+					//jslog('numberofsubtasks');
+				});
+				return false;
+			} else if (typeof spModal == 'undefined') {
+				// STRY0119137 - STRY0119138 (corrected platform page name while working other story)
+				// For Platform use UI Page named: x_153465_discovert_reopen_task_prompt
+				var gm = new GlideModal('x_153465_discovert_reopen_task_prompt');
+				gm.setTitle(params.title);
+				gm.setPreference('sysparm_taskSysId', params.task_sys_id);
+				// 2.8.0 | 2022-04-28 | mmcc | DFCT0010879 - Reopen Task button modal should display all options on the same line as the "Radio button"; set to 900
+				// gm.setWidth(550);
+				gm.setWidth(900);
+				gm.render();
+			}
+		}
+	}
+
+	function _rejectTask(spModal, spUtil, g_form, params) {
+		// comments_dt data type is HTML, but not using a control that shows it so strip off tags
+		var formRejectReason = params.comments_dt.replace(/<\/?[^>]+(>|$)/g, "");
+
+		// Use widget for Portal
+		if (typeof spModal != 'undefined') {
+			spModal.open({
+				title: params.title,
+				backdrop: 'static',
+				widget: 'reject_approval_confirmation',
+				widgetInput: {
+					'rejectionReason': formRejectReason,
+					'taskSysId': params.task_sys_id
+				},
+				buttons: [],
+				// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+				footerStyle: {
+					'display': 'none'
+				}
+			}).then(function() {
+				//jslog('numberofsubtasks');
+			});
+			return false;
+		} else if (typeof spModal == 'undefined') {
+			// For Platform use UI Page named: 
+			var gm = new GlideModal('x_153465_discovert_reject_approval_task_prompt');
+			gm.setTitle(params.title);
+			gm.setPreference('sysparm_rejectionReason', formRejectReason);
+			gm.setPreference('sysparm_taskSysId', params.task_sys_id);
+			gm.setWidth(550);
+			gm.render();
+		}
+	}
+	
+	function _abstain(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'Abstain-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _approve(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'Approve-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _concur(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'Concur-SendToReview';		
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _nonconcur(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'NonConcur-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _approveSign(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'ApproveSign-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _concurSign(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'ConcurSign-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _nonconcurSign(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'NonconcurSign-SendToReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _rejectAssignment(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'rejectAssignment';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _rejectOUAssignment(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'rejectOUAssignment';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _requestClarification(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRequestClarificationSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+	
+	function _requestExtension(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRequestExtensionSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+	
+	function _requestReassignment(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRequestReassignmentSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+
+	function _respondToClarificationRequest(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRespondClarificationSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+	
+	function _respondToExtensionRequest(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRespondExtensionSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+
+	function _respondToReassignmentRequest(spModal, spUtil, g_form, params, modalCompletionCallback) {
+		var action_name = 'openModalRespondReassignmentSP';
+		_openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback);
+	}
+
+	function _sendToReview(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'inReview';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _sendToRework(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'rework';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+	
+	function _markComplete(spModal, spUtil, g_form, params, modalCloseCallback) {
+		var action_name = 'ClosedComplete';
+		_openTaskAction(spModal, action_name, params, g_form, modalCloseCallback);
+	}
+
+	function _openTaskAction(spModal, action_name, params, g_form, modalCloseCallback){
+		if (typeof spModal != 'undefined' ) {
+			_openTaskActionModal(spModal, params);
+		} else {
+			_openTaskModalForm(params, g_form, modalCloseCallback);
+		}			
+	}
+		
+	function _openTaskActionModal(spModal, params){
+		spModal.open({
+			title: params.title,
+			message:'',
+			backdrop:'static',
+			widget: 'tasker_modal_additional_information',
+			widgetInput: {
+				table: params.table, 
+				sys_id: params.task_sys_id, 
+				view: params.view, 
+				//disableUIActions: "true",
+				//omitHeaderOptions: 'true',
+				hideRelatedLists: true,
+				omitHeader: 'true',
+				hideAttachmentBtn: true,
+				isModal: true,
+				isPreCompleteShown: params.isPreCompleteShown 
+			},
+			shared: params.shared,
+			size:'lg',
+			buttons: [],
+			// Hide the <div> with class modal-footer that gets auto inserted from spModal, adds an element style
+			footerStyle: {
+				'display': 'none'
+			}
+		});		
+	}
+
+	function _openTaskModalForm(params, g_form, modalCloseCallback){
+		// This callback is no longer needed.  
+		// The Modals have been updated to include UI Actions that are submitted in the Modal
+		// In addition, Save has been implemented to save the form before opening the modal.  
+		// So, there is no need for a callback
+		var modalForm = new GlideModalForm(params.title, params.table);
+		modalForm.setSysID(params.task_sys_id);
+		modalForm.addParm('sysparm_view',params.view);
+		modalForm.addParm("sysparm_view_forced", true);
+		modalForm.addParm('sysparm_form_only', 'true');
+		// this captures changes that were made in the modal before the modal closes and they are lost
+		modalForm.on("beforeclose", modalCloseCallback);
+		if(params.view == 'Additional_Comments_Modal'){
+			modalForm.setPreference("sysparm_comments", params.comments);
+			modalForm.render();
+			if((g_form.getValue('comments') + '')== ''){
+				g_form.showFieldMsg('comments', params.placeHolderText, 'error', true);
+			}
+			return; // do not render 2 times.  this is the only function setting a field message
+		} else if(params.view == 'Abstain_Response'){
+			modalForm.setPreference("sysparm_comments_dt", params.reviewer_comments);
+		} else if(params.view == 'Accept_Response'){
+			modalForm.setPreference("sysparm_comments_dt", params.reviewer_comments);
+		} else if(params.view == 'Confirm_Signature_Instructions'){
+			modalForm.setPreference("sysparm_u_signature_instructions", params.u_signature_instructions);
+			modalForm.setPreference("sysparm_comments_dt", params.review_sign_comments);
+		} else if(params.view == 'Reject_Signature_Instructions'){
+			modalForm.setPreference("sysparm_u_signature_instructions", params.u_signature_instructions);
+			modalForm.setPreference("sysparm_comments_dt", params.review_sign_comments);
+		} else if(params.view == 'Send_to_Review'){
+			modalForm.setPreference("sysparm_response", params.response_comments);
+			modalForm.setPreference("sysparm_rework_comments", params.rework_comments);
+		} else if(params.view == 'Send_to_Rework'){
+			modalForm.setPreference("sysparm_response", params.response_comments);
+			modalForm.setPreference("sysparm_rework_comments", params.rework_comments);
+		} else if(params.view == 'Reviewer_Complete'){
+			modalForm.setPreference("sysparm_response", params.response_comments);
+			modalForm.setPreference("sysparm_comments_dt", params.reviewer_comments);
+			modalForm.setPreference("sysparm_rework_comments", params.rework_comments);			
+		}
+		modalForm.render();
+	}
+
+	function _openTaskRequestAction(spModal, action_name, params, g_form, modalCompletionCallback){
+		if (typeof spModal != 'undefined' ) {
+			_openTaskRequestActionModal(spModal, params);
+		} else {
+			_openTaskRequestModalForm(params, g_form, modalCompletionCallback);
+		}			
+	}
+	
+	function _openTaskRequestActionModal(spModal, params){
+		var oWidgetInput = {};
+		if(params.isRequest){
+			// DFCT0010643 - DFCT0010790
+			oWidgetInput = {table: params.table, sys_id: params.request_sys_id, view: params.view, query: "parent="+params.parent, u_request_type: params.request_type, isModal: true, omitHeader: 'true'};
+		} else {
+			oWidgetInput = {table: params.table, sys_id: params.request_sys_id, view:params.view, isModal: true};
+		}
+		spModal.open({
+			title:  params.title,
+			message:'',
+			backdrop:'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: oWidgetInput,
+			size:'lg',
+			buttons: [],
+			// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
+			footerStyle: {
+				'display': 'none'
+			} 
+		});
+	}
+	
+	function _openTaskRequestModalForm(params, g_form, modalCompletionCallback){
+		var modalForm = new GlideModalForm(params.title, params.table);
+		if(params.isRequest){
+			modalForm.addParm('sysparm_query','parent='+params.parent + '^u_request_type=' + params.request_type);
+		} else {
+			// STRY0103010 - set the ID before render
+			modalForm.setSysID(params.request_sys_id);
+		}
+		modalForm.addParm('sysparm_view', params.view); //Specify a form view
+		modalForm.addParm("sysparm_view_forced", true);
+		modalForm.addParm('sysparm_form_only', 'true');
+
+		modalForm.render();
+		if(params.isRequest){
+			modalForm.setSysID(params.request_sys_id);
+		}
+
+		modalForm.setCompletionCallback(modalCompletionCallback);
+	}
+	
+/* Share variables between multiple UI scripts by adding them to your scope object. For example: 
+	x_153465_discovert.sharedVar = 0; 
+
+ Then access them in your scripts the same way. For example: 
+	function get_shared() {
+		return x_153465_discovert.sharedVar;
+	}
+*/
+
+	return {
+
+/* set your public API here. For example:
+		incrementAndReturnPrivateVar: function() {
+			return _function();
+		},
+*/
+		checkChangesAndConfirmChange: _checkChangesAndConfirmChange,
+		confirmDeleteTask: _confirmDeleteTask,
+		confirmPublishDraftTasks: _confirmPublishDraftTasks,
+		confirmReopenTasks: _confirmReopenTasks,
+		rejectTask: _rejectTask,
+		abstain: _abstain,
+		approve: _approve,
+		concur: _concur,
+		nonconcur: _nonconcur,
+		approveSign: _approveSign,
+		concurSign: _concurSign,
+		nonconcurSign: _nonconcurSign,
+		rejectAssignment: _rejectAssignment,
+		rejectOUAssignment: _rejectOUAssignment,
+		requestClarification: _requestClarification,
+		requestExtension: _requestExtension,
+		requestReassignment: _requestReassignment,
+		respondToClarificationRequest: _respondToClarificationRequest,
+		respondToExtensionRequest: _respondToExtensionRequest,
+		respondToReassignmentRequest: _respondToReassignmentRequest,
+		sendToReview: _sendToReview,
+		sendToRework: _sendToRework,
+		markComplete: _markComplete,
+		
+/******************************************		
+BELOW IS FROM TWJS - cleanup or merge later
+*******************************************/
+		openDurationModal: function(spModal, title, table, sys_id) {
+			spModal.open({
+				title: title, // c.data.durationTitle + ': ' + obj.part.data.name,
+				message: '',
+				backdrop: 'static',
+				widget: 'tasker_modal_additional_information',
+				widgetInput: {
+					table: table, // c.data.table,
+					sys_id: sys_id, // obj.part.data.key,
+					view: 'Duration_View',
+					hideRelatedLists: true,
+					omitHeader: 'true',
+					hideAttachmentBtn: true,
+					isModal: true
+				},
+				shared: {},
+				size: 'lg',
+				// DFCT0011741 - removed button
+				buttons: [],
+				footerStyle: {'display': 'none'}
+			});
+		},
+		
+		openCreateModal: function(spModal, title, table, view, query, u_servicenow_form_view) {
+			spModal.open({
+				title: title,
+				message: '',
+				backdrop: 'static',
+				widget: 'new_tasker_selection',
+				widgetInput: {
+					omit_icons: true,
+					table: table,
+					query:  query,
+					sys_id: -1,
+					// DFCT0011271
+					u_servicenow_form_view: u_servicenow_form_view,
+					view: view,  // NOTE, we may need to look up default
+					hideRelatedLists: true,
+					omitHeader: 'true',
+					hideAttachmentBtn: true,
+					isModal: true
+				},
+				shared: {},
+				size: 'lg',
+				buttons: [],
+				footerStyle: {'display': 'none'}
+			});			
+		},
+		
+		openAssignmentModal: function(spModal, title, table, sys_id) {
+			spModal.open({
+				title: title,
+				message: '',
+				backdrop: 'static',
+				widget: 'tasker_modal_additional_information',
+				widgetInput: {
+					table: table,
+					sys_id: sys_id,
+					view: 'Assignment_View',
+					hideRelatedLists: true,
+					omitHeader: 'true',
+					hideAttachmentBtn: true,
+					isModal: true
+				},
+				shared: {},
+				size: 'lg',
+				buttons: [],
+				footerStyle: {'display': 'none'}
+			});
+		},
+		
+		openOperationalModal: function(spModal, title, table, sys_id) {
+			spModal.open({
+				title: title,
+				message: '',
+				backdrop: 'static',
+				widget: 'tasker_modal_additional_information',
+				widgetInput: {
+					table: table,
+					sys_id: sys_id,
+					view: 'Operational_View',
+					hideRelatedLists: true,
+					omitHeader: 'true',
+					hideAttachmentBtn: true,
+					isModal: true
+				},
+				shared: {},
+				size: 'lg',
+				buttons: [],
+				footerStyle: {'display': 'none'}
+			});
+		},
+
+		openTreeViewModal: function(spModal, sys_id) {
+			spModal.open({
+				message: '',
+				backdrop: 'static',
+				widget: 'discovertasker-recursivetasktreegraph',
+				widgetInput: {
+					hide_accordion:true,
+					table: "x_153465_discovert_route_task_instance",
+					sys_id: sys_id,
+					isModal: true
+				},
+				shared: {},
+				size: 'lg',
+				buttons: [],
+				footerStyle: {'display': 'none'}
+			});
+		},
+		// 2.8   - 2022-04-05 - raj -  STRY0117600 - Update Templates to match the UI of Org Hierarchy 
+		openFormModal: function(spModal, modalProperties){
+			spModal.open({
+				title: modalProperties.title,
+				backdrop:  _defaultBackdrop(modalProperties.backdrop),
+				widget: modalProperties.widget,
+				widgetInput: modalProperties.widgetInput,
+				size: _defaultSize(modalProperties.size),
+				buttons: _defaultButtons(modalProperties.buttons),
+				shared: modalProperties.shared,
+				// footer styling added to handle proper styling for modal forms
+				footerStyle: _defaultFooterStyle(modalProperties.widgetInput.isModal, modalProperties.footerStyle)
+			});			
+		},
+		
+		type:  "DTech_Task_Actions"
+	};
+})();
+]]></script>
+        <script_name>DTech_Task_Actions</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-08-25 11:40:44</sys_created_on>
+        <sys_id>77d7e9321b783d103ed2eb93b24bcbce</sys_id>
+        <sys_mod_count>82</sys_mod_count>
+        <sys_name>x_153465_discovert.DTech_Task_Actions</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_77d7e9321b783d103ed2eb93b24bcbce</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-09-08 03:41:08</sys_updated_on>
+        <ui_type>10</ui_type>
+        <use_scoped_format>true</use_scoped_format>
+    </sys_ui_script>
+</record_update>

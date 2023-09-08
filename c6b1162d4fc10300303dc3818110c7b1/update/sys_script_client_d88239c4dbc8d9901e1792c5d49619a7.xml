@@ -4,7 +4,7 @@
         <applies_extended>false</applies_extended>
         <condition/>
         <description>Publish Draft Tasks; show a widget or UI Page modal to prompt the User when the task has draft subtasks, otherwise no modal just publish this single task&#13;
-&#13;
+2.8.5 | 2023-09-07 | raj  | STRY0136615 - STRY0136615 - STRETCH-PLACEHOLDER- Header UI Control&#13;
 2.8 | 2022-07-09 | raj |  STRY0119137 - STRY0119138 (corrected platform page name while working other story)&#13;
 2.8.0 | 2022-06-07 | raj | STRY0122882 - Publish Task(s) button- New Modal to 'Choose Which Tasks to Publish'</description>
         <field>calchaschildren</field>
@@ -23,52 +23,54 @@
 function onSubmit() {
     var formAction = g_form.getActionName();
     if (formAction == 'publish_tasks') {
+		var callPublishTask = false;
+		// this logic is also in the UI Script called below b/c of the asyncrhonous nature of the script loader and the modals that are opened
 		if (g_scratchpad.currentState != -6) {
-			return false;
-		}
-
-        if (g_scratchpad.calchaschildren == 0) {
-			return true;
+			callPublishTask = false;
+			// there are no subtasks, no need to confirm publish
+		} else if (g_scratchpad.calchaschildren == 0) {
+			callPublishTask = true;
 		} else {
-            confirmPublishDraftTasks();
-			return false;
-        }
-    }
+			var task_id = g_form.getUniqueValue();
+			_requestParameters(task_id, formAction, confirmPublishTask);
+			// asynchronous above will be processed in the modal, return false to prevent post back to publish
+			callPublishTask = false;
+		}
+		return callPublishTask;
+	}
+}
+			
+function confirmPublishTask(response) {
+	var params = {};
+	var sParams = response.responseXML.documentElement.getAttribute("answer");
+	params = JSON.parse(sParams);
+		
+	var _spModal;
+	if(typeof spModal != 'undefined'){
+		_spModal = spModal;
+	}
+	var _spUtil;
+	if(typeof spUtil != 'undefined'){
+		_spUtil = spUtil;
+	}
+
+	if(x_153465_discovert.DTech_Task_Actions==undefined){
+		ScriptLoader.getScripts(['x_153465_discovert.DTech_Task_Actions.jsdbx'], function() {
+			x_153465_discovert.DTech_Task_Actions.confirmPublishDraftTasks(_spModal, _spUtil, g_form, params);
+		});
+	} else {
+		// already loaded, just call it
+		x_153465_discovert.DTech_Task_Actions.confirmPublishDraftTasks(_spModal, _spUtil, g_form, params);
+	}
 }
 
-// Use this function to show either a widget or UI Page modal
-function confirmPublishDraftTasks() {
-	var taskNumberShortDescription = g_scratchpad.taskerNumber + ': ' + g_form.getValue('short_description');
-	
-    var messageTitle = getMessage('Tasker - Title - Publish Selection for') + taskNumberShortDescription;
-
-    // Use widget for Portal
-    if (typeof spModal != 'undefined') {
-        spModal.open({
-            title: messageTitle,
-            backdrop: 'static',
-            widget: 'tasker_modal_publish_draft_prompt',
-            widgetInput: {
-                'taskSysId': g_form.getUniqueValue()
-            },
-			size: 'lg',
-            buttons: [],
-            footerStyle: {
-                'display': 'none'
-            }
-        }).then(function() {
-            //jslog('numberofsubtasks');
-        });
-        return false;
-    } else if (typeof spModal == 'undefined') {
-		// STRY0119137 - STRY0119138 (corrected platform page name while working other story)
-        // For Platform use UI Page named: x_153465_discovert_publiish_draft_task_prompt
-        var gm = new GlideModal('x_153465_discovert_publiish_draft_task_prompt');
-        gm.setTitle(messageTitle);
-        gm.setPreference('sysparm_taskSysId', g_form.getUniqueValue());
-		gm.setWidth(900);
-        gm.render();
-    }
+// NOTE: this might be able to be moved into the UI Script if the UI Script has access to GlideAjax
+function _requestParameters(task_id, action_name, callback){
+	var ajax  = new GlideAjax('ClientTaskInfo');
+	ajax.addParam('sysparm_name', 'getTaskUIActionParamaters');
+	ajax.addParam('sysparm_task_id', task_id);
+	ajax.addParam('sysparm_action_name', action_name);
+	ajax.getXML(callback);
 }]]></script>
         <sys_class_name>sys_script_client</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
@@ -76,7 +78,7 @@ function confirmPublishDraftTasks() {
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>d88239c4dbc8d9901e1792c5d49619a7</sys_id>
-        <sys_mod_count>10</sys_mod_count>
+        <sys_mod_count>19</sys_mod_count>
         <sys_name>Task - onSubmit - Publish Draft Tasks</sys_name>
         <sys_overrides/>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
@@ -84,7 +86,7 @@ function confirmPublishDraftTasks() {
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_client_d88239c4dbc8d9901e1792c5d49619a7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-07-09 12:06:36</sys_updated_on>
+        <sys_updated_on>2023-09-08 02:42:31</sys_updated_on>
         <table>x_153465_discovert_route_task_instance</table>
         <type>onSubmit</type>
         <ui_type>10</ui_type>

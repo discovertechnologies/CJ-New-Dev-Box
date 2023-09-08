@@ -18,6 +18,17 @@
 //console.log("Tasker Header Widget - debug -operationalObject:" + strOperationalObject);
 	
 //		u_top_task
+//console.log("Tasker Header Widget - debug - c.data.taskRecordObj[c.data.itemMembersObjectKey]" + JSON.stringify(c.data.taskRecordObj[c.data.itemMembersObjectKey]));
+console.log("Tasker Header Widget - debug - c.data.taskRecordObj[c.data.taskerFilesObjectKey]" 	+ 
+						JSON.stringify(c.data.taskRecordObj[c.data.taskerFilesObjectKey]));
+//console.log("Tasker Header Widget - debug - c.data.taskRecordObj[c.data.taskerContextMenuObjectKey]" + 
+//						JSON.stringify(c.data.taskRecordObj[c.data.taskerContextMenuObjectKey]));	
+
+	$scope.loadTaskActions = function(){
+		$scope.data.getActions = true;
+		spUtil.update($scope).then(function(){
+		});
+	};
 };]]></client_script>
         <controller_as>c</controller_as>
         <css>.dtech-pad-right-header{
@@ -49,6 +60,53 @@
 .dtech-task-header-value {
     font-weight: 800;
     color: #000000;
+}
+
+.dtech-member-item-row {
+	align-items: center;
+	column-gap: 5px;
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+}
+
+.dtech-menu-item-divider {
+	height: 1px;
+	margin: 9px 0;
+	overflow: hidden;
+	background-color: #e5e5e5;
+}
+
+.dtech-stack-circle-wrapper {
+  position: relative;
+}
+
+.dtech-stack-circle-0,
+.dtech-stack-circle-1,
+.dtech-stack-circle-2, 
+.dtech-stack-circle-3,
+.dtech-stack-circle-4,
+.dtech-stack-circle-5 {
+  position: absolute;
+}
+
+.dtech-stack-circle-0{
+  left: 0px;
+}
+.dtech-stack-circle-1{
+  left: 15px;
+}
+.dtech-stack-circle-2{
+  left: 30px;
+}
+.dtech-stack-circle-3{
+  left: 45px;
+}
+.dtech-stack-circle-4{
+  left: 60px;
+}
+.dtech-stack-circle-5{
+  left: 75px;
 }</css>
         <data_table>sp_instance</data_table>
         <demo_data/>
@@ -79,16 +137,40 @@
 	function main(){
 		data.table = (input || {}).table || (options || {}).table || $sp.getParameter("table") || "x_153465_discovert_route_task_instance";
 		data.sys_id = (input || {}).sys_id || (options || {}).sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
+		data.query = "";
+		data.view = (input || {}).view || (options || {}).view || $sp.getParameter("view") || $sp.getParameter("v");
 		data.isModal = (input || {}).isModal || (options || {}).isModal || $sp.getParameter("isModal") || false;
 		data.showLongDates = (input || {}).showLongDates || (options || {}).showLongDates || $sp.getParameter("showLongDates") || true;
 		data.responseEditorControl = (input || {}).responseEditorControl || (options || {}).responseEditorControl || 'form';
 		data.responseColumnStyle = 'iconsOnly';
 
+		if(input && input.getActions==true){
+			getTaskActions();
+			return;
+		}
 		data.taskRecordObjectList = {};
+		
+		var taskTreeObjectKey = api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT;
+		data.taskTreeObjectKey = taskTreeObjectKey;
+		data.taskTreeField = "u_task_tree";
+		data.taskRecordObjectList[taskTreeObjectKey] = true;
+
+		var operationalObjectKey = api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT;
+		data.parentField = "parent";
+		data.operationalObjectKey = operationalObjectKey;
+		data.taskRecordObjectList[operationalObjectKey] = true;
+
+		var subTasksObjectKey = api_tasker_task.CONST_DTECH_SUB_TASKS_OBJECT;
+		data.subTasksObjectKey = subTasksObjectKey;
+		data.taskRecordObjectList[subTasksObjectKey] = true;
+		data.subtaskMaxRows = 5;
+
+		var itemMembersObjectKey = api_tasker_task.CONST_DTECH_ITEM_MEMBERS_OBJECT;
+		data.itemMembersObjectKey = itemMembersObjectKey;
+		data.taskRecordObjectList[itemMembersObjectKey] = true;
+		data.itemMembersMaxRows = undefined;
+		
 		var officeObjectKey = api_tasker_task.CONST_DTECH_OFFICE_OBJECT;
-		data.taskRecordObjectList = {
-			officeObjectKey: true
-		};		
 		data.officeObjectKey = officeObjectKey;
 		data.taskRecordObjectList[officeObjectKey] = true;
 		data.officeField = "primary_assignee";
@@ -101,21 +183,22 @@
 		data.stateObjectKey = stateObjectKey;
 		data.stateField = "state";
 		data.taskRecordObjectList[stateObjectKey] = true;
-		
-		var taskTreeObjectKey = api_tasker_task.CONST_DTECH_TASK_TREE_OBJECT;
-		data.taskTreeObjectKey = taskTreeObjectKey;
-		data.taskTreeField = "u_task_tree";
-		data.taskRecordObjectList[taskTreeObjectKey] = true;
-
-		var operationalObjectKey = api_tasker_task.CONST_DTECH_OPERATIONAL_OBJECT;
-		data.parentField = "parent";
-		data.operationalObjectKey = operationalObjectKey;
-		data.taskRecordObjectList[operationalObjectKey] = true;
 
 		var responseObjectKey = api_tasker_task.CONST_DTECH_RESPONSE_OBJECT;
 		data.responseObjectKey = responseObjectKey;
 		data.taskRecordObjectList[responseObjectKey] = true;
 		
+		var taskerFilesObjectKey = api_tasker_task.CONST_DTECH_TASKER_FILES_OBJECT;
+		data.taskerFilesObjectKey = taskerFilesObjectKey;
+		data.taskRecordObjectList[taskerFilesObjectKey] = true;
+		data.taskerFilesMaxRows = 5;
+
+//    Actions are not loaded until user requests them to ensure state hasn't changed
+//		var taskerContextMenuObjectKey = api_tasker_task.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT;
+//		data.taskerContextMenuObjectKey = taskerContextMenuObjectKey;
+//		data.taskRecordObjectList[taskerContextMenuObjectKey] = true;
+		data.taskActions = {};
+
 		data.taskRecordObj = api_task.getTaskRecordObjects(data.sys_id, data.taskRecordObjectList);
 		
 		//**************************************************************************************************
@@ -127,18 +210,21 @@
 
 		data.u_task_tree_label = data.taskRecordObj[taskTreeObjectKey][data.taskTreeField].label;
 		data.u_task_tree_display_value = data.taskRecordObj[taskTreeObjectKey][data.taskTreeField].display_value;
-		data.u_task_tree__value = data.taskRecordObj[taskTreeObjectKey][data.taskTreeField].value;
+		data.u_task_tree_value = data.taskRecordObj[taskTreeObjectKey][data.taskTreeField].value;
 		//**************************************************************************************************
 		// NOTE: if we move all header items into directives, then this section will move into the directive
 		//**************************************************************************************************
-
+		
 // TODO - get the title into the directive
 		data.title = "TODO - get the title into the directive";
 		data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal') + ': ' + data.title;
 		data.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal') + ': ' + data.title;
 		data.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal');
-		
+		data.taskerFilesTitle = gs.getMessage('Tasker - Title - Files Modal');
 
+		function getTaskActions(){
+			data.taskActions = api_task.getContextMenuInformation(data.sys_id);
+		}
 	}
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
@@ -146,29 +232,16 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-08-11 18:47:03</sys_created_on>
         <sys_id>0c33031a1b2cf1103ed2eb93b24bcba8</sys_id>
-        <sys_mod_count>94</sys_mod_count>
+        <sys_mod_count>156</sys_mod_count>
         <sys_name>Tasker Task Header</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0c33031a1b2cf1103ed2eb93b24bcba8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-08-14 18:51:39</sys_updated_on>
+        <sys_updated_on>2023-09-06 14:39:39</sys_updated_on>
         <template><![CDATA[<div class="dtech-task-header flex-row flex-grow">
   <div class="dtech-task-header-menu-row align-items-start">
-<!-- you are here... put the user into a task members directive    
-    <dtech-user dtech-task-title = "getTitle(item);"
-                dtech-field="field"
-                dtech-is-modal="data.isModal"
-                dtech-user-image-size="24"
-                dtech-chat-enabled="data.chatEnabled"
-                dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
-                dtech-param-object="data.userProfiles[item[field].value]"
-                table="data.table"
-                parent-sys-id="item.sys_id"
-                />
--->
-
     <!-- Move into directive at some point -->
     <span class="dtech-pad-right-header">
       <span class="flex-row text-nowrap text-uppercase">
@@ -180,16 +253,35 @@
 
     </span>
     <dtech-operational ng-if="data.taskRecordObjectList[data.operationalObjectKey]"
-                    class="dtech-pad-right-header"
-                    dtech-task-title = "data.operationalTitle"
-                    dtech-operational-object = "data.taskRecordObj[data.operationalObjectKey]"
-	                  dtech-field="data.parentField"
-                    dtech-show-label="true"
-                    dtech-is-modal="data.isModal"
-                    table="{{data.table}}"
-                    task-sys-id="{{data.sys_id}}"                                          
-                    ></dtech-operational>
-
+                       class="dtech-pad-right-header"
+                       dtech-task-title = "data.operationalTitle"
+                       dtech-operational-object = "data.taskRecordObj[data.operationalObjectKey]"
+                       dtech-field="data.parentField"
+                       dtech-show-label="true"
+                       dtech-is-modal="data.isModal"
+                       table="{{data.table}}"
+                       task-sys-id="{{data.sys_id}}"                                          
+                       ></dtech-operational>
+    <dtech-sub-tasks ng-if="data.taskRecordObjectList[data.subTasksObjectKey]"
+                     class="dtech-pad-right-header"
+                     dtech-task-title = "data.subTasksTitle"
+                     dtech-sub-tasks-object = "data.taskRecordObj[data.subTasksObjectKey]"
+                     dtech-show-label="true"
+                     dtech-is-modal="data.isModal"
+                     max-rows-to-display="data.subtaskMaxRows"
+                     table="{{data.table}}"
+                     task-sys-id="{{data.sys_id}}"                                          
+                     ></dtech-sub-tasks>
+    <dtech-item-members ng-if="data.taskRecordObjectList[data.itemMembersObjectKey]"
+                        class="dtech-pad-right-header"
+                        dtech-item-members-object = "data.taskRecordObj[data.itemMembersObjectKey]"
+                        dtech-show-label="true"
+                        dtech-is-modal="data.isModal"
+                        dtech-user-image-size="24"
+                        max-rows-to-display="data.itemMembersMaxRows"
+                        table="{{data.table}}"
+                        task-sys-id="{{data.sys_id}}"                                          
+                        ></dtech-item-members>
     <dtech-office ng-if="data.taskRecordObjectList[data.officeObjectKey]"
                   class="dtech-pad-right-header"
                   dtech-task-title = "data.assignmentTitle"
@@ -220,7 +312,8 @@
         {{data.state_display_value}}
       </span>
     </span>
-    <dtech-response-comments dtech-is-modal="data.isModal"
+    <dtech-response-comments class="dtech-pad-right-header"
+                             dtech-is-modal="data.isModal"
                              dtech-show-label="true"
                              dtech-reopen-comments="{{data.taskRecordObj[data.responseObjectKey].directive_reopen_comments}}"
                              dtech-response-comments="{{data.taskRecordObj[data.responseObjectKey].directive_response_comments}}"
@@ -232,8 +325,36 @@
                              dtech-content-comment="{{data.taskRecordObj[data.responseObjectKey].directive_content_comment}}"
                              dtech-response-editor-control="{{data.responseEditorControl}}"
                              ></dtech-response-comments>
-  
-  </div>  
+    <!-- YOU ARE HERE!!! ADD FILES AND CHANGE FROM SUBTOASK TO FILES -->
+    <dtech-tasker-files ng-if="data.taskRecordObjectList[data.taskerFilesObjectKey]"
+                        class="dtech-pad-right-header"
+                        dtech-task-title = "data.subTasksTitle"
+                        dtech-tasker-files-object = "data.taskRecordObj[data.taskerFilesObjectKey]"
+                        dtech-show-label="true"
+                        dtech-is-modal="data.isModal"
+                        max-rows-to-display="data.taskerFilesMaxRows"
+                        table="{{data.table}}"
+                        task-sys-id="{{data.sys_id}}"                                          
+                        ></dtech-tasker-files>
+  </div>
+  <div class="dtech-push-right-flexbox 
+              dtech-max-width-fit-content
+              dtech-col-7-flex-row-end">
+<!-- TODO - try not loading actions until requested
+    <dtech-actions ng-if="data.taskRecordObjectList[data.taskerContextMenuObjectKey]"
+                   dtech-actions-object = "data.taskRecordObj[data.taskerContextMenuObjectKey]"
+                   dtech-is-modal="data.isModal"
+                   table="{{data.table}}"
+                   task-sys-id="{{data.sys_id}}"                                          
+                   ></dtech-actions>
+-->
+    <dtech-actions dtech-actions-object = "data.taskActions"
+                   dtech-is-modal="data.isModal"
+                   table="{{data.table}}"
+                   task-sys-id="{{data.sys_id}}"
+                   load-task-actions="loadTaskActions"
+                   ></dtech-actions>
+  </div>
 </div>
 ]]></template>
     </sp_widget>
