@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.TaskerTaskACLs</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
+        <description>2.8.3 HF305 | 2023-09-11 - raj - STRY0143647 - "Reviewer" Can Be Adjusted During "Work-in-Progress" &#13;
+2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
 2.8.1 | 2022-11-27 |raj |  DFCT0011433 -  Add "Shared Attachments" should be allowed to the roles (SEE DESCRIPTION) when Task is in the Review state&#13;
 2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table&#13;
 &#13;
@@ -120,8 +121,12 @@ TaskerTaskACLs.prototype = {
 		state = isNaN(stateNumeric) ? state : stateNumeric;
 
 		g_taskPermissions.number = grTask.getValue("number");
-		g_taskPermissions.isTaskManagerOUTA = UserPermissions.IsUserOUTA(gs.getUserID(),primary_assignee);		
-		g_taskPermissions.reviewerInOUTA_OU = UserPermissions.IsUserInOU(primary_assignee, reviewer);
+		g_taskPermissions.isTaskManagerOUTA = UserPermissions.IsUserOUTA(currentUser,primary_assignee);
+		g_taskPermissions.isTaskManagerOfReviewer = false;
+		// STRY0143647
+		if(reviewer && reviewer != ''){
+			g_taskPermissions.isTaskManagerOfReviewer = UserPermissions.IsUserOUTAOfAnotherUser(reviewer, currentUser);
+		}
 		g_taskPermissions.isTAExternal = isTAExternal !='0';
 		g_taskPermissions.isExternalOutbound = isExternalOutbound;
 		g_taskPermissions.isExternal = isExternalOutbound || isTAExternal;
@@ -136,10 +141,7 @@ TaskerTaskACLs.prototype = {
 		
 		// DFCT0011930 - user primary office to determine Task Executive permissions
 		// STRY0112587
-		g_taskPermissions.isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);
-		
-		var OrgScripts = new ClientOrganizationalScripts();
-		g_taskPermissions.isUserOUTAOfAnotherUserBasedOnDefaultOu = OrgScripts.isUserOUTAOfAnotherUserBasedOnDefaultOu(gs.getUserID(), taskOwner);
+		g_taskPermissions.isTaskExecutive = UserPermissions.userIsTaskExecutiveForOU(primary_office);		
 		g_taskPermissions.isTaskerUser = gs.getUser().hasRole("x_153465_discovert.tasker_user");
 		g_taskPermissions.isParentTaskOwner = parentTaskOwner == currentUser;
 		g_taskPermissions.isParentTaskAssignedMember = parentTaskAssignedMember == currentUser;
@@ -1005,6 +1007,7 @@ TaskerTaskACLs.prototype = {
 		return answer;
 	},
 
+	// STRY0143647 updated permissions for Waiting, Unassigned, Assigned, Rejected Primary Assignee, Rejected Assignment, Assigned, Accepted, Work in Progress, In Review and Rework
 	setReviewerPermissions: function(){
 		var answer = false;
 		if(g_taskPermissions.isStandardType){
@@ -1012,31 +1015,24 @@ TaskerTaskACLs.prototype = {
 				case 'New':
 					answer = true;
 					break;
-					// STRY0105845 Draft {-6}
+				// STRY0105845 Draft {-6}
 				case -6:
 					answer = g_taskPermissions.isOriginator;
 					break;
-					// Waiting {-3}, Unassigned {-5}, In Review {14}
-				case -3: case -5: case 'RejectedAssignment': case 14:
+				// Waiting {-3}, Unassigned {-5}, Assigned, RejectedPrimaryAssignee, RejectedAssignment
+				case -3: case -5: case 'RejectedPrimaryAssignee': case 'RejectedAssignment':
 					// STRY0112587
-					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskExecutive) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU);
+					answer = g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || 
+						g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskManagerOfReviewer || 
+						g_taskPermissions.isTaskExecutive || g_taskPermissions.isTaskAdministratorGTA;
 					break;
-				case 'RejectedPrimaryAssignee':
+				// Assigned {1}, Accepted {10}, Work in Progress {13}, In Review {14}, Rework {15}
+				case 1: case 10: case 13: case 14: case 15: 
 					// STRY0112587
-					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskExecutive);
-					break;
-					// Assigned {1}, Rework {15}
-				case 1:  case 15:
-					// STRY0112587
-					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskAdministratorGTA || g_taskPermissions.isTaskExecutive) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU && g_taskPermissions.isReviewRequired) || (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
-					break;
-				// Accepted {10}
-				case 10:
-					answer = (g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf) || (g_taskPermissions.isTaskManagerOUTA && g_taskPermissions.reviewerInOUTA_OU && !g_taskPermissions.isReviewRequired) || (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
-					break;
-				// Work in Progress {13}
-				case 13:
-					answer = (g_taskPermissions.isStandardType && g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
+					answer = g_taskPermissions.isTaskOwner || g_taskPermissions.isOnBehalfOf || 
+						g_taskPermissions.isTaskManagerOUTA || g_taskPermissions.isTaskManagerOfReviewer || 
+						g_taskPermissions.isTaskExecutive || g_taskPermissions.isTaskAdministratorGTA ||
+						(g_taskPermissions.isAssignedMember && !g_taskPermissions.isReviewRequired);
 					break;
 				// Completed {3}, Completed Incomplete {4},Cancelled {7} 
 				case 3: case 4: case 7:
@@ -1300,13 +1296,13 @@ TaskerTaskACLs.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-01-21 19:16:45</sys_created_on>
         <sys_id>695f1bd61bbdac103dc8eb96624bcb9c</sys_id>
-        <sys_mod_count>107</sys_mod_count>
+        <sys_mod_count>110</sys_mod_count>
         <sys_name>TaskerTaskACLs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_695f1bd61bbdac103dc8eb96624bcb9c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-06-07 01:04:34</sys_updated_on>
+        <sys_updated_on>2023-09-11 16:54:09</sys_updated_on>
     </sys_script_include>
 </record_update>
