@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3 (Tempate Updates Addon) STRY0141844 - DHS S&amp;T - Permissions for running a template from a task&#13;
+        <description>2.8.3HF | 2023-09-15 | DFCT0012146 - Non-Template and Non-OUTD users cannot access OU templates even if "Flexible Template Run Permissions" is shared with them&#13;
+2.8.3 (Tempate Updates Addon) STRY0141844 - DHS S&amp;T - Permissions for running a template from a task&#13;
 2.8.5 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat&#13;
 2.8.5 | 2022-12-23 - raj -   DFCT0011531 - Group management error displayed ErrorServer JavaScript error "property" is not defined. This is a technical defect&#13;
 2.8.5 | 2022-10-27 - raj -   STRY0131148 - Add New Table for Tasker User in preparation for Out of Office&#13;
@@ -1097,7 +1098,8 @@ tasking_System_Settings_Scripts.prototype = {
 			allFilter = myFilter;
 		}
 		templateFilters.myTemplateFilter = myFilter;
-		ouFilter = this.getOUTemplateFilter(runOnly) + '';
+		// DFCT0012146 - return just templates the user can run
+		ouFilter = this.getOUTemplateRunFilter(true) + '';
 		if (ouFilter != '' ){
 			templateFilters.hasOUTemplateRights = true;
 			if(allFilter.length !="")
@@ -1127,8 +1129,6 @@ tasking_System_Settings_Scripts.prototype = {
 			allFilter = 'none';
 		
 		templateFilters.allTemplateFilter = allFilter;
-// RAJ - this is in here for testing mobile issue
-// gs.info("User is: " + gs.getUserDisplayName() + " filter is: " + JSON.stringify(templateFilters));
 		return templateFilters;
 	},
 
@@ -1160,36 +1160,76 @@ tasking_System_Settings_Scripts.prototype = {
 		else
 			return "";
 	},
+  	// DFCT0012146
 	// This function returns the filter used to load all of the Templates for a user in the OU Template folder
-	getOUTemplateFilter: function(runOnly) {
+	// NOTE: template filter does not support run only.  There is a separate method call for it below
+	getOUTemplateFilter: function() {
 		var UserPermissions  = new UserInfoScripts();
 		// STRY0074534 Template Admins can read any template
 		var userIsTemplateAdmin =  UserPermissions.userHasProcessTemplateAdminRights() + '';
 		var ousWhereTaskManager = this.getMyOUTaskManagers();
 		var ousWhereTemplateDesigner = this.getMyOUTemplateDesigners(gs.getUserID());
 		var filterOUs = ousWhereTaskManager;
-		var addActive = '';
-		if(runOnly + '' != 'true'){
-			// STRY0074534 Template Admins can read any template
-			if(userIsTemplateAdmin == 'true'){
-				return "process_level=ou_process";
-			}
-			filterOUs = ousWhereTaskManager.concat(ousWhereTemplateDesigner);
-			// if any OUs have been returned, parse to get only unique
-			if (filterOUs.length > 0){
-				var au = new global.ArrayUtil();
-				filterOUs = au.unique(filterOUs);
-			} 
-		} else {
-			// when run, always only show active templates, otherwise, let the user filter
-			addActive  = '^u_active=true';
+		// STRY0074534 Template Admins can read any template
+		if(userIsTemplateAdmin == 'true'){
+			return "process_level=ou_process";
 		}
+		filterOUs = ousWhereTaskManager.concat(ousWhereTemplateDesigner);
+		// if any OUs have been returned, parse to get only unique
+		if (filterOUs.length > 0){
+			var au = new global.ArrayUtil();
+			filterOUs = au.unique(filterOUs);
+		} 
 		var userHasOUProcessRights = (filterOUs.length > 0) +'';
 		if (userHasOUProcessRights == 'true')
-			return "process_level=ou_process^process_ouIN" + filterOUs.join(',') + addActive;
-		else
-			return "";
+			return "process_level=ou_process^process_ouIN" + filterOUs.join(',');
+		else{
+			var ouTemplateQuery = this.getOUTemplateRunFilter(false);
+			return ouTemplateQuery;
+		}
+			
 	},
+	// DFCT0012146 - KEEP in sync with the query in UserInfoScripts.userHasWhoCanRunOnTemplate
+	// NOTE: If a template is using a restricted group, the counts and paging in some widgets will be off as we are not handling restricted groups in here
+	getOUTemplateRunFilter: function(activeOnly){
+		var currentUser = gs.getUserID();
+		
+		var addActive="";
+		if(activeOnly){
+			// this needs to be added to every subquery
+			addActive="^u_active=true";
+		}
+		
+		var allOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_all_members" + 
+			"^process_ouDYNAMIC466104e81bd34190848aa931604bcbe0" + addActive;
+
+		var allOUAndDescendantOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_all_members" + 
+			"^process_ouDYNAMIC90931f09d0e03110777ff1f01e0c509e" + addActive;
+
+		var allOrgStructureMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_all_members" + 
+			"^process_ouDYNAMIC767e4211d0ac3110777ff1f01e0c50e3" + addActive;
+
+		var OUTMsQuery = "process_level=ou_process^process_ouDYNAMICf31893201b5f4190848aa931604bcb94" + addActive +
+			"^u_who_can_run=template_ou_task_managers^ORu_who_can_runSTARTSWITHnull";
+		
+		var OUTMsWhoCanRunEmptyQuery = "process_level=ou_process^u_who_can_runSTARTSWITHnull" + 
+			"^process_ouDYNAMICf31893201b5f4190848aa931604bcb94" + addActive;
+		var OUAndDescendantOUTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_task_managers" + 
+			"^process_ouDYNAMICd8bcc8791b578d1011a92f40604bcb94" + addActive;
+		
+		var OrgStructureTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_task_managers" + 
+			"^process_ouDYNAMICa4eed25dd0ac3110777ff1f01e0c50b3" + addActive;
+
+		encodedQuery = allOUMembersQuery +
+			"^NQ" + allOUAndDescendantOUMembersQuery +
+			"^NQ" + allOrgStructureMembersQuery +
+			"^NQ" + OUTMsQuery + 
+			"^NQ" + OUAndDescendantOUTMsQuery + 
+			"^NQ" + OrgStructureTMsQuery;
+		
+		return encodedQuery;
+	},
+	
 	// This function returns the filter used to load all of the Templates for a user in the Global Template folder
 	getGlobalTemplateFilter: function(runOnly) {
 		var UserPermissions = new UserInfoScripts();
@@ -1208,12 +1248,12 @@ tasking_System_Settings_Scripts.prototype = {
 			if (userIsTaskAdministrator == 'true' || userIsTaskExecutive == 'true' ||  userHasGlobalProcessRights == 'true')
 				return "process_level=global_process";
 			else 
-				return "";
+				return "process_level=global_process";
 		// STRY0112587
 		} else if (userIsTaskAdministrator == 'true' || userIsTaskExecutive == 'true')
 			return "process_level=global_process^u_active=true";
 		else 
-			return "";
+			return "process_level=global_process";
 	},
 	
 	systemControlSetting: function(){
@@ -1270,14 +1310,13 @@ tasking_System_Settings_Scripts.prototype = {
 		} 
 		return allOUs;
 	},
-	
+
 	// Retrieve the OUs based on the user provided
 	retrieveTaskOUs: function(user){
 		// Check global setting (Open, Controlled, Flexible)
-		
 		// DFCT0011913
 		var au = new global.ArrayUtil();
-		
+
 		var systemControlSetting = this.systemControlSetting(); 
 		// Until we have a system setting that can be used, use the temp global setting
 		if(systemControlSetting.Open == true){
@@ -1297,7 +1336,7 @@ tasking_System_Settings_Scripts.prototype = {
 		// load all OUs where this user is a member
 		var userInOus = this.getOUsWhereUserIsAMember(user);
 		var allOUs = allRelativeOffices.concat(userInOus);
-	
+		
 		// if any OUs have been returned, parse to get only unique
 		if (allOUs.length > 0){
 			allOUs = au.unique(allOUs);
@@ -1391,7 +1430,7 @@ tasking_System_Settings_Scripts.prototype = {
 		return isPermissive;
 	},
 	
-getPermissiveOUs: function() {
+	getPermissiveOUs: function() {
 		var au = new global.ArrayUtil();
 		var offices = [];
 		var userTaskingOffices = [];
@@ -1424,6 +1463,7 @@ getPermissiveOUs: function() {
 		}
 		return offices;  
 	},
+
 	
 	// DFCT0010669 
 	getUserOUTaskManagers: function(user) {
@@ -1532,8 +1572,8 @@ getPermissiveOUs: function() {
 		grMemberOUs.addQuery('office_member', user);
 		grMemberOUs.query();
 		while(grMemberOUs.next()){
-			topOU = grMemberOUs.getValue('discover_office_hierarchy.u_top_ou');
-			topOUs.push(OU);
+			topOU = grMemberOUs.discover_office_hierarchy.u_top_ou;
+			topOUs.push(topOU);
 		}
 		// reduce to unique top offices
 		if (topOUs.length > 0){
@@ -1561,11 +1601,11 @@ getPermissiveOUs: function() {
 		var offices = [];
 		var grMemberOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		grMemberOUs.addQuery('office_member', user);
-		grOUs.addQuery('office_task_authority', 'true');
+		grMemberOUs.addQuery('office_task_authority', 'true');
 		grMemberOUs.query();
 		while(grMemberOUs.next()){
-			topOU = grMemberOUs.getValue('discover_office_hierarchy.u_top_ou');
-			topOUs.push(OU);
+			topOU = grMemberOUs.discover_office_hierarchy.u_top_ou;
+			topOUs.push(topOU);
 		}
 		// reduce to unique top offices
 		if (topOUs.length > 0){
@@ -1656,13 +1696,13 @@ getPermissiveOUs: function() {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>365</sys_mod_count>
+        <sys_mod_count>380</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-08-11 13:25:54</sys_updated_on>
+        <sys_updated_on>2023-09-15 20:37:20</sys_updated_on>
     </sys_script_include>
 </record_update>

@@ -368,6 +368,8 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //																			Changes in Client Script, also updated all $on events to destroy them on close of widget
 // 2.8.1 | 2022-11-24 | raj  | DFCT0011366 - On first load of Tasker - Templates shows gears image and empty state for Template Tree Bi-Fold and Template Tree
 //																			Changes in Client Script
+// 2.8.3HF | 2023-09-15 | raj | DFCT0012146 - 	Non-Template and Non-OUTD users cannot access OU templates even if "Flexible Template Run Permissions" is shared with them
+//																			Changes in Server Script
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -417,29 +419,65 @@ li.hover-effect.cm-subs-tab.active {&#13;
     var widgetParams;
     var tabs = [];
     var links = ['link1', 'link2', 'link3', 'link4', 'link5'];
+    // DFCT0012146 
     for (var i = 0; i < links.length; i++) {
+				var runFilter="";
+				var editFilter="";
         link = options[links[i]];
         // overwriting filter in here...
         if (link) {
             var tab = {};
             widgetParams = _getTabData(link);
+						widgetParams.hidePruned = true;
             // override filter calling JS
             switch (widgetParams.view) {
                 case 'MyProcess':
                     // override the my filter in the page with javascript
-                    widgetParams.filter = new tasking_System_Settings_Scripts().getMyTemplateFilter(false);
+										// get the filter for templates the user can edit
+                    editFilter = new tasking_System_Settings_Scripts().getMyTemplateFilter(false);
+										// get the filter for templates the user can run
+										runFilter = new tasking_System_Settings_Scripts().getMyTemplateFilter(true);
                     break;
                 case 'OUProcess':
                     // override the ou filter in the page with javascript
-                    widgetParams.filter = new tasking_System_Settings_Scripts().getOUTemplateFilter(false);
-									break;
+										// get the filter for templates the user can edit
+                    editFilter = widgetParams.filter = new tasking_System_Settings_Scripts().getOUTemplateFilter();
+										// get the filter for templates the user can run
+                    runFilter = widgetParams.filter = new tasking_System_Settings_Scripts().getOUTemplateRunFilter(data.showInactiveProcess);
+										break;
                 case 'GlobalProcess':
                     // override the ou filter in the page with javascript
-                    widgetParams.filter = new tasking_System_Settings_Scripts().getGlobalTemplateFilter(false);
+										// get the filter for templates the user can edit
+                    editFilter = new tasking_System_Settings_Scripts().getGlobalTemplateFilter(false);
+										// get the filter for templates the user can run
+                    runFilter = new tasking_System_Settings_Scripts().getGlobalTemplateFilter(true);
                     break;
             }
-						if(data.showInactiveProcess == false){
-							widgetParams.filter += '^u_active=true';
+					
+						// OUProcess level templates need to add or remove active filter to multiple query segments
+						if(widgetParams.view!="OUProcess" &&
+							 data.showInactiveProcess == false){
+								if(editFilter && editFilter.length>0 &&
+									editFilter.indexOf("u_active")==-1){
+									editFilter += '^u_active=true';
+								}
+								if(runFilter && runFilter.length>0 &&
+									runFilter.indexOf("u_active")==-1){
+									runFilter += '^u_active=true';
+								}
+						}
+						if(editFilter!='' && runFilter!=''){
+								// if both are returned and they are not the same,
+								// concatenate with NQ to return both sets
+								if(editFilter!=runFilter){
+									widgetParams.filter = editFilter + '^NQ' + runFilter;
+								} else {
+									// they are the same so just return one of them
+									widgetParams.filter = editFilter
+								}
+						} else {
+							// if one is blank, just concatenate you will only have one
+							widgetParams.filter = editFilter + runFilter;
 						}
             if (widgetParams.table) {
                 tab.table = widgetParams.table;
@@ -461,8 +499,9 @@ li.hover-effect.cm-subs-tab.active {&#13;
 								} else	if(gs.hasRole(tab.role)){
 									tabVisible = true;
 								}
-								tab.visible = tabVisible; // gs.hasRole(tab.role);// || UserPermissions.userHasProcessTemplateAdminRights();
-                tab.count = _getTableCountbyFilter(tab.table, tab.filter);
+				                tab.count = _getTableCountbyFilter(tab.table, tab.filter);
+								// DFCT0012146 - move count before tab visible, if count > 0, then show tab
+								tab.visible = tabVisible || tab.count>0; // gs.hasRole(tab.role);// || UserPermissions.userHasProcessTemplateAdminRights();
                 tab.className = '';
             }
 					tab.widgetParams = widgetParams;
@@ -579,10 +618,10 @@ li.hover-effect.cm-subs-tab.active {&#13;
 			fields: $sp.getListColumns(table, view),
 			page_id: _getParameterByName(link, 'page') || data.page_id || 'form',
 			show_keywords: _getParameterByName(link, 'show_keywords'),
-			show_breadcrumbs: _getParameterByName(link, 'show_breadcrumbs'),
+			show_breadcrumbs: false,// _getParameterByName(link, 'show_breadcrumbs'),
 			show_new: _getParameterByName(link, 'show_new'),
 			filter: _getParameterByName(link, 'filter'),
-			enable_filter: _getParameterByName(link, 'enable_filter'),
+			enable_filter: false,// _getParameterByName(link, 'enable_filter'),
 			window_size: data.window_size,
 			bifold: data.bifold, // 2.8 | 2022-06-17 | mmcc | DFCT0010888 - Zoom buttons are Not always correctly displayed on the Template List page
 			title: gs.getMessage(_getParameterByName(link, 'title')),
@@ -644,14 +683,14 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>1065</sys_mod_count>
+        <sys_mod_count>1089</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-05-13 19:28:09</sys_updated_on>
+        <sys_updated_on>2023-09-15 13:33:20</sys_updated_on>
         <template><![CDATA[<div >
  <div class="panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane dtech-topstick-posabso flex-column">
     <div class="panel-heading cm-widget-tabs flex-column justify-between dtech-panel-heading-min-height-standard dtech-border-bottom-1px-solid-ddd" role="tabpanel">
