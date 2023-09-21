@@ -433,6 +433,11 @@
                 (newNodeData.state == -3) &&
                 (parseInt(newNodeData.u_active_subtasks) == 0)
             )));
+			
+				// DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
+				if(!newNodeData.warning.waitStatewithNoSubtasks && newNodeData.state==-3){
+					newNodeData.warning.waitStateOrderBy = true;
+				}
 
         newNodeData.warning.primaryAssigneeEmpty = (newNodeData.primary_assignee == '' || newNodeData.primary_assignee == null);
         newNodeData.warning.assignedMemberEmpty = ((newNodeData.assigned_to == '' || newNodeData.assigned_to == null));
@@ -505,17 +510,25 @@
             diagram.model.setDataProperty(nodeData, 'canCreateSubTask', canCreateSubTask);
         }
 
-        var newWaitState = (((nodeData.u_wait_for_subtasks_to_finish == 'true') &&
+        var newWaitStateWithNoSubtasks = (((nodeData.u_wait_for_subtasks_to_finish == 'true') &&
                 (parseInt(nodeData.calchaschildren) == 0)) ||
             (((nodeData.u_wait_for_subtasks_to_finish == 'true') &&
                 (parseInt(nodeData.calchaschildren) != 0) &&
                 (nodeData.state == -3) &&
                 (parseInt(nodeData.u_active_subtasks) == 0)
             )));
-
-        if (nodeData.warning.waitStatewithNoSubtasks != newWaitState) {
-            diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitState);
+        if (nodeData.warning.waitStatewithNoSubtasks != newWaitStateWithNoSubtasks) {
+            diagram.model.setDataProperty(nodeData.warning, 'waitStatewithNoSubtasks', newWaitStateWithNoSubtasks);
         }
+				// DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
+				var newWaitStateOrderBy = false;
+				if(!newWaitStateWithNoSubtasks && nodeData.state==-3){
+					newWaitStateOrderBy = true;
+				}
+        if (nodeData.warning.waitStateOrderBy != newWaitStateOrderBy) {
+            diagram.model.setDataProperty(nodeData.warning, 'waitStateOrderBy', newWaitStateOrderBy);
+        }
+
         // STRY0095748 - no suspensedate warning
         var newSuspenseDateFlag = (nodeData.suspense_date == '' || nodeData.suspense_date == null);
         if (nodeData.warning.noSuspenseDate != newSuspenseDateFlag) {
@@ -1213,9 +1226,10 @@
                 }),
                 new go.Binding("text", "", function(data) {
                     if (iconName == 'ExclamationIcon') {
-												// STRY0131003 - add ooo lookup to if statement
+						// STRY0131003 - add ooo lookup to if statement - DFCT0012129
                         if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
                             data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
+							data.warning.waitStateOrderBy ||
                             data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
                             data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty || _isAnyUserOOOforTask(data))
                             return TREE_CONST.font_awesome_exclamation_triangle_o;
@@ -1238,10 +1252,12 @@
                                 iconStroke = getStateColors(data.state, "text");
                             break;
                         case 'DurationIcon':
+							// DFCT0012129
                             if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
                                 data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-                                data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks)
-                                iconStroke = getStateColors(data.state, "warning");
+                                data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
+								data.warning.waitStateOrderBy)
+                                iconStroke = getStateColors(data.state, "warning");												
                             else
                                 iconStroke = getStateColors(data.state, "text");
                             break;
@@ -1416,6 +1432,8 @@
                 break;
             case 'DurationIcon':
                 var waitStatewithNoSubtasks = (nodeData.warning.waitStatewithNoSubtasks == true);
+				// DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
+				var waitStateOrderBy = (nodeData.warning.waitStateOrderBy == true);
                 var noSuspenseDate = (nodeData.warning.noSuspenseDate == true);
                 var isTopSuspenseDateAfterExternalInboundDate = (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate == true);
                 var isTopSuspenseDateBeforeExternalOutboundDate = (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate == true);
@@ -1430,15 +1448,18 @@
                         // Row 2
                         _createTableColumn(waitStatewithNoSubtasks, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Wait state set with no subtasks"]),
                         // Row 3
-                        _createTableColumn(noSuspenseDate, 2, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task has no Suspense Date"]),
+                        // DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
+                        _createTableColumn(waitStateOrderBy, 2, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Task is Dependent on lower-order Tasks"]),
                         // Row 4
-                        _createTableColumn(isTopSuspenseDateAfterExternalInboundDate, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Internal Suspense date is after the External Suspense Date"]),
+                        _createTableColumn(noSuspenseDate, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task has no Suspense Date"]),
                         // Row 5
-                        _createTableColumn(isTopSuspenseDateBeforeExternalOutboundDate, 4, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound"]),
-                        // Row 6 (width is wider on this message)
-                        _createTableColumn(isChildSuspenseDateAfterParent, 5, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["A Subtask has a Suspense Date AFter this Task"]),
+                        _createTableColumn(isTopSuspenseDateAfterExternalInboundDate, 4, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Internal Suspense date is after the External Suspense Date"]),
+                        // Row 6
+                        _createTableColumn(isTopSuspenseDateBeforeExternalOutboundDate, 5, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound"]),
                         // Row 7 (width is wider on this message)
-                        _createTableColumn(isSuspenseDateAfterParent, 6, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Subtask Suspense Date AFTER Parent Task Suspense Date"])
+                        _createTableColumn(isChildSuspenseDateAfterParent, 6, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["A Subtask has a Suspense Date AFter this Task"]),
+                        // Row 8 (width is wider on this message)
+                        _createTableColumn(isSuspenseDateAfterParent, 7, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Subtask Suspense Date AFTER Parent Task Suspense Date"])
                     );
                 break;
             case 'OperationalIcon':
@@ -1511,27 +1532,28 @@
                         // Row 4
                         _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.assigned_to.fieldLabel + ": "),
                         _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue),
-												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-												_addOutOfOffice(true, 3, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.assigned_to),
-												// STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer
+						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+						_addOutOfOffice(true, 3, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.assigned_to),
+						// STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer
                         // Row 5
                         _createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_reviewer.fieldLabel + ": "),
-												_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_reviewer_DisplayValue),
-												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-												_addOutOfOffice(true, 4, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_reviewer),
+						_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_reviewer_DisplayValue),
+						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+						_addOutOfOffice(true, 4, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_reviewer),
 												
                         // Row 6
                         _createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_task_requester.fieldLabel + ": "),
                         _createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_task_requester_DisplayValue),
-												// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-												_addOutOfOffice(true, 5, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_task_requester)
+						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
+						_addOutOfOffice(true, 5, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_task_requester)
                     );
                 break;
             case 'ExclamationIcon':
-                // STRY0095748 - no suspensedate warning
+                // STRY0095748 - no suspensedate warning - DFCT0012129
                 var durationExclamation = (nodeData.warning.noSuspenseDate || nodeData.warning.isTopSuspenseDateAfterExternalInboundDate ||
                     nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate || !nodeData.warning.isSuspenseDateAfterChildren ||
-                    nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks);
+                    nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks ||
+										nodeData.warning.waitStateOrderBy);
                 var assignmentExclamation = (nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty);
 								var oooExclamation = _isAnyUserOOOforTask(nodeData);
                 toolTip =
@@ -1540,7 +1562,7 @@
                         _createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
                         // row 3
                         _createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"]),
-												// row 5 - STRY0131003 - OOO visual indicator
+						// row 5 - STRY0131003 - OOO visual indicator
                         _createTableColumn(oooExclamation, 5, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task is assigned to a member that is out of office between now and the suspense date."])
 
                     );
@@ -1770,6 +1792,9 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //                                      Added to the tooltip in client script tool tip table
 // 2.8.1 | 2023-01-09 | raj  | STRY0131003 - Task Tree- OOO Visual Indicators
 //                                      Added to lookup to the tooltip
+// 2.8.3HF | 2023-09-21 | raj  | DFCT0012129 - All Wait State Tasks display "Waiting on Creating Subtasks" even if it is in wait state due to "Order by"
+//																			Changes made in Client Controller
+//
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
@@ -1891,14 +1916,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>2019</sys_mod_count>
+        <sys_mod_count>2020</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-01-13 00:16:56</sys_updated_on>
+        <sys_updated_on>2023-09-21 23:02:33</sys_updated_on>
         <template><![CDATA[<div id="accordionTaskerGraphical" class="panel-group flex-row flex-grow">
   <div id="main_body" class="panel panel-default flex-column flex-grow" ng-class="{'dtech-topstick-posabso':data.hide_accordion==true}"> 
     <div id="panel_heading" class="panel-heading" ng-class="{'dtech-panel-heading-min-height-standard':data.bifold==true}">
