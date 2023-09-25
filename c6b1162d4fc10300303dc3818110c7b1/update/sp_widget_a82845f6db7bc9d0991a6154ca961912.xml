@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>standard</category>
-        <client_script><![CDATA[function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window) {
+        <client_script><![CDATA[function ($scope, spUtil, $rootScope, $timeout, spAriaUtil, spGtd, $window, $interval) {
+	var CONST_MINUTES_IN_MS = 1000 * 60;
+	var CONST_THREE_MINUTES = 3 * CONST_MINUTES_IN_MS;
+	var refreshPromise;
+	
 	$scope.data.hasNewItems=true;
 	$scope.collapse = function() {
 		$rootScope.$emit('sp-navbar-collapse');
@@ -85,6 +89,37 @@
       });
     }
   });
+	// STRY0081697
+	$scope.refreshBanner = function(){
+		if(refreshPromise && refreshPromise!=undefined){
+			return;
+		}
+		refreshPromise = $interval(function(){
+			// add logic here to determine if we keep running
+			// for example, if we added a refresh button, we would want to cancel this, then start another one
+			// or, if the user left the screen open, then we might want to cancel after a certain number of refreshes
+			$scope.data.refreshMenuCounts = true;
+			spUtil.update($scope).then(function(){
+				// do anything you need to do here after receiving back
+			});			
+		}, CONST_THREE_MINUTES);
+	}
+
+	$scope.stopRefresh = function() {
+		if (refreshPromise && (refreshPromise!=undefined)) {
+			$interval.cancel(refreshPromise);
+			refreshPromise = undefined;
+		}
+	};
+	
+	$scope.$on('$destroy', function() {
+		// Make sure that the interval is destroyed too
+		$scope.stopRefresh();
+	});
+
+	// start the interval
+	$scope.refreshBanner();
+/*	
 	// Get list of record watchers
 	var record_watchers = [];
 	if ($scope.data.menu.items) {
@@ -99,11 +134,13 @@
 			}
 		}
 	}
+
 	// Init record watchers
 	for (var y in record_watchers){
 		var watcher = record_watchers[y];
 		spUtil.recordWatch($scope, watcher.table, watcher.filter);
 	}
+*/
   $rootScope.$broadcast('sp-header-loaded');
 }]]></client_script>
         <controller_as>c</controller_as>
@@ -332,11 +369,15 @@
 //                                         New Widget, might be able to merge with Tasker-Header Menu
 // 2.8.0 | 2022-08-13 | raj  | STRY0126833 Tasker Portal Homepage- Resize elements to fit for HD1080p at 125% scale
 //                                          Changes in bannerMenuTemplate and CSS
-// 
+// 2.8.3HF | 2023-09-24 | raj | STRY0081697 - Banner Notification re-group banners to minimize performance load time
+// 											Changes in Client Controller and Server Script 
+//											Added $interval to client script function parameters 
 //------------------------------------------------------------------------------------------------------------------------
 (function(){
 	main();
 	
+	// TODO - change this to not reload everything on the update / refresh
+	// look for input and only refresh the menu items if that was posted back on the update
 	function main(){
 	
 		// build menus
@@ -421,14 +462,14 @@
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-06-03 23:56:58</sys_created_on>
         <sys_id>a82845f6db7bc9d0991a6154ca961912</sys_id>
-        <sys_mod_count>57</sys_mod_count>
+        <sys_mod_count>66</sys_mod_count>
         <sys_name>Tasker Banner Menu</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a82845f6db7bc9d0991a6154ca961912</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-09-02 20:38:31</sys_updated_on>
+        <sys_updated_on>2023-09-25 02:11:26</sys_updated_on>
         <template><![CDATA[<ul class="nav navbar-nav" aria-label="${Header}" role="menubar">
   <div class="header-loader" ng-class="{'invisible': !loadingIndicator}">
     <div class="hidden-xs sp-loading-indicator la-sm">
