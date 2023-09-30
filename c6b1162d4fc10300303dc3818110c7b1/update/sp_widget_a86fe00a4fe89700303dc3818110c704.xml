@@ -44,6 +44,43 @@
 		className: "active"
 	};
 	
+	// DFCT0012192 - DFCT0012193
+	function _templateCreated(templateId){
+			$scope.data.getNewTemplateInfo = true;
+			$scope.data.templateId = templateId;
+			spUtil.update($scope).then(function(data) {
+				spUtil.addInfoMessage(data.newTemplateMessage);
+				$scope.data.getNewTemplateInfo = false;
+				_updateTab($scope.data.newTemplateTabName);
+			});		
+	}
+	
+	// DFCT0012192 - DFCT0012193
+	function _onTemplateCloned(event, params){
+		_templateCreated(params.sys_id);
+	}
+	
+	// DFCT0012192 - DFCT0012193 update the tab after create new template and clone template
+	function _updateTab(tabName){
+		var tabs = $scope.data.tabs;
+		if (tabs > 0){
+			for (var t in tabs){
+				var oTab = tabs[t];
+				if(oTab.tabName == tabName){
+					_updateDataTable(oTab);
+					break;
+				}
+			}
+		}
+	}
+
+	// DFCT0012192 - DFCT0012192 - DFCT0012193 update the tab after create new template and clone template
+	function _updateDataTable(tab){
+		spUtil.get('discovertasker-widget-data-table', tab.widgetParams).then(function(response) {
+			tab.dataTableWidget = response;
+		});
+	}
+	
 	$scope.openModalNewPocessTemplate = function (sys_id_Modal) {
 		var table = 'x_153465_discovert_discover_routing_template';
 		
@@ -82,17 +119,10 @@
 				'display': 'none'
 			}
 		}).then(function() {
-			// STRY0127096 - create_template
-			$scope.data.getTemplateInfo = true;
-			$scope.data.templateId = shared.fields.sys_id.value;
-			spUtil.update($scope).then(function(data) {
-				spUtil.addInfoMessage(data.newTemplateMessage);
-				$scope.data.getTemplateInfo = false;
-			});
-			
+			_templateCreated(shared.fields.sys_id.value);
 		});
 	};
-	
+
 	c.showTab = function (tab, e) {
 		c.activeTab = tab.tabName;
 		target = e.target;
@@ -148,12 +178,14 @@
 			}
 		}
 	}
-	
+		
 	// STRY0127096 - unregister all event watchers
 	var unregister_discovertasker_widget_data_table_update_count = $scope.$on("discovertasker-widget-data-table-update_count", _countUpdated);
 	var unregister_discovertasker_widget_data_table_update_page_index = $scope.$on("discovertasker-widget-data-table-update_page_index", _pageIndexUpdated);
 	var unregister_dataTableClick = $rootScope.$on('dataTableClick', _onDataTableClick);
 	var unregister_sp_DiscoverListItem = $scope.$on('sp.DiscoverListItem', _onDiscoverListItem);
+	// DFCT0012192 - DFCT0012193
+	var unregister_dtechTemplateCloned = $rootScope.$on('$dtech-template-cloned', _onTemplateCloned);
 	
 	// STRY0127096 - unregister all event watchers
 	$scope.$on("$destroy", function() {
@@ -368,8 +400,12 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //																			Changes in Client Script, also updated all $on events to destroy them on close of widget
 // 2.8.1 | 2022-11-24 | raj  | DFCT0011366 - On first load of Tasker - Templates shows gears image and empty state for Template Tree Bi-Fold and Template Tree
 //																			Changes in Client Script
-// 2.8.3HF | 2023-09-15 | raj | DFCT0012146 - 	Non-Template and Non-OUTD users cannot access OU templates even if "Flexible Template Run Permissions" is shared with them
+// 2.8.3HF | 2023-09-15 | raj | DFCT0012146 - Non-Template and Non-OUTD users cannot access OU templates even if "Flexible Template Run Permissions" is shared with them
 //																			Changes in Server Script
+// 2.8.3 (Template Updates Addon)  DFCT0012193 - In Template List view, successfully cloning a template does not refresh the Template List
+//										Changes in Client Controller
+// 2.8.3 (Template Updates Addon)  DFCT0012192 -	In Template List view, successfully creating an OU template does not refresh the Template List
+//										Changes in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -384,9 +420,10 @@ li.hover-effect.cm-subs-tab.active {&#13;
     data.showInactiveProcess = false;
     if (input){
 			data.showInactiveProcess = input.showInactiveProcess;
-			if(input.getTemplateInfo==true){
+			if(input.getNewTemplateInfo==true){
+				data.tabs=input.tabs;
 				// set template name and parent task def
-				_getTemplateInfo();
+				_getNewTemplateInfo();
 				return;
 			}
 		}
@@ -547,6 +584,26 @@ li.hover-effect.cm-subs-tab.active {&#13;
 		}
 	}
 
+	// DFCT0012192 - DFCT0012193
+  function _getTabForNewTemplate(tabs){
+		var newTemplateTabName;
+		if (tabs.length > 0){
+				for (var t in tabs){
+					
+					var oTab = tabs[t];
+					if(
+						(data.newTemplateType=="my_process" && oTab.widgetParams.view=="MyProcess") ||
+						(data.newTemplateType=="ou_process" && oTab.widgetParams.view=="OUProcess") ||
+						(data.newTemplateType=="global_process" && oTab.widgetParams.view=="GlobalProcess")
+					){
+						newTemplateTabName = oTab.tabName;
+						break;
+					}
+				}
+		}
+		return newTemplateTabName;
+	}
+
 	function _getFirstTabAndId(tabs){
 		var foundItem = false;
 		for (var t in tabs){
@@ -662,11 +719,14 @@ li.hover-effect.cm-subs-tab.active {&#13;
 		else return count;
 	}
 	
-	function _getTemplateInfo(){
+	function _getNewTemplateInfo(){
 		var gr_template = new GlideRecord("x_153465_discovert_discover_routing_template");
 		if(gr_template.get(input.templateId)){
 			data.newTemplateMessage = gs.getMessage("Tasker - Template created message with Template Name {0} and Top Template Task id {1}",
 											[gr_template.template_name, gr_template.parent_task_def]);
+			data.newTemplateType = gr_template.getValue("process_level");
+			// DFCT0012192 - DFCT0012193
+			data.newTemplateTabName  = _getTabForNewTemplate(data.tabs);
 		}
 	}
 
@@ -683,14 +743,14 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>1089</sys_mod_count>
+        <sys_mod_count>1094</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-15 13:33:20</sys_updated_on>
+        <sys_updated_on>2023-09-29 23:12:55</sys_updated_on>
         <template><![CDATA[<div >
  <div class="panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane dtech-topstick-posabso flex-column">
     <div class="panel-heading cm-widget-tabs flex-column justify-between dtech-panel-heading-min-height-standard dtech-border-bottom-1px-solid-ddd" role="tabpanel">

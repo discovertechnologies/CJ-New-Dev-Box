@@ -13,8 +13,6 @@
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 //------------------------------------------------------------------------------------------------------------------------
-// 2.8.5   - 2023-07-22 - raj -  STRY0142159 - Parent Template Task field protection
-//------------------------------------------------------------------------------------------------------------------------
 // Script Continued Below
 var x_153465_discovert = x_153465_discovert || {};
 
@@ -26,8 +24,10 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 	var _node_drag_over_not_allowed_fill_color = '#B71C1C';
 	var _node_drag_over_not_cursor = 'not-allowed';
 	
+	var _can_edit = false;
 	var _currentItemSelected = null;
-	var _clipboardSubject;
+	// DFCT0012191
+	var _selectedItems = [];
 	var _saveOriginalDragStrokeValue;
 	var _saveOriginalDragFillValue;
 	var _saveOriginalCursor;
@@ -36,6 +36,7 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 	var _diagram;
 	var _spModal;
 	var _widget_data;
+	var $log;
 	
 	/* 	set your private variables and functions here. For example: 
 	var privateVar = 0; 
@@ -44,8 +45,19 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 	}
 	*/
 
+	// function to post message stating user does not have edit permissions
+	function _userEditNotPermitted(operation){
+		_spModal.alert("User does not have permissions to Edit, " + operation + " cancelled.");
+	}
+	
 	function _pasteFromClipboard(){
-		_insertCopiedItems(_clipboardSubject);
+		if(!_can_edit){
+			_userEditNotPermitted("paste from clipboard");
+		} else {
+			// DFCT0012191
+			_insertCopiedItems(_selectedItems);
+		}
+		
 // the "this" in the next line is not receiving the right thing
 //		go.CommandHandler.prototype.pasteFromClipboard.call(this);
 	}
@@ -58,25 +70,43 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 	function _clipboardChanged(e){
 		// store the clipboard.  This is used in _pastFromClipboard.  
 		// If we can figure out how to get access to the clipboard from the diagram object, we could just use that in the _pastFromClipboard event
-		_clipboardSubject = e.subject;
+		// DFCT0012191
+		_setSelectedItems(_diagram.selection.iterator);
 	}
 	
 	function _clipboardPasted(e){
-		// if an item is selected, add clipboard items to i
-		_insertCopiedItems(e.subject);
+		if(!_can_edit){
+			_userEditNotPermitted("paste from clipboard");
+		} else {
+			// if an item is selected, add clipboard items to it
+			// // DFCT0012191
+			_setSelectedItems(e.subject.iterator);
+			_insertCopiedItems(_selectedItems);			
+		}
 	}
 	
-	function _insertCopiedItems(subject){
-		if(_currentItemSelected){
-			var numItemsSelected = subject.count;
-			if(subject.count > 0){
-				var itClip = subject.iterator;
-				while(itClip.next()){
-					var clipObj = itClip.value;
+	// // DFCT0012191
+	function _setSelectedItems(selectedIterator){
+		// reset selected array
+		_selectedItems = [];
+		while(selectedIterator.next()){
+			_selectedItems.push(selectedIterator.value);
+		}		
+	}
+
+	// DFCT0012191
+	function _insertCopiedItems(selectedItems){
+		if(!_can_edit){
+			_userEditNotPermitted("add items");
+		} else {
+			if(_currentItemSelected){
+				var numItemsSelected = selectedItems.length;
+				for(var selIdx=0; selIdx < numItemsSelected; selIdx++) {
+					var clipObj = selectedItems[selIdx];
 					_copyObject(clipObj, _currentItemSelected, numItemsSelected);
 				}
 			}
-		}		
+		}
 	}
 	
 	function _externalObjectsDropped(e){
@@ -86,17 +116,25 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 
 	function _selectionDeleting(e){
 		var countSelected = e.diagram.selection.count;
-		if(countSelected>1){
-			// TODO - MULTILINGUAL
-			_spModal.alert("You have selected [" + countSelected + "] items.  Only one item can be selected for deletion at time.");
-			// todo, to change this, we would have to find a way to loop through selection and prompt for each task selected for deltion
-		} else if(countSelected==1){
-			var delObj = e.diagram.selection.first();
-			if(_widget_data.treeType=="Template"){
-				// NOTE: when adding other trees, might be able to move some logic into confirmation and deal with different trees in confirmation
-				_confirmDeletionTemplateTask(delObj);
+		if(!_can_edit){
+			_userEditNotPermitted("delete items");
+			// since this might fire more than one time, set the selection count to zero after alerting the user
+			e.diagram.selection.count = 0;
+		} else {
+
+			if(countSelected>1){
+				// TODO - MULTILINGUAL
+				_spModal.alert("You have selected [" + countSelected + "] items.  Only one item can be selected for deletion at time.");
+				// todo, to change this, we would have to find a way to loop through selection and prompt for each task selected for deltion
+			} else if(countSelected==1){
+				var delObj = e.diagram.selection.first();
+				if(_widget_data.treeType=="Template"){
+					// NOTE: when adding other trees, might be able to move some logic into confirmation and deal with different trees in confirmation
+					_confirmDeletionTemplateTask(delObj);
+				}
 			}
 		}
+		// command is always stopped b/c we let the record watcher add the items
 		e.diagram.commandHandler.stopCommand();			
 	}
 	
@@ -131,6 +169,7 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 	
 	function _mouseDragEnter(e, obj){
 		var mayDrop = _checkAllForMove(e,obj);
+		mayDrop = mayDrop && _can_edit;
 		// only need to check if you can move b/c all items can be copied
 		// NOTE, drop over parent does nothing
 		_styleDragEnter(obj, mayDrop);
@@ -163,19 +202,27 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 		var dropSuccessful = false;
 		var numItemsSelected = e.diagram.selection.count;
 		var isControlKeyDown = _checkControlKeyDown();
+		var operation = "to move items";
+		if(isControlKeyDown){
+			operation = "to copy items";
+		}
 		var itDrop = e.diagram.selection.iterator;
-		while(itDrop.next()){
-			var itDropObj = itDrop.value;
-			if(isControlKeyDown){
-				dropSuccessful = _copyObject(itDropObj, obj, numItemsSelected);
-			} else {
-				dropSuccessful = _moveObject(itDropObj, obj);
+		if(!_can_edit){
+			_userEditNotPermitted(operation);
+		} else {		
+			while(itDrop.next()){
+				var itDropObj = itDrop.value;
+				if(isControlKeyDown){
+					dropSuccessful = _copyObject(itDropObj, obj, numItemsSelected);
+				} else {
+					dropSuccessful = _moveObject(itDropObj, obj);
+				}
+				//NOTE: if we want to support undu, then we would change the link and referesh the model isntead of calling the update from here
+				//var incoming = itDropObj.findLinksInto().first();
+				//if (incoming) e.diagram.remove(incoming);
+				//e.diagram.model.addLinkData( { from: obj.key, to: itDropObj.key });
+				// stop commmand so the object is not added to the diagram since we are handling the dorp
 			}
-			//NOTE: if we want to support undu, then we would change the link and referesh the model isntead of calling the update from here
-			//var incoming = itDropObj.findLinksInto().first();
-			//if (incoming) e.diagram.remove(incoming);
-			//e.diagram.model.addLinkData( { from: obj.key, to: itDropObj.key });
-			// stop commmand so the object is not added to the diagram since we are handling the dorp
 		}
 		// cancel the copy command that places the items on the canvas
 		if(isControlKeyDown){
@@ -198,7 +245,7 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 		} else {
 			_apiService.copyTemplateTaskAndDescendants(copyObj);
 		}
-		console.log("Template Task was copied: " + JSON.stringify(copyObj));
+		$log.log("Template Task was copied: " + JSON.stringify(copyObj));
 		objectCopied = true;
 		return objectCopied;
 	}
@@ -209,7 +256,7 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 		if(_mayMoveNode(gojsMoveObj, gojsMoveToObj, true)){
 			if(_widget_data.treeType=="Template"){
 				_apiService.moveTemplateTask(moveObj);
-				console.log("Template Task was moved: " + JSON.stringify(moveObj));
+				$log.log("Template Task was moved: " + JSON.stringify(moveObj));
 				objectMoved= true;
 			}
 		}
@@ -290,9 +337,11 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
 */
 	
 
-	function _init(parm_widget_data, parm_spModal, parm_apiService, parm_diagram){
+	function _init(parm_can_edit, parm_widget_data, parm_spModal, parm_log, parm_apiService, parm_diagram){
+		_can_edit = parm_can_edit;
 		_widget_data = parm_widget_data;
 		_spModal = parm_spModal;
+		$log = parm_log;
 		_apiService = parm_apiService;
 		_diagram = parm_diagram;
 		_diagram.addDiagramListener("ClipboardPasted", _clipboardPasted);
@@ -319,14 +368,14 @@ x_153465_discovert.DTech_gojs_drag_drop = (function() {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-23 01:31:47</sys_created_on>
         <sys_id>b1006dccd8d03110777f241b36e1e0bc</sys_id>
-        <sys_mod_count>185</sys_mod_count>
+        <sys_mod_count>203</sys_mod_count>
         <sys_name>x_153465_discovert.DTech_gojs_drag_drop</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_ui_script_b1006dccd8d03110777f241b36e1e0bc</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-15 17:27:23</sys_updated_on>
+        <sys_updated_on>2023-09-29 03:38:09</sys_updated_on>
         <ui_type>10</ui_type>
         <use_scoped_format>true</use_scoped_format>
     </sys_ui_script>

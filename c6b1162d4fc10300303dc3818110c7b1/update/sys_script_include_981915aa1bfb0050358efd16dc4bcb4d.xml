@@ -5,7 +5,10 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3HF | 2023-09-20 | DFCT0012137 - Suspense date not default to 1700 per Tasker setting - install from internally DT app repository.  (Seems to be still happening for Acknowledgement types)&#13;
+        <description>2.8.3HF | 2023-09-26 | STRY0145242 - Allow sharing to 'Ancestor' offices for "Who Can Run" in Templates&#13;
+2.8.3HF | 2023-09-26 | DFCT0012187 - In "View Template" form, the "Who Can Run" option "All Members of the Template OU and its descendants" does not share the template to other PTD/OUTD/GTD users&#13;
+2.8.3HF | 2023-09-25 | DFCT0012183 - In "View Template" form, the "Who Can Run" option "Task Managers of the Template OU and its Descendants" does not share the template to other TMs&#13;
+2.8.3HF | 2023-09-20 | DFCT0012137 - Suspense date not default to 1700 per Tasker setting - install from internally DT app repository.  (Seems to be still happening for Acknowledgement types)&#13;
 2.8.3HF | 2023-09-15 | DFCT0012146 - Non-Template and Non-OUTD users cannot access OU templates even if "Flexible Template Run Permissions" is shared with them&#13;
 2.8.3 (Tempate Updates Addon) STRY0141844 - DHS S&amp;T - Permissions for running a template from a task&#13;
 2.8.5 | 2023-04-04 - raj -   STRY0136617 - Added check for sidebar on and enable chat&#13;
@@ -1224,8 +1227,13 @@ tasking_System_Settings_Scripts.prototype = {
 		var allOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_all_members" + 
 			"^process_ouDYNAMIC466104e81bd34190848aa931604bcbe0" + addActive;
 
-		var allOUAndDescendantOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_all_members" + 
+		// STRY0145242 - ancestor uses descendants query b/c we need to find the descendants of the Template OU
+		var allOUAndAncestorOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_and_ancestors_all_members" + 
 			"^process_ouDYNAMIC90931f09d0e03110777ff1f01e0c509e" + addActive;
+		
+		// DFCT0012187 - changed guid to use new ancestor dynamic filter b/c it is the OU of the template and below that matters
+		var allOUAndDescendantOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_all_members" + 
+			"^process_ouDYNAMIC19e82799ad6d3110777fdd8f405bfeea" + addActive;
 
 		var allOrgStructureMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_all_members" + 
 			"^process_ouDYNAMIC767e4211d0ac3110777ff1f01e0c50e3" + addActive;
@@ -1235,16 +1243,24 @@ tasking_System_Settings_Scripts.prototype = {
 		
 		var OUTMsWhoCanRunEmptyQuery = "process_level=ou_process^u_who_can_runSTARTSWITHnull" + 
 			"^process_ouDYNAMICf31893201b5f4190848aa931604bcb94" + addActive;
-		var OUAndDescendantOUTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_task_managers" + 
+
+		// STRY0145242
+		var OUAndAncestorOUTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_and_ancestors_task_managers" + 
 			"^process_ouDYNAMICd8bcc8791b578d1011a92f40604bcb94" + addActive;
+
+		// DFCT0012183
+		var OUAndDescendantOUTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_task_managers" + 
+			"^process_ouDYNAMIC9582de09942d3110777f53f06178e122" + addActive;
 		
 		var OrgStructureTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_task_managers" + 
 			"^process_ouDYNAMICa4eed25dd0ac3110777ff1f01e0c50b3" + addActive;
 
 		encodedQuery = allOUMembersQuery +
+			"^NQ" + allOUAndAncestorOUMembersQuery +
 			"^NQ" + allOUAndDescendantOUMembersQuery +
 			"^NQ" + allOrgStructureMembersQuery +
 			"^NQ" + OUTMsQuery + 
+			"^NQ" + OUAndAncestorOUTMsQuery + 
 			"^NQ" + OUAndDescendantOUTMsQuery + 
 			"^NQ" + OrgStructureTMsQuery;
 		
@@ -1534,37 +1550,75 @@ tasking_System_Settings_Scripts.prototype = {
 		}
 		return offices;  
 	},
-	
-  	// returns a list of OUs where the logged-in user is a task manager plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
-	getTaskManagerOUsAndDescendents: function(user, level) {
+
+	// DFCT0012183 - used the descendants and needed to create ancestors
+	// returns a list of OUs where the logged-in user is a task manager plus OUs which are ancestors of the task manager OUs
+	getTaskManagerOUsAndAncestors: function(user) {		
+		var officesAndAncestors = [];
+		officesAndAncestors = this._getOUsAndAncestors(user, true);
+		return officesAndAncestors;  
+	},
+
+	// DFCT0012187  - used the descendants and needed to create ancestors
+	// returns a list of OUs where the logged-in user is a task manager plus OUs which are ancestors of the task manager OUs
+	getMyOUsAndAncestors: function(user) {		
+		var officesAndAncestors = [];
+		officesAndAncestors = this._getOUsAndAncestors(user, false);
+		return officesAndAncestors;  
+	},
+
+	// DFCT0012183 - used the descendants and needed to create ancestors
+	// returns a list of OUs where the logged-in user is a task manager plus OUs which are ancestors of the task manager OUs
+	_getOUsAndAncestors: function(user, taskManagersOnly) {
+		var au = new global.ArrayUtil();
+		var OrgScripts = new OrganizationalScripts();
 		var offices = [];
-		var officesAndDescendents = [];
+		var officesAndAncestors = [];
 		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-		grOUs.addQuery('office_task_authority', 'true');
+		if(taskManagersOnly){
+			grOUs.addQuery('office_task_authority', 'true');
+		}
+		
 		grOUs.addQuery('office_member', user);
 		grOUs.query();
 		while(grOUs.next()){
 			var OU = grOUs.getValue('discover_office_hierarchy');
 			offices.push(OU);
-			officesAndDescendents.push(OU);
+			officesAndAncestors.push(OU);
 		}
-		for (i=0; i<offices.length; i++) {
-			// Get Descendents and add them to the siblings for each OU where I am a task Manager
-			officesAndDescendents = this.getDescendents(offices[i], officesAndDescendents, level);
+		for (var i=0; i<offices.length; i++) {
+			var strAncestorOffices = OrgScripts.getAncestors(offices[i]);
+			var aAncestorOffices = strAncestorOffices.split(',');
+			officesAndAncestors = au.union(officesAndAncestors,aAncestorOffices);
 		}
-		if (officesAndDescendents.length > 0){
-			var au = new global.ArrayUtil();
-			officesAndDescendents = au.unique(officesAndDescendents);
+		if (officesAndAncestors.length > 0){
+			officesAndAncestors = au.unique(officesAndAncestors);
 		}
+		return officesAndAncestors;  
+	},
+
+
+	// returns a list of OUs where the logged-in user is a task manager plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
+	getTaskManagerOUsAndDescendents: function(user, level) {
+		var officesAndDescendents = this._getOUsAndDescendents(user, level, true);
 		return officesAndDescendents;  
 	},
 	
-  	// STRY0141844 - new function for new dynamic filters set up for Who can run, but useable in other ways
+	// STRY0141844 - new function for new dynamic filters set up for Who can run, but useable in other ways
 	// returns a list of OUs where the logged-in user is a member plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
 	getMyOUsAndDescendents: function(user, level) {
+		var officesAndDescendents = this._getOUsAndDescendents(user, level, false);
+		return officesAndDescendents;  
+	},
+	
+	_getOUsAndDescendents: function (user, level, taskManagersOnly){
 		var offices = [];
 		var officesAndDescendents = [];
 		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		if(taskManagersOnly){
+			grOUs.addQuery('office_task_authority', 'true');
+		}
+		
 		grOUs.addQuery('office_member', user);
 		grOUs.query();
 		while(grOUs.next()){
@@ -1717,13 +1771,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>382</sys_mod_count>
+        <sys_mod_count>383</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-20 13:38:33</sys_updated_on>
+        <sys_updated_on>2023-09-28 13:18:13</sys_updated_on>
     </sys_script_include>
 </record_update>
