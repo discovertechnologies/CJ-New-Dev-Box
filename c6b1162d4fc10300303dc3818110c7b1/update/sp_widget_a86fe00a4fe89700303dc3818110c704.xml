@@ -4,21 +4,35 @@
         <client_script><![CDATA[api.controller=function ($scope, $location, $rootScope, spUtil, spModal, spAriaFocusManager, $timeout) {
 	
 	var c = this;
-	var search = $location.search();
-	if(c.data.sys_id && c.data.sys_id != -1 &&
-		 search.sys_id != c.data.sys_id){
-		// data table is being set to row 1 by this widget.
-		// broadcast to other widgets without forcing full page reload
-		$location.search("sys_id", c.data.sys_id).search("selTab", c.data.selTab).search("page_index", c.data.page_index).search("spa",1);
-		
-		var params = {};
-		params.sys_id = c.data.sys_id;
-		params.selTab = c.data.selTab;
-		params.page_index = c.data.page_index;
-		params.table = c.data.table;
-		// DFCT0011366 - need to wait for the template page to load before setting the Template URLs
-		$timeout(updateTemplateURLs, 2000);
-		
+	// STRY0145486 - changed load to resuse setting of the properties to change template into function
+	var search;
+	var params;
+	_init();
+	
+	function _init(){
+		search = $location.search();
+		if(c.data.sys_id && c.data.sys_id != -1 &&
+			 search.sys_id != c.data.sys_id){
+			// data table is being set to row 1 by this widget.
+			// broadcast to other widgets without forcing full page reload
+			$location.search("sys_id", c.data.sys_id).search("selTab", c.data.selTab).search("page_index", c.data.page_index).search("spa",1);
+
+			params = {};
+			params.sys_id = c.data.sys_id;
+			params.selTab = c.data.selTab;
+			params.page_index = c.data.page_index;
+			params.table = c.data.table;
+			_changeTemplate();
+		}
+	}
+	
+	// STRY0145486 - new function to change template
+	function _changeTemplate(){
+			// data table is being set to row 1 by this widget.
+			// broadcast to other widgets without forcing full page reload
+			$location.search("sys_id", params.sys_id).search("selTab", params.selTab).search("page_index", params.page_index).search("spa",1);
+			// DFCT0011366 - need to wait for the template page to load before setting the Template URLs
+			$timeout(updateTemplateURLs, 2000);		
 	}
 	
 	// DFCT0011366
@@ -44,14 +58,26 @@
 		className: "active"
 	};
 	
-	// DFCT0012192 - DFCT0012193
+	// STRY0145486 - DFCT0012192 - DFCT0012193
 	function _templateCreated(templateId){
 			$scope.data.getNewTemplateInfo = true;
 			$scope.data.templateId = templateId;
 			spUtil.update($scope).then(function(data) {
 				spUtil.addInfoMessage(data.newTemplateMessage);
 				$scope.data.getNewTemplateInfo = false;
+				// STRY0145486 - setup and change selected function
+				params = {};
+				params.sys_id = templateId;
+				params.process_level = $scope.data.process_level;
+				params.template_name = $scope.data.template_name;
+				params.selTab = $scope.data.newTemplateTabName;
+				// assume new template is on the first page sorted by updated
+				params.page_index = 1;
+				params.table = c.data.table;
+				_changeTemplate();
 				_updateTab($scope.data.newTemplateTabName);
+				// need to broadcast to the template tree that the Template changed
+				$rootScope.$broadcast('dtech-switchToNewTemplate', params);
 			});		
 	}
 	
@@ -63,11 +89,12 @@
 	// DFCT0012192 - DFCT0012193 update the tab after create new template and clone template
 	function _updateTab(tabName){
 		var tabs = $scope.data.tabs;
-		if (tabs > 0){
+		if (tabs.length > 0){
 			for (var t in tabs){
 				var oTab = tabs[t];
 				if(oTab.tabName == tabName){
 					_updateDataTable(oTab);
+					c.activeTab = tabName;
 					break;
 				}
 			}
@@ -404,7 +431,9 @@ li.hover-effect.cm-subs-tab.active {&#13;
 //																			Changes in Server Script
 // 2.8.3 (Template Updates Addon)  DFCT0012193 - In Template List view, successfully cloning a template does not refresh the Template List
 //										Changes in Client Controller
-// 2.8.3 (Template Updates Addon)  DFCT0012192 -	In Template List view, successfully creating an OU template does not refresh the Template List
+// 2.8.3 (Template Updates Addon - Part 2)  STRY0145486 - On Template List, creating/cloning new Template redirects to the new Template
+//										Changes in Client Controller
+// 2.8.3 (Template Updates Addon - Part 2)  DFCT0012192 -	In Template List view, successfully creating an OU template does not refresh the Template List
 //										Changes in Client Controller
 //
 //------------------------------------------------------------------------------------------------------------------------
@@ -727,6 +756,17 @@ li.hover-effect.cm-subs-tab.active {&#13;
 			data.newTemplateType = gr_template.getValue("process_level");
 			// DFCT0012192 - DFCT0012193
 			data.newTemplateTabName  = _getTabForNewTemplate(data.tabs);
+			// STRY0145486
+			data.process_level = {
+				value: gr_template.getValue("process_level"),
+				display_value: gr_template.getDisplayValue("process_level")
+			};
+			// STRY0145486
+			data.template_name = {
+				value: gr_template.getValue("template_name"),
+				display_value: gr_template.getDisplayValue("template_name")
+			};
+			
 		}
 	}
 
@@ -743,14 +783,14 @@ li.hover-effect.cm-subs-tab.active {&#13;
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-03-01 03:31:15</sys_created_on>
         <sys_id>a86fe00a4fe89700303dc3818110c704</sys_id>
-        <sys_mod_count>1094</sys_mod_count>
+        <sys_mod_count>1104</sys_mod_count>
         <sys_name>Template List Tabbed</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a86fe00a4fe89700303dc3818110c704</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-29 23:12:55</sys_updated_on>
+        <sys_updated_on>2023-10-04 03:37:44</sys_updated_on>
         <template><![CDATA[<div >
  <div class="panel panel-{{::options.panel_type}} widget-toggle csm-widget cm-right-pane dtech-topstick-posabso flex-column">
     <div class="panel-heading cm-widget-tabs flex-column justify-between dtech-panel-heading-min-height-standard dtech-border-bottom-1px-solid-ddd" role="tabpanel">
