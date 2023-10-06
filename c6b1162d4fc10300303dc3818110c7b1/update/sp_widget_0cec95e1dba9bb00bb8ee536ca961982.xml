@@ -7,20 +7,25 @@
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-function ($scope,$http, spUtil,$rootScope) {
+function ($scope,$http, spUtil,$rootScope, $interval) {
 	var c = this;
+	var CONST_MINUTES_IN_MS = 1000 * 60;
+	var CONST_NINETY_SECONDS = 1.5 * CONST_MINUTES_IN_MS;
+	var refreshPromise;
+
 	// this is to prevent a post back in the $on when this
 	// widget pushed the broadcast notification
 	var changedByThisWidgetId = false;
 	if (!c.data.table)
 		return;
 
-	// added the update to reload as it wasn't reloading teh count
+/* STRY0081697 - removed the record watcher
+	// added the update to reload as it wasn't reloading the count
 	spUtil.recordWatch($scope, c.data.table, c.data.filter, function(){
 		// DFCT0011188 - reload to get latest count
 		spUtil.update($scope);
 	});
-	
+*/
 	// STRY0114448 - adding additional parameters
 	c.params = {
 		'table' : c.data.table,
@@ -84,6 +89,36 @@ function ($scope,$http, spUtil,$rootScope) {
 		changedByThisWidgetId = false;
 	});
 	
+	// STRY0081697
+	$scope.refreshBanner = function(){
+		if(refreshPromise && refreshPromise!=undefined){
+			return;
+		}
+		refreshPromise = $interval(function(){
+			// add logic here to determine if we keep running
+			// for example, if we added a refresh button, we would want to cancel this, then start another one
+			// or, if the user left the screen open, then we might want to cancel after a certain number of refreshes
+			$scope.data.refreshMenuCounts = true;
+			spUtil.update($scope).then(function(){
+				// do anything you need to do here after receiving back
+			});			
+		}, CONST_NINETY_SECONDS);
+	}
+	
+	$scope.stopRefresh = function() {
+		if (refreshPromise && (refreshPromise!=undefined)) {
+			$interval.cancel(refreshPromise);
+			refreshPromise = undefined;
+		}
+	};
+	
+	$scope.$on('$destroy', function() {
+		// Make sure that the interval is destroyed too
+		$scope.stopRefresh();
+	});
+
+	// start the interval
+	$scope.refreshBanner();
 
 }
 ]]></client_script>
@@ -245,6 +280,9 @@ TODO - We may want to move into global class*/
 //																					Changes in client script
 // 2.8.3 | 2023-07-14 | raj | DFCT0011947 - "Open Task by My OU to Others" & "Tasks by My OU to Others" should NOT display large query on the Tasker Portal page
 //																			In Server Script only
+// 2.8.3HF | 2023-09-24 | raj | STRY0081697 - Banner Notification re-group banners to minimize performance load time
+//											Changes in Client Controller and Server Script 
+//											Added $interval to client script function parameters 
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function ($sp, input, data, options, gs) {
@@ -272,6 +310,15 @@ TODO - We may want to move into global class*/
 				var objDefaultMainFilter = {displayValue:input.title, value:input.tasker_filter_id};
 				taskWidgetIconsAndMessage.savePreferenceUserDefaultMainFilter(input.page_filter, objDefaultMainFilter);
 			}
+			// STRY0081697
+			if(input.refreshMenuCounts){
+				// if refreshing count, just refresh count and return
+				data.filter = input.filter;
+				data.table = input.table;
+				data.count = _getDataCount();
+				return;
+			}
+				
 		}
 		
 		// this is used to load the the dynamic fitler text
@@ -395,10 +442,10 @@ TODO - We may want to move into global class*/
 			data.is_dynamic_filter = true;
 			data.ellipsesIcon = _loadEllipsesFilterIcon();
 
-			// STRY0101803 - load user preferences object for use when oening forms
-			// only load this one time
+			// STRY0113382 - reorganized and moved the loading of filters up so we could set the default to the user if one existed
+			// DFCT0010732
 			data.filters = _loadFilters(data.page_filter, selected_Filter_id);
-			
+
 		}			
 	}
 	
@@ -552,14 +599,14 @@ TODO - We may want to move into global class*/
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-05-21 02:58:10</sys_created_on>
         <sys_id>0cec95e1dba9bb00bb8ee536ca961982</sys_id>
-        <sys_mod_count>369</sys_mod_count>
+        <sys_mod_count>379</sys_mod_count>
         <sys_name>Tasker Count</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0cec95e1dba9bb00bb8ee536ca961982</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-07-17 18:10:33</sys_updated_on>
+        <sys_updated_on>2023-10-06 12:21:24</sys_updated_on>
         <template><![CDATA[<button class="dtech-filter-btn btn"
         ng-class="{'dtech-btn-focus': data.isFilterSelected==true}"
         ng-click="c.selectCount()"
