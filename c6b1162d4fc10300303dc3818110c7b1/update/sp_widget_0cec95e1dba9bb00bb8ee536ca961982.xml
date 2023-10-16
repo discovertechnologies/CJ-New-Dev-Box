@@ -40,10 +40,13 @@ function ($scope,$http, spUtil,$rootScope, $interval) {
 
 	// when the users selects this count,
 	// broadcast to the data table and other counts
-	c.selectCount = function(){
-			_broadCastFitlerChange();
-			$scope.data.filterChanged=true;
-			spUtil.update($scope);
+	// DFCT0012219
+	c.selectCount = function(e){
+		if(e.originalEvent.dropdown!=true){
+				_broadCastFitlerChange();
+				$scope.data.filterChanged=true;
+				spUtil.update($scope);				
+			}
 	}
 	
 	// when the user selects an item from the dynamic filter dropdown
@@ -61,6 +64,13 @@ function ($scope,$http, spUtil,$rootScope, $interval) {
 		spUtil.update($scope).then(function(){
 			_broadCastFitlerChange();
 		});
+	}
+	
+	// // DFCT0012219 - reload counts
+	c.loadDynamicCounts = function(e){
+		$scope.data.loadDynamicCounts = true;
+		e.originalEvent.dropdown = true;
+		spUtil.update($scope);
 	}
 	
 	function _broadCastFitlerChange(){
@@ -283,6 +293,8 @@ TODO - We may want to move into global class*/
 // 2.8.3HF | 2023-09-24 | raj | STRY0081697 - Banner Notification re-group banners to minimize performance load time
 //											Changes in Client Controller and Server Script 
 //											Added $interval to client script function parameters 
+// 2.8.3HF | 2023-10-16 | raj | DFCT0012219 - Show more count badge indicators are not getting updated
+//											Changes in Client Controller and Server Script, and HTML
 //
 //------------------------------------------------------------------------------------------------------------------------
 (function ($sp, input, data, options, gs) {
@@ -333,10 +345,17 @@ TODO - We may want to move into global class*/
 		data.selectedFilterTitle = data.settings.userDefaultMainFilter.displayValue;
 		data.selectedFilterId = data.settings.userDefaultMainFilter.value;
 
+
 		// this function loads the drop down list based on the page
 		// it also determines if the selected fitler is in the current
 		/// dropdown so the count can be loaded
 		_loadDynamicFilter(data.selectedFilterId);
+		
+		// DFCT0012219 - only load counts when dropdown clicked, needs to be after _loadDynamicFilter
+		if(input && input.loadDynamicCounts){
+			data.filters = input.filters;
+			data.filters = _getDynamicFilterCounts(data.filters);
+		}
 		
 		// loads the count filter for this count item
 		_loadCountFilter(data.page_filter, data.selectedFilterId);
@@ -480,7 +499,7 @@ TODO - We may want to move into global class*/
 	}
 	
 	function _loadFilters(pageFilter, selected_Filter_id) {
-		taskerFilters = [];
+		var taskerFilters = [];
 		// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 		// Get an array filled with the Filter Menu Headers to use in the Filter More options
 		var gr_filterMenuHeaders = new GlideRecord('sys_choice');
@@ -562,6 +581,11 @@ TODO - We may want to move into global class*/
 				data.filterInDynamicList = true;
 			}
 		}
+		return taskerFilters;
+	}
+	
+	// DFCT0012219 - only load counts when dropdown clicked, needs to be after _loadDynamicFilter
+	function _getDynamicFilterCounts(taskerFilters){
 		// get task count for filter menu
 		// 2.7.0 | 08.06.2021 | mmcc | STRY0106157 - PPM – Modern Portal – New Filter Design
 		// Use forEach to get the counts
@@ -599,17 +623,17 @@ TODO - We may want to move into global class*/
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-05-21 02:58:10</sys_created_on>
         <sys_id>0cec95e1dba9bb00bb8ee536ca961982</sys_id>
-        <sys_mod_count>379</sys_mod_count>
+        <sys_mod_count>394</sys_mod_count>
         <sys_name>Tasker Count</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_0cec95e1dba9bb00bb8ee536ca961982</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-10-06 12:21:24</sys_updated_on>
+        <sys_updated_on>2023-10-16 15:02:25</sys_updated_on>
         <template><![CDATA[<button class="dtech-filter-btn btn"
         ng-class="{'dtech-btn-focus': data.isFilterSelected==true}"
-        ng-click="c.selectCount()"
+        ng-click="c.selectCount($event)"
         >
   <div class="flex-row flex-nowrap" >
     <div class="flex-row dtech-filter-width-200">
@@ -633,6 +657,7 @@ TODO - We may want to move into global class*/
       <div ng-if="data.is_dynamic_filter"
            class="dropdown-toggle dtech-border-none" 
            type="button" id="dropdownMenu1"
+           ng-click="c.loadDynamicCounts($event)"
            data-toggle="dropdown" 
            aria-haspopup="true"
            aria-expanded="false">
