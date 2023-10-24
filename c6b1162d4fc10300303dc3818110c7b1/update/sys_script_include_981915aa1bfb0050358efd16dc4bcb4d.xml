@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.tasking_System_Settings_Scripts</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3HF | 2023-10-02 | DFCT0012206 - OUTDs/TMs should not be able to see Global Templates&#13;
+        <description>2.8.3HF | 2023-10-23 | DFCT0012237 - Template page performance is slow for users in many OUs and for large org structures&#13;
+2.8.3HF | 2023-10-02 | DFCT0012206 - OUTDs/TMs should not be able to see Global Templates&#13;
 2.8.3HF | 2023-09-26 | STRY0145242 - Allow sharing to 'Ancestor' offices for "Who Can Run" in Templates&#13;
 2.8.3HF | 2023-09-26 | DFCT0012187 - In "View Template" form, the "Who Can Run" option "All Members of the Template OU and its descendants" does not share the template to other PTD/OUTD/GTD users&#13;
 2.8.3HF | 2023-09-25 | DFCT0012183 - In "View Template" form, the "Who Can Run" option "Task Managers of the Template OU and its Descendants" does not share the template to other TMs&#13;
@@ -1236,8 +1237,9 @@ tasking_System_Settings_Scripts.prototype = {
 		var allOUAndDescendantOUMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_all_members" + 
 			"^process_ouDYNAMIC19e82799ad6d3110777fdd8f405bfeea" + addActive;
 
+		// DFCT0012237
 		var allOrgStructureMembersQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_all_members" + 
-			"^process_ouDYNAMIC767e4211d0ac3110777ff1f01e0c50e3" + addActive;
+			"^process_ou.u_top_ouDYNAMIC9e11af6185023110777f8fef31e5b1ca" + addActive;
 
 		var OUTMsQuery = "process_level=ou_process^process_ouDYNAMICf31893201b5f4190848aa931604bcb94" + addActive +
 			"^u_who_can_run=template_ou_task_managers^ORu_who_can_runSTARTSWITHnull";
@@ -1253,10 +1255,11 @@ tasking_System_Settings_Scripts.prototype = {
 		var OUAndDescendantOUTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_and_descendants_task_managers" + 
 			"^process_ouDYNAMIC9582de09942d3110777f53f06178e122" + addActive;
 		
+		// DFCT0012237
 		var OrgStructureTMsQuery = "process_level=ou_process^u_who_can_run=template_ou_org_structure_task_managers" + 
-			"^process_ouDYNAMICa4eed25dd0ac3110777ff1f01e0c50b3" + addActive;
+			"^process_ou.u_top_ouDYNAMIC5be812b9858a3110777f8fef31e5b1ad" + addActive;
 
-		encodedQuery = allOUMembersQuery +
+		var encodedQuery = allOUMembersQuery +
 			"^NQ" + allOUAndAncestorOUMembersQuery +
 			"^NQ" + allOUAndDescendantOUMembersQuery +
 			"^NQ" + allOrgStructureMembersQuery +
@@ -1571,24 +1574,25 @@ tasking_System_Settings_Scripts.prototype = {
 		var au = new global.ArrayUtil();
 		var OrgScripts = new OrganizationalScripts();
 		var offices = [];
+		var strOfficesAndAncestors = "";
 		var officesAndAncestors = [];
-		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
+		var grMemberOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		if(taskManagersOnly){
-			grOUs.addQuery('office_task_authority', 'true');
+			grMemberOUs.addQuery('office_task_authority', 'true');
 		}
-		
-		grOUs.addQuery('office_member', user);
-		grOUs.query();
-		while(grOUs.next()){
-			var OU = grOUs.getValue('discover_office_hierarchy');
-			offices.push(OU);
-			officesAndAncestors.push(OU);
+		grMemberOUs.addQuery('office_member', user);
+		grMemberOUs.query();
+		while(grMemberOUs.next()){
+			// DFCT0012237 - modified to reduce queries
+			var OU = grMemberOUs.getValue('discover_office_hierarchy') + "";
+			// add the user's office to the list
+			strOfficesAndAncestors = strOfficesAndAncestors==""?OU:";"+OU;
+			var strOfficeAncestorList = grMemberOUs.discover_office_hierarchy.u_all_ancestors_organizations;
+			if(strOfficeAncestorList && strOfficeAncestorList!=""){
+				strOfficesAndAncestors = strOfficesAndAncestors + ";" + strOfficeAncestorList;
+			}
 		}
-		for (var i=0; i<offices.length; i++) {
-			var strAncestorOffices = OrgScripts.getAncestors(offices[i]);
-			var aAncestorOffices = strAncestorOffices.split(',');
-			officesAndAncestors = au.union(officesAndAncestors,aAncestorOffices);
-		}
+		officesAndAncestors = strOfficesAndAncestors.split(";");
 		if (officesAndAncestors.length > 0){
 			officesAndAncestors = au.unique(officesAndAncestors);
 		}
@@ -1635,14 +1639,16 @@ tasking_System_Settings_Scripts.prototype = {
 		return officesAndDescendents;  
 	},
 
-	// returns a list of OUs where the logged-in user is a member plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
-	getMyOrgStructureOUs: function(user) {
+	// DFCT0012237 - new function to use top ous instead of all ous
+	getMyOrgStructureTopOUs: function(user, onlyTaskManagers){
 		var au = new global.ArrayUtil();
 		var topOU;
 		var topOUs = [];
-		var offices = [];
 		var grMemberOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
 		grMemberOUs.addQuery('office_member', user);
+		if(onlyTaskManagers){
+			grMemberOUs.addQuery('office_task_authority', 'true');
+		}
 		grMemberOUs.query();
 		while(grMemberOUs.next()){
 			topOU = grMemberOUs.discover_office_hierarchy.u_top_ou;
@@ -1653,49 +1659,40 @@ tasking_System_Settings_Scripts.prototype = {
 			au = new global.ArrayUtil();
 			topOUs = au.unique(topOUs);
 		}
+		return topOUs;
+	},
 		
-		for (i=0; i<topOUs.length; i++) {
-			topOU = topOUs[i];
-			var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-			grOUs.addQuery('u_top_ou', topOU);
-			grOUs.query();
-			while(grOUs.next()){
-				offices.push(grOUs.getUniqueValue());
-			}
-		}
+	// returns a list of OUs where the logged-in user is a member plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
+	getMyOrgStructureOUs: function(user) {
+		// DFCT0012237
+		var offices = [];
+		offices = _getMyTaskManagersOrgStructureOUs(user,false);
 		return offices;  
 	},
 
 	// returns a list of OUs where the logged-in user is a member plus OUs which are descendents of the task manager OUs - if level is 1 then only the immediate suboffices will be returned
 	getMyTaskManagersOrgStructureOUs: function(user) {
-		var au = new global.ArrayUtil();
-		var topOU;
-		var topOUs = [];
+		// DFCT0012237
 		var offices = [];
-		var grMemberOUs = new GlideRecordSecure('x_153465_discovert_discover_office_members');
-		grMemberOUs.addQuery('office_member', user);
-		grMemberOUs.addQuery('office_task_authority', 'true');
-		grMemberOUs.query();
-		while(grMemberOUs.next()){
-			topOU = grMemberOUs.discover_office_hierarchy.u_top_ou;
-			topOUs.push(topOU);
-		}
-		// reduce to unique top offices
-		if (topOUs.length > 0){
-			au = new global.ArrayUtil();
-			topOUs = au.unique(topOUs);
-		}
-		
-		for (i=0; i<topOUs.length; i++) {
-			topOU = topOUs[i];
-			var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-			grOUs.addQuery('u_top_ou', topOU);
-			grOUs.query();
-			while(grOUs.next()){
-				offices.push(grOUs.getUniqueValue());
-			}
-		}
+		offices = _getMyTaskManagersOrgStructureOUs(user,true);
 		return offices;  
+	},
+	
+		// DFCT0012237
+	_getMyTaskManagersOrgStructureOUs: function(user, onlyTaskManagers) {
+		var offices = [];
+		// DFCT0012237
+		var topOUs = this.getMyOrgStructureTopOUs(user, onlyTaskManagers);
+		var strTopOUs = topOUs.join(",");
+		var ouQuery = "u_top_ouIN" + strTopOUs;	
+		var grOUs = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
+		grOUs.addEncodedQuery(ouQuery);
+		grOUs.query();
+		while(grOUs.next()){
+			offices.push(grOUs.getUniqueValue());
+		}		
+		return offices;
+
 	},
 
 	getAllRelatvieOUs: function(userOffices){
@@ -1733,13 +1730,16 @@ tasking_System_Settings_Scripts.prototype = {
 	//returns OUs downstream from the specified OU
 	getDescendents: function(ou, offices, level){
 		var grDescendents = new GlideRecordSecure('x_153465_discovert_discover_office_hierarchy');
-		grDescendents.addQuery('parent', ou);
+		if (level == 1){
+			grDescendents.addQuery('parent', ou);
+		} else {
+			// DFCT0012237 - removed recursion by using the ancestor list as a way to find all records where an OU is an ancestore
+			grDescendents.addQuery('u_all_ancestors_organizations', 'CONTAINS', ou);
+		}
 		grDescendents.query();
 		while(grDescendents.next()){
 			offices.push(grDescendents.getValue('sys_id'));
-          //STRY0121937 - if the calling function only wants one level it will pass level 1 otherwise all levels will be returned
-			if (level != 1)
-				offices = this.getDescendents(grDescendents.getValue('sys_id'), offices);
+			// DFCT0012237 - removed recursion - see above
 		}
 		return offices;
 	},
@@ -1769,13 +1769,13 @@ tasking_System_Settings_Scripts.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-03-29 21:47:52</sys_created_on>
         <sys_id>981915aa1bfb0050358efd16dc4bcb4d</sys_id>
-        <sys_mod_count>384</sys_mod_count>
+        <sys_mod_count>385</sys_mod_count>
         <sys_name>tasking_System_Settings_Scripts</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_981915aa1bfb0050358efd16dc4bcb4d</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-10-04 04:04:22</sys_updated_on>
+        <sys_updated_on>2023-10-24 21:15:50</sys_updated_on>
     </sys_script_include>
 </record_update>
