@@ -1,7 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>Updated for 2.8.1 new User Table</description>
+        <description>2.8 Fix Script to move the Task Administrator list and the Global Hierarchy Administrator list to the Top OU for performance&#13;
+&#13;
+// NOTE:  update in 2.8.4  | 2023-11-06 | STRY0146507 - Certification Failed Test Results - Provided the updates required to keep in product&#13;
+&#13;
+Release Introduced: 2.8&#13;
+- Only needs to be run a single time&#13;
+&#13;
+Purpose:  &#13;
+- This script sets the OU Administrator for each OU to the OU Admin, an Ancestor OU Admin, or the Gobal Hierarchy Administrator&#13;
+- This was done to allow better management of Organizational Units as an Ancestor OU Admin can handle issues without having to go all the way to the GHA&#13;
+- The field did not exist before 2.8.  &#13;
+- All scripts were updated to use this when checking for administrators&#13;
+- All CRUD scripts were updated to set these values when they change&#13;
+&#13;
+Validation:&#13;
+- Open the Organizational Hierarchy Table - /x_153465_discovert_discover_office_hierarchy_list.do&#13;
+- Add the OU Administator field "OU Hierarchy Administrators" to the list &#13;
+- RESULT: All fields should be populated&#13;
+&#13;
+If any values are wrong, report the differences to the DTech Apps support team.&#13;
+</description>
         <name>Synchronize OU TA &amp; GTA per Org Unit</name>
         <record_for_rollback>false</record_for_rollback>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
@@ -27,26 +47,16 @@
 			ouUnitTable.query();
 			return ouUnitTable;
 		};
-	
-		// then do the same for global tasking authorities
+		//function to get org unit table with global auth based on current OU
+		var getGlobalUnitTable = function(currentGlobalHierarchySysId) {
+			var globalUnitTable = new GlideRecord(orgUnitTableName);
+			globalUnitTable.addQuery("discover_office_hierarchy", currentGlobalHierarchySysId);
+			globalUnitTable.addQuery("is_global_tasking_authority", "true");
+			globalUnitTable.query();
+			return globalUnitTable;
+		};
+		//for each record in hierarchy table
 		var globalHierarchyList = "";
-		var globalUnitTable = new GlideRecord("x_153465_discovert_organization_user");
-		globalUnitTable.addQuery("is_task_administrator", "true");
-		globalUnitTable.query();
-		while(globalUnitTable.next()) {
-			try {
-				var globalMember = globalUnitTable.getValue("u_tasker_user");
-				if(globalHierarchyList.indexOf(globalMember) == -1) {
-					globalHierarchyList = (globalHierarchyList) ? 
-						globalHierarchyList + "," + globalMember : globalMember;
-				}
-			} catch(ex_uTableGl) {
-				gs.warn(ex_uTableGl);
-			}
-		}
-				
-		gs.info("Fix Script - Sync Org Hierarchy - collected Global TA Users: " + globalHierarchyList);
-
 		while(hierarchyTable.next()) {
 			gs.info("Fix Script - Sync Org Hierarchy - Checking OU: ====" + hierarchyTable.getValue("office_name") + "====");
 			try {
@@ -65,17 +75,38 @@
 					} catch(ex_uTableOU) {
 						gs.error(ex_uTableOU);
 					}
+					
 				}
 				hierarchyTable.setValue("tasking_authorities", hierarchyList);
 				gs.info("Fix Script - Sync Org Hierarchy - OU_TA Users: " + hierarchyList);
-				gs.info("Fix Script - Sync Org Hierarchy - Setting Global TA for " + hierarchyTable.getValue("office_name"));
-				hierarchyTable.setValue("u_global_authorities", globalHierarchyList);
-
+				// then do the same for global tasking authorities
+				var unitTableGlobal = getGlobalUnitTable(ouId);
+				
+				while(unitTableGlobal.next()) {
+					try {
+						var globalMember = unitTableGlobal.getValue("office_member");
+						if(globalHierarchyList.indexOf(globalMember) == -1) {
+							globalHierarchyList = (globalHierarchyList) ? globalHierarchyList + "," + globalMember : globalMember;
+						}
+					} catch(ex_uTableGl) {
+						gs.warn(ex_uTableGl);
+					}
+				}
+				
+				gs.info("Fix Script - Sync Org Hierarchy - collected Global TA Users: " + globalHierarchyList);
 				// if anything changed, call the update (max once per record)
 				hierarchyTable.update();
 			} catch(ex_htable) {
 				gs.error(ex_htable);
 			}
+		}
+		hierarchyTable = new GlideRecord(orgHierarchyTableName);
+		hierarchyTable.query();
+		gs.info("Fix Script - Sync Org Hierarchy - Setting ALL Global TA");
+		while(hierarchyTable.next()) {
+			gs.info("Fix Script - Sync Org Hierarchy - Setting Global TA for " + hierarchyTable.getValue("office_name"));
+			hierarchyTable.setValue("u_global_authorities", globalHierarchyList);
+			hierarchyTable.update();
 		}
 		gs.info("Fix Script - Sync Org Hierarchy - COMPLETE");
 	} catch(e) {
@@ -86,14 +117,14 @@
         <sys_created_by>kbaton</sys_created_by>
         <sys_created_on>2019-02-07 15:23:55</sys_created_on>
         <sys_id>4ba02524db672300c18c59b2ca9619c8</sys_id>
-        <sys_mod_count>31</sys_mod_count>
+        <sys_mod_count>32</sys_mod_count>
         <sys_name>Synchronize OU TA &amp; GTA per Org Unit</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_4ba02524db672300c18c59b2ca9619c8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2022-11-04 02:37:34</sys_updated_on>
+        <sys_updated_on>2023-11-07 03:27:58</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
