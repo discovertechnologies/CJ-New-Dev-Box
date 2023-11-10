@@ -16,10 +16,18 @@ Purpose:  &#13;
 &#13;
 Validation:&#13;
 - After running open list of all  Organizational Units x_153465_discovert_discover_office_hierarchy_list.do&#13;
-- Order by and Name and Abbreviation&#13;
+- Order by Name and Abbreviation&#13;
  - If any consecutive Organizational units have the same Name and Abbreviation, this script didn't correct all issues&#13;
 - This script creates an email listing all Organizational Units changed by the script&#13;
 - Nothing is written to the log while this is running, but the count of updated records will be displayed when complete&#13;
+&#13;
+If any Errors occurs while processing OUs, the error will be written to the log in this format:&#13;
+Log Level - Error&#13;
+Message - "OU Name:[ouName] - - Error in 'Flag Org Unit Duplication' - exception: " + error&#13;
+&#13;
+If an error occurs sending the associated notification to users&#13;
+Log Level - Error&#13;
+Message - "Error in 'Flag Org Unit Duplication' - Sending email listing exceptions - exception: " + error&#13;
 &#13;
 This Fix Script will reset any duplicate Organizational Unit Name and Abbreviation combinatios.&#13;
 </description>
@@ -44,8 +52,11 @@ var nameIter = {};
 var abbrevIter = {};
 var listOfChangedOrganizations = [];
 var listOfChangedAbbrev = [];
-try {
-	while(records.next()) {
+while(records.next()) {
+	var ouName;
+	var num;
+	try {
+		ouName = records.getValue("office_name");
 		// if the office name or abbrev are not valid, skip
 		if(!(records.office_name && records.office_abbreviation)) {
 			gs.info("Tasker - Flag Org Unit Duplication - Skipping non-valid: " + records.sys_id + " name: " + records.office_name + " abrv: " + records.office_abbreviation);
@@ -57,7 +68,7 @@ try {
 		var trackChange = false;
 		//check org name
 		if(orgMap[orgName]) {
-			var num = ++nameIter[orgName];
+			num = ++nameIter[orgName];
 			var changedName = records.office_name + "-" + num;
 			var reportLine = "<li>Changed name " + records.office_name + " to " + changedName+". <a href=\""+ records.getLink()+ "\">Link</a></li>";
 			listOfChangedOrganizations.push(reportLine);
@@ -72,7 +83,7 @@ try {
 
 		//check abbreviation
 		if(abbrevMap[abbrevName]) {
-			var num = ++abbrevIter[abbrevName];
+			num = ++abbrevIter[abbrevName];
 			var changedAbbrev = records.office_abbreviation + "-" + num;
 			var abbrevReportLine = "<li>Changed abbrev " + records.office_abbreviation + " to " + changedAbbrev+". <a href=\""+ records.getLink()+ "\">Link</a></li>";
 			listOfChangedAbbrev.push(abbrevReportLine);
@@ -86,8 +97,12 @@ try {
 		if(trackChange) {
 			records.update();
 		}
-	}
+	} catch(e) {
+		gs.error("OU Name:" + ouName + " - Error in 'Flag Org Unit Duplication' - exception: " + e);
+	}			
+}
 
+try {
 	var header = "<img src=\"tasker_logo.pngx\" width=\"100\" height=\"20\"/><br/><h2>OU Hierarchy Duplicate Fix Script Report</h2>";
 	//report on name changes
 	if(listOfChangedOrganizations.length > 0 || listOfChangedAbbrev.length > 0) {
@@ -104,22 +119,22 @@ try {
 	} else {
 		gs.eventQueue("x_153465_discovert.GenericFixScriptEmail",null,gs.getUserID(),header + "<p>All records are unique and no changes were made<p>");
 	}
-		
 } catch(e) {
-	gs.error(e);
-}]]></script>
+	gs.error("Error in 'Flag Org Unit Duplication' - Sending email listing exceptions - exception: " + e);
+}			
+]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>kbaton</sys_created_by>
         <sys_created_on>2019-08-29 01:22:28</sys_created_on>
         <sys_id>5b124071db63b7009a6fabc5ca9619ba</sys_id>
-        <sys_mod_count>28</sys_mod_count>
+        <sys_mod_count>30</sys_mod_count>
         <sys_name>Flag Org Unit Duplication</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_5b124071db63b7009a6fabc5ca9619ba</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-07 03:18:30</sys_updated_on>
+        <sys_updated_on>2023-11-09 20:02:08</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>

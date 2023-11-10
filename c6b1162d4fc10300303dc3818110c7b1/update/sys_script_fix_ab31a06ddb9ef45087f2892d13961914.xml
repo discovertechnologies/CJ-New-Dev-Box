@@ -24,6 +24,10 @@ Each updated OU will be listed in the Log&#13;
 - Add the Parent field "Parent" to the list &#13;
 - RESULT: Each Parent child relationship in the tree should increment the OU Level by 1&#13;
 &#13;
+If any Errors occurs while processing OUs, the error will be written to the log in this format:&#13;
+Log Level - Error&#13;
+Message - "OU Name:[ouName] - - Error in 'Tasker 2.6.400 Correct OU Levels' - exception: " + error&#13;
+&#13;
 If any values are wrong, report the differences to the DTech Apps support team.&#13;
 </description>
         <name>Tasker 2.6.400 Correct OU Levels</name>
@@ -46,49 +50,57 @@ function tasker_2_6_400_resetOULevel(){
 }
 
 function recurseLevelFix(grOUs){
-	var levelChanged = false;
-	var fromLevel = parseInt(grOUs.office_level);
-	if(grOUs.parent){
-		var grParent = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-		if(grParent.get(grOUs.parent)){
-			var parentLevel = parseInt(grParent.office_level);
-			if(fromLevel != parentLevel + 1){
-				levelChanged = true;
-				grOUs.office_level = parentLevel + 1;
-			}			
-		}
-	} else {
-		if(parseInt(grOUs.office_level) != 1){
-			levelChanged = true;
-			grOUs.office_level = 1;
-		}
-	}
+	var ouName;
+	try {
+		ouName = grOUs.getValue("office_name");
 	
-	if(levelChanged){
-		// turn off other business rules
-		grOUs.setWorkflow(false);
-		grOUs.update('Fix Script - Reset OU level for OU (' + grOUs.office_name + ') to Level (' + grOUs.office_level + ')');
-		gs.info('Fix Script - Reset OU level for OU (' + grOUs.office_name + ') From Level(' + fromLevel + ') To Level(' + grOUs.office_level + ')');
+		var levelChanged = false;
+		var fromLevel = parseInt(grOUs.office_level);
+		if(grOUs.parent){
+			var grParent = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+			if(grParent.get(grOUs.parent)){
+				var parentLevel = parseInt(grParent.office_level);
+				if(fromLevel != parentLevel + 1){
+					levelChanged = true;
+					grOUs.office_level = parentLevel + 1;
+				}			
+			}
+		} else {
+			if(parseInt(grOUs.office_level) != 1){
+				levelChanged = true;
+				grOUs.office_level = 1;
+			}
+		}
+
+		if(levelChanged){
+			// turn off other business rules
+			grOUs.setWorkflow(false);
+			grOUs.update('Fix Script - Reset OU level for OU (' + grOUs.office_name + ') to Level (' + grOUs.office_level + ')');
+			gs.info('Fix Script - Reset OU level for OU (' + grOUs.office_name + ') From Level(' + fromLevel + ') To Level(' + grOUs.office_level + ')');
+		}
+		var grChildren = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
+		grChildren.addQuery('parent',grOUs.getUniqueValue());
+		grChildren.query();
+		while (grChildren.next()){
+			recurseLevelFix(grChildren);
+		}
+	} catch(e) {
+		gs.error("OU Name:" + ouName + " - Error in 'Tasker 2.6.400 Correct OU Levels' - exception: " + e);
 	}
-	var grChildren = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-	grChildren.addQuery('parent',grOUs.getUniqueValue());
-	grChildren.query();
-	while (grChildren.next()){
-		recurseLevelFix(grChildren);
-	}
+		
 }]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-08-30 14:14:22</sys_created_on>
         <sys_id>ab31a06ddb9ef45087f2892d13961914</sys_id>
-        <sys_mod_count>9</sys_mod_count>
+        <sys_mod_count>10</sys_mod_count>
         <sys_name>Tasker 2.6.400 Correct OU Levels</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_ab31a06ddb9ef45087f2892d13961914</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-06 21:16:49</sys_updated_on>
+        <sys_updated_on>2023-11-09 18:55:08</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>

@@ -31,6 +31,10 @@ In test mode the counts are written for every Template and Schedule.&#13;
 When not in Test mode, the Number of Templates fixed will be listed&#13;
 'Tasker 2.7.3 - Fix Temp Schedule Count - found (' + countTemplates + ') Templates in System. ('+ countChangedTemplates + ') had the wroung schedule count before fix script run.  ('+ countChangedTemplates + ') were updated to correct the counts.'&#13;
 &#13;
+If any Errors occurs while processing OUs, the error will be written to the log in this format:&#13;
+Log Level - Error&#13;
+Message - "TemplateName:[templateName] - - Error in 'Tasker 2.7.3 - Fix Temp Schedule Count' - exception: " + error&#13;
+&#13;
 If any values are wrong, report the differences to the DTech Apps support team.&#13;
 </description>
         <name>Tasker 2.7.3 - Fix Temp Schedule Count</name>
@@ -54,33 +58,40 @@ function update_template_schedule_count(){
 
 	var grProcessTemplate = new GlideRecord('x_153465_discovert_discover_routing_template');
 	grProcessTemplate.query(); 
-	while (grProcessTemplate.next()) { 
-		countTemplates++;
-		
-		// Count Schedules AFTER insert / delete
-		var gaSchedules = new GlideAggregate('x_153465_discovert_tasker_schedule');
-		gaSchedules.addQuery('tasker_process', grProcessTemplate.getUniqueValue());
-		gaSchedules.addAggregate('COUNT');
-		gaSchedules.query();
+	while (grProcessTemplate.next()) {
+		var tempName;
+		try {
+			tempName = grProcessTemplate.getValue("template_name");
 
-		var numSchedules=0;
-		if(gaSchedules.next()) {
-			numSchedules = gaSchedules.getAggregate('COUNT');
-			if(parseInt(grProcessTemplate.schedules) != numSchedules){
-				var previousCount = grProcessTemplate.schedules;
-				grProcessTemplate.schedules = numSchedules;
-				grProcessTemplate.setWorkflow(false); // do not trigger business rules/workflows
-				grProcessTemplate.autoSysFields(false); // do not update system fields
-				
-				if(!test){
-					var msg = 'Tasker 2.7.3 - Fix Temp Schedule Count - Change Template Schedule Count - for Template: ' +
-						grProcessTemplate.template_name + ' count from: (' + previousCount + ') to (' + numSchedules + ')';
-					grProcessTemplate.update(msg);
-					gs.info(msg);
+			countTemplates++;
+
+			// Count Schedules AFTER insert / delete
+			var gaSchedules = new GlideAggregate('x_153465_discovert_tasker_schedule');
+			gaSchedules.addQuery('tasker_process', grProcessTemplate.getUniqueValue());
+			gaSchedules.addAggregate('COUNT');
+			gaSchedules.query();
+
+			var numSchedules=0;
+			if(gaSchedules.next()) {
+				numSchedules = gaSchedules.getAggregate('COUNT');
+				if(parseInt(grProcessTemplate.schedules) != numSchedules){
+					var previousCount = grProcessTemplate.schedules;
+					grProcessTemplate.schedules = numSchedules;
+					grProcessTemplate.setWorkflow(false); // do not trigger business rules/workflows
+					grProcessTemplate.autoSysFields(false); // do not update system fields
+
+					if(!test){
+						var msg = 'Tasker 2.7.3 - Fix Temp Schedule Count - Change Template Schedule Count - for Template: ' +
+							grProcessTemplate.template_name + ' count from: (' + previousCount + ') to (' + numSchedules + ')';
+						grProcessTemplate.update(msg);
+						gs.info(msg);
+					}
+					countChangedTemplates++;
 				}
-				countChangedTemplates++;
 			}
-		}		
+		} catch(e){
+			gs.error("Template Name:" + tempName + " - Error in 'Tasker 2.7.3 - Fix Temp Schedule Count' - exception: " + e);
+		}
 	}
 	if(test){
 		gs.info('Tasker 2.7.3 - Fix Temp Schedule Count - TEST RUN TO SHOW COUNTS - found (' + countTemplates + ') templates in System. ('+ countChangedTemplates + ') have the wrong count for template schedules.  Change "test" variable to false in the Fix Script  to update the schedule counts for ('+ countChangedTemplates + ') templates.');
@@ -93,14 +104,14 @@ function update_template_schedule_count(){
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2022-05-13 15:09:54</sys_created_on>
         <sys_id>0c2e263f1b1f4110e35b54a2604bcb56</sys_id>
-        <sys_mod_count>9</sys_mod_count>
+        <sys_mod_count>10</sys_mod_count>
         <sys_name>Tasker 2.7.3 - Fix Temp Schedule Count</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_0c2e263f1b1f4110e35b54a2604bcb56</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-06 21:36:12</sys_updated_on>
+        <sys_updated_on>2023-11-09 19:41:18</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
