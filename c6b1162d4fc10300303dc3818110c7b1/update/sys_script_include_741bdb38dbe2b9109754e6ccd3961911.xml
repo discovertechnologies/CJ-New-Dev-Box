@@ -1,0 +1,670 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.api_tasker_ui_component_data</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.8.5 This module contains all of the functions to build the data for the common UI components of the Tasker App&#13;
+2.8.5 | 2023-11-28 | raj | Updates to make work for TemplateTask</description>
+        <name>api_tasker_ui_component_data</name>
+        <script><![CDATA[var api_tasker_ui_component_data = Class.create();
+api_tasker_ui_component_data.CONST_DTECH_DURATION_OBJECT = "durationObject";
+api_tasker_ui_component_data.CONST_DTECH_ITEM_MEMBERS_OBJECT = "itemMembersObject";
+api_tasker_ui_component_data.CONST_DTECH_OFFICE_OBJECT = "officeObject";
+api_tasker_ui_component_data.CONST_DTECH_OPERATIONAL_OBJECT = "operationalObject";
+api_tasker_ui_component_data.CONST_DTECH_RESPONSE_OBJECT = "responseObject";
+api_tasker_ui_component_data.CONST_DTECH_STATE_OBJECT = "stateObject";
+api_tasker_ui_component_data.CONST_DTECH_SUB_TASKS_OBJECT = "subtasksObject";
+api_tasker_ui_component_data.CONST_DTECH_TASKER_FILES_OBJECT = "taskerFilesObject";
+api_tasker_ui_component_data.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT = "ContextMenuActionsObject";
+api_tasker_ui_component_data.CONST_DTECH_TASK_TREE_OBJECT = "taskTreeObject";
+api_tasker_ui_component_data.prototype = {
+    initialize: function() {
+		this.api_dtech = new api_dtech_common();
+		this.taskerStatus = new TaskerStatus();
+    },
+	
+	// NOTE: the getUIActions function is not in the inital load yet.
+	//       Looking for a way to use $sp.getForm from here
+	getRecordObjects: function(tableName, sysId, arrObjectList){
+		//function(tableName, sysId, arrObjectList){
+		var recordObject = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			if(arrObjectList){
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_OFFICE_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_OFFICE_OBJECT] = this.getAssignmentInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_DURATION_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_DURATION_OBJECT] = this.getDurationInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_ITEM_MEMBERS_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_ITEM_MEMBERS_OBJECT] = this.getItemMembersInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_OPERATIONAL_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_OPERATIONAL_OBJECT] = this.getOperationalInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_RESPONSE_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_RESPONSE_OBJECT] = this.getResponseCommentsGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_STATE_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_STATE_OBJECT] = this.getStateInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_SUB_TASKS_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_SUB_TASKS_OBJECT] = this.getSubTasksInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_TASKER_FILES_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_TASKER_FILES_OBJECT] = this.getTaskerFilesInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_TASK_TREE_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_TASK_TREE_OBJECT] = this.getTaskTreeInformationGR(gr_recordObject);
+				}
+				if(arrObjectList[api_tasker_ui_component_data.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT]){
+					recordObject[api_tasker_ui_component_data.CONST_DTECH_TASK_CONTEXT_MENU_ACTIONS_OBJECT] = 
+						this.getContextMenuInformationGR(gr_recordObject);
+				}
+			}
+		}
+		return recordObject;
+	},
+
+	getAssignmentInformation: function(tableName,sysId){
+		var lAssignmentInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		
+		if(gr_recordObject.get(sysId)){
+			lAssignmentInfo = this.getAssignmentInformationGR(gr_recordObject);
+		}
+		return lAssignmentInfo;
+	},
+	
+	getAssignmentInformationGR: function(gr_recordObject){
+		var lAssignmentInfo = {};
+		var objectType = "";
+		var arrAssignmentFields = [];
+		var title;
+		var warning = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+			arrAssignmentFields = 
+				["task_name", "tasking_authority", "u_reviewer", "primary_office", "u_task_requester", "primary_assignee", 
+				"assigned_to", "u_internal_contact_performing_task", "u_internal_contact", "on_behalf_of", 
+				"outbound", "u_external_ou", "poc_name", "external_task_id_number", "u_external_task_url", 
+				"originator", "sys_created_on"];
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			objectType = "templateTask";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
+			arrAssignmentFields = 
+				["short_description", "tasking_authority", "u_reviewer", "primary_office", "primary_assignee", 
+				"assigned_to_individual", "u_internal_contact_performing_task", "u_internal_contact", "u_on_behalf_of", 
+				"outbound", "u_external_ou", "poc_name", "sys_created_on"];
+		}
+
+		lAssignmentInfo = this.api_dtech.loadObject(gr_recordObject, arrAssignmentFields);
+		// add object type after the info is loaded
+		lAssignmentInfo.objectType = objectType;
+		// add task id after loaded
+		lAssignmentInfo.taskId = gr_recordObject.getUniqueValue();
+		// NOTE: if the task is not an outbound task, remove outbound and external fields
+		if(lAssignmentInfo.outbound!=true){
+			lAssignmentInfo["outbound"] = undefined;
+			lAssignmentInfo["u_external_ou"] = undefined;
+			lAssignmentInfo["poc_name"] = undefined;
+			if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+				lAssignmentInfo["external_task_id_number"] = undefined;
+				lAssignmentInfo["u_external_task_url"] = undefined;
+			}
+		}
+        warning.primaryAssigneeEmpty = (lAssignmentInfo["primary_assignee"].value == '' || lAssignmentInfo["primary_assignee"].value == null);
+        warning.taskingAuthorityEmpty = ((lAssignmentInfo["tasking_authority"].value == '' || lAssignmentInfo["tasking_authority"].value == null));
+        warning.primaryOfficeEmpty = ((lAssignmentInfo["primary_office"].value == '' || lAssignmentInfo["primary_office"].value == null));
+		lAssignmentInfo.warning = warning;
+
+
+		lAssignmentInfo.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal') + ': ' + title;
+		return lAssignmentInfo;		
+	},
+
+// TODO - CONEXT MENU IS DIFFERENT, NEEDS TO LEAVE THINGS IN TASK AND TEMPLATE OR CREATE SEPARATE OBJECT FOR JUST THIS
+	getContextMenuInformation: function(tableName, sysId){
+		var lContextMenuInformation = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lContextMenuInformation = this.getContextMenuInformationGR(gr_recordObject);
+		}
+		return lContextMenuInformation;
+	},
+	
+	// NOTE: this one is backward where if we have the glide record we get the task id and call getContextMenuInformation
+	getContextMenuInformationGR:function (gr_recordObject){
+		var objectType = "";
+		var lContextMenuInformation = {};
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";
+			var l_api_tasker_task = new api_tasker_task();
+			lContextMenuInformation = l_api_tasker_task.getContextMenuInformationGR(gr_recordObject);
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME){
+			objectType = "templateTask";
+			//lContextMenuInformation =  l_api_tasker_task.getContextMenuInformationGR(gr_recordObject);
+			lContextMenuInformation = {"Error":"getContextMenuInformationGR - Not implemented for Template yet"};
+		}
+		lContextMenuInformation.objectType = objectType;
+		return lContextMenuInformation;
+	},
+
+	getDurationInformation: function(tableName, sysId){
+		var lDurationInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lDurationInfo = this.getDurationInformationGR(gr_recordObject);
+		}
+		return lDurationInfo;
+	},
+	
+	getDurationInformationGR: function(gr_recordObject){
+		var objectType = "";
+		var lDurationInfo = {};
+		var arrDurationFields = [];
+		var title;
+		var status_and_reason = {};
+		var warning = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";			
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+			arrDurationFields = 
+				["task_name", "suspense_date", "task_order", "warning_hours", "u_wait_for_subtasks_to_finish", "expected_start", "calendar_duration", 
+				"work_start", "work_end", "outbound", "u_external_due_date", "status", "calchaschildren", "state", "u_active_subtasks"];
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			objectType = "templateTask";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
+			arrDurationFields = 
+				["short_description", "u_suspense_date", "route_order", "warning_hours", "u_wait_for_subtasks_to_finish", 
+				"outbound", "calchaschildren", "u_duration_days", "u_duration_time_due", "u_warning_projected_due_date_before_child", "u_warning_projected_due_date_after_parent","warning_hours"];			
+		}
+		lDurationInfo = this.api_dtech.loadObject(gr_recordObject, arrDurationFields);
+		// add task id after loaded
+		lDurationInfo.taskId = gr_recordObject.getUniqueValue();
+
+		var l_temp_u_wait_for_subtasks_to_finish = lDurationInfo["u_wait_for_subtasks_to_finish"].value;
+		var l_temp_calchaschildren = lDurationInfo["calchaschildren"].value;
+
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			status_and_reason = this.taskerStatus.getStatusAndReason(gr_recordObject);
+			// NOTE: if the task is not an outbound task, remove outbound and external due date
+			if(lDurationInfo.outbound!=true){
+				lDurationInfo["outbound"] = undefined;
+				lDurationInfo["u_external_due_date"] = undefined;
+			}
+
+			lDurationInfo.isInboundExternalOU = !gr_recordObject.parent && gr_recordObject.tasking_authority && (gr_recordObject.tasking_authority.u_external_flag == true);
+			lDurationInfo.isOutboundExternalOU = (gr_recordObject.outbound == true);
+			lDurationInfo.state = lDurationInfo["state"].value;
+			lDurationInfo.u_active_subtasks = lDurationInfo["u_active_subtasks"].value;
+			warning.isTopSuspenseDateAfterExternalInboundDate = lDurationInfo.isInboundExternalOU && (gr_recordObject.suspense_date > gr_recordObject.u_external_due_date);
+			warning.isTopSuspenseDateBeforeExternalOutboundDate = lDurationInfo.isOutboundExternalOU && (gr_recordObject.u_external_due_date > gr_recordObject.suspense_date);
+			
+			warning.waitStatewithNoSubtasks = ((l_temp_u_wait_for_subtasks_to_finish && 
+												(l_temp_calchaschildren == 0)) ||
+												(l_temp_u_wait_for_subtasks_to_finish && 
+												(l_temp_calchaschildren != 0) && 
+												(lDurationInfo.state==-3) && 
+												(lDurationInfo.u_active_subtasks==0))
+												);
+			if(!warning.waitStatewithNoSubtasks && lDurationInfo.state==-3){
+				warning.waitStateOrderBy = true;
+			}
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			if(lDurationInfo.outbound!=true){
+				lDurationInfo["outbound"] = undefined;
+			}
+			warning = {};
+			lDurationInfo.actualTime = {label: "Actual Time", value:0, display_value:"0"};
+			var durationDays = parseInt(lDurationInfo.u_duration_days.value);
+			if(durationDays >= 0){
+				lDurationInfo.actualTime.value = durationDays * 86400000;
+			}
+			var durationTimeDueValue = new GlideDateTime(lDurationInfo.u_duration_time_due.value);
+			var durationTimeDue = durationTimeDueValue.getNumericValue();
+			lDurationInfo.u_duration_time_due.formatted_value = "00:00:00";
+			if(durationTimeDue){
+				lDurationInfo.actualTime.value+= durationTimeDue;
+				var dur = new GlideDuration(durationTimeDue);
+				lDurationInfo.u_duration_time_due.formatted_value = dur.getByFormat('HH:mm');
+			}
+			warning.waitStatewithNoSubtasks = ((lDurationInfo.u_wait_for_subtasks_to_finish.display_value=="true" && 
+												(lDurationInfo.calchaschildren.display_value == "0"))
+												);
+			var suspenseDateLabel = lDurationInfo.u_suspense_date.label;
+			suspenseDateLabel = suspenseDateLabel.toLowerCase();
+			warning.waitStateNoSubtasks_msg = gs.getMessage("Tasker - Warning: Wait state set with no subtasks");
+			warning.parentBeforeChild_msg = gs.getMessage("The projected {0} of one (1) or more Subtasks exceeds the projected {1} of this task", [suspenseDateLabel, suspenseDateLabel]);
+			warning.childBeforeParent_msg = gs.getMessage("This Subtask's projected {0}  exceeds the projected {1} of the Parent Task", [suspenseDateLabel, suspenseDateLabel]);
+			var warningDays = parseInt(lDurationInfo.warning_hours.display_value);
+			var warningDaysText = '';
+			if (warningDays > 0) {
+				warningDaysText = gs.getMessage("Warning Caption",[ lDurationInfo.warning_hours.display_value, lDurationInfo.warning_hours.label]);
+			} else {
+				warningDaysText = gs.getMessage('Warning Not Set Caption');
+			}
+			lDurationInfo.warningDaysText = warningDaysText;
+		}
+		lDurationInfo.status_reason = status_and_reason;
+		lDurationInfo.warning = warning;
+		// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; removed ': '
+		lDurationInfo.durationTitle = gs.getMessage('Tasker - Title - Duration Modal') + title;
+
+		lDurationInfo.objectType = objectType;
+		return lDurationInfo;
+	},
+
+	getItemMembersInformation: function(tableName, sysId){
+		var lItemMembersInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lItemMembersInfo = this.getItemMembersInformationGR(gr_recordObject);
+		}
+		return lItemMembersInfo;
+	},
+	
+	getItemMembersInformationGR: function(gr_recordObject){
+		var objectType = "";
+		var lItemMembersInfo = {};
+		var arrItemMembersFields = [];
+		var lMembers = {};
+		var arrMembers = [];
+		var tableName = gr_recordObject.getRecordClassName();
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";
+			
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+
+			arrItemMembersFields = 
+				["assigned_to", "originator", "u_task_requester", "u_reviewer", "on_behalf_of"];
+
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+//  task_name -> short_description
+//  originator" -> NOT ON THIS TABLE
+//  u_task_requester -> NOT ON THIS TABLE
+//  on_behalf_of -> u_on_behalf_of
+			objectType = "templateTask";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
+			arrItemMembersFields = 
+				["assigned_to_individual", "u_reviewer", "u_on_behalf_of"];
+
+		}
+		lMembers = this.api_dtech.loadObject(gr_recordObject, arrItemMembersFields);
+		
+		// NOTE: additional fields are needed in the member info object, add them after loading the members into an array with photos
+		// turn the member field object into an array and add the photos
+		arrMembers = this._loadPhotosForObjects(lMembers, arrItemMembersFields);
+		lItemMembersInfo.members = arrMembers;
+		
+		// add task id after loaded
+		lItemMembersInfo.taskId = gr_recordObject.getUniqueValue();
+		lItemMembersInfo.itemMembersTitle = gs.getMessage('Tasker - Title - ItemMembers Modal') + ': ' + title;
+
+		lItemMembersInfo.objectType = objectType;
+		return lItemMembersInfo;
+	},
+	
+	getOperationalInformation: function(tableName, sysId){
+		var lOperationalInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lOperationalInfo = this.getOperationalInformationGR(gr_recordObject);
+		}
+		return lOperationalInfo;
+	},
+	
+	getOperationalInformationGR: function(gr_recordObject){
+		var objectType = "";
+		var lOperationalInfo = {};
+		var lTopTasklInfo = {};
+		var arrOperationalFields = [];
+		var arrTopTaskFields = [];
+		var title;
+		var status_and_reason = {};
+		var warning = {};
+		// NOTE: warning hours is actually a number of days, not hours
+		// NOTE: calendar duration is Estimated Effort
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+
+			// NOTE: warning hours is actually a number of days, not hours
+			// NOTE: calendar duration is Estimated Effort
+			arrOperationalFields = 
+				["task_name", "number", "parent", "taskernumber", "classification", "assignement_group", "tasker_type", "short_description", 
+				"instructions", "u_signature_instructions", "priority", "u_privacy", "urgency",
+				"state", "status", "decision", "category", "sub_category", "risk_flag", "risk_impact_description",
+				"risk_impact_factor", "risk_mitigation_strategy", "risk_probability", "risk_probability_description", "risk_reason",
+				"tasker_app_version"];
+			arrTopTaskFields = ["u_objective"];
+
+			status_and_reason = this.taskerStatus.getStatusAndReason(gr_recordObject);
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+//  task_name -> short_description (there really isn't a "task name" on the template as that represnts name and TaskerNumber.  TaskerNumber does not exist yet for the template)
+//  suspense_date -> u_suspense_date
+//  assignement_group -> assigned_to_group
+//  short_description -> short_description
+//  priority -> u_priority
+//  urgency -> u_urgency
+//  risk_flag -> u_risk_flag
+//  risk_impact_description -> u_risk_impact_description
+//  risk_impact_factor -> u_risk_impact_factor
+//  risk_mitigation_strategy -> u_risk_mitigation_strategy
+//  risk_probability -> u_risk_probability
+//  risk_probability_description -> u_risk_probability_description
+//  risk_reason -> u_risk_reason
+//  taskernumber -> NOT ON THIS TABLE
+//  state -> NOT ON THIS TABLE
+//  status -> NOT ON THIS TABLE
+//  tasker_app_version -> NOT ON THIS TABLE
+//  decision -> NOT ON THIS TABLE
+// NOTE: there are other fields used here, need to look to see what we need for warnings
+			objectType = "templateTask";
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
+			arrDurationFields = 
+				["short_description", "number", "parent", "classification", "assigned_to_group", "tasker_type", 
+				"instructions", "u_signature_instructions", "u_priority", "u_privacy", "u_urgency", 
+				"category", "sub_category", "u_risk_flag", "u_risk_impact_description",
+				"u_risk_impact_factor", "u_risk_mitigation_strategy", "u_risk_probability", "u_risk_probability_description", "u_risk_reason"];
+			arrTopTaskFields = ["u_objective"];
+		}
+
+		lOperationalInfo = this.api_dtech.loadObject(gr_recordObject, arrOperationalFields);
+
+		lOperationalInfo.status_reason = status_and_reason;
+		// add task id after loaded
+		lOperationalInfo.taskId = gr_recordObject.getUniqueValue();
+
+		lTopTasklInfo = this._getTopTaskFields(gr_recordObject, arrTopTaskFields);
+		lOperationalInfo.u_top_task = lTopTasklInfo;
+		lOperationalInfo.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal') + ': ' + title;
+		lOperationalInfo.objectType = objectType;
+		return lOperationalInfo;
+	},
+		
+	getResponseComments: function(tableName, sysId){
+		var lResponseCommentsInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lResponseCommentsInfo = this.getResponseCommentsGR(gr_recordObject);
+		}
+		return lResponseCommentsInfo;
+	},
+
+	// this is only on the task object, so go directly to task
+	getResponseCommentsGR: function(gr_recordObject){
+		var lResponseCommentsInfo = {};
+		// if not task, return empty object
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			var l_api_tasker_task = new api_tasker_task();
+			lResponseCommentsInfo = l_api_tasker_task.getResponseCommentsGR(gr_recordObject);
+		}
+		return lResponseCommentsInfo;
+	},
+	
+	getStateInformation: function(tableName, sysId){
+		var lStateInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lStateInfo = this.getStateInformationGR(gr_recordObject);
+		}
+		return lStateInfo;
+	},
+
+	// this is only on the task object, so go directly to task
+	getStateInformationGR: function(gr_recordObject){
+		var lStateInfo = {};
+		// if not task, return empty object
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			var l_api_tasker_task = new api_tasker_task();
+			lStateInfo = l_api_tasker_task.getStateInformationGR(gr_recordObject);
+		}
+		return lStateInfo;
+	},
+
+	getSubTasksInformation: function(tableName, sysId){
+		var lSubTasksInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lSubTasksInfo = this.getSubTasksInformationGR(gr_recordObject);
+		}
+		return lSubTasksInfo;
+	},
+	
+	// no differences between task and template
+	getSubTasksInformationGR: function(gr_recordObject){
+		var lSubTasksInfo = {};
+		var arrSubTasksFields = 
+			["calchaschildren"];
+		lSubTasksInfo = this.api_dtech.loadObject(gr_recordObject, arrSubTasksFields);
+		// add task id after loaded
+		lSubTasksInfo.taskId = gr_recordObject.getUniqueValue();
+		var title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+		lSubTasksInfo.subTasksTitle = gs.getMessage('Tasker - Title - SubTasks Modal') + ': ' + title;
+		return lSubTasksInfo;
+	},
+
+	getSubTasksInformationWithList: function(tableName, sysId){
+		var lSubTasksInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lSubTasksInfo = this.getSubTasksInformationWithListGR(gr_recordObject);
+		}
+		return lSubTasksInfo;
+	},
+	
+	getSubTasksInformationWithListGR: function(gr_recordObject){
+		var lSubTasksInfo = {};
+		// load the subtask information
+		lSubTasksInfo = this.getSubTasksInformationGR(gr_recordObject);
+		// array of subtasks
+		var lsubtasks = [];
+		lsubtasks = this._getSubTaskList(gr_recordObject);
+		lSubTasksInfo.subtasks = lsubtasks;
+		return lSubTasksInfo;
+	},
+	
+	getTaskerFilesInformation: function(tableName, sysId){
+		var lTaskerFilesInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lTaskerFilesInfo = this.getTaskerFilesInformationGR(gr_recordObject);
+		}
+		return lTaskerFilesInfo;
+	},
+
+	getTaskerFilesInformationGR: function(gr_recordObject){
+		var objectType = "";
+		var lTaskerFilesInfo = {};
+// TODO - NEED TO GET NEW FIELD IN FOR DOCUMENT COUNTS
+		var arrSubTasksFields = 
+			["calchaschildren"];
+		lTaskerFilesInfo = this.api_dtech.loadObject(gr_recordObject, arrSubTasksFields);
+// TODO - NEED TO ADD A CHECK FOR DOCUMENT VS ATTACHMENT SETTING		
+		// add task id after loaded
+		lTaskerFilesInfo.taskId = gr_recordObject.getUniqueValue();
+// TODO - SET TO DOCUMENTS OR ATTACHMENTS BASED ON TASKER SYSTEM SETTINGS 
+// NOTE: if both is on, do we say files instead of having 2 headers?
+// NOTE: do we have something per view or multiple lists in the dropdown, or just show the items associated iwth this file and have the tree have an attachments icon for the tree level folders
+		lTaskerFilesInfo.label = gs.getMessage('Tasker - Documents');
+		var title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
+		lTaskerFilesInfo.title = gs.getMessage('Tasker - Title - SubTasks Modal') + ': ' + title;
+		return lTaskerFilesInfo;
+	},
+	
+	getTaskerFilesInformationWithFiles: function(tableName, sysId){
+		var lTaskerFilesInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lTaskerFilesInfo = this.getTaskerFilesInformationWithFilesGR(gr_recordObject);
+		}
+		return lTaskerFilesInfo;
+	},
+	
+	getTaskerFilesInformationWithFilesGR: function(gr_recordObject){
+		var objectType = "";
+		var lTaskerFilesInfo = {};
+		// load the subtask information
+		lTaskerFilesInfo = this.getTaskerFilesInformationGR(gr_recordObject);
+		// array of files
+		var ltaskerfiles = [];
+// TODO - BUILD FILE NAME LOADER AND ALSO DETERMINE IF WE HAVE MULTIPLE FOLDERS AND IF WE ALSO LOAD THE SIGNATURE IN HERE
+		ltaskerfiles = this._getSubTaskList(gr_recordObject);
+		lTaskerFilesInfo.files = ltaskerfiles;
+		return lTaskerFilesInfo;
+	},
+	
+	getTaskTreeInformation: function(tableName, sysId){
+		var lTaskTreeInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lTaskTreeInfo = this.getTaskTreeInformationGR(gr_recordObject);
+		}
+		return lDurationInfo;
+	},
+	
+	// this is only on the task object, so go directly to task
+	getTaskTreeInformationGR: function(gr_recordObject){
+		var objectType = "";
+		var lTaskTreeInfo = {};
+		var l_api_tasker_task = new api_tasker_task();
+
+		lTaskTreeInfo = l_api_tasker_task.getTaskTreeInformationGR(gr_recordObject);
+		return lTaskTreeInfo;
+	},
+
+	getUIActionParamaters: function(tableName, sysId, action_name, action_sys_id){
+		var params = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			params = this.getUIActionParamatersGR(gr_recordObject, action_name, action_sys_id);
+		}
+		return params;
+	},
+	
+	// this is only on the task object, so go directly to task
+	getUIActionParamatersGR: function(gr_recordObject, action_name, action_sys_id){
+		var params = {};
+
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			var l_api_tasker_task = new api_tasker_task();
+			params = l_api_tasker_task.getUIActionParamatersGR(gr_recordObject, action_name, action_sys_id);
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME){
+			//params = l_api_tasker_task.getUIActionParamatersGR(gr_recordObject, action_name, action_sys_id);
+			params = {"Error":"Not implemented for Template yet"};
+		}
+		return params;
+	},
+	
+	// ************************************************************************
+	// Internal methods below 
+	// ************************************************************************
+	_getSubTaskList: function(gr_recordObject){
+		var objectType = "";
+		var lSubTaskInfo = {};
+		var lSubTasks = [];
+		var arrSubTaskListFields = [];
+		var gr_subtasks;
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			arrSubTaskListFields = 
+				["short_description", "state", "number", "task_order"];
+			gr_subtasks = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+//  task_order -> route_order
+//  state -> NOT ON THIS TABLE
+// NOTE: there are other fields used here, need to look to see what we need for warnings
+			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
+			arrSubTaskListFields = 
+				["short_description", "number", "route_order"];
+			gr_subtasks = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		}
+
+		gr_subtasks.addQuery("parent", gr_recordObject.getUniqueValue());
+		gr_subtasks.query();
+		while(gr_subtasks.next()){
+			lSubTaskInfo = this.api_dtech.loadObject(gr_subtasks, arrSubTaskListFields);
+			// add task id after loaded
+			lSubTaskInfo.taskId = gr_subtasks.getUniqueValue();
+			lSubTasks.push(lSubTaskInfo);
+		}
+		return lSubTasks;
+	},
+
+	_getTopTaskFields: function(gr_recordObject, arrTopTaskFields){
+		var objectType = "";
+		var tableName = gr_recordObject.getRecordClassName();
+		var lTopTasklInfo;
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			var topTaskId = gr_recordObject.getValue("u_top_task");
+			var gr_top_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+			if(gr_top_task.get(topTaskId)){
+				lTopTasklInfo = this.api_dtech.loadObject(gr_top_task, arrTopTaskFields);
+			}
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			var templateId = gr_recordObject.getValue("tasker_process_definition");
+			// this is going to template table, not task template table
+			var gr_template = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME);
+			if(gr_template.get(topTaskId)){
+				lTopTasklInfo = this.api_dtech.loadObject(gr_template, arrTopTaskFields);
+			}
+		}
+		return lTopTasklInfo;
+	},
+
+	_loadPhotosForObjects: function(infoObject, fields){
+		var arrMembers = [];
+		var userInfo = new UserInfoScripts();
+		for (i=0; i < fields.length; i++) {
+			var fieldName = fields[i];
+			var field = infoObject[fieldName];
+			field.order = i;
+			if(field.value && field.value!=null && field.value!="null"){
+				field.photoInfo = userInfo.loadPhotoInfo(field.value, true);
+			}
+			arrMembers.push(field);
+		}
+		return arrMembers;
+	},
+	
+    type: 'api_tasker_ui_component_data'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-11-14 14:46:06</sys_created_on>
+        <sys_customer_update>false</sys_customer_update>
+        <sys_id>741bdb38dbe2b9109754e6ccd3961911</sys_id>
+        <sys_mod_count>43</sys_mod_count>
+        <sys_name>api_tasker_ui_component_data</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_741bdb38dbe2b9109754e6ccd3961911</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-11-28 13:24:03</sys_updated_on>
+    </sys_script_include>
+</record_update>
