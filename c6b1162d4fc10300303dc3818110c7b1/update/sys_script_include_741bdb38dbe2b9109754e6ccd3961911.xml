@@ -187,7 +187,7 @@ api_tasker_ui_component_data.prototype = {
 			objectType = "templateTask";
 			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
 			arrDurationFields = 
-				["short_description", "u_suspense_date", "route_order", "warning_hours", "u_wait_for_subtasks_to_finish", 
+				["short_description", "u_suspense_date", "route_order", "warning_hours", "u_wait_for_subtasks_to_finish", "duration",
 				"outbound", "calchaschildren", "u_duration_days", "u_duration_time_due", "u_warning_projected_due_date_before_child", "u_warning_projected_due_date_after_parent","warning_hours"];			
 		}
 		lDurationInfo = this.api_dtech.loadObject(gr_recordObject, arrDurationFields);
@@ -251,9 +251,9 @@ api_tasker_ui_component_data.prototype = {
 			var warningDays = parseInt(lDurationInfo.warning_hours.display_value);
 			var warningDaysText = '';
 			if (warningDays > 0) {
-				warningDaysText = gs.getMessage("Warning Caption",[ lDurationInfo.warning_hours.display_value, lDurationInfo.warning_hours.label]);
+				warningDaysText = gs.getMessage("Reminder {0} days before {1}",[ lDurationInfo.warning_hours.display_value, lDurationInfo.warning_hours.label]);
 			} else {
-				warningDaysText = gs.getMessage('Warning Not Set Caption');
+				warningDaysText = gs.getMessage('No warning reminder set');
 			}
 			lDurationInfo.warningDaysText = warningDaysText;
 		}
@@ -330,15 +330,14 @@ api_tasker_ui_component_data.prototype = {
 	getOperationalInformationGR: function(gr_recordObject){
 		var objectType = "";
 		var lOperationalInfo = {};
-		var lTopTasklInfo = {};
 		var arrOperationalFields = [];
-		var arrTopTaskFields = [];
 		var title;
 		var status_and_reason = {};
 		var warning = {};
 		// NOTE: warning hours is actually a number of days, not hours
 		// NOTE: calendar duration is Estimated Effort
-// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
+		// NOTE: See Template fieldname differences and update Macro, Scripts whenever changing
+		// NOTE: there are other fields used here, need to look to see what we need for warnings
 		var tableName = gr_recordObject.getRecordClassName();
 		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
 			objectType = "task";
@@ -351,49 +350,39 @@ api_tasker_ui_component_data.prototype = {
 				"instructions", "u_signature_instructions", "priority", "u_privacy", "urgency",
 				"state", "status", "decision", "category", "sub_category", "risk_flag", "risk_impact_description",
 				"risk_impact_factor", "risk_mitigation_strategy", "risk_probability", "risk_probability_description", "risk_reason",
-				"tasker_app_version"];
+				"tasker_app_version", "arrReferenceFields","u_top_task"];
+			
+			lOperationalInfo = this.api_dtech.loadObject(gr_recordObject, arrOperationalFields);
+			var lTopTasklInfo = {};
+			var arrTopTaskFields = [];
 			arrTopTaskFields = ["u_objective"];
-
 			status_and_reason = this.taskerStatus.getStatusAndReason(gr_recordObject);
+			lTopTasklInfo = this._getReferenceFields(tableName, lOperationalInfo.u_top_task.value,  arrTopTaskFields);
+			lOperationalInfo.u_top_task = lTopTasklInfo;
+
 		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
-// TODO - See Template fieldname differences and update Macro, Script in the macro and controller
-//  task_name -> short_description (there really isn't a "task name" on the template as that represnts name and TaskerNumber.  TaskerNumber does not exist yet for the template)
-//  suspense_date -> u_suspense_date
-//  assignement_group -> assigned_to_group
-//  short_description -> short_description
-//  priority -> u_priority
-//  urgency -> u_urgency
-//  risk_flag -> u_risk_flag
-//  risk_impact_description -> u_risk_impact_description
-//  risk_impact_factor -> u_risk_impact_factor
-//  risk_mitigation_strategy -> u_risk_mitigation_strategy
-//  risk_probability -> u_risk_probability
-//  risk_probability_description -> u_risk_probability_description
-//  risk_reason -> u_risk_reason
-//  taskernumber -> NOT ON THIS TABLE
-//  state -> NOT ON THIS TABLE
-//  status -> NOT ON THIS TABLE
-//  tasker_app_version -> NOT ON THIS TABLE
-//  decision -> NOT ON THIS TABLE
-// NOTE: there are other fields used here, need to look to see what we need for warnings
+			// NOTE: See Task fieldname differences and update Macro, Scripts whenever changing
+			// NOTE: there are other fields used here, need to look to see what we need for warnings
 			objectType = "templateTask";
 			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
-			arrDurationFields = 
+			arrOperationalFields = 
 				["short_description", "number", "parent", "classification", "assigned_to_group", "tasker_type", 
 				"instructions", "u_signature_instructions", "u_priority", "u_privacy", "u_urgency", 
-				"category", "sub_category", "u_risk_flag", "u_risk_impact_description",
+				"category", "sub_category", "u_risk_flag", "u_risk_impact_description", "tasker_process_definition",
 				"u_risk_impact_factor", "u_risk_mitigation_strategy", "u_risk_probability", "u_risk_probability_description", "u_risk_reason"];
-			arrTopTaskFields = ["u_objective"];
+			lOperationalInfo = this.api_dtech.loadObject(gr_recordObject, arrOperationalFields);
+			var lTemplateInfo = {};
+			var arrTemplateFields = [];
+			arrTemplateFields = ["u_objective"];
+			lTemplateInfo = this._getReferenceFields(api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME,
+													lOperationalInfo.tasker_process_definition.value, arrTemplateFields);
+			lOperationalInfo.tasker_process_definition = lTemplateInfo;
 		}
-
-		lOperationalInfo = this.api_dtech.loadObject(gr_recordObject, arrOperationalFields);
 
 		lOperationalInfo.status_reason = status_and_reason;
 		// add task id after loaded
 		lOperationalInfo.taskId = gr_recordObject.getUniqueValue();
 
-		lTopTasklInfo = this._getTopTaskFields(gr_recordObject, arrTopTaskFields);
-		lOperationalInfo.u_top_task = lTopTasklInfo;
 		lOperationalInfo.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal') + ': ' + title;
 		lOperationalInfo.objectType = objectType;
 		return lOperationalInfo;
@@ -614,25 +603,13 @@ api_tasker_ui_component_data.prototype = {
 		return lSubTasks;
 	},
 
-	_getTopTaskFields: function(gr_recordObject, arrTopTaskFields){
-		var objectType = "";
-		var tableName = gr_recordObject.getRecordClassName();
-		var lTopTasklInfo;
-		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
-			var topTaskId = gr_recordObject.getValue("u_top_task");
-			var gr_top_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
-			if(gr_top_task.get(topTaskId)){
-				lTopTasklInfo = this.api_dtech.loadObject(gr_top_task, arrTopTaskFields);
-			}
-		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
-			var templateId = gr_recordObject.getValue("tasker_process_definition");
-			// this is going to template table, not task template table
-			var gr_template = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME);
-			if(gr_template.get(topTaskId)){
-				lTopTasklInfo = this.api_dtech.loadObject(gr_template, arrTopTaskFields);
-			}
+	_getReferenceFields: function(tableName, referenceId, arrReferenceFields){
+		var lReferenceInfo;
+		var gr_reference = new GlideRecordSecure(tableName);
+		if(gr_reference.get(referenceId)){
+			lReferenceInfo = this.api_dtech.loadObject(gr_reference, arrReferenceFields);
 		}
-		return lTopTasklInfo;
+		return lReferenceInfo;
 	},
 
 	_loadPhotosForObjects: function(infoObject, fields){
@@ -655,16 +632,14 @@ api_tasker_ui_component_data.prototype = {
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-11-14 14:46:06</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>741bdb38dbe2b9109754e6ccd3961911</sys_id>
-        <sys_mod_count>43</sys_mod_count>
+        <sys_mod_count>56</sys_mod_count>
         <sys_name>api_tasker_ui_component_data</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_741bdb38dbe2b9109754e6ccd3961911</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-28 13:24:03</sys_updated_on>
+        <sys_updated_on>2023-11-30 15:02:14</sys_updated_on>
     </sys_script_include>
 </record_update>
