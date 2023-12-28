@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
+    <sp_angular_provider action="INSERT_OR_UPDATE">
+        <name>dtechAddSubObject</name>
+        <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
+//
+// Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Special License Rights
+//  The Government's rights to use, display, or disclose this software are restricted.
+//  Any reproduction of computer software, computer software documentation,
+//  or portions thereof marked with this legend must also reproduce the markings. 
+// Script Continued Below
+//
+// NOTE: Hover tooltip capability is off until we provide options on add forms to open
+*/
+function dtechAddSubObject(getTemplateUrl, spModal, spUtil, $timeout) {
+	var dtechDirective = {
+		restrict: 'E',
+		// replace: true,
+		// @: string 1 way, =: object 2 way, <: object 1 way,
+		// &: execute an expression in the context of the parent scope, ?: the binding is optional
+		scope: {
+			dtechIsDark:"<",			
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
+			dtechTable: '@',
+			dtechTaskSysId: '@',
+			dtechObjectType: '@',
+			dtechToolTipOpen: "=?",
+			dtechAddSubObject: "=",
+			dtechTaskTitle: "<?",
+			dtechServiceNowFormView: "<"
+		},
+		controller: directiveCtrl,
+		link: link,
+		controllerAs: 'd',
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechAddSubObject.html')
+	};
+	return dtechDirective;
+
+	function directiveCtrl($scope, $rootScope, spModal, spUtil, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+		var d = this;
+		var CONST_MAX_ACTION_WAIT_RETRY = 5;
+		// have local per directive instead of global - TODO: get from a service
+		// increase since this is a click and not a hover
+		var CONST_TEMP_WAIT_DURATION = 1200; // 600;
+		// NOTE: No popover delay with actions since it is a click event
+		
+		var g_form;
+
+		// STRY0145237 - Directive - update to local var
+// FIRST ITERATION HAS NO TOOLTIP
+//		var isOverTooltip = false;
+//		var isClosing = false;
+//		var parentMouseLeaveTimeouts = []; // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		$scope.dtechToolTipOpen = false;
+//		d.enterTooltip = _enterTooltip;
+		d.getImage = _getImage;
+		d.init = _init;
+		
+//		d.initTooltip = _initTooltip;
+//		d.leaveTooltip = _leaveTooltip;
+//		d.parentMouseLeave = _parentMouseLeave;
+
+// ADD back when more than one action		
+//		d.showActions = _showActions;
+		d.createSubItem = _createSubItem;
+		// when the user hovers over the tooltip set overtooltip flag
+//		function _enterTooltip() {
+//			isOverTooltip = true;
+//		}
+
+		function _getImage(){
+			var imageName = "x_153465_discovert.GenericAddSub16.svg";
+			// only change to white if dark and using original image
+			if(imageName=="x_153465_discovert.GenericAddSub16.svg" && $scope.dtechIsDark==true){
+				imageName = "x_153465_discovert.GenericAddSub_White16.svg";
+			}
+			return imageName;
+		}
+				
+		// init()
+		// initialize the control, called from the Link function
+		// gets a reference to the element
+		function _init(rawAttrs) {
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "bottom";
+			}
+
+			// Set default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechTaskTitle)) {
+				if($scope.dtechAddSubObject){
+					$scope.dtechTaskTitle = $scope.dtechAddSubObject.title;
+				}
+			}
+
+			// Set default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechObjectType)) {
+				if($scope.dtechAddSubObject){
+					$scope.dtechObjectType = $scope.dtechAddSubObject.objectType;
+				}
+			}
+
+			$scope.dtechToolTipOpen = 
+				angular.isDefined($attrs.dtechToolTipOpen) ?
+				$scope.$parent.$eval($attrs.dtechToolTipOpen) : false;
+				
+			$scope.dtechServiceNowFormView = 
+				angular.isDefined($attrs.dtechServiceNowFormView) ?
+				$scope.$parent.$eval($attrs.dtechServiceNowFormView) : false;				
+				
+		}
+
+//		function _initTooltip() {
+//			// if the user moved off of the parent before the tooltip opened, cancel the open
+//			if (isClosing == true) {
+//				_leaveTooltip();
+//				isClosing = false;
+//			}
+//		}
+
+//		function _leaveTooltip() {
+//			isOverTooltip = false;
+//			$scope.dtechToolTipOpen = false;
+//			
+//			// STRY0139742 - Increase delaying when hover directives open; set true
+//			isClosing = true;
+//		}
+
+//		function _parentMouseLeave() {
+//			// STRY0145237 - Directive - Duration code changes to match design; 
+//			// we need to track each time the below fires so we cancel on destroy
+//			parentMouseLeaveTimeouts.push($timeout(function() {
+//				if(!isOverTooltip){
+//					d.leaveTooltip();
+//				}
+//			}, CONST_TEMP_WAIT_DURATION));
+//		}
+		
+//		function _showActions(event) {
+//			$scope.dtechToolTipOpen = true;
+//			
+//			// STRY0139742 - Increase delaying when hover directives open; set false
+//			isClosing = false;
+//			
+//			var addSubObject = {};
+//			actionsObject.taskId = $scope.dtechTaskSysId;
+//			$scope.dtechAddSubObject = addSubObject;
+// TODO - you will need a new function to load the sub action types
+//			$scope.loadActions($scope.dtechTaskSysId);
+//		}
+
+		// createTemplateTaskModal()
+		// this function is called from Template html
+		// it is called when a user clicks on the open link
+		function _createTemplateTaskModal() {
+			var templateTaskCreateParams = {
+				title: $scope.dtechTaskTitle, 
+				message: '',
+				backdrop: 'static',
+				widget: 'discovertasker-formtab',
+				widgetInput: {
+					table: $scope.dtechTable,
+					query: 'parent=' + $scope.dtechTaskSysId, 
+					sys_id: -1,
+					view: 'Default_View', // NOTE, we may need to look up default
+					hideRelatedLists: true,
+					omitHeader: 'true',
+					hideAttachmentBtn: true,
+					isModal: true
+					},
+				shared: {},
+				size: 'lg',
+				buttons: []
+			};
+			x_153465_discovert.DTech_Task_Actions.openFormModal(spModal, templateTaskCreateParams);
+		}
+
+
+		function _createTaskModal() {
+// TODO PULL CREATE TASK TILLTE AND TITLE FIELD FROM HOW BUILD IN TASKER FORM WITH TABS
+$scope.dtechTaskTitle = "testing";
+//			var title= c.data.createTaskTitle + ': ' + c.data.f.title;
+			var query = 'parent=' + $scope.dtechTaskSysId;
+			var view = '';// this will always come from the parent, so use the dtechServiceNowFormView
+			// DFCT0011271
+			x_153465_discovert.DTech_Task_Actions.openCreateModal(spModal, $scope.dtechTaskTitle, $scope.dtechTable, view, query, $scope.dtechServiceNowFormView);
+		}
+
+		function _createSubItem(event){
+			// STRY0145237 - Directive - Duration code changes to match design;  
+			var title = $scope.dtechTaskTitle;
+			if ($scope.dtechObjectType=='templateTask'){
+				_createTemplateTaskModal();
+			} else if($scope.dtechObjectType=='task') {
+				_createTaskModal();
+			}
+			// popover closes quickly and user is left watching the spinner before modal pops
+//			d.leaveTooltip();
+			
+			// modal is openened stop the row or cell click form raising
+			event.stopPropagation();
+		}
+
+
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+//			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+//				$timeout.cancel(item);
+//				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+//			});
+		});
+
+	} // end function actionsCtrl
+	// Link function links local methods to parent controller methods
+	// see the list of events being monitored
+	function link(scope, element, attrs, directiveCtrl) {
+		// initialize the control
+		// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+		// updated to pass attrs
+		directiveCtrl.init(attrs);
+
+		scope.$on('$destroy',_destroy);
+		// get the location of the element hovering over
+		function _destroy() {
+			element.remove();
+		}
+	}
+
+}]]></script>
+        <sys_class_name>sp_angular_provider</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-12-14 23:21:53</sys_created_on>
+        <sys_id>b8d03b261b47b110e75655f5624bcbee</sys_id>
+        <sys_mod_count>15</sys_mod_count>
+        <sys_name>dtechAddSubObject</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_angular_provider_b8d03b261b47b110e75655f5624bcbee</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-12-21 20:34:43</sys_updated_on>
+        <type>directive</type>
+    </sp_angular_provider>
+</record_update>

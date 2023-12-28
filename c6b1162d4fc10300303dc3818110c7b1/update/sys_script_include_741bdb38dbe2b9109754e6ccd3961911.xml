@@ -130,7 +130,8 @@ api_tasker_ui_component_data.prototype = {
 		return lAssignmentInfo;		
 	},
 
-// TODO - CONEXT MENU IS DIFFERENT, NEEDS TO LEAVE THINGS IN TASK AND TEMPLATE OR CREATE SEPARATE OBJECT FOR JUST THIS
+	// Conext menu is different than other things, actions are loaded from the object provided
+	// NOTE: this can ONLY be called from Portal Server Script b/c the call stack uses $sp.getForm and that only exists in Portal Server Script
 	getContextMenuInformation: function(tableName, sysId){
 		var lContextMenuInformation = {};
 		var gr_recordObject = new GlideRecordSecure(tableName);
@@ -140,21 +141,11 @@ api_tasker_ui_component_data.prototype = {
 		return lContextMenuInformation;
 	},
 	
-	// NOTE: this one is backward where if we have the glide record we get the task id and call getContextMenuInformation
+	// Conext menu is different than other things, actions are loaded from the object provided
+	// NOTE: this can ONLY be called from Portal Server Script b/c the call stack uses $sp.getForm and that only exists in Portal Server Script
 	getContextMenuInformationGR:function (gr_recordObject){
-		var objectType = "";
 		var lContextMenuInformation = {};
-		var tableName = gr_recordObject.getRecordClassName();
-		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
-			objectType = "task";
-			var l_api_tasker_task = new api_tasker_task();
-			lContextMenuInformation = l_api_tasker_task.getContextMenuInformationGR(gr_recordObject);
-		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME){
-			objectType = "templateTask";
-			//lContextMenuInformation =  l_api_tasker_task.getContextMenuInformationGR(gr_recordObject);
-			lContextMenuInformation = {"Error":"getContextMenuInformationGR - Not implemented for Template yet"};
-		}
-		lContextMenuInformation.objectType = objectType;
+		lContextMenuInformation = this._load_context_menu(gr_recordObject);
 		return lContextMenuInformation;
 	},
 
@@ -251,7 +242,7 @@ api_tasker_ui_component_data.prototype = {
 			var warningDays = parseInt(lDurationInfo.warning_hours.display_value);
 			var warningDaysText = '';
 			if (warningDays > 0) {
-				warningDaysText = gs.getMessage("Reminder {0} days before {1}",[ lDurationInfo.warning_hours.display_value, lDurationInfo.warning_hours.label]);
+				warningDaysText = gs.getMessage("Reminder {0} day(s) before {1}",[ lDurationInfo.warning_hours.display_value, lDurationInfo.u_suspense_date.label]);
 			} else {
 				warningDaysText = gs.getMessage('No warning reminder set');
 			}
@@ -301,7 +292,6 @@ api_tasker_ui_component_data.prototype = {
 			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TITLE_FIELD);
 			arrItemMembersFields = 
 				["assigned_to_individual", "u_reviewer", "u_on_behalf_of"];
-
 		}
 		lMembers = this.api_dtech.loadObject(gr_recordObject, arrItemMembersFields);
 		
@@ -566,6 +556,95 @@ api_tasker_ui_component_data.prototype = {
 		return params;
 	},
 	
+	// NOTE: if we can move icons to an attachment on the ui action, we could reduce this to filtering out separators and pull all list context menu actions
+	_load_context_menu: function(gr_recordObject){
+		var lContextMenuInformation = {};
+		var arrMenuItems = [];
+		var ui_action_menu_item = {};
+		var objectType = "";
+		var apiObject;
+		var form;
+		var ui_actions;
+		var taskId = gr_recordObject.getUniqueValue();
+		var tableName = gr_recordObject.getRecordClassName();
+		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			objectType = "task";
+			form = $sp.getForm(tableName, taskId);
+			ui_actions = form._ui_actions;
+			lContextMenuInformation.taskId = taskId;
+			apiObject = new api_tasker_task();			
+		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			objectType = "templateTask";
+			form = $sp.getForm(tableName, taskId);
+			ui_actions = form._ui_actions;
+			lContextMenuInformation.taskId = taskId;
+			apiObject = new api_tasker_template();
+		} else {
+			gs.info("Tasker Error - loading context menu actions for table: " + tableName + " Not implemented for Template yet");
+		}
+		lContextMenuInformation.objectType = objectType;
+		// use the api object above and load the context menu actions
+		var arrHCMUI = apiObject._get_ui_actions_context_menu_array();
+		// use the api object above and load the action icons
+		var ui_actions_icons = apiObject._get_ui_actions_icons();
+		var orderCount = 0;
+		for (actionIndex=0; actionIndex < arrHCMUI.length; actionIndex++) {
+			var addAction = false;
+			var hcm_item = arrHCMUI[actionIndex];
+			if(hcm_item != "separator"){
+				var arrItem = ui_actions.filter(function(item){
+					return item.sys_id==hcm_item;});
+				// if the action was not returned, then the user doesn't have permsissions, don't add it
+				if(arrItem[0]){
+					addAction=true;
+					ui_action_menu_item = arrItem[0];
+					ui_action_menu_item.order = actionIndex;
+					ui_action_menu_item.image = undefined;
+					var ui_action_icon = ui_actions_icons[ui_action_menu_item.sys_id];
+					if(ui_action_icon){
+						ui_action_menu_item.image = ui_action_icon.image;
+					}
+					var params = {};
+					// use the api object above and load the action parameters
+					params = apiObject._get_ui_actions_params(gr_recordObject, ui_action_menu_item.sys_id);
+					ui_action_menu_item.params = params;
+				}
+			} else {
+				addAction=true;
+				ui_action_menu_item = {
+					"sys_id" : "separtor" + actionIndex.toString(),
+					"name": "separator",
+					"order": actionIndex
+				};
+			}
+			if(addAction){
+				arrMenuItems.push(ui_action_menu_item);				
+			}
+		}
+		
+		// now filter out adjacent separators
+		var prevIsSeparator = false;  // defined outside the function so it keeps a flag if the previous item is a spearator
+		arrMenuItems = arrMenuItems.filter(function(item){
+			var include=true;
+			if(prevIsSeparator && item.name=="separator"){
+				// this item and previous are both separators.  Skip and do not include
+				include = false;
+			}
+			prevIsSeparator = item.name=="separator";
+			return include;
+		});
+		// remove leading separators
+		while(arrMenuItems.length>0 && arrMenuItems[0].name=="separator"){
+			arrMenuItems.shift();
+		}
+		while(arrMenuItems.length>0 && arrMenuItems[arrMenuItems.length-1].name=="separator"){
+			arrMenuItems.pop();
+		}
+		lContextMenuInformation.ui_actions = arrMenuItems;
+		return lContextMenuInformation;
+	},
+
+	
 	// ************************************************************************
 	// Internal methods below 
 	// ************************************************************************
@@ -633,13 +712,13 @@ api_tasker_ui_component_data.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-11-14 14:46:06</sys_created_on>
         <sys_id>741bdb38dbe2b9109754e6ccd3961911</sys_id>
-        <sys_mod_count>56</sys_mod_count>
+        <sys_mod_count>75</sys_mod_count>
         <sys_name>api_tasker_ui_component_data</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_741bdb38dbe2b9109754e6ccd3961911</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-30 15:02:14</sys_updated_on>
+        <sys_updated_on>2023-12-17 20:59:22</sys_updated_on>
     </sys_script_include>
 </record_update>

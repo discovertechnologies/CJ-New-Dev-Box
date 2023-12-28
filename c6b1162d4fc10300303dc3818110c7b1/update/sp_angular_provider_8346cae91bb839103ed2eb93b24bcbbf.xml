@@ -2,113 +2,117 @@
     <sp_angular_provider action="INSERT_OR_UPDATE">
         <name>dtechActions</name>
         <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
-Note: AngularJS normalizes case-sensitive camelCase to case-insensitive kebab-case for the DOM.
-Usage in a widget's HTML:
-	<dtech-actions 
-		dtech-task-title = "getTitle(item);"
-		dtech-actions-object = "data.loadedActionsOjbects[item.sys_id]"
-			NOTE: This outlines the Actions Object
-		dtech-is-modal="data.isModal"
-        table="{{data.table}}"
-        task-sys-id="{{item.sys_id}}">
-	</dtech-actions>
-
-
-	The HTML for the directive is in	
-	templateUrl: getTemplateUrl('x_153465_discovert_dtechActions.html')
 //
 // Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Special License Rights
+//  The Government's rights to use, display, or disclose this software are restricted.
+//  Any reproduction of computer software, computer software documentation,
+//  or portions thereof marked with this legend must also reproduce the markings. 
 // Script Continued Below
 //
 */
 function dtechActions(getTemplateUrl, spModal, spUtil, $timeout) {
-	// increase since this is a click and not a hover
-	var CONST_TEMP_WAIT_ACTIONS = 1200; // 600;
-	
-	// reduced to near zero since this is a click, not a hover
-	var CONST_POPOVER_DELAY = 100; // 1200;
-	
-	var dtActions = {
+	var dtechDirective = {
 		restrict: 'E',
-		replace: true,
-		// @: string 1 way, =: object 2 way, <: object 1 way
+		// replace: true,
+		// @: string 1 way, =: object 2 way, <: object 1 way,
+		// &: execute an expression in the context of the parent scope, ?: the binding is optional
 		scope: {
-			dtechTaskTitle: "<?",
+			dtechIsDark:"<",			
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
+			dtechTable: '@',
+			dtechTaskSysId: '@',
+			dtechToolTipOpen: "=?",
 			dtechActionsObject: "=",
-			dtechField: "<",
-			dtechShowLabel: "<?",
-			dtechIsModal: "=",
-			loadTaskActions: "=",
-			table: '@',
-			taskSysId: '@'
+			loadActions: "=",
 		},
-		controller: actionsCtrl,
+		controller: directiveCtrl,
 		link: link,
 		controllerAs: 'd',
 		templateUrl: getTemplateUrl('x_153465_discovert_dtechActions.html')
 	};
-	return dtActions;
+	return dtechDirective;
 
-	function actionsCtrl($scope, $rootScope, spModal, spUtil, $attrs, $animate, dtechTaskService) {
-		var d = this;	
+	function directiveCtrl($scope, $rootScope, spModal, spUtil, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+		var d = this;
+		var CONST_MAX_ACTION_WAIT_RETRY = 5;
+		// have local per directive instead of global - TODO: get from a service
+		// increase since this is a click and not a hover
+		var CONST_TEMP_WAIT_DURATION = 1200; // 600;
+		// NOTE: No popover delay with actions since it is a click event
+		
 		var g_form;
 
-		d._isOverTooltip = false;
-		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added, init to false
-		d._isClosing = false;
-		
-		d.dtechActionsToolTipOpen = _dtechActionsToolTipOpen;
-		d.dtechTaskTitle = _dtechTaskTitle;
-		d.dtechField = _dtechField;
-		d.dtechShowLabel = _dtechShowLabel;		
-		
-		// passed in data section
-		d.dtechIsModal = _dtechIsModal;
-		
-		// directive's functional section
+		// STRY0145237 - Directive - update to local var
+		var isOverTooltip = false;
+		var isClosing = false;
+		// STRY0145237 - Directive - Duration code; 
+		var parentMouseLeaveTimeouts = []; // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		$scope.dtechToolTipOpen = false;
 		d.enterTooltip = _enterTooltip;
+		d.getImage = _getImage;
 		d.init = _init;
 		
 		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added
 		d.initTooltip = _initTooltip;
-		
 		d.leaveTooltip = _leaveTooltip;
 		d.executeAction = _executeAction;
 		d.parentMouseLeave = _parentMouseLeave;
 		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added to set popover-popup-delay in the HTML
-		d.popoverDelay = _popoverDelay;
-		
 		d.showActions = _showActions;
-
-		function _dtechField(value){
-			return $scope.dtechField;
-		}
-
-		function _dtechShowLabel(value){
-			return $scope.dtechShowLabel;
-		}
-		
-		function _dtechTaskTitle(value){
-			return $scope.dtechTaskTitle;
-		}
-
-		function _dtechIsModal() {
-			return $scope.dtechIsModal;
-		}
-		
-		function _dtechActionsToolTipOpen(){
-			return $scope.dtechActionsToolTipOpen;
-		}
 
 		// when the user hovers over the tooltip set overtooltip flag
 		function _enterTooltip() {
-			d._isOverTooltip = true;
+			isOverTooltip = true;
 		}
 
+		function _getImage(){
+			var imageName = "x_153465_discovert.EllipsesMenu24.svg";
+			// only change to white if dark and using original image
+			if(imageName=="x_153465_discovert.EllipsesMenu24.svg" && $scope.dtechIsDark==true){
+				imageName = "x_153465_discovert.ActionsMenu_White16.svg";
+			}
+			return imageName;
+		}
 
 		function _executeActionWithParameters(action, params) {
+			if($scope.dtechActionsObject.objectType=='task'){
+				_task_executeActionWithParameters(action, params);
+			} else if($scope.dtechActionsObject.objectType=='templateTask'){
+				_template_executeActionWithParameters(action, params);
+			}
+		}
+
+		function _template_executeActionWithParameters(action, params) {
+			switch (action.action_name){
+				// abstain
+				case "delete_template_task":
+					x_153465_discovert.DTech_Task_Actions.confirmDeleteTemplateTask(spModal, params);
+					break;
+				case "Activate Process Template Task":
+					var activateObj = {};
+					activateObj.task_sys_id = params.task_sys_id;
+					dtechTemplateService.activateTemplateTask(activateObj);
+					break;
+				case "Deactivate Template Task":
+					var deactivateObj = {};
+					deactivateObj.task_sys_id = params.task_sys_id;
+					dtechTemplateService.deactivateTemplateTask(deactivateObj);
+					break;
+				default:
+					var errMsg = action.name + " - for Template Task not implemented.  Please report as an issue.";
+					if(spUtil){
+						spUtil.addErrorMessage(errMsg);
+					} else if(g_form){
+						g_form.addErrorMessage(errMsg);
+					}
+					break;
+			}
+		}
+
+		function _task_executeActionWithParameters(action, params) {
 			switch (action.action_name){
 				// abstain
 				case "Abstain-SendToReview":
@@ -205,7 +209,7 @@ function dtechActions(getTemplateUrl, spModal, spUtil, $timeout) {
 					x_153465_discovert.DTech_Task_Actions.sendToRework(spModal, spUtil, g_form, params);
 					break;
 				default:
-					var errMsg = action.name + " - not implemented.  Please report as an issue.";
+					var errMsg = action.name + " - for Task not implemented.  Please report as an issue.";
 					if(spUtil){
 						spUtil.addErrorMessage(errMsg);
 					} else if(g_form){
@@ -219,90 +223,94 @@ function dtechActions(getTemplateUrl, spModal, spUtil, $timeout) {
 		// this function is called from Template html
 		// it is called when a user clicks on the open link
 		function _executeAction(event, action) {
-			d.isSpinnerShown = true;
-			dtechTaskService.getUIActionParametersByActionName($scope.taskSysId, action.action_name).then(
-				function(response){
-					var params = response.actionParameters;
-					_executeActionWithParameters(action, params);
-					d.isSpinnerShown = false;
-				});
+			if($scope.dtechActionsObject.objectType=='task'){
+				dtechTaskService.getUIActionParametersByActionName($scope.dtechTaskSysId, action.action_name).then(
+					function(response){
+						var params = response.actionParameters;
+						_executeActionWithParameters(action, params);
+					});
+			} else if($scope.dtechActionsObject.objectType=='templateTask'){
+				dtechTemplateService.getUIActionParametersByActionName($scope.dtechTaskSysId, action.action_name).then(
+					function(response){
+						var params = response.actionParameters;
+						_executeActionWithParameters(action, params);
+					});
+			}
 			event.stopPropagation();
 		}
-		
+				
 		// init()
 		// initialize the control, called from the Link function
 		// gets a reference to the element
-		function _init(element) {
-			
-			d.$element = element;
-			
-			$scope.dtechActionsToolTipOpen = 
-				angular.isDefined($attrs.enterTooltip) ?
-				$scope.$parent.$eval($attrs.dtechActionsToolTipOpen) : false;
-			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set to const
-			d.popoverDelay = CONST_POPOVER_DELAY;
+		function _init(rawAttrs) {
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "bottom";
+			}
+
+			$scope.dtechToolTipOpen = 
+				angular.isDefined($attrs.dtechToolTipOpen) ?
+				$scope.$parent.$eval($attrs.dtechToolTipOpen) : false;
+				
 		}
 
 		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
 		function _initTooltip() {
 			// if the user moved off of the parent before the tooltip opened, cancel the open
-			if (d._isClosing == true) {
+			if (isClosing == true) {
 				_leaveTooltip();
-				// d._isClosing = false;
+				isClosing = false;
 			}
 		}
 
 		function _leaveTooltip() {
-			d._isOverTooltip = false;
-			$scope.dtechActionsToolTipOpen = false;
+			isOverTooltip = false;
+			$scope.dtechToolTipOpen = false;
 			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set true
-			d._isClosing = true;
+			// STRY0139742 - Increase delaying when hover directives open; set true
+			isClosing = true;
 		}
 
-		// _parentMouseLeave
-		// this is the get function for the direcitve property parentMouseLeave
-		// this function is called when the user hovers off the profile image
 		function _parentMouseLeave() {
-			$timeout(function() {
-				if(!d._isOverTooltip){
+			// STRY0145237 - Directive - Duration code changes to match design; 
+			// we need to track each time the below fires so we cancel on destroy
+			parentMouseLeaveTimeouts.push($timeout(function() {
+				if(!isOverTooltip){
 					d.leaveTooltip();
 				}
-			}, CONST_TEMP_WAIT_ACTIONS);
-		}
-		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
-		function _popoverDelay() {
-			return d.popoverDelay;
+			}, CONST_TEMP_WAIT_DURATION));
 		}
 		
 		function _showActions(event) {
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set false
-			d._isClosing = false;
+			$scope.dtechToolTipOpen = true;
 			
-			$scope.dtechActionsToolTipOpen = true;
+			// STRY0139742 - Increase delaying when hover directives open; set false
+			isClosing = false;
 			
-			var ActionsObject = $scope.dtechActionsObject;
-			if(!ActionsObject){
-				ActionsObject = {};
-				ActionsObject.taskId = $scope.taskSysId;
-				// unlike others, always load actions as the task could have changed states
-				//ActionsObject.loaded = false;
-			}
-			d.isSpinnerShown = true;
-			$scope.loadTaskActions();
-			d.isSpinnerShown = false;
+			var actionsObject = {};
+			actionsObject.taskId = $scope.dtechTaskSysId;
+			$scope.dtechActionsObject = actionsObject;
+			$scope.loadActions($scope.dtechTaskSysId);
+		}
 
-			$scope.dtechActionsToolTipOpen = true;
-		}		
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+				$timeout.cancel(item);
+				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+			});
+		});
+
 	} // end function actionsCtrl
-	
 	// Link function links local methods to parent controller methods
 	// see the list of events being monitored
-	function link(scope, element, attrs, actionsCtrl) {
+	function link(scope, element, attrs, directiveCtrl) {
 		// initialize the control
-		actionsCtrl.init(element);
+		// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+		// updated to pass attrs
+		directiveCtrl.init(attrs);
+
 		scope.$on('$destroy',_destroy);
 		// get the location of the element hovering over
 		function _destroy() {
@@ -315,14 +323,14 @@ function dtechActions(getTemplateUrl, spModal, spUtil, $timeout) {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-08-21 16:41:16</sys_created_on>
         <sys_id>8346cae91bb839103ed2eb93b24bcbbf</sys_id>
-        <sys_mod_count>52</sys_mod_count>
+        <sys_mod_count>89</sys_mod_count>
         <sys_name>dtechActions</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_8346cae91bb839103ed2eb93b24bcbbf</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-08 03:45:57</sys_updated_on>
+        <sys_updated_on>2023-12-27 17:48:15</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>

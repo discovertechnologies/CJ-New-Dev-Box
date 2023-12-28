@@ -49,11 +49,24 @@
 
 	// STRY0142899 - Tasker Portal Board needs to update directive hover text; added 
 	function main() {
+		c.data.addSubObject = {};
+		c.data.addSubObject.objectType = "task";
+
+		
 		spUtil.recordWatch($scope, $scope.data.table, $scope.data.filter, function() {
 			spUtil.update($scope);
 		});
 	}
 
+	$scope.loadActions = function(taskSysId){
+		$scope.data.getActions = true;
+		$scope.data.taskSysId = taskSysId;
+		spUtil.update($scope).then(function(){
+//alert("RJ - testing - actions: " + JSON.stringify($scope.data.actions.objectType));
+		});
+
+};
+	
 	// STRY0135722
 	$scope.tableFilterButtonSelected = function(filterSelected){
 		c.data.tableFilterButtonSelected=filterSelected;
@@ -761,7 +774,7 @@
 }
 
 .tableContent {
-  min-height:35px; 
+//  min-height:35px; 
   padding-left: 15px;
   padding-top: 5px;
   padding-right: 5px;
@@ -1399,6 +1412,12 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         data.getURL = false;
         return;
     }
+// TODO - LOOK AT PUTTING IN A WIDGET
+var api_ui_component_data = new api_tasker_ui_component_data();	
+		if(input && input.getActions==true){
+			getActions(input.taskSysId);
+			return;
+		}
 
     // 2.7.0 | 2021-06-30 | raj | STRY0101803 Added Open in Platform to open the list with the fitler in platform
     data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
@@ -1813,6 +1832,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 				// Task table
 			case taskTableName:
 				var task_id = gr.getUniqueValue();
+				record.u_servicenow_form_view = gr.getValue("u_servicenow_form_view");										
 				record.task_name = gr.getDisplayValue("short_description");
 				record.comment_state = gr.getDisplayValue("state");
 				record.comment_number = ''; // aka task Number
@@ -1952,6 +1972,12 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 
     	data.filterBreadcrumbs // = $sp.getWidget('widget-filter-breadcrumbs', breadcrumbWidgetParams);
     */
+	
+// TODO - THIS MIGHT BE BETTER IN A WIDGET
+		function getActions(taskSysId){
+			data.actions = api_ui_component_data.getContextMenuInformation(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME, taskSysId);
+		}
+	
 		// STRY0135722
 		function _getCount(encodedQuery, topOnly){
 			var count = 0;
@@ -2096,17 +2122,15 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1414</sys_mod_count>
+        <sys_mod_count>1441</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-11-08 22:11:43</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-12-22 15:51:17</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -2223,6 +2247,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
           <th ng-if="data.include_comments==true" class="text-nowrap th-title">
             ${Comments}
           </th>
+          <th ng-if="data.table=='x_153465_discovert_route_task_instance'" class="text-nowrap">
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -2275,27 +2301,27 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
             </span>
             <div ng-if="item[field].isOffice==true">
               <span ng-if="data.showDTechAssignment">
-                <dtech-office   dtech-task-title = "getTitle(item);"
+                <dtech-assignment   dtech-task-title = "getTitle(item);"
                               dtech-assignment-object = "data.loadedAssignementOjbects[item.sys_id]"
                               dtech-field="field"
                               dtech-is-modal="data.isModal"
-                              table="{{data.table}}"
-                              parent-sys-id="{{item.sys_id}}"                                          
-                              ></dtech-office>
+                              dtech-table="{{data.table}}"
+                              dtech-task-sys-id="{{item.sys_id}}"
+                              ></dtech-assignment>
               </span>
             </div>
             
             <!-- STRY0137371 -->
-            <span ng-if="data.showDTechDuration && field=='suspense_date'">
-              <dtech-duration dtech-is-modal="data.isModal"
-                              dtech-table="{{data.table}}"
-                              dtech-task-sys-id="{{item.sys_id}}"
-                              dtech-duration-object="data.loadedDurationOjbects[item.sys_id]"
-                              dtech-show-long-dates="data.showLongDates"
-                              ></dtech-duration>
-
-            </span>
-            
+            <div ng-if="field=='suspense_date'">
+              <span ng-if="data.showDTechDuration">
+                <dtech-duration dtech-is-modal="data.isModal"
+                                dtech-table="{{data.table}}"
+                                dtech-task-sys-id="{{item.sys_id}}"
+                                dtech-duration-object="data.loadedDurationOjbects[item.sys_id]"
+                                dtech-show-long-dates="data.showLongDates"
+                                ></dtech-duration>
+              </span>
+            </div>           
             <span ng-if="field=='response'">
               <div ng-if="item.isResponseCommentsDirectiveShown==true">
                 <!-- Response Comments Directive -->
@@ -2326,6 +2352,30 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
               </a>
             </span>
           </td>
+          
+          <td ng-if="data.table=='x_153465_discovert_route_task_instance'" class="pointer">
+            <div class="flex-row text-nowrap items-center">
+              <dtech-add-sub-object dtech-is-dark="false"
+                                    dtech-tool-tip-open="item.addSubActionToolTipOpen"
+                                    dtech-add-sub-object="data.addSubObject"
+                                    dtech-is-modal="data.isModal"
+                                    dtech-table="{{data.table}}"
+                                    dtech-task-sys-id="{{item.sys_id}}"
+                                    dtech-object-type="task"
+                                    dtech-service-now-form-view="item.u_servicenow_form_view"
+                                    ></dtech-add-sub-object>
+
+              <dtech-actions dtech-is-dark="false"
+                             dtech-tool-tip-open="item.actionToolTipOpen"
+                             dtech-actions-object = "data.actions"
+                             dtech-is-modal="data.isModal"
+                             dtech-table="{{data.table}}"
+                             dtech-task-sys-id="{{item.sys_id}}"
+                             load-actions="loadActions"
+                             ></dtech-actions>
+            </div>
+          </td>
+          
         </tr>
       </tbody>
     </table>

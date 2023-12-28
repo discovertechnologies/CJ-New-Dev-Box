@@ -1,30 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
     <sp_angular_provider action="INSERT_OR_UPDATE">
         <name>dtechOperational</name>
-        <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
-Note: AngularJS normalizes case-sensitive camelCase to case-insensitive kebab-case for the DOM.
-Usage in a widget's HTML:
-	<dtech-operational 
-		dtech-task-title = "getTitle(item);"
-		dtech-operational-object = "data.loadedOperationalOjbects[item.sys_id]"
-			NOTE: These properties are on the operational Object
-			number, , taskernumber, classification, tasker_type, short_description, 
-			u_objective, instructions, priority, state, urgency
-			status, category, sub_category, risk_flag, risk_impact_description,
-			risk_impact_factor, risk_mitigation_strategy, risk_probability, risk_probability_description, risk_reason
-			tasker_app_version
-		dtech-is-modal="data.isModal"
-        dtech-show-long-dates="{{data.showLongDates}}"
-        table="{{data.table}}"
-        task-sys-id="{{item.sys_id}}">
-	</dtech-operational>
-
-
-	The HTML for the directive is in	
-	templateUrl: getTemplateUrl('x_153465_discovert_dtechOperational.html')
+        <script><![CDATA[/* Use this Directive to show an opening scene with a label, icon and content for the Named field
 //
 // Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Special License Rights
+//  The Government's rights to use, display, or disclose this software are restricted.
+//  Any reproduction of computer software, computer software documentation,
+//  or portions thereof marked with this legend must also reproduce the markings. 
 // Script Continued Below
+//-----------------------------------------------------------------------------------------------------
+// 2.8.5 | 2023-11-28 | raj | Updates to make work for TemplateTask
+// 2.8.5 | 2023-07-10 | raj | STRY0141856 - Stretch- PLACEHOLDER- Office Control
+//
 // 2.8.5 | 2023-05-11 | mmcc | STRY0141856 - Stretch- PLACEHOLDER- Office Control
 //   Updated to move variables into the Operational object to streamline the services and 
 //   This had the added benefit of allowing the same service to be called from server and client.
@@ -36,121 +24,109 @@ Usage in a widget's HTML:
 //  In function _init(element) added setting d.popoverDelay = CONST_POPOVER_DELAY;
 //  Added function _initTooltip(); in function _leaveTooltip() set d._isClosing = true;
 //   Added function _popoverDelay(); in function _showOperational(event) set d._isClosing = false;
-//
+//-----------------------------------------------------------------------------------------------------
 */
-function dtechOperational(getTemplateUrl, spModal, $timeout, $window) {
-	var CONST_TEMP_WAIT_OPERATIONAL = 600;
+function dtechOperational(getTemplateUrl, spModal, $timeout) {
 	
-	// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
-	var CONST_POPOVER_DELAY = 1200;
-	
-	var dtOperational = {
+	var dtechDirective = {
 		restrict: 'E',
-		replace: true,
+		// replace: true,
 		// @: string 1 way, =: object 2 way, <: object 1 way
+		// &: execute an expression in the context of the parent scope, ?: the binding is optional
 		scope: {
-			dtechTaskTitle: "<?",
-			dtechOperationalObject: "=",
-			dtechField: "<",
+			dtechIsDark:"<",
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
 			dtechShowLabel: "<?",
-			dtechIsModal: "=",
-			table: '@',
-			taskSysId: '@'
+			dtechTable: '@',
+			dtechTaskSysId: '@',
+			dtechToolTipOpen: "=?",
+			dtechOperationalObject: "<",
+			dtechField: "<",
+			dtechTaskTitle: "<?"
 		},
-		controller: operationalCtrl,
+		controller: directiveCtrl,
 		link: link,
 		controllerAs: 'd',
 		templateUrl: getTemplateUrl('x_153465_discovert_dtechOperational.html')
 	};
-	return dtOperational;
+	return dtechDirective;
 
-	function operationalCtrl($scope, $attrs, $animate, dtechTaskService, dtechTemplateService) {
-		var d = this;	
-		d._isOverTooltip = false;
+	function directiveCtrl($scope, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+		var d = this;
+
+		// have local per directive instead of global - TODO: get from a service
+		var CONST_TEMP_WAIT_DURATION = 600;
+		// STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
+		var CONST_POPOVER_DELAY = 1200;
+		var CONST_SPINNER_DELAY = 500;
+
+		// STRY0145237 - Directive - update to local var
+		var isOverTooltip = false;
+		var isClosing = false;
 		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added, init to false
-		d._isClosing = false;
-		
-		d.dtechOperationalToolTipOpen = _dtechOperationalToolTipOpen;
-		d.dtechTaskTitle = _dtechTaskTitle;
-		d.dtechField = _dtechField;
-		d.dtechShowLabel = _dtechShowLabel;		
-		
-		// passed in data section
-		d.dtechIsModal = _dtechIsModal;
-		
-		// directive's functional section
+		// STRY0145237 - Directive - Duration code; 
+		var parentMouseLeaveTimeouts = [];  // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		// Section: directive's function declarations to hide implementation details, sorted
+		$scope.dtechToolTipOpen = false;
+
 		d.enterTooltip = _enterTooltip;
 		d.init = _init;
 		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added
+		// STRY0139742 - Increase delaying when hover directives open; added
 		d.initTooltip = _initTooltip;
 		
 		d.leaveTooltip = _leaveTooltip;
 		d.openModal = _openModal;
 		d.parentMouseLeave = _parentMouseLeave;
 		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added to set popover-popup-delay in the HTML
-		d.popoverDelay = _popoverDelay;
+		// STRY0139742 - Increase delaying when hover directives open; 
+		d.popoverDelay = CONST_POPOVER_DELAY;  // added to set popover-popup-delay in the Macro HTML
 		
 		d.popoverTemplate = $scope.dtechOperationalObject.objectType + '-popover-operational.html';
 
 		d.showOperational = _showOperational;
 
-		function _dtechField(value){
-			return $scope.dtechField;
-		}
-
-		function _dtechShowLabel(value){
-			return $scope.dtechShowLabel;
-		}
-		
-		function _dtechTaskTitle(value){
-			return $scope.dtechTaskTitle;
-		}
-
-		function _dtechIsModal() {
-			return $scope.dtechIsModal;
-		}
-		
-		function _dtechOperationalToolTipOpen(){
-			return $scope.dtechOperationalToolTipOpen;
-		}
-
 		// when the user hovers over the tooltip set overtooltip flag
 		function _enterTooltip() {
-			d._isOverTooltip = true;
+			isOverTooltip = true;
 		}
 		
-		// init()
-		// initialize the control, called from the Link function
-		// gets a reference to the element
-		function _init(element) {
+		function _init(rawAttrs) {
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "auto";
+			}
+
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechShowLabel)) {
+				$scope.dtechShowLabel = false;
+			}
 			
-			d.$element = element;
+			// Set default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechTaskTitle)) {
+				$scope.dtechTaskTitle = $scope.dtechOperationalObject.operationalTitle;
+			}
 			
 			$scope.dtechOperationalToolTipOpen = 
-				angular.isDefined($attrs.enterTooltip) ?
-				$scope.$parent.$eval($attrs.dtechOperationalToolTipOpen) : false;
-			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set to const
-			d.popoverDelay = CONST_POPOVER_DELAY;
+				angular.isDefined($attrs.dtechToolTipOpen) ?
+				$scope.$parent.$eval($attrs.dtechToolTipOpen) : false;
 		}
 		
 		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
 		function _initTooltip() {
 			// if the user moved off of the parent before the tooltip opened, cancel the open
-			if (d._isClosing == true) {
+			if (isClosing == true) {
 				_leaveTooltip();
-				// d._isClosing = false;
+				isClosing = false;
 			}
 		}
 		
 		function _leaveTooltip() {
-			d._isOverTooltip = false;
-			$scope.dtechOperationalToolTipOpen = false;
+			isOverTooltip = false;
+			$scope.dtechToolTipOpen = false;
 			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set true
+			// STRY0139742 - Increase delaying when hover directives open; set true
 			d._isClosing = true;
 		}
 		
@@ -158,65 +134,89 @@ function dtechOperational(getTemplateUrl, spModal, $timeout, $window) {
 		// this function is called from Template html
 		// it is called when a user clicks on the open link
 		function _openModal(event) {
-			x_153465_discovert.twJS.openOperationalModal(spModal, $scope.dtechOperationalObject.operationalTitle, $scope.table, $scope.taskSysId);
-			event.stopPropagation();
+
+			// STRY0145237 - Directive - Duration code changes to match design;  
+			var title = $scope.dtechTaskTitle;
+			if ($scope.dtechOperationalObject.objectType=='templateTask' || 
+				$scope.dtechOperationalObject.objectType=='task') {
+				x_153465_discovert.twJS.openOperationalModal(spModal, title, $scope.dtechTable, $scope.dtechTaskSysId);
+
+				// popover closes quickly and user is left watching the spinner before modal pops
+				d.leaveTooltip();
+				
+				// modal is openened stop the row or cell click form raising
+				event.stopPropagation();
+			}
 		}
 		
-		// _parentMouseLeave
-		// this is the get function for the direcitve property parentMouseLeave
-		// this function is called when the user hovers off the profile image
 		function _parentMouseLeave() {
-			$timeout(function() {
-				if(!d._isOverTooltip){
+			// STRY0145237 - Directive - Duration code changes to match design; 
+			// we need to track each time the below fires so we cancel on destroy
+			parentMouseLeaveTimeouts.push($timeout(function() {
+				if(!isOverTooltip){
 					d.leaveTooltip();
 				}
-			}, CONST_TEMP_WAIT_OPERATIONAL);
+			}, CONST_TEMP_WAIT_DURATION));
 		}
-		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
-		function _popoverDelay() {
-			return d.popoverDelay;
-		}
-		
-		function _showOperational(event) {
-			$scope.dtechOperationalToolTipOpen = true;
+
+		// STRY0145237 - Directive - Duration code changes to match design;	
+		function _showOperational() {
+			$scope.dtechToolTipOpen = true;
 			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set false
-			d._isClosing = false;
+			// STRY0139742 - Increase delaying when hover directives open; set false
+			isClosing = false;
 			
-			var OperationalObject = $scope.dtechOperationalObject;
-			if(!OperationalObject){
-				OperationalObject = {};
-				OperationalObject.taskId = $scope.taskSysId;
-				OperationalObject.loaded = false;
+			var operationalObject = $scope.dtechOperationalObject;
+			if(!operationalObject){
+				operationalObject = {};
+				operationalObject.taskId = $scope.dtechTaskSysId;
+				operationalObject.loaded = false;
 			}
-			if(!OperationalObject.loaded){
+			if(!operationalObject.loaded || operationalObject.taskId != $scope.dtechTaskSysId){
+				$scope.dtechOperationalObject.loaded=false;
+				var dtechObject;
 				if($scope.dtechOperationalObject.objectType=='task'){
-					dtechTaskService.getOperationalInformation($scope.taskSysId).then(
+					dtechTaskService.getOperationalInformation($scope.dtechTaskSysId).then(
 						function(response){
-							$scope.dtechOperationalObject = response.operationalInformation;
-							d.isSpinnerShown = false;
-							$scope.dtechOperationalObject.loaded = true;
+							_responseRecieved(response);
 						});
 				} else if($scope.dtechOperationalObject.objectType=='templateTask'){
-					dtechTemplateService.getOperationalInformation($scope.taskSysId).then(
+					dtechTemplateService.getOperationalInformation($scope.dtechTaskSysId).then(
 						function(response){
-							$scope.dtechOperationalObject = response.operationalInformation;
-							d.isSpinnerShown = false;
-							$scope.dtechOperationalObject.loaded = true;
+							_responseRecieved(response);
 						});
 				}
 			}
-			$scope.dtechOperationalObject=OperationalObject;
-			$scope.dtechOperationalToolTipOpen = true;
-		}		
-	} // end function operationalCtrl
+			$scope.dtechOperationalObject=operationalObject;
+		}
+		
+		function _responseRecieved(response){
+			$timeout(function(){
+				_setDTechObject(response.operationalInformation);
+				}, CONST_SPINNER_DELAY);
+		}
+
+		function _setDTechObject(dtechObject){
+			$scope.dtechOperationalObject = dtechObject;
+			$scope.dtechOperationalObject.loaded = true;
+		}
+
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+				$timeout.cancel(item);
+				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+			});
+		});
+
+	} // end function directiveCtrl
 	
 	// Link function links local methods to parent controller methods
 	// see the list of events being monitored
-	function link(scope, element, attrs, operationalCtrl) {
+	function link(scope, element, attrs, directiveCtrl) {
 		// initialize the control
-		operationalCtrl.init(element);
+		directiveCtrl.init(attrs);
 		scope.$on('$destroy',_destroy);
 		// get the location of the element hovering over
 
@@ -230,14 +230,14 @@ function dtechOperational(getTemplateUrl, spModal, $timeout, $window) {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-08-13 12:14:18</sys_created_on>
         <sys_id>a67cbbbe1b643110e75655f5624bcbb6</sys_id>
-        <sys_mod_count>13</sys_mod_count>
+        <sys_mod_count>30</sys_mod_count>
         <sys_name>dtechOperational</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_a67cbbbe1b643110e75655f5624bcbb6</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-30 14:54:15</sys_updated_on>
+        <sys_updated_on>2023-12-11 16:43:27</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>

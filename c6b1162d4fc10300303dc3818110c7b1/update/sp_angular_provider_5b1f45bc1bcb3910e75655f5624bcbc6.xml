@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
+    <sp_angular_provider action="INSERT_OR_UPDATE">
+        <name>dtechWarning</name>
+        <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
+//
+// Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Special License Rights
+//  The Government's rights to use, display, or disclose this software are restricted.
+//  Any reproduction of computer software, computer software documentation,
+//  or portions thereof marked with this legend must also reproduce the markings. 
+// Script Continued Below
+//
+*/
+function dtechWarning(getTemplateUrl, spModal, $timeout) {
+	var dtechDirective = {
+		restrict: 'E',
+		// replace: true,
+		// @: string 1 way, =: object 2 way, <: object 1 way, 
+		// &: execute an expression in the context of the parent scope, ?: the binding is optional
+		scope: {
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
+			dtechTable: '@',
+			dtechTaskSysId: '@',
+			dtechToolTipOpen: "=?",
+			dtechWarningObject: "<",
+			dtechTaskTitle: "@?"
+		},
+		controller: directiveCtrl,
+		link: link,
+		controllerAs: 'd',
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechWarning.html')
+	};
+	return dtechDirective;
+
+	function directiveCtrl($scope, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+		var d = this;
+
+		// have local per directive instead of global - TODO: get from a service
+		var CONST_TEMP_WAIT_DURATION = 600;
+		// STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
+		var CONST_POPOVER_DELAY = 1200;
+		
+		// STRY0145237 - Directive - update to local var
+		var isOverTooltip = false;
+		var isClosing = false;
+		
+		// STRY0145237 - Directive - Duration code; 
+		var parentMouseLeaveTimeouts = [];  // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		// Section: directive's function declarations to hide implementation details, sorted
+		$scope.dtechToolTipOpen = false;
+
+		d.enterTooltip = _enterTooltip;
+		d.init = _init;
+		
+		// STRY0139742 - Increase delaying when hover directives open; added
+		d.initTooltip = _initTooltip;
+	
+		d.leaveTooltip = _leaveTooltip;
+		d.openModal = _openModal;
+		d.parentMouseLeave = _parentMouseLeave;
+		
+		// STRY0139742 - Increase delaying when hover directives open; 
+		d.popoverDelay = CONST_POPOVER_DELAY;  // added to set popover-popup-delay in the Macro HTML
+
+		d.showWarning = _showWarning;
+
+		// Section: local functions
+		// when the user hovers over the tooltip set over tooltip flag
+		function _enterTooltip() {
+			isOverTooltip = true;
+		}
+		
+		function _init(rawAttrs) {
+			// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "auto";
+			}
+
+			// Set default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechTaskTitle)) {
+				$scope.dtechTaskTitle = $scope.dtechWarningObject.durationTitle;
+			}
+
+			$scope.dtechToolTipOpen = 
+				angular.isDefined($attrs.dtechToolTipOpen) ?
+				$scope.$parent.$eval($attrs.dtechToolTipOpen) : false;			
+		}
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
+		function _initTooltip() {
+			// if the user moved off of the parent before the tooltip opened, cancel the open
+			if (isClosing == true) {
+				_leaveTooltip();
+				isClosing = false;
+			}
+		}
+		
+		function _leaveTooltip() {
+			isOverTooltip = false;
+			$scope.dtechToolTipOpen = false;
+			
+			// STRY0139742 - Increase delaying when hover directives open; set true
+			isClosing = true;
+		}
+		
+		// Call this function in the Template html by d.openModal($event);
+		// it is called when a user clicks on the opening scene or the open link in the hover popover
+		function _openModal(event) {
+			// STRY0145237 - Directive - Duration code changes to match design;  
+			var title = $scope.dtechTaskTitle;
+			if ($scope.dtechWarningObject.objectType=='templateTask' || 
+				$scope.dtechWarningObject.objectType=='task') {
+				x_153465_discovert.twJS.openDurationModal(spModal, title, $scope.dtechTable, $scope.dtechTaskSysId);
+
+				// popover closes quickly and user is left watching the spinner before modal pops
+				d.leaveTooltip();
+
+				// modal is openened stop the row or cell click form raising
+				event.stopPropagation();
+			}
+
+		}
+		
+		function _parentMouseLeave() {
+			// STRY0145237 - Directive - Duration code changes to match design; 
+			// we need to track each time the below fires so we cancel on destroy
+			parentMouseLeaveTimeouts.push($timeout(function() {
+				if(!isOverTooltip){
+					d.leaveTooltip();
+				}
+			}, CONST_TEMP_WAIT_DURATION));
+		}
+		
+		// STRY0145237 - Directive - Duration code changes to match design;
+		// removed unused $event
+		function _showWarning() {
+			$scope.dtechToolTipOpen = true;
+			
+			// STRY0139742 - Increase delaying when hover directives open; set false
+			isClosing = false;
+			
+			var WarningObject = $scope.dtechWarningObject;
+			if(!WarningObject){
+				WarningObject = {};
+				WarningObject.taskId = $scope.dtechTaskSysId;
+				WarningObject.loaded = false;
+			}
+
+			if(!WarningObject.loaded || WarningObject.taskId != $scope.dtechTaskSysId){
+				var dtechObject;
+				if($scope.dtechWarningObject.objectType=='task'){
+					dtechTaskService.getDurationInformation($scope.dtechTaskSysId).then(
+						function(response){
+							dtechObject =  response.durationInformation;
+							$timeout(_setDTechObject(dtechObject), 500);
+						});
+				} else if($scope.dtechWarningObject.objectType=='templateTask'){
+					dtechTemplateService.getDurationInformation($scope.dtechTaskSysId).then(
+						function(response){
+							dtechObject =  response.durationInformation;
+							$timeout(_setDTechObject(dtechObject), 500);
+						});
+				}
+			}
+			$scope.dtechWarningObject = WarningObject;
+		}
+
+		function _setDTechObject(dtechObject){
+			$scope.dtechWarningObject = dtechObject;
+			$scope.dtechWarningObject.loaded = true;
+		}
+
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+				$timeout.cancel(item);
+				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+			});
+		});
+
+	} // end function directiveCtrl
+	
+	function link(scope, element, attrs, directiveCtrl) {
+		// initialize the control
+		// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+		// updated to pass attrs
+		directiveCtrl.init(attrs);
+
+		scope.$on('$destroy',_destroy);
+		// get the location of the element hovering over
+
+		function _destroy() {
+			element.remove();
+		}
+	}
+
+}]]></script>
+        <sys_class_name>sp_angular_provider</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-12-09 01:06:00</sys_created_on>
+        <sys_id>5b1f45bc1bcb3910e75655f5624bcbc6</sys_id>
+        <sys_mod_count>10</sys_mod_count>
+        <sys_name>dtechWarning</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_angular_provider_5b1f45bc1bcb3910e75655f5624bcbc6</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-12-15 06:44:47</sys_updated_on>
+        <type>directive</type>
+    </sp_angular_provider>
+</record_update>

@@ -23,6 +23,19 @@ api_tasker_task.prototype = {
 		this.titleField = "task_name";
     },
 
+	acceptTask: function(task_sys_id) {
+		var acceptResponse = {};
+		acceptResponse.taskAccepted = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_task = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if(gr_task.get(task_sys_id)){
+			new Task_uiAction().uiAction_AcceptAssignment(gr_task);
+			acceptResponse.taskAccepted = true;
+		}
+		return acceptResponse;
+	},
+	
 	getAssignmentInformation: function(taskId){
 		var lAssignmentInfo = {};
 		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
@@ -32,30 +45,6 @@ api_tasker_task.prototype = {
 		return lAssignmentInfo;
 	},
 	
-	getContextMenuInformation: function(taskId){
-		var lContextMenuInformation = {};
-		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
-		if(gr_task.get(taskId)){
-			lContextMenuInformation = this.getContextMenuInformationGR(gr_task);
-		}
-		return lContextMenuInformation;
-	},
-	
-	// NOTE: this one is backward where if we have the glide record we get the task id and call getContextMenuInformation
-	getContextMenuInformationGR:function (gr_task){
-		var lContextMenuInformation = {};
-		var taskId = gr_task.getUniqueValue();
-		
-		var arrContextMenuFields = 
-			["active"];
-		lContextMenuInformation = this.api_dtech.loadObject(gr_task, arrContextMenuFields);		
-		var form = $sp.getForm(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME, taskId);
-		var ui_actions = form._ui_actions;
-		lContextMenuInformation.ui_actions = this._load_context_ui_actions(ui_actions, gr_task);
-		lContextMenuInformation.taskId = taskId;
-		return lContextMenuInformation;
-	},
-
 	getDurationInformation: function(taskId){
 		var lDurationInfo = {};
 		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
@@ -243,6 +232,19 @@ api_tasker_task.prototype = {
 		return publishResponse;
 	},
 
+	startTask: function(task_sys_id) {
+		var startResponse = {};
+		startResponse.taskStarted = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_task = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if(gr_task.get(task_sys_id)){
+			new Task_uiAction().uiAction_StartWork(gr_task);
+			startResponse.taskStarted = true;
+		}
+		return startResponse;
+	},
+
 	_getParentTaskFields: function(gr_task, arrParentTaskFields){
 		var parentTaskId = gr_task.getValue("parent");
 		var gr_parent_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
@@ -262,68 +264,6 @@ api_tasker_task.prototype = {
 		}
 		return lTopTasklInfo;
 	},
-	
-	// NOTE: if we can move icons to an attachment on the ui action, we could reduce this to filtering out separators and pull all list context menu actions
-	_load_context_ui_actions: function(form_ui_actions, gr_task){
-		var arrMenuItems = [];
-		var ui_action_menu_item = {};
-		var arrHCMUI = this._get_ui_actions_context_menu_array();
-		// load ui action icons
-		var ui_actions_icons = this._get_ui_actions_icons();
-		var orderCount = 0;
-		for (actionIndex=0; actionIndex < arrHCMUI.length; actionIndex++) {
-			var addAction = false;
-			var hcm_item = arrHCMUI[actionIndex];
-			if(hcm_item != "separator"){
-				var arrItem = form_ui_actions.filter(function(item){
-					return item.sys_id==hcm_item;});
-				// if the action was not returned, then the user doesn't have permsissions, don't add it
-				if(arrItem[0]){
-					addAction=true;
-					ui_action_menu_item = arrItem[0];
-					ui_action_menu_item.order = actionIndex;
-					ui_action_menu_item.image = undefined;
-					var ui_action_icon = ui_actions_icons[ui_action_menu_item.sys_id];
-					if(ui_action_icon){
-						ui_action_menu_item.image = ui_action_icon.image;
-					}
-					var params = {};
-					// load ui action parameters
-					params = this._get_ui_actions_params(gr_task, ui_action_menu_item.sys_id);
-					ui_action_menu_item.params = params;
-				}
-			} else {
-				addAction=true;
-				ui_action_menu_item = {
-					"sys_id" : "separtor" + actionIndex.toString(),
-					"name": "separator",
-					"order": actionIndex
-				};
-			}
-			if(addAction){
-				arrMenuItems.push(ui_action_menu_item);				
-			}
-		}
-		// now filter out adjacent separators
-		var prevIsSeparator = false;  // defined outside the function so it keeps a flag if the previous item is a spearator
-		arrMenuItems = arrMenuItems.filter(function(item){
-			var include=true;
-			if(prevIsSeparator && item.name=="separator"){
-				// this item and previous are both separators.  Skip and do not include
-				include = false;
-			}
-			prevIsSeparator = item.name=="separator";
-			return include;
-		});
-		// remove leading separators
-		while(arrMenuItems.length>0 && arrMenuItems[0].name=="separator"){
-			arrMenuItems.shift();
-		}
-		while(arrMenuItems.length>0 && arrMenuItems[arrMenuItems.length-1].name=="separator"){
-			arrMenuItems.pop();
-		}
-		return arrMenuItems;
-	},
 
 	// this returns an object with just the id, but could return more data later
 	// NOTE: to allow multiple requests, we would need to update this
@@ -342,6 +282,9 @@ api_tasker_task.prototype = {
 		return requestInfo;
 	},
 	
+	// **************************************************************************************************
+	// START - Context Menu Sectioin
+	// **************************************************************************************************
 	// NOTE: not sure if we want to burry this in code but, this would be how we would add the separators
 	_get_ui_actions_context_menu_array: function(){
 		var arrActions = [
@@ -372,9 +315,9 @@ api_tasker_task.prototype = {
 			'd237f7974fa28300303dc3818110c7c4', // "name": "Reopen Task", "action_name": "Reopen"
 			'baa96f804f181b00303dc3818110c74e', // "name": "Send to Rework" "action_name": "rework"
 			'separator', // add a separator
-			'9e53d1f8db02f01087f2892d139619ed', // "name": "Delete", (task) , "action_name" : "delete_tasks"
+			'addRequestAccessGuidhere', // "name": "Request Access for Member(s)"  - no guid today
 			'separator', // add a separator
-			'addRequestAccessGuidhere' // "name": "Request Access for Member(s)"  - no guid today
+			'9e53d1f8db02f01087f2892d139619ed' // "name": "Delete", (task) , "action_name" : "delete_tasks"
 		];
 		return arrActions;
 	},
@@ -774,23 +717,6 @@ api_tasker_task.prototype = {
 	
 	},
 	
-	_get_URL_for_Task_Based_on_Prefrences: function(sys_id, current_view){
-		var oUserPref = new tasker_User_Form_Preferences();
-		var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(sys_id,current_view);
-		
-		var task_url;
-		task_url =  
-			'../' + url_Properties.portal_url_ref + 
-			'?id=' + url_Properties.pageId + 
-			'&table=' + api_dtech_common.CONST_DTECH_TASK_TABLE_NAME + 
-			'&sys_id=' + sys_id +
-			'&view=' + url_Properties.view;
-
-		return task_url;
-	},	
-
-	
-	
 	_get_ui_actions_icons: function(){
 		// create an object with each action that has an icon
 		// object key is uiAction sys_id, name comment added to make it easier to match sys_id to image
@@ -892,21 +818,38 @@ api_tasker_task.prototype = {
 		return uiActionsIcons;
 	},
 	
+	// **************************************************************************************************
+	// END - Context Menu Sectioin
+	// **************************************************************************************************
+	
+	_get_URL_for_Task_Based_on_Prefrences: function(sys_id, current_view){
+		var oUserPref = new tasker_User_Form_Preferences();
+		var url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(sys_id,current_view);
+		
+		var task_url;
+		task_url =  
+			'../' + url_Properties.portal_url_ref + 
+			'?id=' + url_Properties.pageId + 
+			'&table=' + api_dtech_common.CONST_DTECH_TASK_TABLE_NAME + 
+			'&sys_id=' + sys_id +
+			'&view=' + url_Properties.view;
+
+		return task_url;
+	},	
+	
     type: 'api_tasker_task'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-11 12:37:05</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>2915c2101b4471503ed2eb93b24bcbe3</sys_id>
-        <sys_mod_count>181</sys_mod_count>
+        <sys_mod_count>188</sys_mod_count>
         <sys_name>api_tasker_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_2915c2101b4471503ed2eb93b24bcbe3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-28 14:35:10</sys_updated_on>
+        <sys_updated_on>2023-12-16 06:03:19</sys_updated_on>
     </sys_script_include>
 </record_update>

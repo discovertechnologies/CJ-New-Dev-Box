@@ -19,6 +19,33 @@ api_tasker_template.prototype = {
 		this.templateCopyMoveMethods = new template_Copy_Move_Methods();
     },
 	
+	activateTemplateTask: function(templateTaskId) {
+		var activateResponse = {};
+		activateResponse.taskActivated = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_template_task = new GlideRecord(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		if(gr_template_task.get(templateTaskId)){
+			new Template_uiAction().uiAction_ActivateTemplateTask(gr_template_task);
+			activateResponse.taskActivated = true;
+		}
+		return activateResponse;
+	},
+	
+	changeTemplateTaskOrder: function(templateTaskId, newOrder){
+		var changeOrder = {};
+		changeOrder.taskActivated = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_template_task = new GlideRecord(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		if(gr_template_task.get(templateTaskId)){
+			gr_template_task.route_order = newOrder;
+			gr_template_task.update();
+			changeOrder.taskActivated = true;
+		}
+		return changeOrder;		
+	},
+	
 	cloneTemplate: function (template_id, new_template_name, new_template_owner){
 		// this is JSON with new task and success flag
 		var cloneResponse;
@@ -38,6 +65,19 @@ api_tasker_template.prototype = {
 		return templateTaskCopied;
 	},
 	
+	deactivateTemplateTask: function(templateTaskId) {
+		var deactivateResponse = {};
+		deactivateResponse.taskDeactivated = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_template_task = new GlideRecord(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		if(gr_template_task.get(templateTaskId)){
+			new Template_uiAction().uiAction_DeactivateTemplateTask(gr_template_task);
+			deactivateResponse.taskDeactivated = true;
+		}
+		return deactivateResponse;
+	},
+
 	getAssignmentInformation: function(templateTaskId){
 		var lAssignmentInfo = {};
 		var gr_template_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
@@ -56,6 +96,15 @@ api_tasker_template.prototype = {
 		return lDurationInfo;
 	},
 	
+	getItemMembersInformation: function(templateTaskId){
+		var lItemMembersInfo = {};
+		var gr_template_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		if(gr_template_task.get(templateTaskId)){
+			lItemMembersInfo = this.api_tasker_ui_component_data.getItemMembersInformationGR(gr_template_task);
+		}
+		return lItemMembersInfo;
+	},
+	
 	getOperationalInformation: function(templateTaskId){
 		var lOperationalInfo = {};
 		var gr_template_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
@@ -63,6 +112,29 @@ api_tasker_template.prototype = {
 			lOperationalInfo = this.api_tasker_ui_component_data.getOperationalInformationGR(gr_template_task);
 		}
 		return lOperationalInfo;
+	},
+	
+	getUIActionParamaters: function(templateTaskId, action_name, action_sys_id){
+		var params = {};
+		var gr_template_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME);
+		if(gr_template_task.get(templateTaskId)){
+			params = this.getUIActionParamatersGR(gr_template_task, action_name, action_sys_id);
+		}
+		return params;
+	},
+	
+	getUIActionParamatersGR: function(gr_template_task, action_name, action_sys_id){
+		var params = {};
+		var objTaskTemplateActions = this._get_ui_actions_icons();
+		var arrItem = Object.keys(objTaskTemplateActions).filter(function(key){
+			return objTaskTemplateActions[key].action_name==action_name || key==action_sys_id;});
+		if(arrItem[0]){
+			// get the key b/c the sys_id is the key of the array
+			var ui_action_sys_id = arrItem[0];
+			// load ui action parameters
+			params = this._get_ui_actions_params(gr_template_task, ui_action_sys_id);
+		}
+		return params;
 	},
 	
 	isTemplateNameUnique: function(template_name, template_level, template_ou, template_owner){
@@ -139,19 +211,91 @@ api_tasker_template.prototype = {
 		return validMetaData;	
 	},
 	
+	// **************************************************************************************************
+	// START - Context Menu Sectioin
+	// **************************************************************************************************
+	// NOTE: not sure if we want to burry this in code but, this would be how we would add the separators
+	_get_ui_actions_context_menu_array: function(){
+		var arrActions = [
+			'298c61f5dbdcb780c18c59b2ca9619ab', // "name": "Activate" "action_name": "Activate Process Template Task"
+			'06030bf6dbc8bf40c18c59b2ca961925',  // "name": "Deactivate" "action_name": "Deactivate Template Task"
+			'separator', // add a separator
+			'8381c90c1be10d107a948485604bcb2d' // "name": "Delete", "action_name" : "delete_template_task"
+		];
+		return arrActions;
+	},
+
+	_get_ui_actions_params: function(gr_task, action_sys_id){
+		var params = {};
+		// these parameters on passed to all
+		params.task_sys_id = gr_task.getUniqueValue();
+		var parent = gr_task.getDisplayValue("parent");
+		params.is_top_template_task = (parent == '');
+		var requestInfo = {};
+		switch (action_sys_id){
+			case '8381c90c1be10d107a948485604bcb2d': // "name": "Delete", "action_name" : "delete_template_task"
+				params.action_name = "delete_template_task";
+				params.template_sys_id = gr_task.getValue("tasker_process_definition");
+				params.number_name = gr_task.getDisplayValue("number") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Delete') + ' ' + params.number_name + '?';
+				break;
+			case '298c61f5dbdcb780c18c59b2ca9619ab': // "name": "Activate" "action_name": "Activate Process Template Task"				
+				params.action_name = "Activate Process Template Task";
+				params.template_sys_id = gr_task.getValue("tasker_process_definition");
+					
+				params.number_name = gr_task.getDisplayValue("number") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Delete') + ' ' + params.number_name + '?';
+				break;
+			case '06030bf6dbc8bf40c18c59b2ca961925': // "name": "Deactivate" "action_name": "Deactivate Template Task"
+				params.action_name = "Deactivate Template Task";
+				params.template_sys_id = gr_task.getValue("tasker_process_definition");
+
+				params.number_name = gr_task.getDisplayValue("number") + ': ' + gr_task.getValue('short_description');
+				params.title = gs.getMessage('Delete') + ' ' + params.number_name + '?';
+				break;
+			default:			
+				var errMsg = "Tasker - function: _get_ui_actions_params - an action was requested that isn't implemented.  UI Action sys_id: " + action_sys_id;
+				gs.addErrorMessage(errMsg);
+				break;
+		}
+		return params;
+	
+	},
+	
+	_get_ui_actions_icons: function(){
+		// create an object with each action that has an icon
+		// object key is uiAction sys_id, name comment added to make it easier to match sys_id to image
+		// NOTE: this also contains the actoin name.  This allows us to use the array to find the sys_id for an action name
+		var uiActionsIcons = {
+			'8381c90c1be10d107a948485604bcb2d': { // "name": "Delete", (task), "action_name" : "delete_template_task"
+				"action_name" : "delete_template_task",
+				"image": "x_153465_discovert.DeleteTask16.svg"},
+			'298c61f5dbdcb780c18c59b2ca9619ab': { // "name": "Activate" "action_name": "Activate Process Template Task"
+				"action_name" : "Activate Process Template Task",
+				"image": "x_153465_discovert.Activate16.svg"},
+			'06030bf6dbc8bf40c18c59b2ca961925': { // "name": "Deactivate" "action_name": "Deactivate Template Task"
+				"action_name" : "Deactivate Template Task",
+				"image": "x_153465_discovert.Deactivate16.svg"}
+		};
+		return uiActionsIcons;
+	},
+	// **************************************************************************************************
+	// END - Context Menu Sectioin
+	// **************************************************************************************************
+	
     type: 'api_tasker_template'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-23 22:28:27</sys_created_on>
         <sys_id>c2be7d54f9103110777f907fa6fa4918</sys_id>
-        <sys_mod_count>24</sys_mod_count>
+        <sys_mod_count>37</sys_mod_count>
         <sys_name>api_tasker_template</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_c2be7d54f9103110777f907fa6fa4918</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-29 04:46:00</sys_updated_on>
+        <sys_updated_on>2023-12-22 19:43:40</sys_updated_on>
     </sys_script_include>
 </record_update>

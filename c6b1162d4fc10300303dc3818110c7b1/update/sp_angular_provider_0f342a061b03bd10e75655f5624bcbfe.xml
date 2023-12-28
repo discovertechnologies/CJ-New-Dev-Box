@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider">
+    <sp_angular_provider action="INSERT_OR_UPDATE">
+        <name>dtechOrder</name>
+        <script><![CDATA[/* Use this Directive to add icons for the suspense date and have a table cell with a hover popover function
+//
+// Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Special License Rights
+//  The Government's rights to use, display, or disclose this software are restricted.
+//  Any reproduction of computer software, computer software documentation,
+//  or portions thereof marked with this legend must also reproduce the markings. 
+// Script Continued Below
+//
+*/
+function dtechOrder(getTemplateUrl, spModal, $timeout) {
+	var dtechDirective = {
+		restrict: 'E',
+		// replace: true,
+		// @: string 1 way, =: object 2 way, <: object 1 way, 
+		// &: execute an expression in the context of the parent scope, ?: the binding is optional
+		scope: {
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
+			dtechTable: '@',
+			dtechTaskSysId: '@',
+			dtechToolTipOpen: "=?",
+			dtechOrderObject: "<",
+		},
+		controller: directiveCtrl,
+		link: link,
+		controllerAs: 'd',
+		templateUrl: getTemplateUrl('x_153465_discovert_dtechOrder.html')
+	};
+	return dtechDirective;
+
+	function directiveCtrl($scope, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+		var d = this;
+
+		// have local per directive instead of global - TODO: get from a service
+		var CONST_TEMP_WAIT_DURATION = 600;
+		// STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
+		var CONST_POPOVER_DELAY = 1200;
+		var CONST_MAX_ORDER = 50;
+		
+		// STRY0145237 - Directive - update to local var
+		var isOverTooltip = false;
+		var isClosing = false;
+		
+		// STRY0145237 - Directive - Duration code; 
+		var parentMouseLeaveTimeouts = [];  // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		// Section: directive's function declarations to hide implementation details, sorted
+		$scope.dtechToolTipOpen = false;
+
+		$scope.dtechOrderList = [];
+		// function at the botom below functionality
+		var orderItemsConfigArray = _loadOrderItemsConfigArray(); 
+
+		d.enterTooltip = _enterTooltip;
+		d.init = _init;
+		
+		// STRY0139742 - Increase delaying when hover directives open; added
+		d.initTooltip = _initTooltip;
+	
+		d.leaveTooltip = _leaveTooltip;
+		d.changeOrder = _changeOrder;
+		d.parentMouseLeave = _parentMouseLeave;
+		
+		// STRY0139742 - Increase delaying when hover directives open; 
+		d.popoverDelay = CONST_POPOVER_DELAY;  // added to set popover-popup-delay in the Macro HTML
+
+		d.showOrder = _showOrder;
+
+		// Section: local functions
+		function _createOrderList(){
+			var lOrderList = [];
+			var orderObject = {};
+
+			for (var i=0; i < CONST_MAX_ORDER; i++) {
+				orderObject = {};
+				orderObject.value = orderItemsConfigArray[i].value;
+				orderObject.display_value = orderItemsConfigArray[i].display_value;
+				// max_route is passed in
+				if(orderObject.value>$scope.dtechOrderObject.max_route_order.value + 1){
+					break;
+				}
+
+				if(orderObject.value == $scope.dtechOrderObject.route_order.value){
+					// set selected in object
+					orderObject.selected =true;
+				}
+				lOrderList.push(orderObject);
+			}
+			return lOrderList;
+		}
+
+		// when the user hovers over the tooltip set over tooltip flag
+		function _enterTooltip() {
+			isOverTooltip = true;
+		}
+		
+		function _changeOrder(event, orderItem) {
+			var changeOrderObj = {};
+			changeOrderObj.task_sys_id = $scope.dtechTaskSysId;
+			changeOrderObj.route_order = orderItem.value;
+
+			if($scope.dtechOrderObject.objectType=='task'){
+				dtechTaskService.changeTaskOrder(changeOrderObj);
+			} else if($scope.dtechOrderObject.objectType=='templateTask'){
+				dtechTemplateService.changeTemplateTaskOrder(changeOrderObj);
+			}
+			event.stopPropagation();
+		}
+
+		function _init(rawAttrs) {
+			// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "auto";
+			}
+
+			$scope.dtechToolTipOpen = 
+				angular.isDefined($attrs.dtechToolTipOpen) ?
+				$scope.$parent.$eval($attrs.dtechToolTipOpen) : false;			
+		}
+		
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
+		function _initTooltip() {
+			// if the user moved off of the parent before the tooltip opened, cancel the open
+			if (isClosing == true) {
+				_leaveTooltip();
+				isClosing = false;
+			}
+		}
+		
+		function _leaveTooltip() {
+			isOverTooltip = false;
+			$scope.dtechToolTipOpen = false;
+			
+			// STRY0139742 - Increase delaying when hover directives open; set true
+			isClosing = true;
+		}
+		
+		function _parentMouseLeave() {
+			// STRY0145237 - Directive - Duration code changes to match design; 
+			// we need to track each time the below fires so we cancel on destroy
+			parentMouseLeaveTimeouts.push($timeout(function() {
+				if(!isOverTooltip){
+					d.leaveTooltip();
+				}
+			}, CONST_TEMP_WAIT_DURATION));
+		}
+		
+		// STRY0145237 - Directive - Duration code changes to match design;
+		// removed unused $event
+		function _showOrder() {
+			$scope.dtechToolTipOpen = true;
+			
+			// STRY0139742 - Increase delaying when hover directives open; set false
+			isClosing = false;
+			var orderObject = $scope.dtechOrderObject;
+			if(!orderObject){
+				orderObject = {};
+				orderObject.taskId = $scope.dtechTaskSysId;
+				orderObject.loaded = false;
+			}
+			// reset the display array
+			$scope.dtechOrderList = [];
+			$scope.dtechOrderList = _createOrderList();
+			$timeout(_setDTechObject(orderObject), 500);
+		}
+
+		function _setDTechObject(dtechObject){
+			$scope.dtechOrderObject = dtechObject;
+			$scope.dtechOrderObject.loaded = true;
+		}
+
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+				$timeout.cancel(item);
+				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+			});
+		});
+
+		function _loadOrderItemsConfigArray(){
+			var lOrderItemsConfigArray = [
+				{value:1,  display_value:" 1 (First)"},
+				{value:2,  display_value:" 2 (Second)"},
+				{value:3,  display_value:" 3 (Third)"},
+				{value:4,  display_value:" 4 (Fourth)"},
+				{value:5,  display_value:" 5 (Fifth)"},
+				{value:6,  display_value:" 6 (Sixth)"},
+				{value:7,  display_value:" 7 (Seventh)"},
+				{value:8,  display_value:" 8 (Eighth)"},
+				{value:9,  display_value:" 9 (Ninth)"},
+				{value:10, display_value:"10 (Tenth)"},
+				{value:11, display_value:"11 (Eleventh)"},
+				{value:12, display_value:"12 (Twelfth)"},
+				{value:13, display_value:"13 (Thirteenth)"},
+				{value:14, display_value:"14 (Fourteenth)"},
+				{value:15, display_value:"15 (Fifteenth)"},
+				{value:16, display_value:"16 (Sixteenth)"},
+				{value:17, display_value:"17 (Seventeenth)"},
+				{value:18, display_value:"18 (Eighteenth)"},
+				{value:19, display_value:"19 (Nineteenth)"},
+				{value:20, display_value:"20 (Twentieth)"},
+				{value:21, display_value:"21 (Twenty-first)"},
+				{value:22, display_value:"22 (Twenty-second)"},
+				{value:23, display_value:"23 (Twenty-third)"},
+				{value:24, display_value:"24 (Twenty-fourth)"},
+				{value:25, display_value:"25 (Twenty-fifth)"},
+				{value:26, display_value:"26 (Twenty-sixth)"},
+				{value:27, display_value:"27 (Twenty-seventh)"},
+				{value:28, display_value:"28 (Twenty-eigth)"},
+				{value:29, display_value:"29 (Twenty-ninth)"},
+				{value:30, display_value:"30 (Thirtieth)"},
+				{value:31, display_value:"31 (Thirty-first)"},
+				{value:32, display_value:"32 (Thirty-second)"},
+				{value:33, display_value:"33 (Thirty-third)"},
+				{value:34, display_value:"34 (Thirty-fourth)"},
+				{value:35, display_value:"35 (Thirty-fifth)"},
+				{value:36, display_value:"36 (Thirty-sixth)"},
+				{value:37, display_value:"37 (Thirty-seventh)"},
+				{value:38, display_value:"38 (Thirty-eigth)"},
+				{value:39, display_value:"39 (Thirty-ninth)"},
+				{value:40, display_value:"40 (Fortieth)"},
+				{value:41, display_value:"41 (Forty-first)"},
+				{value:42, display_value:"42 (Forty-second)"},
+				{value:43, display_value:"43 (Forty-third)"},
+				{value:44, display_value:"44 (Forty-fourth)"},
+				{value:45, display_value:"45 (Forty-fifth)"},
+				{value:46, display_value:"46 (Forty-sixth)"},
+				{value:47, display_value:"47 (Forty-seventh)"},
+				{value:48, display_value:"48 (Forty-eigth)"},
+				{value:49, display_value:"49 (Forty-ninth)"},
+				{value:50, display_value:"50 (Fiftieth)"}
+			];
+			return lOrderItemsConfigArray;
+		}
+
+
+	} // end function directiveCtrl
+	
+	function link(scope, element, attrs, directiveCtrl) {
+		// initialize the control
+		// 2.8.5 | 2023-11-07 | mmcc | STRY0145237 - Directive - Duration code changes to match design; 
+		// updated to pass attrs
+		directiveCtrl.init(attrs);
+
+		scope.$on('$destroy',_destroy);
+		// get the location of the element hovering over
+
+		function _destroy() {
+			element.remove();
+		}
+	}
+
+}]]></script>
+        <sys_class_name>sp_angular_provider</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2023-12-13 04:30:18</sys_created_on>
+        <sys_id>0f342a061b03bd10e75655f5624bcbfe</sys_id>
+        <sys_mod_count>26</sys_mod_count>
+        <sys_name>dtechOrder</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_angular_provider_0f342a061b03bd10e75655f5624bcbfe</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2023-12-14 05:32:21</sys_updated_on>
+        <type>directive</type>
+    </sp_angular_provider>
+</record_update>
