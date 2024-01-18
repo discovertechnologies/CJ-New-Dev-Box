@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>DEPRECATED&#13;
-NOTE:  update in 2.8.4  | 2023-11-06 | STRY0146507 - Certification Failed Test Results - DEPRECATED&#13;
+        <description>DFCT0012327 - 2023-01-18 -  RAJ - User not able to set primary assignee on subtask due to empty "privacy level" after upgrade on older task when upgraded&#13;
 &#13;
-In 2.7, the Task form and Template Task form- Classification defaults to "--None--"&#13;
+In 2.8, a privacy field was added to tasks and task trees.  &#13;
+Customers noticed that when this field is empty users have trouble changing the Primary Assignee&#13;
+This script finds all empty privacy fields and sets them to open.&#13;
 &#13;
-Run this script to set the classification field to none/clear all Tasks, Template, Template Task.&#13;
-&#13;
-See Testing notes below.  NOTE: ships with Testing on since this is optional.&#13;
-</description>
-        <name>2.7 - Clear Restricted Class (Optional)</name>
+Run this script to set empty Privacy fields on task and task tree records to open</description>
+        <name>2.8.401 - Default Privacy fields to open</name>
         <record_for_rollback>false</record_for_rollback>
         <script><![CDATA[// // Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 // /* Special License Rights
@@ -18,114 +16,99 @@ See Testing notes below.  NOTE: ships with Testing on since this is optional.&#1
 // *  Any reproduction of computer software, computer software documentation,
 // *  or portions thereof marked with this legend must also reproduce the markings. */
 // // Script Continued Below
-// clearClassificationforAllWhereRestricted();
+setEmptyPrivacyFieldsToOpen();
 
-// function clearClassificationforAllWhereRestricted(){
+function setEmptyPrivacyFieldsToOpen(){
+	// to run a test and only perform the counts, set testing to true
+	var testing = false;
 	
-// 	// to run a test and only perform the counts, set testing to true
-// 	var testing = true;
-	
-// 	clearClassifiedRestricted('x_153465_discovert_route_task_instance', 'classification', 'classification=restricted^active=true', testing);
-// 	clearClassifiedRestricted('x_153465_discovert_discover_routing_template', 'classification', 'classification=restricted^u_active=true', testing);
-// 	clearClassifiedRestricted('x_153465_discovert_route_tasks', 'classification', 'classification=restricted^active=true', testing);
-// 	clearClassifiedRestricted('x_153465_discovert_discover_routing_runtime', 'classification', 'classification=restricted', testing);
-// }
+	updateEmptyPrivacy('x_153465_discovert_task_tree', 'u_privacy', testing);
+	updateEmptyPrivacy('x_153465_discovert_route_task_instance', 'u_privacy', testing);
+}
 
-// function clearClassifiedRestricted(table, classificationField, query, testing){
-	
-// 	var numCleared = 0;
-// 	var classifiedRestrictedCount = countItemsToClear(table, classificationField, query, testing);
-// 	if(classifiedRestrictedCount>0){
-// 		// STRY0106180 - Find all tasks classified restricted and clear the field.
-// 		var rec = new GlideRecord(table);
-// 		rec.addEncodedQuery(query);
-// 		rec.query();
-// 		while(rec.next()) {
-// 			rec[classificationField] = null;
-// 			rec.work_notes = 'Classification cleared by Fix Script';
+function updateEmptyPrivacy(table, privacy_field, testing){
 
-// 			if(!testing){
-// 				rec.update();
-// 				numCleared +=1;
-// 			}
-// 		}
+	var numUpdated = 0;
+	var privacyEmptyCount = countItemsToUpdate(table, privacy_field, testing);
+	if(privacyEmptyCount>0){
+		var rec = new GlideRecord(table);
+		rec.addNullQuery(privacy_field);
+		rec.query();
+		while(rec.next()) {
+			var new_privacy = 'open'; // default to open
+			if(table == 'x_153465_discovert_task_tree'){
+				if(rec.u_task_ref && rec.u_task_ref.primary_office && rec.u_task_ref.primary_office.u_top_ou && 
+					rec.u_task_ref.primary_office.u_top_ou.u_organizational_privacy){
+					new_privacy = rec.u_task_ref.primary_office.u_top_ou.u_organizational_privacy;
+				}
+			} else if(table == 'x_153465_discovert_task_tree'){
+				if(rec.primary_office && rec.primary_office.u_top_ou && 
+					rec.primary_office.u_top_ou.u_organizational_privacy){
+					new_privacy = rec.primary_office.u_top_ou.u_organizational_privacy;
+				}
+			}
+			rec.setValue(privacy_field, new_privacy);
+			rec.work_notes = 'Privacy set by Fix Script';
 
-// 		switch(table){
-// 			case 'x_153465_discovert_route_task_instance':
-// 				if(numCleared == classifiedRestrictedCount){
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Tasks Classified as Restricted has been cleared.");
-// 				} else {
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Tasks with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see tasks still classified as restricted, run this query on the Task table: " + query);
-// 				}
-// 				break;
-// 			case 'x_153465_discovert_discover_routing_template':
-// 				if(numCleared == classifiedRestrictedCount){
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Classified as Restricted has been cleared.");
-// 				} else {
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Templates with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see tasks still classified as restricted, run this query on the Template table: " + query);
-// 				}
-// 				break;
-// 			case 'x_153465_discovert_route_tasks':
-// 				if(numCleared == classifiedRestrictedCount){
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Tasks Classified as Restricted has been cleared.");
-// 				} else {
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Template Tasks with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see Template Tasks still classified as restricted, run this query on the Template Task table: " + query);
-// 				}
-// 				break;
-// 			case 'x_153465_discovert_discover_routing_runtime':
-// 				if(numCleared == classifiedRestrictedCount){
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - the Classificaiotn for all Templates Instances Classified as Restricted has been cleared.");
-// 				} else {
-// 					gs.info("Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Some Template Instances with Classification of Restricted have been cleared. " + numCleared + " of " + classifiedRestrictedCount + " were cleared. To see Template Instances still classified as restricted, run this query on the Template Instance table: " + query);
-// 				}
-// 				break;
-// 		}
-// 	}
-// }
+			if(!testing){
+				rec.update();
+				numUpdated +=1;
+			}
+		}
 
-// function countItemsToClear(table, classificationField, query, testing){
-// 	var classifiedRestrictedCount;
-// 	// count all open requests on closed tasks and log
-// 	var ga = new GlideAggregate(table);
-// 	ga.addEncodedQuery(query);
-// 	ga.addAggregate("COUNT");	
-// 	ga.query();
-// 	if(ga.next()){
-// 		classifiedRestrictedCount = ga.getAggregate("COUNT");
-// 	}
-	
-// 	switch(table){
-// 		case 'x_153465_discovert_route_task_instance':
-// 			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
-// 					classifiedRestrictedCount + ' Active Tasks have a Classification of "Restricted".  Clearing the Clasification field...');
-// 			break;
-// 		case 'x_153465_discovert_discover_routing_template':
-// 			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
-// 					classifiedRestrictedCount + ' Active Templates have a Classification of "Restricted".  Clearing the Clasification field...');
-// 			break;
-// 		case 'x_153465_discovert_route_tasks':
-// 			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
-// 					classifiedRestrictedCount + ' Active Template Tasks have a Classification of "Restricted".  Clearing the Clasification field...');
-// 			break;
-// 		case 'x_153465_discovert_discover_routing_runtime':
-// 			gs.info('Fix Script - Tasker 2.7 - Clear Restricted Class (Optional) - Your system was analyzed and ' + 
-// 					classifiedRestrictedCount + '  Template Instances have a Classification of "Restricted".  Clearing the Clasification field...');
-// 			break;
-// 	}
-// 	return classifiedRestrictedCount;
-// }]]></script>
+		switch(table){
+			case 'x_153465_discovert_task_tree':
+				if(numUpdated == privacyEmptyCount){
+					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- the Privacy for all Task Trees has been set.");
+				} else {
+					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- Some Tasks with empty Privacy field were not updated. " + numUpdated + " of " + privacyEmptyCount + " were set. To see tasks with privacy not set, run this query on the Task table: u_privacy=" );
+				}
+				break;
+			case 'x_153465_discovert_route_task_instance':
+				if(numUpdated == privacyEmptyCount){
+					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- the Privacy for all Tasks has been set.");
+				} else {
+					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- Some Tasks with empty Privacy field were not updated. " + numUpdated + " of " + privacyEmptyCount + " were set. To see tasks with privacy not set, run this query on the Task table: u_privacy=" );
+				}
+				break;
+		}
+	}
+}
+
+function countItemsToUpdate(table, privacy_field, value, testing){
+	var privacyEmptyCount;
+	// count all empty privacy fields
+	var ga = new GlideAggregate(table);
+	ga.addNullQuery(privacy_field);
+	ga.addAggregate("COUNT");	
+	ga.query();
+	if(ga.next()){
+		privacyEmptyCount = ga.getAggregate("COUNT");
+	}
+
+	switch(table){
+		case 'x_153465_discovert_task_tree':
+			gs.info('Fix Script - 2.8.401 - Default Privacy fields to open - Your system was analyzed and ' + 
+					privacyEmptyCount + ' Task Trees do not have privacy set.  Setting the privacy value to the value of the Primary Office for the Task Tree.');
+			break;
+		case 'x_153465_discovert_route_task_instance':
+			gs.info('Fix Script - 2.8.401 - Default Privacy fields to open - Your system was analyzed and ' + 
+					privacyEmptyCount + ' Tasks do not have privacy set.  Setting the privacy value to the value of the Primary Office for the top task in the tree.');
+	}
+	return privacyEmptyCount;
+}]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-09-22 00:42:59</sys_created_on>
         <sys_id>cf7d3324dbfe78501e1792c5d4961983</sys_id>
-        <sys_mod_count>8</sys_mod_count>
-        <sys_name>2.7 - Clear Restricted Class (Optional)</sys_name>
+        <sys_mod_count>19</sys_mod_count>
+        <sys_name>2.8.401 - Default Privacy fields to open</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_cf7d3324dbfe78501e1792c5d4961983</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-07 04:06:37</sys_updated_on>
+        <sys_updated_on>2024-01-18 19:02:21</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
