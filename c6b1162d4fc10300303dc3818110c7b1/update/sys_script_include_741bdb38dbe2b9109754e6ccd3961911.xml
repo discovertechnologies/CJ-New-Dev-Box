@@ -24,7 +24,7 @@ api_tasker_ui_component_data.prototype = {
 		this.api_dtech = new api_dtech_common();
 		this.taskerStatus = new TaskerStatus();
     },
-	
+
 	// NOTE: the getUIActions function is not in the inital load yet.
 	//       Looking for a way to use $sp.getForm from here
 	getRecordObjects: function(tableName, sysId, arrObjectList){
@@ -195,11 +195,13 @@ api_tasker_ui_component_data.prototype = {
 				lDurationInfo["outbound"] = undefined;
 				lDurationInfo["u_external_due_date"] = undefined;
 			}
-
+			warning={};
 			lDurationInfo.isInboundExternalOU = !gr_recordObject.parent && gr_recordObject.tasking_authority && (gr_recordObject.tasking_authority.u_external_flag == true);
 			lDurationInfo.isOutboundExternalOU = (gr_recordObject.outbound == true);
 			lDurationInfo.state = lDurationInfo["state"].value;
 			lDurationInfo.u_active_subtasks = lDurationInfo["u_active_subtasks"].value;
+			warning.noSuspenseDate = lDurationInfo.suspense_date.value=='' || lDurationInfo.suspense_date.value==null || lDurationInfo.suspense_date.value==undefined;
+			warning.isSuspenseDateAfterChildren = !this._isAnyChildDueDateAfterDueDate(lDurationInfo.taskId);
 			warning.isTopSuspenseDateAfterExternalInboundDate = lDurationInfo.isInboundExternalOU && (gr_recordObject.suspense_date > gr_recordObject.u_external_due_date);
 			warning.isTopSuspenseDateBeforeExternalOutboundDate = lDurationInfo.isOutboundExternalOU && (gr_recordObject.u_external_due_date > gr_recordObject.suspense_date);
 			
@@ -213,6 +215,14 @@ api_tasker_ui_component_data.prototype = {
 			if(!warning.waitStatewithNoSubtasks && lDurationInfo.state==-3){
 				warning.waitStateOrderBy = true;
 			}
+			warning.isSuspenseDateAfterParent = this._isTaskDueDateAfterParent(gr_recordObject, lDurationInfo.suspense_date);
+			warning.waitStateNoSubtasks_msg = gs.getMessage("Tasker - Warning: Wait state set with no subtasks");
+			warning.waitStateOrderBy_msg = gs.getMessage("Tasker - Task is Dependent on lower-order Tasks");
+			warning.noSuspenseDate_msg = gs.getMessage("Tasker - Warning: Task has no Suspense Date");
+			warning.isTopSuspenseDateAfterExternalInboundDate_msg = gs.getMessage("Tasker - Warning: Internal Suspense date is after the External Suspense Date");
+			warning.isTopSuspenseDateBeforeExternalOutboundDate_msg = gs.getMessage("Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound");
+			warning.isSuspenseDateAfterChildren_msg = gs.getMessage("A Subtask has a Suspense Date AFter this Task");
+			warning.isSuspenseDateAfterParent_msg = gs.getMessage("Subtask Suspense Date AFTER Parent Task Suspense Date");
 		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
 			if(lDurationInfo.outbound!=true){
 				lDurationInfo["outbound"] = undefined;
@@ -257,6 +267,31 @@ api_tasker_ui_component_data.prototype = {
 		return lDurationInfo;
 	},
 
+	// TODO - Suggest moving this into tasker task api as related to task
+	_isAnyChildDueDateAfterDueDate: function(task_id){
+		var isChildAfterTask = false;
+		var numChildrenAfterParent = 0;
+		var ga_children = new GlideAggregate(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		var encodedQuery = "parent=" + task_id + "^suspense_date>parent.suspense_date";
+		ga_children.addEncodedQuery(encodedQuery);
+		ga_children.addAggregate('COUNT');
+		ga_children.query();
+		if(ga_children.next())
+			numChildrenAfterParent = ga_children.getAggregate('COUNT');
+		isChildAfterTask = numChildrenAfterParent>0;
+		return isChildAfterTask;
+	},
+
+	// TODO - Suggest moving this into tasker task api as related to task
+	_isTaskDueDateAfterParent: function (gr_task, suspense_date){
+		var isAfterParent = false;
+		var parentFields = {};
+		if(gr_task.parent){
+			parentFields = new api_tasker_task().getParentTaskFields(gr_task, ["suspense_date"]);
+			isAfterParent = suspense_date.value > parentFields.suspense_date.value;
+		}
+		return isAfterParent;
+	},
 	getItemMembersInformation: function(tableName, sysId){
 		var lItemMembersInfo = {};
 		var gr_recordObject = new GlideRecordSecure(tableName);
@@ -265,8 +300,29 @@ api_tasker_ui_component_data.prototype = {
 		}
 		return lItemMembersInfo;
 	},
-	
+
 	getItemMembersInformationGR: function(gr_recordObject){
+		var lItemMembersInfo = {};
+		lItemMembersInfo = this._getItemMembersInformationGR(gr_recordObject, false);
+		return lItemMembersInfo;
+	},
+
+	getItemMembersInformationTaskTree: function(tableName, sysId){
+		var lItemMembersInfo = {};
+		var gr_recordObject = new GlideRecordSecure(tableName);
+		if(gr_recordObject.get(sysId)){
+			lItemMembersInfo = this.getItemMembersInformationTaskTreeGR(gr_recordObject);
+		}
+		return lItemMembersInfo;
+	},
+
+	getItemMembersInformationTaskTreeGR: function(gr_recordObject){
+		var lItemMembersInfo = {};
+		lItemMembersInfo = this._getItemMembersInformationGR(gr_recordObject, true);
+		return lItemMembersInfo;
+	},
+
+	_getItemMembersInformationGR: function(gr_recordObject, isTaskTree){
 		var objectType = "";
 		var lItemMembersInfo = {};
 		var arrItemMembersFields = [];
@@ -279,8 +335,14 @@ api_tasker_ui_component_data.prototype = {
 			
 			title = gr_recordObject.getDisplayValue(api_dtech_common.CONST_DTECH_TASK_TITLE_FIELD);
 
-			arrItemMembersFields = 
-				["assigned_to", "originator", "u_task_requester", "u_reviewer", "on_behalf_of"];
+			if(isTaskTree){
+				arrItemMembersFields = 
+					["assigned_to", "u_reviewer", "u_task_requester"];
+
+			} else {
+				arrItemMembersFields = 
+					["assigned_to", "originator", "u_task_requester", "u_reviewer", "on_behalf_of"];
+			}
 
 		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
 // TODO - See Template fieldname differences and update Macro, Script in the macro and controller
@@ -567,17 +629,14 @@ api_tasker_ui_component_data.prototype = {
 		var ui_actions;
 		var taskId = gr_recordObject.getUniqueValue();
 		var tableName = gr_recordObject.getRecordClassName();
+		form = $sp.getForm(tableName, taskId);
+		ui_actions = form._ui_actions;
+		lContextMenuInformation.taskId = taskId;
 		if(tableName == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
 			objectType = "task";
-			form = $sp.getForm(tableName, taskId);
-			ui_actions = form._ui_actions;
-			lContextMenuInformation.taskId = taskId;
 			apiObject = new api_tasker_task();			
 		} else if(tableName == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
 			objectType = "templateTask";
-			form = $sp.getForm(tableName, taskId);
-			ui_actions = form._ui_actions;
-			lContextMenuInformation.taskId = taskId;
 			apiObject = new api_tasker_template();
 		} else {
 			gs.info("Tasker Error - loading context menu actions for table: " + tableName + " Not implemented for Template yet");
@@ -587,8 +646,7 @@ api_tasker_ui_component_data.prototype = {
 		var arrHCMUI = apiObject._get_ui_actions_context_menu_array();
 		// use the api object above and load the action icons
 		var ui_actions_icons = apiObject._get_ui_actions_icons();
-		var orderCount = 0;
-		for (actionIndex=0; actionIndex < arrHCMUI.length; actionIndex++) {
+		for (var actionIndex=0; actionIndex < arrHCMUI.length; actionIndex++) {
 			var addAction = false;
 			var hcm_item = arrHCMUI[actionIndex];
 			if(hcm_item != "separator"){
@@ -643,7 +701,6 @@ api_tasker_ui_component_data.prototype = {
 		lContextMenuInformation.ui_actions = arrMenuItems;
 		return lContextMenuInformation;
 	},
-
 	
 	// ************************************************************************
 	// Internal methods below 
@@ -712,13 +769,13 @@ api_tasker_ui_component_data.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-11-14 14:46:06</sys_created_on>
         <sys_id>741bdb38dbe2b9109754e6ccd3961911</sys_id>
-        <sys_mod_count>75</sys_mod_count>
+        <sys_mod_count>94</sys_mod_count>
         <sys_name>api_tasker_ui_component_data</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_741bdb38dbe2b9109754e6ccd3961911</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-12-17 20:59:22</sys_updated_on>
+        <sys_updated_on>2024-02-29 13:04:21</sys_updated_on>
     </sys_script_include>
 </record_update>

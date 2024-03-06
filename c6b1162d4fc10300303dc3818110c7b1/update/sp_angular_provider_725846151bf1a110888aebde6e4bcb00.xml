@@ -2,23 +2,6 @@
     <sp_angular_provider action="INSERT_OR_UPDATE">
         <name>dtechResponseComments</name>
         <script><![CDATA[/* Use this Directive to add icons for the different types of Comments a Task can have to a table cell with a hover popover function
-Note: AngularJS normalizes case-sensitive camelCase to case-insensitive kebab-case for the DOM.
-Usage in a widget's HTML:
-	<dtech-response-comments dtech-is-modal="data.isModal"
-        dtech-reopen-comments="{{item.directive_reopen_comments}}"
-        dtech-response-comments="{{item.directive_response_comments}}"
-        dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
-        dtech-rework-comments="{{item.directive_rework_comments}}"
-		dtech-sys-id="{{item.sys_id}}"
-		dtech-table="{{data.table}}"
-		dtech-response-column-style="{{data.responseColumnStyle}}"
-		dtech-content-comment="{{item.directive_content_comment}}"
-		dtech-response-editor-control="{{data.responseEditorControl}}"
-		dtech_work_item_type="{{item.directive_work_item_type}}"
-		></dtech-response-comments>
-
-	The HTML for the directive is in	
-	templateUrl: getTemplateUrl('x_153465_discovert_dtechResponseComments.html')
 //
 // Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
 // Script Continued Below
@@ -45,26 +28,19 @@ Usage in a widget's HTML:
 */
 function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 	// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; 400 to 600
-	// TODO: get from a service
-	var CONST_TEMP_WAIT_DURATION = 600;
-	
-	// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
-	var CONST_POPOVER_DELAY = 1200;
-	
-	// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-	var CONST_CUT_OFF_VALUE = 160;
-	
 	var dtResponse = {
 		restrict: 'E',
-		replace: true,
+		//replace: true,
 		// @: string 1 way, =: object 2 way, <: object 1 way
 		scope: {
-			dtechIsModal: "=",
+			dtechIsModal: "<",
+			dtechPopoverPlacement: '@?',
 			dtechReopenComments: '@',
 			dtechResponseComments: '@',
 			dtechReviewerComments: '@',
 			dtechReworkComments: '@',
 			dtechShowLabel: "<?",
+			dtechInDataTable: "<?",
 			dtechSysId: '@',
 			dtechTable: '@',
 			dtechResponseColumnStyle: '@',
@@ -81,37 +57,25 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 	};
 	return dtResponse;
 
-	function responseCtrl($scope, $attrs, $animate) {
+	function responseCtrl($scope, $attrs, $animate, $sce) {
 		var d = this;	
-		d._isOverTooltip = false;
-		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added, init to false
-		d._isClosing = false;
-		
-		d.dtechResponseToolTipOpen = _dtechResponseToolTipOpen;
 
-		// passed in data section
-		d.dtechIsModal = _dtechIsModal;
-		d.dtechReopenComments = _dtechReopenComments;
-		d.dtechResponseComments = _dtechResponseComments;
-		d.dtechReviewerComments = _dtechReviewerComments;
-		d.dtechReworkComments = _dtechReworkComments;
-		d.dtechShowLabel = _dtechShowLabel;
-		d.dtechSysId = _dtechSysId;
-		d.dtechTable = _dtechTable;
-		
+		// TODO: get from a service
+		var CONST_TEMP_WAIT_DURATION = 600;
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; TODO: get from a service
+		var CONST_POPOVER_DELAY = 1200;
 		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-		d.dtechResponseColumnStyle = _dtechResponseColumnStyle;
-		d.convertedHtmlLength = _convertedHtmlLength;
-		d.cutOffValue = _cutOffValue;
-		d.dtechContentComment = _dtechContentComment;
+		var CONST_SPINNER_DELAY = 500;
+		var CONST_CUT_OFF_VALUE = 160;
+
+		var isOverTooltip = false;
+		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added, init to false
+		var isClosing = false;
 		
-		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
-		d.dtechResponseEditorControl = _dtechResponseEditorControl;
-		
-		// 2.8.5 | 2023-09-01 | mmcc | DFCT0012141 - Task Work Item Type of review will not show icons and text; added
-		d.dtechWorkItemType = _dtechWorkItemType;
-		
+		var parentMouseLeaveTimeouts = [];  // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
+
+		$scope.dtechResponseToolTipOpen = false;
+
 		// directive's functional section
 		d.enterTooltip = _enterTooltip;
 		d.init = _init;
@@ -124,118 +88,56 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 		d.openModalResponseComments = _openModalResponseComments;
 		d.parentMouseLeave = _parentMouseLeave;
 		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added to set popover-popup-delay in the HTML
-		d.popoverDelay = _popoverDelay;
-		
+		d.popoverDelay = CONST_POPOVER_DELAY;
+
 		d.showResponse = _showResponse;
 		
-		// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
-		function _dtechResponseEditorControl() {
-			return $scope.dtechResponseEditorControl;
-		}
-		
-		function _dtechIsModal() {
-			return $scope.dtechIsModal;
-		}
-		
-		function _dtechReopenComments() {
-			return $scope.dtechReopenComments;
-		}
-		
-		function _dtechResponseComments() {
-			return $scope.dtechResponseComments;
-		}
-		
-		function _dtechReviewerComments() {
-			return $scope.dtechReviewerComments;
-		}
-		
-		function _dtechReworkComments() {
-			return $scope.dtechReworkComments;
-		}
-		
-		function _dtechResponseToolTipOpen(){
-			return $scope.dtechResponseToolTipOpen;
-		}
-
-		function _dtechShowLabel(value){
-			return $scope.dtechShowLabel;
-		}
-
-		function _dtechSysId() {
-			return $scope.dtechSysId;
-		}
-		
-		function _dtechTable() {
-			return $scope.dtechTable;
-		}
-		
-		// 2.8.5 | 2023-09-01 | mmcc | DFCT0012141 - Task Work Item Type of review will not show icons and text; added
-		function _dtechWorkItemType() {
-			return $scope.dtechWorkItemType;
-		}
-		
-		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-		function _convertedHtmlLength() {
-			return $scope.convertedHtmlLength;
-		}
-		
-		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-		function _cutOffValue() {
-			return $scope.cutOffValue;
-		}
-		
-		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-		function _dtechContentComment() {
-			return $scope.dtechContentComment;
-		}
-		
-		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-		function _dtechResponseColumnStyle() {
-			return $scope.dtechResponseColumnStyle;
-		}
-				
 		// when the user hovers over the tooltip set overtooltip flag
 		function _enterTooltip() {
-			d._isOverTooltip = true;
+			isOverTooltip = true;
 		}
 		
 		// init()
 		// initialize the control, called from the Link function
 		// gets a reference to the element
-		function _init(element) {
-			
-			d.$element = element;
-			
+		function _init(rawAttrs) {
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechPopoverPlacement)) {
+				$scope.dtechPopoverPlacement = "auto";
+			}
+
+			// Set a default value when attribute not in hosting HTML
+			if (angular.isUndefined(rawAttrs.dtechShowLabel)) {
+				$scope.dtechShowLabel = false;
+			}
+
+			if (angular.isUndefined(rawAttrs.dtechInDataTable)) {
+				$scope.dtechInDataTable = false;
+			}
+
 			$scope.dtechResponseToolTipOpen = 
-				angular.isDefined($attrs.enterTooltip) ?
-				$scope.$parent.$eval($attrs.dtechResponseToolTipOpen) : false;
-			
-			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set to const
-			d.popoverDelay = CONST_POPOVER_DELAY;
-			
-			// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added
-			d.cutOffValue = CONST_CUT_OFF_VALUE;
+				angular.isDefined(rawAttrs.enterTooltip) ?
+				$scope.$parent.$eval(rawAttrs.dtechResponseToolTipOpen) : false;
+
 		}
 		
 		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added local function
 		function _convertHtmlToString(someHtmlText) {
             var divElement = document.createElement('div');
             divElement.innerHTML = someHtmlText;
-
             return divElement.textContent || divElement.innerHTML || '';
         }
 		
 		// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status; added global function
-		$scope.truncateConvertedHtml = function(someHtmlText, cutOffCount) {
+		$scope.truncateConvertedHtml = function(someHtmlText) {
 			var convertedHtml = '';
             convertedHtml = _convertHtmlToString(someHtmlText);
 			
 			$scope.convertedHtmlLength = convertedHtml.length;
 			
-			convertedHtml = convertedHtml.substring(0, cutOffCount);
+			convertedHtml = convertedHtml.substring(0, CONST_CUT_OFF_VALUE);
 			
-			if ($scope.convertedHtmlLength > cutOffCount) {
+			if ($scope.convertedHtmlLength > CONST_CUT_OFF_VALUE) {
 				convertedHtml = convertedHtml + '...';
 			}
 			
@@ -245,18 +147,17 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
 		function _initTooltip() {
 			// if the user moved off of the parent before the tooltip opened, cancel the open
-			if (d._isClosing == true) {
+			if (isClosing == true) {
 				_leaveTooltip();
-				// d._isClosing = false;
+				isClosing = false;
 			}
 		}
 		
 		function _leaveTooltip() {
-			d._isOverTooltip = false;
+			isOverTooltip = false;
 			$scope.dtechResponseToolTipOpen = false;
-			
 			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set true
-			d._isClosing = true;
+			isClosing = true;
 		}
 		
 		// openModal()
@@ -275,11 +176,11 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 				backdrop: 'static',
 				widget: widget,
 				widgetInput: {
-					isModal: _dtechIsModal(),
-					sys_id: _dtechSysId(),
-					table:  _dtechTable(),
+					isModal: $scope.dtechIsModal,
+					sys_id: $scope.dtechSysId,
+					table:  $scope.dtechTable,
 					// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
-					responseEditorControl: _dtechResponseEditorControl()
+					responseEditorControl: $scope.dtechResponseEditorControl
 				},
 				size: 'lg',
 				buttons: [],
@@ -298,28 +199,31 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 			_leaveTooltip();
 		}
 		
-		// _parentMouseLeave
-		// this is the get function for the direcitve property parentMouseLeave
-		// this function is called when the user hovers off the profile image
 		function _parentMouseLeave() {
-			$timeout(function() {
-				if(!d._isOverTooltip){
+			// STRY0145237 - Directive - Duration code changes to match design; 
+			// we need to track each time the below fires so we cancel on destroy
+			parentMouseLeaveTimeouts.push($timeout(function() {
+				if(!isOverTooltip){
 					d.leaveTooltip();
 				}
-			}, CONST_TEMP_WAIT_DURATION);
-		}
-		
-		// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; added function
-		function _popoverDelay() {
-			return d.popoverDelay;
+			}, CONST_TEMP_WAIT_DURATION));
 		}
 		
 		function _showResponse(event) {
 			$scope.dtechResponseToolTipOpen = true;
-			
+// TODO - ADD CALL TO GET DATA IF NOT POPULATED
 			// 2.8.1 | 2023-05-11 | mmcc | STRY0139742 - Increase delaying when hover directives open; set false
-			d._isClosing = false;
+			isClosing = false;
 		}
+
+		// STRY0145237 - Directive - Duration code changes to match design; added
+		$scope.$on("$destroy", function (event) {
+			// we tracked each time mouse leave fired, now we can cancel each time-out and remove from the array
+			angular.forEach(parentMouseLeaveTimeouts, function(item) {
+				$timeout.cancel(item);
+				parentMouseLeaveTimeouts.splice(parentMouseLeaveTimeouts.indexOf(item), 1);
+			});
+		});
 		
 	} // end function responseCtrl
 	
@@ -327,7 +231,8 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
 	// see the list of events being monitored
 	function link(scope, element, attrs, responseCtrl) {
 		// initialize the control
-		responseCtrl.init(element);			
+		responseCtrl.init(attrs);
+		
 		scope.$on('$destroy',_destroy);
 
 		function _destroy() {
@@ -339,17 +244,15 @@ function dtechResponseComments(getTemplateUrl, spModal, $timeout, $window) {
         <sys_class_name>sp_angular_provider</sys_class_name>
         <sys_created_by>mmccune</sys_created_by>
         <sys_created_on>2023-03-24 19:12:48</sys_created_on>
-        <sys_customer_update>false</sys_customer_update>
         <sys_id>725846151bf1a110888aebde6e4bcb00</sys_id>
-        <sys_mod_count>162</sys_mod_count>
+        <sys_mod_count>180</sys_mod_count>
         <sys_name>dtechResponseComments</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
-        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_725846151bf1a110888aebde6e4bcb00</sys_update_name>
-        <sys_updated_by>mmccune</sys_updated_by>
-        <sys_updated_on>2023-09-02 00:02:54</sys_updated_on>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2024-01-24 05:00:34</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>

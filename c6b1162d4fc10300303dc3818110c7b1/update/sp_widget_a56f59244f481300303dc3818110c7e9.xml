@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[api.controller = function($scope, $timeout, $http, $location, $rootScope, amb, spModal, spUtil, $interpolate, htmlToStringService) {
+        <client_script><![CDATA[api.controller = function($scope, $timeout, $http, $location, $rootScope, amb, spModal, spUtil, $sce, $interpolate, htmlToStringService, $log, i18n, dtechTaskService, dtechOrganizationalUser) {
     //------------------------------------------------------------------------------------------------------------------------
     // COMPANY: DISCOVER TECHNOLOGIES
     // CUSTOMIZED BY: KARINA TORRES
@@ -20,7 +20,10 @@
     //											the call to substring with field.maxChars
     //------------------------------------------------------------------------------------------------------------------------
     var c = this;
+		var CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME = 'dtech_task_tree_state_legend_pinned';
+	
     var twjs = x_153465_discovert.twJS;
+		var gojsRoundedRectangles = x_153465_discovert.gojsRoundedRectangles;
     var TREE_CONST;
     var modalObjects;
     var $go; // for conciseness in defining templates
@@ -39,14 +42,19 @@
     // TREE FOOTER TOOLBAR
     var viewPortHeight = 0;
     // call main function
+		$scope.activeUnderDraftMessageMaxWidth = "800px";
 
     main();
 
     function main() {
+				_initializeObjects();
+				_loadLegendStates();
+
         // every time the form is loaded, set not collpased based on whether the accordion is being used
       	// DFCT0012174 - modified from isNotCollapsed to isCollapsed to simplify logic
         c.data.isCollapsed = !c.data.hide_accordion;
         TREE_CONST = _loadTreeConstants();
+				_bifoldAdjust();
         $go = go.GraphObject.make; // for conciseness in defining templates
 
         if (!c.data.selectedId || c.data.selectedId == 'null')
@@ -70,73 +78,186 @@
         }
     }
 
+		// this seems to only happen on Task, look into more later
+		function _bifoldAdjust(){
+			// bifold has smaller header.  If not bifold, increase offsets
+			if(c.data.isBifold!=true){
+				// Adjust top offset to accoutn for Margin and height difference
+/*
+				var fullScreenOffsetModifier = 9;
+				TREE_CONST.topCircleSpanOffset = TREE_CONST.topCircleSpanOffset + fullScreenOffsetModifier;
+				TREE_CONST.topIconPanelOffset = TREE_CONST.topIconPanelOffset + fullScreenOffsetModifier;
+				TREE_CONST.topOrderOffset = TREE_CONST.topOrderOffset + fullScreenOffsetModifier;
+				TREE_CONST.topWarningIconOffset = TREE_CONST.topWarningIconOffset + fullScreenOffsetModifier;
+*/
+			}
+		}
+	
+		function _initializeObjects(){
+			c.data.iconsInitialized = true;
+			c.data.assignmentObject = {};	
+			c.data.assignmentObject.objectType = "task";
+			c.data.durationObject = {};	
+			c.data.durationObject.objectType = "task";
+			c.data.operationalObject = {};	
+			c.data.operationalObject.objectType = "task";
+			//c.data.actions = {};	
+			//c.data.actions.objectType = "task";
+			c.data.warningObject = {};	
+			c.data.warningObject.objectType = "task";
+			c.data.orderObject = {};
+			c.data.orderObject.objectType = "task";
+			c.data.addSubObject = {};
+			c.data.addSubObject.objectType = "task";
+			c.data.membersObject = {};
+			c.data.membersObject.objectType = "task";
+		}
+
+		function _loadLegendStates(){
+			var legendStates = [];
+			legendStates.push({'value':'Draft', 'label': i18n.getMessage('Draft')}); 
+			legendStates.push({'value':'Waiting', 'label': i18n.getMessage('Waiting')}); 
+			legendStates.push({'value':'Unassigned', 'label': i18n.getMessage('Unassigned')}); 
+			legendStates.push({'value':'Assigned', 'label': i18n.getMessage('Assigned')}); 
+			legendStates.push({'value':'Accepted', 'label': i18n.getMessage('Accepted')}); 
+			legendStates.push({'value':'Rejected', 'label': i18n.getMessage('Rejected')}); 
+			legendStates.push({'value':'Work in Progress', 'label': i18n.getMessage('Work in Progress')}); 
+			legendStates.push({'value':'In Review', 'label': i18n.getMessage('In Review')}); 
+			legendStates.push({'value':'Rework', 'label': i18n.getMessage('Rework')}); 
+			legendStates.push({'value':'Completed', 'label': i18n.getMessage('Completed')}); 
+			c.data.legendStates = legendStates;
+			c.data.hideLegend = c.data.preferences[CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME].value != true;
+		}
+	
+		$scope.loadActions = function(taskSysId){
+			// STRY0117600 - does not like diagram posted back to server
+			c.data.widgetTreeFooterToolbars[0].diagram = null;
+			c.data.widgetTreeHeaderToolbars[0].diagram = null;
+
+			$scope.data.getActions = true;
+			$scope.data.taskSysId = taskSysId;
+			spUtil.update($scope).then(function(){
+				c.data.widgetTreeFooterToolbars[0].diagram = diagram;
+				c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
+			});
+		};	
     // STRY0117600
     function _loadTreeConstants() {
         var oTREE_CONST = {
-            // DFCT0011227
-            tree_name_max_length: 43,
-            tree_details_max_length: 43,
             // STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
             fontStyle: "14px Segoe UI",
-            fontStyleTaskerNumber: "10px Segoe UI",
-            fontStyleNodeDetails: "12px Segoe UI",
+            fontStyleTaskerNumber: "12px Segoe UI",
+            fontStyleNodeDetails: "10px Segoe UI",
+						// tree color change
+						// textStrokeColor: "white",
+            textStrokeColor: "#000000",
+						textStrokeTaskerNumber: "#757575",
+						textStrokeNodeDetails: "#757575",
+						textStrokeInactive: "#FFFFFF",
+					
             node_id: "page_map",
-            minHeight: 12,
+            minHeight: 435,
             diagramMinHeight: 150,
             horizontalTreeAngle: 0,
             verticalTreeAngle: 90,
+						// Expander button and port offsets
+						rightTreeExpanderOffset: -15,
+						bottomTreeExpanderOffset: -15,
+						rightTreePortOffset: 6,
+						leftTreePortOffset:-9,
+						topTreePortOffset: -9,
+						bottomTreePortOffset:6,
+						// Boarder, selected node and hover node 
             outlineWidth: 2,
             roundedRectangleFill: "Gray",
-            node_active_bg: '#33738e',
+						roundedRectangleMargin: 15,
+						orderNormalFill: '#757575', 
+						orderHoverFill: '#70087D2', 
+						selectedOutlineBorderColor: "#80D1FF",
+						selectedOutlineWidth: 7,
+						hoverRectangleOffset: 10,
+						// Router Order Constants
+						leftOrderOffset: -1,
+						topOrderOffset: -1,
+						orderTextColor: '#FFFFFF',					
+						fontStyleOrderCircle: "12px Segoe UI",
+						topCircleSpanOffset: 46,
+						leftRouteCircleOffset: -5,
+						topRouteCircleOffset: -5,
+						// warnining Constatns
+						warningPanelXoffset: -7,
+						warningPanelYoffset: 7,
+						topWarningIconOffset: 43,
+						leftWarningIconOffset: -1,
+						warningIconMargin: 2,
+						warningPanelHeight: 26,
+						warningPanelWidth: 26,
+						warningPanelStrokeWidth: 2, 
+						warningPanelStokeColor: "#FFFFFF",
+						// status Constatns
+						statusPanelHeight: 16,
+						statusPanelWidth: 16,
+						statusPanelXoffset: 30,
+						statusPanelYoffset: -28,
+						statusPanelStrokeWidth: 2, 
+						statusPanelStokeColor: "#FFFFFF",
+						statusIconMargin: 2,
+					
+						// Icon Panel constants
+						leftIconPanelOffset: -93,
+						topIconPanelOffset: 23,
+						topCornerOffset: -7, // offset desired is 7 - this should start the image 7 pixels early
+						rightCornerOffset: -9, // offset desired is 7, images are 16, starting 9 pixes inside should hang seven off outside			
+						iconOutlineWidth: 2,
+						iconOutlineColor: '#FFFFFF',
+						iconPicSize:16,
+						// profile picture constants
+						profilePicOffset: 8,
+						profilePicSize: 24,
+						profilePicCircleSize: 26,
+						profilePicBorder: '#FFFFFF',
+						profilePicTextStroke: '#FFFFFF',
+						profilePicFill: '#787878',
+						memberPanelTopOffset: 15,
+						memberPanelLeftOffset:-3,
+					
+						topPicCornerOffset: 17,
+						leftPicCornerOffset: 17,
+						fontStyleProfileInitials: "bold 12px Segoe UI",
+					
+						// tree color change
+						// node_active_bg: '#33738e',
+            node_active_bg: '#FFFFFF',					
             node_inactive_bg: '#787878',
+						// tree color change
+						node_border: '#757575',
             node_selected_border: "#00A4FF", //'#ADD8E6',
             node_selected_border_stroke_width: 4,
 
             nodeOuterRectangelWidth: 310,
-            nodeOuterRectangelHeight: 80,
-            nodeTextPanelMargin: 5,
-            numberPanelWidth: 90,
-            textPanelMinWidth: 290,
+            nodeOuterRectangelHeight: 70,
+						taskStateIndicatorWidth: 12,
+            nodeTextPanelLeftMargin: 30,
+						nodeTextPanelRightMargin: 20,
+            textPanelMinWidth: 240,
             textPanelMinHeight: 35,
-            textPanelMaxWidth: 290,
-            textPanelMaxHeight: 35,
+            textPanelMaxWidth: 240,
+            textPanelMaxHeight: 55,
 
-            spacingNode: 5,
+            spacingNode: -5,
             spacingLayer: 60,
-
-            //	Font Awesome css
-            // STRY0109208 - Add Create Icon
-            font_awesome_plus_o: '\uf067',
-            font_awesome_calendar_o: '\uf073',
-            font_awesome_user_o: '\uf007',
-            font_awesome_exclamation_triangle_o: '\uf071',
-            font_awesome_pencil_square_o: '\uf044',
-            // STRY0124682
-            font_awesome_info_o: '\uf129',
-
-            icon_font: '18px FontAwesome',
-            icon_top_margin: 2,
-            icon_right_margin: 5,
-            icon_bottom_margin: 2,
-            icon_left_margin: 5,
-            icon_panel_width: 200,
-
+						iconPanelWidth: 150,					
+						iconPanelHeight: 20,
+						iconPanelFillColor: '#263341',
+					
             // NOTE: other trees set this default to 700, but task tree is setting to 200
-            toolTipHoverDelay: 200,
+            toolTipHoverDelay: 700,
             toolTipDuration: 10000,
-            toolTipBackgroundColor: '#FFFFFF', // "#C5C5C5"
-            toolTipNormalMargin: 3,
-            toolTipWarningNoteMargin: 6,
-            toolTipColumnWidth: 600, // "auto",
-            toolTipWarningMessageColumnWidth: 600,
-						// STRY0131003 - OOO visual indicator
-						toolTipExclamationColumnWidth:250,
-            // -------------------------------------------------------------------	
-
             node_status_ontime: '#37C1C3', //success
             node_status_warning: '#F6C716', //warning
             node_status_critical: '#E32921', //danger
-            node_colors: {
+					
+            state_flag_colors: {
                 "waiting": {
                     bg: '#6b6b6b',
                     text: 'white',
@@ -215,76 +336,77 @@
                     warning: '#F6C716',
                     hover: '#F00'
                 }
-            }
+            },
         };
         return oTREE_CONST;
     }
 
-
-    function getStateColors(state, type) {
-        var font_color;
+// RAJ - new tree
+    function getStateColorFlag(state) {
+        var bg_color;
         switch (state) {
             case "-3": // waiting
-                font_color = getFontColors(type, TREE_CONST.node_colors.waiting);
+                bg_color = TREE_CONST.state_flag_colors.waiting.bg;
                 break;
             case "-5": // unassigned
-                font_color = getFontColors(type, TREE_CONST.node_colors.unassigned);
+                bg_color = TREE_CONST.state_flag_colors.unassigned.bg;
                 break;
             case "1": // assigned
-                font_color = getFontColors(type, TREE_CONST.node_colors.assigned);
+                bg_color = TREE_CONST.state_flag_colors.assigned.bg;
                 break;
             case "10": // accepted
-                font_color = getFontColors(type, TREE_CONST.node_colors.accepted);
+                bg_color = TREE_CONST.state_flag_colors.accepted.bg;
                 break;
             case "11": // rejected
-                font_color = getFontColors(type, TREE_CONST.node_colors.rejected);
+                bg_color = TREE_CONST.state_flag_colors.rejected.bg;
                 break;
             case "13": // workinprogress
-                font_color = getFontColors(type, TREE_CONST.node_colors.workinprogress);
+                bg_color = TREE_CONST.state_flag_colors.workinprogress.bg;
                 break;
             case "12": // workscheduled
-                font_color = getFontColors(type, TREE_CONST.node_colors.workscheduled);
+                bg_color = TREE_CONST.state_flag_colors.workscheduled.bg;
                 break;
             case "14": // inreview
-                font_color = getFontColors(type, TREE_CONST.node_colors.inreview);
+                bg_color = TREE_CONST.state_flag_colors.inreview.bg;
                 break;
             case "15": // rework
-                font_color = getFontColors(type, TREE_CONST.node_colors.rework);
+                bg_color = TREE_CONST.state_flag_colors.rework.bg;
                 break;
             case "3": // completed
-                font_color = getFontColors(type, TREE_CONST.node_colors.completed);
+                bg_color = TREE_CONST.state_flag_colors.completed.bg;
                 break;
             case "4": // closedincomplete
-                font_color = getFontColors(type, TREE_CONST.node_colors.closedincomplete);
+                bg_color = TREE_CONST.state_flag_colors.closedincomplete.bg;
                 break;
             case "7": // cancelled
-                font_color = getFontColors(type, TREE_CONST.node_colors.cancelled);
+                bg_color = TREE_CONST.state_flag_colors.cancelled.bg;
                 break;
             default:
-                font_color = getFontColors(type, TREE_CONST.node_colors.colorDefault);
+                bg_color = TREE_CONST.state_flag_colors.colorDefault.bg;
         }
-        return font_color;
+        return bg_color;
     }
 
-    function getFontColors(type, fontColors) {
-        var font_color;
-        switch (type) {
-            case "bg":
-                font_color = fontColors.bg;
-                break;
-            case "text":
-                font_color = fontColors.text;
-                break;
-            case "warning":
-                font_color = fontColors.warning;
-                break;
-            case "hover":
-                font_color = fontColors.hover;
-                break;
-        }
-        return font_color;
-    }
-
+		// this function sets all toolbars to false
+		function _clearDirectiveHovers(){
+			c.data.showIcons = false;
+			c.data.operationalToolTipOpen = false;
+			c.data.assignmentToolTipOpen = false;
+			c.data.durationToolTipOpen = false;
+			c.data.actionToolTipOpen =false;
+			c.data.addSubActionToolTipOpen = false;
+			c.data.overPanel = false;
+			c.data.showWarning=false;
+			c.data.overWarningIcon=false;
+			c.data.warningToolTipOpen = false;
+			c.data.showOrder=false;
+			c.data.overOrder=false;
+			c.data.orderToolTipOpen=false;
+			c.data.showMembers = false;
+			c.data.overMember = false;
+			c.data.membersToolTipOpen = false;
+		}
+	
     // -----------------------------------------------------------------------------------------------------------------
     // START RECORD WATCHER BLOCK
     // -----------------------------------------------------------------------------------------------------------------
@@ -298,6 +420,7 @@
             var watcherChannel = amb.getChannelRW(table, filter);
             amb.connect();
             watcher = watcherChannel.subscribe(function(name) {
+								var requiresRedraw = false;
                 var changes = name.data.changes;
                 var sys_id = name.data.sys_id;
                 switch (name.data.operation) {
@@ -308,6 +431,9 @@
                             for (var change in changes) {
                                 if (c.data.fieldsInModel[changes[change]]) {
                                     nodeDataChanged = true;
+                                    if (changes[change] == 'order' || changes[change] == 'task_order') {
+																			requiresRedraw = true;
+																		}
                                     break;
                                 }
                             }
@@ -336,27 +462,31 @@
                         var nodeDataOfDeleted = diagram.model.findNodeDataForKey(sys_id);
                         if (nodeDataOfDeleted) {
                             diagram.model.removeNodeData(nodeDataOfDeleted);
-							
-							// 2.8.1 | 2022-12-19 | mmcc | DFCT0011241 - Draft task deleted, info message should NOT display; added if else if
-							if (c.data.selectedId == sys_id) {
-								c.data.isTopTaskOrNotDraft = true;
-								var parentNodeOfNodeDeleted =  diagram.findNodeForKey(nodeDataOfDeleted.parent);
-								
-								// when the selected node is the deleted node, try to select it's parent
-								if (parentNodeOfNodeDeleted) {
-									// make it the selected Node
-									diagram.select(parentNodeOfNodeDeleted);
-									nodeSelectionChanged(parentNodeOfNodeDeleted);
-								}
-								
-							} else if(c.data.selectedId != sys_id) {
-								var nodeSelectedItem = diagram.findNodeForKey(c.data.selectedId);
-								
-								// when the selected node is NOT the deleted node, re-select the selected node
-								nodeSelectionChanged(nodeSelectedItem);
-							}
+														// 2.8.1 | 2022-12-19 | mmcc | DFCT0011241 - Draft task deleted, info message should NOT display; added if else if
+														if (c.data.selectedId == sys_id) {
+															c.data.isTopTaskOrNotDraft = true;
+															var parentNodeOfNodeDeleted =  diagram.findNodeForKey(nodeDataOfDeleted.parent);
+
+															// when the selected node is the deleted node, try to select it's parent
+															if (parentNodeOfNodeDeleted) {
+																// make it the selected Node
+																diagram.select(parentNodeOfNodeDeleted);
+																nodeSelectionChanged(parentNodeOfNodeDeleted);
+															}
+
+														} else if(c.data.selectedId != sys_id) {
+															var nodeSelectedItem = diagram.findNodeForKey(c.data.selectedId);
+
+															// when the selected node is NOT the deleted node, re-select the selected node
+															nodeSelectionChanged(nodeSelectedItem);
+														}
                         }
                 }
+								_clearDirectiveHovers();
+								if(requiresRedraw){
+									//	drawTree();	
+									diagram.layoutDiagram(true);
+								}							
             });
         }
     }
@@ -405,6 +535,11 @@
                     date_number = date_number - tzOffset;
                     newNodeData[key] = date_number;
                 }
+                //  STRY0113883
+                if (field.type == 'photo' || field.type == 'profile') {
+                    // these are handled in a function b/c they need to post back to the server
+                    loadUserInfo(field.type, newNodeData.key, key, record[key].value, displayValue );
+                }							
             } //if field wasn't found do nothing
         }
 
@@ -491,6 +626,10 @@
                     date_number = date_number - tzOffset;
                     diagram.model.setDataProperty(nodeData, key, date_number);
                 }
+                if (field.type == 'photo'  || field.type == 'profile') {
+                    // these are handled in a function b/c they need to post back to the server
+                    loadUserInfo(field.type, nodeData.key, key, record[key].value, displayValue );
+                }							
             } //if field wasn't found do nothing
         }
         var nameValue = getTaskTitleNode(nodeData);
@@ -556,19 +695,42 @@
         checkDateWarnings(nodeData);
         diagram.model.updateTargetBindings(nodeData);
     }
+	
+		// STRY0113883 load user profile and/or Photo information
+		function loadUserInfo(fieldType, nodeKey, fieldName, value, displayValue){
+			c.data.getUserGUID = value;
 
+			if (fieldType == 'photo' ||
+					fieldType == 'profile') {
+				dtechOrganizationalUser.getUserProfile(value).then(function(response){
+					var userProfile = response.userProfile;
+					updateProfileData(nodeKey, fieldName, userProfile.name, userProfile.photo, userProfile);
+				});
+			}
+		}
+
+		function updateProfileData(nodeKey, fieldName, name, photo, updatedProfile){
+			// find the node to update again
+			var nodeData = diagram.model.findNodeDataForKey(nodeKey);
+			if (nodeData) {
+				nodeData[fieldName + '_photoName'] = name;
+				diagram.model.setDataProperty(nodeData, fieldName + '_photoName', name);
+
+				if(photo){
+					nodeData[fieldName + '_photo'] = photo;
+					diagram.model.setDataProperty(nodeData, fieldName + '_photo', photo);
+				}
+
+				if(updatedProfile){
+					nodeData[fieldName + '_profile'] = updatedProfile;
+					diagram.model.setDataProperty(nodeData, fieldName + '_profile', updatedProfile);
+				}
+				diagram.model.updateTargetBindings(nodeData);
+			}
+		}
+	
     function getTaskTitleNode(nodeData) {
-        var nodeOrder = "";
-        if (nodeData.order != null && nodeData.order != "null") {
-            nodeOrder = nodeData.order + ". ";
-        }
-
         var nodeTitle = nodeData.short_description;
-        if (nodeData.parent != '') nodeTitle = nodeOrder + nodeTitle; // NEW
-        // DFCT0011078 - STRY0127737 - updated name and details and separated number
-        if (nodeTitle.length > TREE_CONST.tree_name_max_length) {
-            nodeTitle = nodeTitle.substring(0, TREE_CONST.tree_name_max_length) + "...";
-        }
         return nodeTitle;
     }
 
@@ -609,11 +771,6 @@
                 nodeDetails += nodeData.state_DisplayValue;
                 break;
         }
-        // DFCT0011227
-        if (nodeDetails.length > TREE_CONST.tree_details_max_length) {
-            nodeDetails = nodeDetails.substring(0, TREE_CONST.tree_details_max_length) + "...";
-        }
-
         return nodeDetails;
     }
 
@@ -669,9 +826,9 @@
 		
 		// 2.8.1 | 2022-12-19 | mmcc | DFCT0011241 - Draft task deleted, info message should NOT display; added create outer
         if (evt.sys_id == c.data.selectedId) { // get called twice by gojs
-			_createOuterRoundedRectangle();
-			return;
-		}
+					_createOuterRoundedRectangle();
+					return;
+				}
 		
         evt.table = d.sys_class_name || c.data.table;
         c.data.selectedId = evt.sys_id;
@@ -683,8 +840,8 @@
 
         $location.search('table', evt.table).search('sys_id', evt.sys_id).search('spa', '1');
 		
-		// 2.8.1 | 2022-12-19 | mmcc | DFCT0011241 - Draft task deleted, info message should NOT display; added create outer
-		_createOuterRoundedRectangle();
+				// 2.8.1 | 2022-12-19 | mmcc | DFCT0011241 - Draft task deleted, info message should NOT display; added create outer
+				_createOuterRoundedRectangle();
 		
         $rootScope.$broadcast('$sp.list.click', evt);
         //$rootScope.$broadcast('data_table.click', evt);// KT - TLV - STRY0057360 - Macro Widget
@@ -803,38 +960,6 @@
     // END BLOCK
     // -----------------------------------------------------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------------------------------------------------
-    // START ICON MODALS
-    // -----------------------------------------------------------------------------------------------------------------
-    // NOTE: TODO - look at the standard TWJS modal widget used in template.  
-    //       All of the widgets in task should be able to use this same funtion.
-    //       If we replace spModal everywhere with this function we can change style of modals in one place.
-    openDurationModal = function(obj) {
-        // call common duration modal
-        var title = c.data.messages["Tasker - Title - Duration Modal"] + ': ' + obj.part.data.task_name;
-        twjs.openDurationModal(spModal, title, c.data.table, obj.part.data.key);
-    };
-
-    openAssignmentModal = function(obj) {
-        var title = c.data.messages["Tasker - Title - Assignment Modal"] + ': ' + obj.part.data.task_name;
-        twjs.openAssignmentModal(spModal, title, c.data.table, obj.part.data.key);
-    };
-
-    // STRY0109208 - Add Create Icon
-    openCreateModal = function(obj) {
-        var title = c.data.messages["Tasker - Add a Subtask"] + ': ' + obj.part.data.task_name;
-        var query = 'parent=' + obj.part.data.key;
-        twjs.openCreateModal(spModal, title, c.data.table, c.data.view, query, obj.part.data.u_servicenow_form_view);
-    };
-
-    openOperationalModal = function(obj) {
-        var title = c.data.messages["Tasker - Title - Operational Modal"] + ': ' + obj.part.data.task_name;
-        twjs.openOperationalModal(spModal, title, c.data.table, obj.part.data.key);
-    };
-    // -----------------------------------------------------------------------------------------------------------------
-    // END ICON MODALS
-    // -----------------------------------------------------------------------------------------------------------------
-
     // **************************************************************************************************************
     // STRY0119818 - NOTE: reorganized Task to put all of the repeated functions in the same block of code
     // TREE Code functions in all trees 
@@ -842,9 +967,33 @@
     // **************************************************************************************************************	
     $(window).on("resize", function() {
         // not sure why, but increasing the minHeight seems to work, but not sure why
-        TREE_CONST.minHeight = 12;
+//        TREE_CONST.minHeight = 435;
         resizeDiagram();
     });
+	
+		$scope.toggleLegend = function(){
+			c.data.hideLegend=!c.data.hideLegend;
+			$scope.data.preferences[CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME].value = !c.data.hideLegend;
+			$scope.data.setPreference = true;
+			// STRY0117600 - does not like diagram posted back to server
+			c.data.widgetTreeFooterToolbars[0].diagram = null;
+			c.data.widgetTreeHeaderToolbars[0].diagram = null;
+			spUtil.update($scope).then(function(){
+				// reset for other post backs
+				$scope.data.setPreference = false;
+				c.data.widgetTreeFooterToolbars[0].diagram = diagram;
+				c.data.widgetTreeHeaderToolbars[0].diagram = diagram;
+
+			});
+			
+			$timeout(function() {
+				if(diagram){
+					diagram.requestUpdate();	
+				}
+				_setActiveUnderDraftMessageMaxWidth();
+				
+			}, 200);
+		}
     // TREE HEADER TOOLBAR
     // STRY0117600 - this event is raised when the switch to horizontal icon is clicked 
     $scope.$on("$tasker-tree-toolbar-icons.switchToHorizontal", function() {
@@ -867,11 +1016,11 @@
             if (treeOrientation == 'Horizontal') {
                 treeNodeAngle = TREE_CONST.horizontalTreeAngle;
                 // this is handles positioning the status indicator
-                treeOrientationWithinBorder = "Vertical";
+//                treeOrientationWithinBorder = "Vertical";
             } else {
                 treeNodeAngle = TREE_CONST.verticalTreeAngle;
                 // this is handles positioning the status indicator
-                treeOrientationWithinBorder = "Horizontal";
+//                treeOrientationWithinBorder = "Horizontal";
             }
         }
 
@@ -942,6 +1091,7 @@
             // get the initial scale from the footer widget
             diagram.scale = Number.parseFloat(c.data.widgetTreeFooterToolbars[0].data.settings.diagramScale);
         }
+				_setActiveUnderDraftMessageMaxWidth();
         diagramInitCompleted = true;
     }
     // ***************************************
@@ -974,6 +1124,12 @@
 
     }
 
+		function _setActiveUnderDraftMessageMaxWidth(){
+			var stateLegendBoundRect = document.getElementById('divStateLegend').getBoundingClientRect();
+			var activeUnderDraftMessageBoundRect = document.getElementById('divActiveUnderDraftMessage').getBoundingClientRect();
+			$scope.activeUnderDraftMessageMaxWidth = stateLegendBoundRect.left - activeUnderDraftMessageBoundRect.left + "px";
+		}
+	
     function resizeDiagram() {
         // 2.8 | 2022-06-22 | mmcc | STRY0120303 - Task Tree Widget- Add Header and Footer area; deleted all commented out code
         if ($scope.data.map && $scope.data.map.length > 0) {
@@ -981,6 +1137,7 @@
             var node_select = diagram.findNodeForKey(c.data.selectedId);
             diagram.select(node_select);
         }
+				_setActiveUnderDraftMessageMaxWidth();
     }
 
     // NOTE: YOU ARE HERE
@@ -997,11 +1154,20 @@
                     initialContentAlignment: go.Spot.Default,
                     allowZoom: true,
                     // define the layout for the diagram
-                    layout: $go(go.TreeLayout, {
-                        angle: treeNodeAngle,
-                        nodeSpacing: TREE_CONST.spacingNode,
-                        layerSpacing: TREE_CONST.spacingLayer
-                    })
+                    layout: $go(go.TreeLayout, 
+																{angle: treeNodeAngle,
+																 nodeSpacing: TREE_CONST.spacingNode,
+																 layerSpacing: TREE_CONST.spacingLayer,
+																 sorting: go.TreeLayout.SortingAscending,
+																 setsPortSpot:false,
+																 setsChildPortSpot:false,
+																 comparer: function(pa,pb){
+																	 var da = pa.node.data;
+																	 var db = pb.node.data;
+																	 if(parseInt(da.order) < parseInt(db.order)) return -1;
+																	 if(parseInt(da.order) > parseInt(db.order)) return 1;
+																 }
+																})
                 });
         } else {
             // STRY0072032 - STRY0123997 no longer killing and rebuilding diagram, clear
@@ -1020,10 +1186,17 @@
         diagram.select(diagram.findNodeForKey(c.data.selectedId));
         diagram.allowVerticalScroll = true;
 
-        // Define a trivial link template with no arrowhead
-        diagram.linkTemplate = $go(go.Link, {
-            selectable: false
-        }, $go(go.Shape)); // the link shape
+ 			// Define a trivial link template with no arrowhead
+      diagram.linkTemplate =
+        $go(go.Link,
+          {
+            curve: go.Link.Bezier,
+            toEndSegmentLength: 30, fromEndSegmentLength: 30
+          },
+// RAJ - new tree
+// NOTE: move color to constants
+          $go(go.Shape, { strokeWidth: 1.5, stroke: "#A0A9AD" }) // the link shape, with the default black stroke
+        );
     }
     // **************************************************************************************************************
     // STRY0119818 - NOTE: reorganized Template and OU to put all of the repeated functions in the same block of code
@@ -1036,57 +1209,82 @@
     // This block contains the functions that define the tree structure and capabilities
     // START BLOCK
     // **************************************************************************************************************	
-    // Define a simple node template consisting of text followed by an expand/collapse button
-    function _createNodeTemplate() {
-        var nodeTemplate =
-            $go(go.Node, treeOrientation, {
-                    selectionAdorned: false,
-                    selectionChanged: nodeSelectionChanged,
-                    isTreeExpanded: true,
-                    isTreeLeaf: true
-                }, // this event handler is defined below
-                _createTreeNode()
-                // NOTE: The Tree Expander button is a differnt for task tree b/c we have the status indicator still outside the triangle.
-                //       When we change the color to a flat color and move the status indicator inside the rectangle this will change to look like all the others.
-            );
-
-        return nodeTemplate;
-    }
-
-    function _createTreeNode() {
-        var treeNode =
-            $go(go.Panel, treeOrientationWithinBorder, // everything within the border
-                $go(go.Panel, treeOrientation, // the row of status indicators
-                    makeIndicator("status", "10"),
-                    $go(go.Panel, "Auto",
-                        _createOuterRoundedRectangle(),
-                        _createVerticalMainPanel()
-                    ),
-                    // this was overkill for small diagrams
-                    $go("TreeExpanderButton", {
-                        alignment: go.Spot.Default
-                    }, {
-                        visible: true
-                    })
-                )
-            );
-        return treeNode;
-    }
-
+		function _createHoverRoundedRectangle(){
+			var hoverRoundedRectangle = 
+					$go(go.Shape, "RoundedRectangle",
+							{name: "hoverRoundedRectangle", 
+							 portId: "",  // now the Shape is the port, not the whole Node
+							 strokeWidth:TREE_CONST.selectedOutlineWidth,
+							 stroke: TREE_CONST.selectedOutlineBorderColor,
+							 width: TREE_CONST.nodeOuterRectangelWidth + TREE_CONST.hoverRectangleOffset,
+							 height: TREE_CONST.nodeOuterRectangelHeight + TREE_CONST.hoverRectangleOffset,
+							 parameter1:10
+							},
+							
+							new go.Binding("toSpot", "", function()
+														 {var newToSpot;
+															if(treeOrientation == "Horizontal"){
+																newToSpot = new go.Spot(0,0.5, TREE_CONST.leftTreePortOffset, 0);
+															} else if(treeOrientation == "Vertical"){
+																newToSpot = new go.Spot(0.5,0, 0, TREE_CONST.topTreePortOffset);
+															}
+															return newToSpot;
+														 }),
+							new go.Binding("fromSpot", "", function()
+														 {var newfromSpot;
+															if(treeOrientation == "Horizontal"){
+																newfromSpot = new go.Spot(1,0.5, TREE_CONST.rightTreePortOffset, 0);
+															} else if(treeOrientation == "Vertical"){
+																newfromSpot = new go.Spot(0.5,1, 0, TREE_CONST.bottomTreePortOffset);
+															}
+															return newfromSpot;
+														 }),
+							new go.Binding("stroke", "isSelected", function(s) 
+														 {if (s)
+															 return TREE_CONST.selectedOutlineBorderColor;
+															else
+																return "#FFFFFF";
+														 }).ofObject(""),
+							new go.Binding("fill", "isSelected", function(s) 
+														 {if (s)
+															 return TREE_CONST.selectedOutlineBorderColor;
+															else
+																return "#FFFFFF";
+														 }).ofObject("")
+						 );
+			return hoverRoundedRectangle;
+		}	
+	
     function _createOuterRoundedRectangle() {
         // STRY0113936, STRY0111888 - set width and height
         var roundedRectangle =
-            $go(go.Shape, "RoundedRectangle", {
-                    strokeWidth: TREE_CONST.outlineWidth,
-                    width: TREE_CONST.nodeOuterRectangelWidth,
-                    height: TREE_CONST.nodeOuterRectangelHeight,
-                    fill: TREE_CONST.roundedRectangleFill
+            $go(go.Shape, "RoundedRectangle", 
+								{name: "OuterRoundedRectangle",
+								 strokeWidth: TREE_CONST.outlineWidth,
+								 width: TREE_CONST.nodeOuterRectangelWidth,
+								 height: TREE_CONST.nodeOuterRectangelHeight,
+// TODO - determine if fill can be diaganal lines
+//                    fill: TREE_CONST.roundedRectangleFill,
+								 fill: TREE_CONST.node_active_bg,
+								 stroke: TREE_CONST.node_border,
+								 margin: TREE_CONST.roundedRectangleMargin,
+								 // added parameter 1 to increase rounding form 5 to 10
+								 parameter1:10
                 },
+								new go.Binding("stroke", "status", function(s) 
+															 {return _setNodeOutline(s);
+															 })
+
+								
+/*
+								,
+// RAJ - new tree
+// changed unselected border
                 new go.Binding("stroke", "isSelected", function(s) {
                     if (s)
                         return TREE_CONST.node_selected_border;
                     else
-                        return null;
+                        return "#757575";
                 }).ofObject(""),
                 // if we want to have same border width even on selected, remove this section
                 new go.Binding("strokeWidth", "isSelected", function(s) {
@@ -1106,202 +1304,521 @@
                 new go.Binding("fill", "state", function(t) {
                     return getStateColors(t, "bg");
                 })
+*/
+								
             );
         return roundedRectangle;
     }
 
+		function _getFontStroke(activeColor,isActive){
+			var color;
+			if(isActive){
+				color = activeColor;
+			} else {
+				color = TREE_CONST.textStrokeInactive;
+			}
+			return color;
+		}
+	
+		function _createTaskStateIndicator(){
+			var taskStateIndicator = $go(go.Panel, "Horizontal",
+																	 {alignment: new go.Spot(0,0.5, TREE_CONST.outlineWidth+TREE_CONST.selectedOutlineWidth, 0),
+																		alignmentFocus: go.Spot.Left,
+																		height: TREE_CONST.nodeOuterRectangelHeight - TREE_CONST.outlineWidth,
+																		width: TREE_CONST.taskStateIndicatorWidth,
+																	 },
+																	 $go(go.Panel, "Auto",
+																			 {stretch: go.GraphObject.Fill,
+																				defaultStretch: go.GraphObject.Vertical
+																			 },
+																			 $go(go.Shape, 'RoundedLeftRectangle',
+																					 {strokeWidth: 0,
+																						width:TREE_CONST.taskStateIndicatorWidth,
+																						fill: TREE_CONST.roundedRectangleFill,
+																						parameter1:10},
+																					 new go.Binding("fill", "state", function(t) 
+																													{return getStateColorFlag(t);
+																													})
+																					)
+																			)
+																	);
+			return taskStateIndicator;
+		}	
+	
     function _createVerticalMainPanel() {
         var mainPanel =
             $go(go.Panel, "Auto",
-                $go(go.Panel, "Vertical",
-                    // DFCT0011134 - STRY0127737 - change name and number display
-                    $go(go.Panel, "Horizontal",
-
-                        _createNumberHeader(),
-                        _createIconPanel()
-                    ),
-                    // DFCT0010761 =- changed the height to 35, marin to margin: new go.Margin(0, 5, 0, 5),
-                    $go(go.Panel, "Vertical", {
-                            alignment: go.Spot.Left,
-                            margin: TREE_CONST.nodeTextPanelMargin,
-                            minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight),
-                            maxSize: new go.Size(TREE_CONST.textPanelMaxWidth, TREE_CONST.textPanelMaxHeight)
-                        },
-                        $go(go.TextBlock, {
-                                alignment: go.Spot.Left,
-                                text: "verticalAlignment: Center",
-                                textAlign: "left",
-                                wrap: go.TextBlock.WrapFit,
-                                font: TREE_CONST.fontStyle,
-                                stroke: TREE_CONST.textStrokeColor
-                            },
-                            new go.Binding("stroke", "state", function(t) {
-                                return getStateColors(t, "text");
-                            }),
-                            new go.Binding("text", "name")
-                        ),
-                        $go(go.TextBlock, {
-                                alignment: go.Spot.Left,
-                                text: "verticalAlignment: Center",
-                                textAlign: "left",
-                                wrap: go.TextBlock.WrapFit,
-                                font: TREE_CONST.fontStyleNodeDetails,
-                                stroke: TREE_CONST.textStrokeColor
-                            },
-                            new go.Binding("stroke", "state", function(t) {
-                                return getStateColors(t, "text");
-                            }),
-                            new go.Binding("text", "nodeDetails")
-                        )
-                    )
-                )
-            );
-        return mainPanel;
-    }
-
-    openIconForm = function(obj, iconName) {
-        switch (iconName) {
-            case 'AddIcon':
-                openCreateModal(obj);
-                break;
-            case 'DurationIcon':
-                openDurationModal(obj);
-                break;
-            case 'UserIcon':
-                openAssignmentModal(obj);
-                break;
-            case 'OperationalIcon':
-                openOperationalModal(obj);
-                break;
-        }
-    };
+								$go(go.Panel, "Spot",  // Horizontal panel for Image and Icons
+										{alignment: go.Spot.Left},
+												$go(go.Panel, "Vertical", 
+														{alignment: go.Spot.Left,
+														 margin: new go.Margin(0,TREE_CONST.nodeTextPanelRightMargin,0, TREE_CONST.nodeTextPanelLeftMargin),
+														 minSize: new go.Size(TREE_CONST.textPanelMinWidth, TREE_CONST.textPanelMinHeight),
+														 maxSize: new go.Size(TREE_CONST.textPanelMaxWidth, TREE_CONST.textPanelMaxHeight)
+														},
+														$go(go.TextBlock, 
+																{alignment: go.Spot.Left,
+																 text: "verticalAlignment: Center",
+																 textAlign: "left",
+																 wrap: go.TextBlock.None,
+																 overflow: go.TextBlock.OverflowEllipsis,
+																 font: TREE_CONST.fontStyle,
+																 stroke: TREE_CONST.textStrokeColor
+																},
+																new go.Binding("text", "name"),
+																new go.Binding("stroke", "active", 
+																							 function(active)
+																							 {return _getFontStroke(TREE_CONST.textStrokeColor,active)
+																							 })																
+															 ),
+														_createNumberHeader(),
+														$go(go.TextBlock, 
+																{alignment: go.Spot.Left,
+																 text: "verticalAlignment: Center",
+																 textAlign: "left",
+																 wrap: go.TextBlock.WrapFit,
+																 font: TREE_CONST.fontStyleNodeDetails,
+																 stroke: TREE_CONST.textStrokeNodeDetails
+																},
+																new go.Binding("text", "nodeDetails"),
+																new go.Binding("stroke", "active", 
+																							 function(active)
+																							 {return _getFontStroke(TREE_CONST.textStrokeNodeDetails,active)
+																							 })
+															 )
+													 )
+										)
+							 );
+			return mainPanel;
+		}
 
     function _createNumberHeader() {
         var numberHeader =
             $go(go.TextBlock, {
                     alignment: go.Spot.Left,
-                    width: TREE_CONST.numberPanelWidth
-                },
-
-
-                {
-                    font: TREE_CONST.fontStyleTaskerNumber
+                    stroke: TREE_CONST.textStrokeTaskerNumber,
+                    font: TREE_CONST.fontStyleTaskerNumber							
                 },
                 new go.Binding("text", "", function(data) {
                     return data.taskernumber;
                 }),
-                new go.Binding("stroke", "", function(data) {
-                    var iconStroke = getStateColors(data.state, "text");
-                    return iconStroke;
-                })
+// TODO - this needs to change to use state instead of active
+								new go.Binding("stroke", "active", 
+															 function(active)
+															 {return _getFontStroke(TREE_CONST.textStrokeTaskerNumber,active)
+															 })
+								
             );
         return numberHeader;
     }
+	
 
-    function _createIcon(iconName, iconText) {
-        var icon =
-            $go(go.TextBlock, {
-                    name: iconName,
-                    text: iconText,
-                    margin: new go.Margin(TREE_CONST.icon_top_margin, TREE_CONST.icon_right_margin, TREE_CONST.icon_bottom_margin, TREE_CONST.icon_left_margin),
-                    alignment: go.Spot.Right,
-                    font: TREE_CONST.icon_font,
-                    editable: false,
-                    isMultiline: false,
-                    isActionable: true,
-                    click: function(e, obj) {
-                        openIconForm(obj, iconName);
-                        e.handled = true;
-                    },
-                    mouseEnter: function(e, obj) {
-                        obj.saveStroke = obj.stroke;
-                        obj.stroke = getStateColors(obj.part.data.state, "hover");
-                    },
-                    mouseLeave: function(e, obj) {
-                        obj.stroke = obj.saveStroke;
-                        obj.saveStroke = null;
-                    }
-                },
-                new go.Binding("toolTip", "", function(nodeData) {
-                    return toolTipJSON(iconName, nodeData);
-                }),
-                new go.Binding("text", "", function(data) {
-                    if (iconName == 'ExclamationIcon') {
-						// STRY0131003 - add ooo lookup to if statement - DFCT0012129
-                        if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
-                            data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
-							data.warning.waitStateOrderBy ||
-                            data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-                            data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty || _isAnyUserOOOforTask(data))
-                            return TREE_CONST.font_awesome_exclamation_triangle_o;
-                        else
-                            return '';
-                    } else {
-                        return iconText;
-                    }
-                }),
-                //this binds the stroke color to the level property of the data mapping, the function uses the level to determine the color
-                //the fake logic sets the warning color, otherwise use the default color.
-                new go.Binding("stroke", "", function(data) {
-                    var iconStroke = getStateColors(data.state, "text");
-                    switch (iconName) {
-                        case 'UserIcon':
-                            // STRY0095897 - STRY0131003 - STRY0131003 - add ooo lookup to if statement
-                            if (data.warning.primaryAssigneeEmpty || data.warning.assignedMemberEmpty || _isAnyUserOOOforTask(data))
-                                iconStroke = getStateColors(data.state, "warning");
-                            else
-                                iconStroke = getStateColors(data.state, "text");
-                            break;
-                        case 'DurationIcon':
-							// DFCT0012129
-                            if (data.warning.noSuspenseDate || !data.warning.isSuspenseDateAfterChildren ||
-                                data.warning.isTopSuspenseDateAfterExternalInboundDate || data.warning.isTopSuspenseDateBeforeExternalOutboundDate ||
-                                data.warning.isSuspenseDateAfterParent || data.warning.waitStatewithNoSubtasks ||
-								data.warning.waitStateOrderBy)
-                                iconStroke = getStateColors(data.state, "warning");												
-                            else
-                                iconStroke = getStateColors(data.state, "text");
-                            break;
-                        case 'ExclamationIcon':
-                            iconStroke = getStateColors(data.state, "warning");
-                            break;
-                    }
-                    return iconStroke;
-                }),
-                new go.Binding("visible", "", function(data) {
-                    if (iconName == 'AddIcon') {
-                        return (data.canCreateSubTask == true);
-                    } else {
-                        return true;
-                    }
-                })
-            );
-        return icon;
-    }
+    // -----------------------------------------------------------------------------------------------------------------
+    // START TOOLTIPS
+    // -----------------------------------------------------------------------------------------------------------------
+		function _membersShowHide(memberPic, show){
+			var memberPanelPosition;
+			var memberDiv;
+			var nodeObject;
+			var docLoc;
+			$scope.data.item_id = memberPic.part.data.key;
+			// clear member object if not same id
+			if(!$scope.data.membersObject || $scope.data.membersObject.taskId != $scope.data.item_id){
+				c.data.membersObject = {};
+				c.data.membersObject.objectType = "task";
+			}
 
-    function _createIconPanel() {
-        // STRY0109208 - Add Create Icon
-        var iconPanel =
-            $go(go.Panel, "Horizontal",
-                // removing width allows the width to be size of text.
-                {
-                    alignment: go.Spot.Right,
-                    width: TREE_CONST.icon_panel_width,
-                    isOpposite: true
-                },
+			c.data.showMembers=show;
+			if(show){
+				nodeObject = diagram.findNodeForKey($scope.data.item_id);
+				var outerRoundedRectangle = nodeObject.findObject('OuterRoundedRectangle');
+				
+				memberPanelPosition = outerRoundedRectangle.getDocumentPoint(go.Spot.Left);
+				docLoc = diagram.transformDocToView(memberPanelPosition);
+				memberDiv = angular.element(document.getElementById('memberPanel'))[0];
+				
+				memberDiv.style.left = Math.ceil(docLoc.x + TREE_CONST.memberPanelLeftOffset) + 'px';
+				memberDiv.style.top = Math.ceil(docLoc.y + TREE_CONST.memberPanelTopOffset) + 'px';				
+			}
+			$timeout(function() {
+				$scope.$apply();
+			});	
+		}
+	
+		function _getMaxRouteOrder(orderPanel){
+			var nodePanel = orderPanel.part;
+				var nodeParent = nodePanel.findTreeParentNode();
+			var itSiblings = nodeParent.findTreeChildrenNodes();
+			var maxOrder = 0;
+			while (itSiblings.next()) {
+				var sibling = itSiblings.value;
+// TODO - check this against route order in directive for task vs template
+				var curOrder = parseInt(sibling.data.order);
+				if( curOrder > maxOrder){
+					maxOrder = curOrder;
+				}
+			}
+			return maxOrder;
+		}
+	
+		function _orderCircleShowHide(orderPanel, show){
+			var orderPanelPosition;
+			var orderCircleSpan;
+			var docLoc;
+			$scope.data.item_id = orderPanel.part.data.key;
+// TODO - check this against route order in directive for task vs template			
+			// get max order
+			c.data.orderObject.max_route_order = {};
+			c.data.orderObject.max_route_order.value = _getMaxRouteOrder(orderPanel);
+			c.data.orderObject.route_order = {};
+// changed, this, but not above, check directive
+			c.data.orderObject.route_order.value = parseInt(orderPanel.part.data.order);
+			c.data.showOrder=show;
+			if(show){
+				orderPanelPosition = orderPanel.getDocumentPoint(go.Spot.Left);
+				docLoc = diagram.transformDocToView(orderPanelPosition);
+				orderCircleSpan = angular.element(document.getElementById('orderCircle'))[0];
+				orderCircleSpan.style.left = Math.ceil(docLoc.x + TREE_CONST.leftRouteCircleOffset) + 'px';
+				orderCircleSpan.style.top = Math.ceil(docLoc.y + TREE_CONST.topCircleSpanOffset) + 'px';
+			}
+			$timeout(function() {
+				$scope.$apply();
+			});	
+		}
+	
+    // common styling for each indicator
+    function _createOrderCircle() { // the data property name
+			var orderCircle = 
+					$go(go.Shape, "Circle",
+							{width: 16,
+							 height: 16,
+							 fill: TREE_CONST.orderNormalFill,
+							 margin: 5
+							},
+							new go.Binding("alignment", "", function()
+														 {var newAlignment;
+															if(treeOrientation == "Horizontal"){
+																newAlignment = new go.Spot(0,0.5, TREE_CONST.leftOrderOffset, 0);
+															} else if(treeOrientation == "Vertical"){
+																newAlignment = new go.Spot(0.5,0, 0, TREE_CONST.topOrderOffset);
+															}
+															return newAlignment;
+														 }),
+							new go.Binding("visible", "", function (data)
+														 {if(data.parent){
+															 return true;
+														 } else {
+															 return false;
+														 }})
+						 );
+			return orderCircle;
+		}
+	
+		function _createOrderPanel(){
+			var orderPanel = 
+					$go(go.Panel, "Spot",  // panel for Order
+							new go.Binding("alignment", "", function()
+														 {var newAlignment;
+															if(treeOrientation == "Horizontal"){
+																newAlignment = new go.Spot(0,0.5, TREE_CONST.leftOrderOffset, 0);
+															} else if(treeOrientation == "Vertical"){
+																newAlignment = new go.Spot(0.5,0, 0, TREE_CONST.topOrderOffset);
+															}
+															return newAlignment;
+														 }),
+							new go.Binding("visible", "", function (data)
+														 {if(data.parent){
+															 return true;
+														 } else {
+															 return false;
+														 }}),
+							{mouseEnter: function(e, obj) 
+							 {_orderCircleShowHide(obj, true);},
+							 mouseLeave: function(e, obj)
+							 {_orderCircleShowHide(obj, false);}
+							},
+							$go(go.TextBlock,
+									{alignment: go.Spot.Center,
+									 stroke: TREE_CONST.orderTextColor,
+									 font: TREE_CONST.fontStyleOrderCircle
+									},
+									new go.Binding("text", "", function(data) 
+																 {return data.order;}
+																)
+								 )
+						 );
+			return orderPanel;
+		}
+	
+		function _iconPanelShowHide(nodeObject, show){
+			var iconPanelPosition;
+			var iconSpan;
+			var docLoc;
+			var outerRoundedRectangle = nodeObject.findObject('OuterRoundedRectangle');
+			
+			$scope.data.item_id = nodeObject.part.data.key;
+			c.data.addSubObject.title =	c.data.messages["Tasker - Add a Subtask"] + ': ' + nodeObject.part.data.name;
+			c.data.showIcons=show;
+			if(show){
+				outerRoundedRectangle.stroke=TREE_CONST.node_selected_border;
+				
+				iconPanelPosition = outerRoundedRectangle.getDocumentPoint(go.Spot.TopCenter);
+				docLoc = diagram.transformDocToView(iconPanelPosition);
+				iconSpan = angular.element(document.getElementById('iconSpan'))[0];
+				iconSpan.style.left = Math.ceil(docLoc.x + TREE_CONST.leftIconPanelOffset) + 'px';
+				iconSpan.style.top = Math.ceil(docLoc.y + TREE_CONST.topIconPanelOffset) + 'px';				
+			} else {
+				outerRoundedRectangle.stroke=_setNodeOutline(nodeObject.part.data.status);
+			}
+			$timeout(function() {
+				$scope.$apply();
+			});
+		}	
+	
+		function _setNodeOutline(status){
+			switch (status) {
+				case "Projected on time":
+					return TREE_CONST.node_border;
+				case "Warning":
+					return TREE_CONST.node_status_warning;
+				case "Critical":
+					return TREE_CONST.node_status_critical;
+				default:
+					return TREE_CONST.node_border;
+			}
 
-                _createIcon('AddIcon', TREE_CONST.font_awesome_plus_o),
-                _createIcon('DurationIcon', TREE_CONST.font_awesome_calendar_o),
-                _createIcon('UserIcon', TREE_CONST.font_awesome_user_o),
-                // STRY0124682
-                _createIcon('OperationalIcon', TREE_CONST.font_awesome_info_o),
-                //this binds the exclamation icon to the duration warning  property of the data mapping, 
-                //the function uses the level determine if the icon is added or not
-                _createIcon('ExclamationIcon', TREE_CONST.icon_warning_stroke)
-            );
-        return iconPanel;
-    }
+		}
 
+		function _warningiconShowHide(warningPic, show){
+			var warningPanelPosition;
+			var iconSpan;
+			var docLoc;
+			$scope.data.item_id = warningPic.part.data.key;
+			c.data.showWarning=show;
+			if(show){
+				warningPanelPosition = warningPic.getDocumentPoint(go.Spot.Left);
+				docLoc = diagram.transformDocToView(warningPanelPosition);
+				iconSpan = angular.element(document.getElementById('warningIcon'))[0];
+				iconSpan.style.left = Math.ceil(docLoc.x + TREE_CONST.leftWarningIconOffset) + 'px';
+				iconSpan.style.top = Math.ceil(docLoc.y + TREE_CONST.topWarningIconOffset) + 'px';				
+			}
+			$timeout(function() {
+				$scope.$apply();
+			});	
+		}
+	
+	
+		function _createStatusIcon(imageName){
+			var statusPic = $go(go.Picture,
+							{source: imageName,
+							 background: TREE_CONST.statusPanelStokeColor,
+							 margin: TREE_CONST.statusIconMargin,
+							 
+// todo - is there a hover for status?
+//							 ,
+//							 mouseEnter: function(e, obj) 
+//							 {_warningiconShowHide(obj, true);},
+//							 mouseLeave: function(e, obj)
+//							 {_warningiconShowHide(obj, false);}
+							},
+							 new go.Binding("visible", "", function (data)
+																 {var picVisible = 
+																		 (imageName == "x_153465_discovert.Warning16.svg" && data.status=="Warning") ||
+																		 (imageName == "x_153465_discovert.Error16.svg" && data.status=="Critical")
+																	return	picVisible;
+																 })
+						 );
+			return statusPic;
+		}
+	
+		function _createStatusShape(shape){
+			var statusShape = $go(go.Shape, shape,
+									{height:TREE_CONST.statusPanelHeight,
+									 width:TREE_CONST.statusPanelWidth,
+									 strokeWidth:TREE_CONST.statusPanelStrokeWidth,
+									 stroke:TREE_CONST.statusPanelStokeColor
+									},
+									new go.Binding("visible", "", function (data)
+																 {var shapeVisible = 
+																		 (shape == "Triangle" && data.status=="Warning") ||
+																		 (shape == "Circle" && data.status=="Critical")
+																	return	shapeVisible;
+																 })
+								 );
+			return statusShape;
+		}
+	
+		function _createStatusPanel(){
+			var statusPanel = 
+					$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+							{name: "statusPanel",
+							 scale:1,
+							 isClipping:true,
+							 alignment: new go.Spot(0, 1, TREE_CONST.statusPanelXoffset, TREE_CONST.statusPanelYoffset)
+							},
+							new go.Binding("visible", "", function (data){
+									var statusVisible = data.status=="Critical" ||
+											data.status=="Warning";
+									return statusVisible;
+									}),
+							_createStatusShape("Triangle"),
+							_createStatusShape("Circle"),
+							_createStatusIcon("x_153465_discovert.Error16.svg"),
+							_createStatusIcon("x_153465_discovert.Warning16.svg")
+						 );
+			return statusPanel;
+		}
+		
+		function _createWarningIcon(){
+			var warningIcon = 
+					$go(go.Picture,
+							{source: "x_153465_discovert.NodeWarning24.svg",
+							 margin: TREE_CONST.warningIconMargin,
+							 background: TREE_CONST.warningPanelStokeColor,
+							 mouseEnter: function(e, obj) 
+							 {_warningiconShowHide(obj, true);},
+							 mouseLeave: function(e, obj)
+							 {_warningiconShowHide(obj, false);}
+							}
+						 ); // end panel holding circle and unlock icon
+			return warningIcon;
+		}
+	
+		function _createWarningPanel(){
+			var warningPanel = 
+					$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+							{name: "warningPanel",
+							 scale:1,
+							 isClipping:true,
+							 alignment: new go.Spot(1, 0, TREE_CONST.warningPanelXoffset, TREE_CONST.warningPanelYoffset)
+							},		
+							new go.Binding("visible", "", function (nodeData){
+  								var durationExclamation = nodeData.warning.noSuspenseDate || !nodeData.warning.isSuspenseDateAfterChildren ||
+											nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks ||
+											nodeData.warning.waitStateOrderBy || nodeData.warning.isTopSuspenseDateAfterExternalInboundDate ||
+											nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate;
+									var assignmentExclamation = nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty || _isAnyUserOOOforTask(nodeData);
+									return durationExclamation || assignmentExclamation;
+									}),
+							new go.Binding("fill", "isSelected", function(s) 
+														 {if (s)
+															 return TREE_CONST.selectedOutlineBorderColor;
+															else
+																return "#FFFFFF";
+														 }).ofObject(""),
+							$go(go.Shape,"Triangle",
+									{height:TREE_CONST.warningPanelHeight,
+									 width:TREE_CONST.warningPanelWidth,
+									 strokeWidth:TREE_CONST.warningPanelStrokeWidth,
+									 stroke:TREE_CONST.warningPanelStokeColor}),
+							_createWarningIcon()
+							)
+			return warningPanel;
+		}
+	
+		function createProfilePicCircle(picNum){
+			// TODO - move offset to constants
+			var picOffset = picNum * TREE_CONST.profilePicOffset;
+			// STRY0111888 - added outer circle for border
+			var profilePicCricle =
+					$go(go.Shape, "Circle", 
+							{width: TREE_CONST.profilePicCircleSize, height: TREE_CONST.profilePicCircleSize, strokeWidth: TREE_CONST.outlineWidth,
+							 alignment: new go.Spot(0, 0, TREE_CONST.leftPicCornerOffset + picOffset, TREE_CONST.topPicCornerOffset),
+							 fill:TREE_CONST.profilePicFill,
+							 stroke:TREE_CONST.profilePicBorder
+							},
+							{mouseEnter: function(e, obj) 
+							 {_membersShowHide(obj, true);},
+							 mouseLeave: function(e, obj)
+							 {_membersShowHide(obj, false);}
+							}
+						 );
+			return profilePicCricle;
+		}
+
+	function createProfilePicPhoto(fieldName, picNum){
+		// TODO - move offset to constants
+		var picOffset = picNum * TREE_CONST.profilePicOffset;
+
+		//STRY0111888 - changed alignment and works with Spot panel above
+		var profilePicPhoto = 
+				$go(go.Panel, "Spot", // panel to hold the image clipped into a circle
+						{isClipping: true,	
+						 alignment: new go.Spot(0, 0, TREE_CONST.leftPicCornerOffset + picOffset, TREE_CONST.topPicCornerOffset)//,
+						}, 
+						// STRY0113936
+						$go(go.Shape, "Circle", 
+								{width: TREE_CONST.profilePicSize, 
+								 strokeWidth: TREE_CONST.outlineWidth,
+								 fill:TREE_CONST.profilePicFill
+								}),
+						// this is a special picture just for the user
+						$go(go.Picture, 
+								{desiredSize: new go.Size(TREE_CONST.profilePicSize, TREE_CONST.profilePicSize),
+								 visible: true,
+								 imageStretch: go.GraphObject.UniformToFill
+								}, 
+								new go.Binding("source", "", function(data)
+															{var photo = "";
+															 var profile = data[fieldName + "_profile"];
+															 if(profile && profile != "" && profile!=null && profile!=undefined){
+																 var lphoto = profile.photo;
+																 if(lphoto && lphoto != "" && lphoto!=null && lphoto!=undefined){
+																	 photo = lphoto;
+																 }
+															 }
+															 return photo;
+															}), 
+								new go.Binding("name",fieldName + "_photoName"),
+								new go.Binding("visible", "", function(data)
+															 {var visible = false;
+																var profile = data[fieldName + "_profile"];
+																if(profile && profile != "" && profile!=null && profile!=undefined){
+																	var photo = profile.photo;
+																	if(photo && photo != "" && photo!=null && photo!=undefined){
+																		visible = true;
+																	} else {
+																		visible = false;
+																	}
+																}
+																return visible;
+															 })
+							 ), // end image picture object							 
+						
+						// added initials when photo doesn't exist.
+						// add textbox first and always show, then hide image unless image exists
+						$go(go.TextBlock, 
+								{font: TREE_CONST.fontStyleProfileInitials, 
+								 stroke: TREE_CONST.profilePicTextStroke,
+								 visible:false
+								},
+								new go.Binding("text", "", function(data)
+															 {var initials="?";
+																var profile = data[fieldName + "_profile"];
+																if(profile && profile.initials != undefined &&
+																	profile.initials !=""){
+																	initials = profile.initials;
+																}
+																return initials;
+															 }),
+								new go.Binding("visible", "", function(data)
+															 {var visible = true;
+																var profile = data[fieldName + "_profile"];
+																if(profile && profile != "" && profile!=null && profile!=undefined){
+																	var photo = profile.photo;
+																	if(photo && photo != "" && photo!=null && photo!=undefined){
+																		visible = false;
+																	} else {
+																		visible = true;
+																	}
+																}
+																return visible;
+															 })
+							 )
+					 ); // end panel holding circle and picture
+		return profilePicPhoto;
+	}
+	
     // common styling for each indicator
     function makeIndicator(propName, label) { // the data property name
         return $go(go.Shape,
@@ -1326,35 +1843,111 @@
             })
         );
     }
+	
+    function _createTreeNode() {
+			
+// NOTE: TODO - NEED TO PUT CRITICAL INDICATOR IN MAIN PANEEL
+//								The Tree Expander button is a differnt for task tree b/c we have the status indicator still outside the triangle.
+//       When we change the color to a flat color and move the status indicator inside the rectangle this will change to look like all the others.
+
+        var treeNode =
+					$go(go.Panel, "Spot",
+							_createHoverRoundedRectangle(),							
+							_createOuterRoundedRectangle(),
+_createTaskStateIndicator(),
+							_createVerticalMainPanel(),
+							createProfilePicCircle(2),
+							createProfilePicPhoto("u_task_requester",2),
+							createProfilePicCircle(1),
+							createProfilePicPhoto("u_reviewer",1),
+							createProfilePicCircle(0),
+							createProfilePicPhoto("assigned_to",0),
+							_createWarningPanel(),
+// TODO - you are here figure out how to get status passed down
+_createStatusPanel(),
+							_createOrderCircle(),
+							_createOrderPanel() 
+						 );
+			return treeNode;
+    }
+	
+//    function _createTreeNode() {
+//        var treeNode =
+//            $go(go.Panel, treeOrientationWithinBorder, // everything within the border
+//                $go(go.Panel, treeOrientation, // the row of status indicators
+//                    makeIndicator("status", "10"),
+//                    $go(go.Panel, "Auto",
+//                        _createOuterRoundedRectangle(),
+//                        _createVerticalMainPanel()
+//                    ),
+//                    // this was overkill for small diagrams
+//                    $go("TreeExpanderButton", {
+//                        alignment: go.Spot.Default
+//                    }, {
+//                        visible: true
+//                    })
+//                )
+//            );
+//        return treeNode;
+//    }
+
+    // Define a simple node template consisting of text followed by an expand/collapse button
+//    function _createNodeTemplate() {
+//// RJ - New Tree
+////				gojsRoundedRectangles.addRoundedLeftRectangle(go);
+//			
+//        var nodeTemplate =
+//            $go(go.Node, treeOrientation, {
+//                    selectionAdorned: false,
+//                    selectionChanged: nodeSelectionChanged,
+//                    isTreeExpanded: true,
+//                    isTreeLeaf: true
+//                }, // this event handler is defined below
+//                _createTreeNode(),
+//								$go("TreeExpanderButton") // this was overkill for small diagrams								
+//            );
+//        return nodeTemplate;
+//    }
+
+		function _createNodeTemplate() {
+				gojsRoundedRectangles.addRoundedLeftRectangle(go);
+        var nodeTemplate = 
+						$go(go.Node, treeOrientation,
+								{selectionAdorned: false,
+								 selectionChanged: nodeSelectionChanged,
+								 isTreeExpanded: true,
+								 isTreeLeaf: true
+								}, // this event handler is defined below
+								
+								// on hover over node, show the icons
+								{mouseEnter: function(e, obj) {_iconPanelShowHide(obj, true);},
+								 mouseLeave: function(e, obj) {_iconPanelShowHide(obj, false);}
+								},
+								_createTreeNode(),
+								$go("TreeExpanderButton", // this was overkill for small diagrams
+										new go.Binding("alignment", "", function()
+																	 {var newAlignment;
+																		if(treeOrientation == "Horizontal"){
+																			newAlignment = new go.Spot(1,0.5, TREE_CONST.rightTreeExpanderOffset, 0);
+																		} else if(treeOrientation == "Vertical"){
+																			newAlignment = new go.Spot(0.5,1, 0, TREE_CONST.bottomTreeExpanderOffset);
+																		}
+																		return newAlignment;
+																	 })
+									 )
+							 );
+			return nodeTemplate;
+
+			
+    }
+	
+	
     // **************************************************************************************************************	
     // DRAW TREE AND TREE LAYOUT FUCNTIONS
     // This block contains the functions that define the tree structure and capabilities
     // END BLOCK
     // **************************************************************************************************************	
-    // -----------------------------------------------------------------------------------------------------------------
-    // START TOOLTIPS
-    // -----------------------------------------------------------------------------------------------------------------
-    function _createTableColumn(visibleFlag, rowNum, columnNum, spanMultipleInt, columnWidth, margin, textAlignment, text) {
-        var tableColumn;
-        tableColumn =
-            $go(go.TextBlock, {
-                    visible: visibleFlag,
-                    row: rowNum,
-                    column: columnNum,
-                    columnSpan: spanMultipleInt,
-                    width: columnWidth,
-                    margin: margin,
-                    alignment: textAlignment,
-                    wrap: go.TextBlock.WrapFit,
-					isMultiline:false,
-                    background: TREE_CONST.toolTipBackgroundColor
-                },
-                text
-            );
-        return tableColumn;
-
-    }
-
+  
 		// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
 		function _addOutOfOffice(visibleFlag, rowNum, columnNum, margin, task_id, user_id){
 			var oooImage;
@@ -1419,168 +2012,6 @@
 			return isAssignedUserOOO || isReviewerOOO || isOwnerOOO;
 		}
 	
-    // STRY0091260
-    function getToolTipText(objectName, nodeData) {
-        var toolTip;
-        switch (objectName) {
-            // // STRY0109208 - Add Create Icon
-            case 'AddIcon':
-                toolTip =
-                    $go(go.Panel, "Table",
-                        // Row 1
-                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.messages["Tasker - Add a Subtask"])
-                    );
-                break;
-            case 'DurationIcon':
-                var waitStatewithNoSubtasks = (nodeData.warning.waitStatewithNoSubtasks == true);
-				// DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
-				var waitStateOrderBy = (nodeData.warning.waitStateOrderBy == true);
-                var noSuspenseDate = (nodeData.warning.noSuspenseDate == true);
-                var isTopSuspenseDateAfterExternalInboundDate = (nodeData.warning.isTopSuspenseDateAfterExternalInboundDate == true);
-                var isTopSuspenseDateBeforeExternalOutboundDate = (nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate == true);
-                var isChildSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterChildren != true);
-                var isSuspenseDateAfterParent = (nodeData.warning.isSuspenseDateAfterParent == true);
-                var durrationWarningCount = 1;
-                toolTip =
-                    $go(go.Panel, "Table",
-                        // Row 1
-                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.suspense_date.fieldLabel + ": "),
-                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.suspense_date_DisplayValue),
-                        // Row 2
-                        _createTableColumn(waitStatewithNoSubtasks, 1, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Wait state set with no subtasks"]),
-                        // Row 3
-                        // DFCT0012129 - if waiting, but not for subtasks, then add the previous order message
-                        _createTableColumn(waitStateOrderBy, 2, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Task is Dependent on lower-order Tasks"]),
-                        // Row 4
-                        _createTableColumn(noSuspenseDate, 3, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task has no Suspense Date"]),
-                        // Row 5
-                        _createTableColumn(isTopSuspenseDateAfterExternalInboundDate, 4, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Internal Suspense date is after the External Suspense Date"]),
-                        // Row 6
-                        _createTableColumn(isTopSuspenseDateBeforeExternalOutboundDate, 5, 0, 2, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: External Suspense Date is after Internal Suspense date for an outbound"]),
-                        // Row 7 (width is wider on this message)
-                        _createTableColumn(isChildSuspenseDateAfterParent, 6, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["A Subtask has a Suspense Date AFter this Task"]),
-                        // Row 8 (width is wider on this message)
-                        _createTableColumn(isSuspenseDateAfterParent, 7, 0, 2, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Subtask Suspense Date AFTER Parent Task Suspense Date"])
-                    );
-                break;
-            case 'OperationalIcon':
-                var hasSignatureInstructions = (nodeData.u_signature_instructions != 'null');
-                var hasDecision = (nodeData.decision != null && nodeData.decision != 'null');
-                var decisionText = "";
-                if (hasDecision)
-                    decisionText = nodeData.decision;
-                var hasClassification = (nodeData.classification_DisplayValue != 'null');
-                toolTip =
-                    $go(go.Panel, "Table",
-                        // Row 1 - DFCT0011078 - STRY0127737 - added name to the table to enable seeing the full longer name
-                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.task_name.fieldLabel + ": "),
-                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.task_name),
-                        // Row 2
-                        _createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasker_type.fieldLabel + ": "),
-                        _createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasker_type_DisplayValue),
-                        // Row 3
-                        _createTableColumn(hasClassification, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.classification.fieldLabel + ": "),
-                        _createTableColumn(hasClassification, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.classification_DisplayValue),
-                        // Row 4
-                        _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.priority.fieldLabel + ": "),
-                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.priority_DisplayValue),
-                        // Row 5
-                        _createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.risk_flag.fieldLabel + ": "),
-                        _createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.risk_flag_DisplayValue),
-                        // Row 6
-                        _createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.instructions.fieldLabel + ": "),
-                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-                        // strip HTML Tags
-                        // new go.Binding("text", "", function(data) {
-                        //    return data.instructions.replace(/<\/?[^>]+(>|$)/g, "");
-                        // convert HTML to a simple string
-
-                        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
-                        // return _convertHtmlToSimpleString(data.instructions); // function was removed
-                        // Need to call below to have <, >, and & show as that character and not an ALT code
-                        // return htmlToStringService.convertHtmlToString(data.instructions);															
-                        _createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.instructions)),
-                        // Row 7
-                        _createTableColumn(hasSignatureInstructions, 6, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_signature_instructions.fieldLabel + ": "),
-                        // 2.7.0 | 2021-06-25 | mmcc | STRY0102408 "Task Tree Manager" tool tip displays "Unicode Decimal Codes"
-                        // strip HTML Tags
-                        // new go.Binding("text", "", function(data) {
-                        //    return data.u_signature_instructions.replace(/<\/?[^>]+(>|$)/g, "");
-                        // convert HTML to a simple string
-
-                        // 2.7.0 | 2021-07-06 | mmcc | STRY0102408 Task Tree Manager tool tip displays Unicode Decimal Codes when entering 
-                        // return _convertHtmlToSimpleString(data.u_signature_instructions); // function was removed
-                        // Need to call below to have <, >, and & show as that character and not an ALT code
-                        // return htmlToStringService.convertHtmlToString(data.u_signature_instructions);
-                        _createTableColumn(hasSignatureInstructions, 6, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, htmlToStringService.convertHtmlToString(nodeData.u_signature_instructions)),
-                        // Row 8
-                        _createTableColumn(hasDecision, 7, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.decision.fieldLabel + ": "),
-                        _createTableColumn(hasDecision, 7, 1, 1, TREE_CONST.toolTipWarningMessageColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, decisionText)
-                    );
-                break;
-            case 'UserIcon':
-                toolTip =
-                    $go(go.Panel, "Table",
-                        // Row 1
-                        _createTableColumn(true, 0, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.tasking_authority.fieldLabel + ": "),
-                        _createTableColumn(true, 0, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.tasking_authority_DisplayValue),
-                        // Row 2
-                        _createTableColumn(true, 1, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_office.fieldLabel + ": "),
-                        _createTableColumn(true, 1, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_office_DisplayValue),
-                        // Row 3
-                        _createTableColumn(true, 2, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.primary_assignee.fieldLabel + ": "),
-                        _createTableColumn(true, 2, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.primary_assignee_DisplayValue),
-                        // Row 4
-                        _createTableColumn(true, 3, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.assigned_to.fieldLabel + ": "),
-                        _createTableColumn(true, 3, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.assigned_to_DisplayValue),
-						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-						_addOutOfOffice(true, 3, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.assigned_to),
-						// STRY0131001 - Task Tree- Assignment Tooltip Shows Task Owner and Reviewer
-                        // Row 5
-                        _createTableColumn(true, 4, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_reviewer.fieldLabel + ": "),
-						_createTableColumn(true, 4, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_reviewer_DisplayValue),
-						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-						_addOutOfOffice(true, 4, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_reviewer),
-												
-                        // Row 6
-                        _createTableColumn(true, 5, 0, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Right, c.data.fieldsInModel.u_task_requester.fieldLabel + ": "),
-                        _createTableColumn(true, 5, 1, 1, TREE_CONST.toolTipColumnWidth, TREE_CONST.toolTipNormalMargin, go.Spot.Left, nodeData.u_task_requester_DisplayValue),
-						// STRY0131003 - if user has a conflict for this task, show the OOO schedule conflict indicator
-						_addOutOfOffice(true, 5, 2, TREE_CONST.toolTipNormalMargin, nodeData.sys_id, nodeData.u_task_requester)
-                    );
-                break;
-            case 'ExclamationIcon':
-                // STRY0095748 - no suspensedate warning - DFCT0012129
-                var durationExclamation = (nodeData.warning.noSuspenseDate || nodeData.warning.isTopSuspenseDateAfterExternalInboundDate ||
-                    nodeData.warning.isTopSuspenseDateBeforeExternalOutboundDate || !nodeData.warning.isSuspenseDateAfterChildren ||
-                    nodeData.warning.isSuspenseDateAfterParent || nodeData.warning.waitStatewithNoSubtasks ||
-										nodeData.warning.waitStateOrderBy);
-                var assignmentExclamation = (nodeData.warning.primaryAssigneeEmpty || nodeData.warning.assignedMemberEmpty);
-								var oooExclamation = _isAnyUserOOOforTask(nodeData);
-                toolTip =
-                    $go(go.Panel, "Table",
-                        // Row 1
-                        _createTableColumn(durationExclamation, 1, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Duration Warning"]),
-                        // row 3
-                        _createTableColumn(assignmentExclamation, 3, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker -  Warning Assignment"]),
-						// row 5 - STRY0131003 - OOO visual indicator
-                        _createTableColumn(oooExclamation, 5, 0, 2, TREE_CONST.toolTipExclamationColumnWidth, TREE_CONST.toolTipWarningNoteMargin, go.Spot.Left, c.data.messages["Tasker - Warning: Task is assigned to a member that is out of office between now and the suspense date."])
-
-                    );
-                break;
-        }
-        return toolTip;
-    }
-
-    function toolTipJSON(objectName, nodeData) {
-        var toolJSON = $go(go.Adornment, "Spot", "Auto",
-            $go(go.Shape, "Rectangle", {
-                fill: TREE_CONST.toolTipBackgroundColor
-            }),
-            getToolTipText(objectName, nodeData)
-        );
-        return toolJSON;
-    }
     // -----------------------------------------------------------------------------------------------------------------
     // END TOOLTIPS
     // -----------------------------------------------------------------------------------------------------------------
@@ -1801,6 +2232,8 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //------------------------------------------------------------------------------------------------------------------------
 
 (function() {
+		var api_ui_component_data = new api_tasker_ui_component_data();
+		var CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME = 'dtech_task_tree_state_legend_pinned';
 
     main();
 
@@ -1834,9 +2267,20 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
             return;
         }
         if (input) {
-            data.loadData = input.loadData;
+					if(input.getActions==true){
+						getActions(input.taskSysId);
+						return;
+					}
+					
+					if(input.setPreference==true){
+						_setUserPreferences(input.preferences);
+						return;
+					}
+					data.loadData = input.loadData;
+
         }
 
+				data.preferences = _getUserPreferences();
         // DFCT0010674 - STRY0119599
         if (data.hide_accordion) {
             data.loadData = true;
@@ -1848,7 +2292,13 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
             _loadToolBars();
 
         }
+			
     }
+
+		function getActions(taskSysId){
+			data.actions = api_ui_component_data.getContextMenuInformation(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME, taskSysId);
+			data.actions.objectType = "task";
+		}
 
     function _loadToolBars() {
         // TREE HEADER TOOLBAR
@@ -1907,6 +2357,20 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         }
     }
 
+		function _getUserPreferences(){
+			var preferences = {};
+			preferences[CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME] = {};
+			var pinnedPreference = gs.getUser().getPreference(CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME);
+			pinnedPreference = pinnedPreference!=false && pinnedPreference!='false'; 
+			preferences[CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME].value = pinnedPreference;
+			return preferences;
+		}
+	
+		function _setUserPreferences(preferences){
+				gs.getUser().savePreference(CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME,
+																		preferences[CONST_USER_PREFERENCE_TASK_TREE_PINNED_NAME].value);
+		}
+	
     function convertToBool(names) {
         names.forEach(function(name) {
             data[name] = data[name] == true || data[name] == 'true';
@@ -1919,17 +2383,17 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>kTorres</sys_created_by>
         <sys_created_on>2018-01-30 18:38:46</sys_created_on>
         <sys_id>a56f59244f481300303dc3818110c7e9</sys_id>
-        <sys_mod_count>2023</sys_mod_count>
+        <sys_mod_count>2415</sys_mod_count>
         <sys_name>Tasker Graph - Task Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_a56f59244f481300303dc3818110c7e9</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-09-25 01:27:40</sys_updated_on>
+        <sys_updated_on>2024-03-06 18:53:30</sys_updated_on>
         <template><![CDATA[<div class="panel-group flex-row flex-grow">
   <div id="main_body" class="panel panel-default flex-column flex-grow" ng-class="{'dtech-topstick-posabso':data.hide_accordion==true}"> 
-    <div id="panel_heading" class="panel-heading" ng-class="{'dtech-panel-heading-min-height-standard':data.bifold==true}">
+    <div id="panel_heading" class="panel-heading dtech-panel-heading-min-height-standard" ng-class="{'dtech-panel-heading-min-height-standard':data.bifold==true}">
       <h4 id="panel_title" class="panel-title">
         <!--DFCT0010652 - STRY0119599 -->
         <a class="accordion-toggle" ng-hide="data.hide_accordion" ng-click="getMap()" />
@@ -1943,51 +2407,188 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
       </h4>
     </div>
     <!--DFCT0010652 - STRY0119599 -->
+
+<div class="flex-row flex-grow"> <!-- This div holds the viewer and the legend -->
     <div class="flex-column flex-grow" ng-show ="data.isCollapsed!=true">
       <div class="flex-column flex-grow" >
-        <div class="flex-column flex-grow m-t-sm"  ng-show="data.topParentTask_id">
-          <div id="legend" class="panel-heading text-right">
-            <span>Projected on time: <span class="label label-as-badge label-success"> </span></span>&nbsp;
-            <span>Warning: <span class="label label-as-badge label label-warning"> </span></span>&nbsp;
-            <span>Critical: <span class="label label-as-badge label label-danger"> </span></span>&nbsp;
-            <!-- Task State Legend Section -->
-            <span style="text-align:right; color:white;">Task State Legend: </span>
-            <span class="label label-Draft">Draft</span>
-            <span class="label label-Waiting">Waiting</span>
-            <span class="label label-Unassigned">Unassigned</span> 
-            <span class="label label-Assigned">Assigned</span> 
-            <span class="label label-Accepted">Accepted</span> 
-            <span class="label label-Rejected">Rejected</span> 
-            <span class="label label-Work in Progress">Work in Progress</span> 
-            <span class="label label-InReview">In Review</span> 
-            <span class="label label-Rework">Rework</span> 
-            <span class="label label-Completed">Completed</span> 
-            <!-- <span class="label label-Closed.Incomplete">Closed Incomplete</span> -->
-            <!-- <span class="label label-Cancelled">Cancelled</span> -->
-          </div>
-
+        <div class="flex-column flex-grow"  ng-show="data.topParentTask_id">
           <div class="flex-column flex-grow">
+            <div ng-show="data.hideLegend==true"
+                 class="dtech-position-relative">
+                <dtech-state-legend dtech-is-modal="data.isModal"
+                                    dtech-popover-placement="left-top"
+                                    dtech-tool-tip-open="data.stateLegendToolTipOpen"
+                                    dtech-legend-icon-showing="data.hideLegend"
+                                    dtech-legend-states="data.legendStates"
+                                    dtech-toggle-legend="toggleLegend()"
+                                    class="dtech-position-abso-top-20-right-0-zindex-20"> <!-- not sure why but must be on new row-->
+                </dtech-state-legend>
+
+            </div>
+
             <div id="page_map" class="flex-column flex-grow page-map" ng-class="{'dtech-h-50vh':!data.hide_accordion}"/>
 
             <div class="dtech-position-relative">
-              <div class="dtech-position-abso-bottom-15-left-0-zindex-2">
-                <img src="{{::data.icons['TaskFlowTM_Logo'].src}}" title="{{::data.icons['TaskFlowTM_Logo'].title}}"
-                     alt="{{::data.icons['TaskFlowTM_Logo'].alt}}" class="dtech-pad-left-10-bottom-10"/>
+              <div class="dtech-position-abso-bottom-20-left-0-zindex-2 flex-row">
+                <div class="flex-column">
+                  <img src="{{::data.icons['TaskFlowTM_Logo'].src}}" title="{{::data.icons['TaskFlowTM_Logo'].title}}"
+                       alt="{{::data.icons['TaskFlowTM_Logo'].alt}}" class="dtech-pad-left-10-bottom-10"/>
+                </div>
+                <div ng-hide="data.isTopTaskOrNotDraft"
+                     class="flex-column  text-nowrap img-rounded dtech-bg-white dtech-opacity-100" id="draftTaskPublishMessage">              
+                  <div class="flex-column justify-center">
+                    <div class="flex-row flex-nowrap">
+                      <div class="m-l-sm"><img src="x_153465_discovert.InfoRound16.svg"/></div>
+                      <div id="divActiveUnderDraftMessage"
+                           class="dtech-text-overflow-ellipsis m-l-xs"
+                           ng-style="{'max-width':activeUnderDraftMessageMaxWidth}"
+                            uib-tooltip="{{::data.messages['Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task.']}}"
+                            alt="{{::data.messages['Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task.']}}"
+                            >{{data.messages["Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task."]}}
+                        </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="flex-row justify-center" id="draftTaskPublishMessage">              
-              <div ng-hide="data.isTopTaskOrNotDraft">
-                <span class="m-l-sm"><img src="InfoRound28.svg"/></span>
-                <span class="m-l-xs">{{data.messages["Tasker - Active Tasks cannot exist under Draft Tasks. Navigate to the Earliest Task-Order Draft Task to publish this Draft Task."]}}</span>
-              </div>
-            </div>
             <!-- STRY0116823 -->
             <div id="myOverview" ></div>
+            <div id="iconSpan" 
+                 ng-show="data.showIcons==true || 
+                          data.operationalToolTipOpen || data.assignmentToolTipOpen || data.durationToolTipOpen || data.actionToolTipOpen || data.addSubActionToolTipOpen ||
+                          data.overPanel"
+                 ng-mouseenter="c.data.overPanel=true;"
+                 ng-mouseleave="c.data.overPanel=false;"
+                 class="dtech-icon-panel-container-box-shadow">
+              <dtech-operational dtech-is-dark="true"
+                                 dtech-exclude-warning="true"
+                                 dtech-tool-tip-open="data.operationalToolTipOpen"
+                                 dtech-operational-object = "data.operationalObject"
+                                 dtech-table="{{data.table}}"
+                                 dtech-task-sys-id="{{data.item_id}}"                                          
+                                 ></dtech-operational>
+              <dtech-assignment dtech-is-dark="true"
+                                dtech-exclude-warning="true"
+                                dtech-tool-tip-open="data.assignmentToolTipOpen"
+                                dtech-assignment-object = "data.assignmentObject"
+                                dtech-table="{{data.table}}"
+                                dtech-task-sys-id="{{data.item_id}}"
+                                ></dtech-assignment>
+              <dtech-duration dtech-is-dark="true"
+                              dtech-exclude-warning="true"
+                              dtech-tool-tip-open="data.durationToolTipOpen"
+                              dtech-show-label="false"
+                              dtech-hide-date="true"
+                              dtech-table="{{data.table}}"
+                              dtech-task-sys-id="{{data.item_id}}"
+                              dtech-duration-object="data.durationObject"
+                              ></dtech-duration>
+              <img src="x_153465_discovert.DividerNarrow24.svg"/>
+              <dtech-add-sub-object dtech-is-dark="true"
+                                    dtech-tool-tip-open="data.addSubActionToolTipOpen"
+                                    dtech-add-sub-object="data.addSubObject"
+                                    dtech-is-modal="data.isModal"
+                                    dtech-table="{{data.table}}"
+                                    dtech-task-sys-id="{{data.item_id}}"
+                                    ></dtech-add-sub-object>
+
+              <dtech-actions dtech-is-dark="true"
+                             dtech-tool-tip-open="data.actionToolTipOpen"
+                             dtech-actions-object = "data.actions"
+                             dtech-is-modal="data.isModal"
+                             dtech-table="{{data.table}}"
+                             dtech-task-sys-id="{{data.item_id}}"
+                             load-actions="loadActions"
+                             ></dtech-actions>
+
+
+            </div>
+            <div id="warningIcon"
+                 ng-show="data.showWarning==true || data.overWarningIcon || data.warningToolTipOpen"
+                 class="dtech-hover-panel"
+                 ng-mouseenter="c.data.overWarningIcon=true;"
+                 ng-mouseleave="c.data.overWarningIcon=false; c.data.showWarning=false;"
+                 >
+              <dtech-warning dtech-tool-tip-open="data.warningToolTipOpen"
+                             dtech-table="{{data.table}}"
+                             dtech-task-sys-id="{{data.item_id}}"
+                             dtech-warning-object="data.warningObject"
+                             >
+              </dtech-warning>
+            </div>
+            <div id="orderCircle"
+                 ng-show="data.showOrder==true || data.overOrder || data.orderToolTipOpen"
+                 class="dtech-hover-panel"
+                 ng-mouseenter="c.data.overOrder=true;"
+                 ng-mouseleave="c.data.overOrder=false;"           
+                 >
+<!-- class="dtech-warning-panel" -->
+        					<dtech-order dtech-tool-tip-open="data.orderToolTipOpen"
+                               dtech-table="{{data.table}}"
+                               dtech-task-sys-id="{{data.item_id}}"
+                               dtech-order-object="data.orderObject"
+                               >
+              </dtech-order>
+            </div>
+            <div id="memberPanel"
+                 ng-show="data.showMembers==true || data.overMember || data.membersToolTipOpen"
+                 class="dtech-hover-panel"
+                 ng-mouseenter="c.data.overMember=true;"
+                 ng-mouseleave="c.data.overMember=false;">
+              <dtech-item-members dtech-item-members-object = "data.membersObject"
+                                  dtech-tool-tip-open="data.membersToolTipOpen"
+                                  dtech-show-label="false"
+                                  dtech-hide-hover-panel="true"
+                                  dtech-is-modal="data.isModal"
+                                  dtech-user-image-size="24"
+                                  dtech-max-rows-to-display="3"
+                                  dtech-table="{{data.table}}"
+                                  dtech-task-sys-id="{{data.item_id}}"
+                                  dtech-is-task-tree="true"
+                                  ></dtech-item-members>
+            </div>
           </div>
         </div>
       </div>
     </div>
+  	<!-- This needs to stay in sync with the script below -->
+  	<div id="divStateLegend"
+         class="flex-column dtech-state-legend-panel dtech-pad-left-20" 
+         ng-class="{'dtech-action-menu-container': data.hideLegend}"
+         ng-show="data.hideLegend!=true">
+        <div ng-click="toggleLegend()"
+             class="flex-row align-items-center dtech-state-legend-item">
+          <div>
+            <img class="dtech-state-indicator-padding"
+                 src="x_153465_discovert.Unpin16.svg" title="${Hide Legend}"
+                 alt="${Hide Legend}" />
+          </div>
+          <div class="dtech-legend-text">${Unpin this menu}</div>
+      	</div>
+      
+        <div class="dtech-action-menu-item-divider dtech-margin-left-negative-20px"/>
+				<div class="flex-row align-items-center dtech-state-legend-item" 
+					ng-repeat="state in data.legendStates">
+					<div class="dtech-state-indicator-padding"><div class="dtech-circle-legend {{state.value}}"/></div>
+					<div class="dtech-legend-text">{{state.label}}</div>
+				</div>
+        
+        <!-- <span class="label label-Closed.Incomplete">Closed Incomplete</span> -->
+        <!-- <span class="label label-Cancelled">Cancelled</span> -->
+				<div class="dtech-action-menu-item-divider dtech-margin-left-negative-20px"/>
+
+				<div class="flex-row align-items-center dtech-state-legend-item" >
+					<div><img class="dtech-state-indicator-padding" src="x_153465_discovert.Warning16.svg"/></div>
+					<div class="dtech-legend-text">${Warning}</div>
+				</div>
+				<div class="flex-row align-items-center dtech-state-legend-item" >
+					<div><img class="dtech-state-indicator-padding" src="x_153465_discovert.Error16.svg"/></div>
+					<div class="dtech-legend-text">${Critical}</div>
+				</div>      
+  </div >
+      
+</div> <!-- THIS IS A NEW ROW TO HOLD VIEWER AND LEGEND -->  
     <div class="panel-footer">
       <!-- STRY0113668 -->
       <div id="panel_footer" ng-show ="data.isCollapsed!=true">
@@ -2004,6 +2605,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
       </div>
     </div>
   </div>
-</div>]]></template>
+</div>
+]]></template>
     </sp_widget>
 </record_update>

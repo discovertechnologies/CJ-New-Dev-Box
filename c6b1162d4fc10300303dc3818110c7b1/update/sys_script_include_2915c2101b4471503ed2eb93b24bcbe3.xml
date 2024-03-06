@@ -36,6 +36,34 @@ api_tasker_task.prototype = {
 		return acceptResponse;
 	},
 	
+	assignTask: function(task_sys_id) {
+		var assignResponse = {};
+		assignResponse.taskAssigned = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_task = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if(gr_task.get(task_sys_id)){
+			new Task_uiAction().uiAction_AssignTask(gr_task);
+			assignResponse.taskAssigned = true;
+		}
+		return assignResponse;
+	},
+
+	changeTaskOrder: function(task_sys_id, newOrder){
+		var changeOrder = {};
+		changeOrder.taskActivated = false;
+		// NOTE: state is read only.  Cannot use GlideRecordSecure here.
+		//       GlideRecord is needed and the permissions are applied on tha Action
+		var gr_task = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if(gr_task.get(task_sys_id)){
+			gr_task.order = newOrder;
+			gr_task.task_order = newOrder;
+			gr_task.update();
+			changeOrder.taskActivated = true;
+		}
+		return changeOrder;		
+	},
+
 	getAssignmentInformation: function(taskId){
 		var lAssignmentInfo = {};
 		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
@@ -62,7 +90,16 @@ api_tasker_task.prototype = {
 		}
 		return lItemMembersInfo;
 	},
-	
+
+	getItemMembersInformationTaskTree: function(taskId){
+		var lItemMembersInfo = {};
+		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if(gr_task.get(taskId)){
+			lItemMembersInfo = this.api_tasker_ui_component_data.getItemMembersInformationTaskTreeGR(gr_task);
+		}
+		return lItemMembersInfo;
+	},	
+
 	getOperationalInformation: function(taskId){
 		var lOperationalInfo = {};
 		var gr_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
@@ -106,9 +143,10 @@ api_tasker_task.prototype = {
 			lResponseCommentsInfo.directive_reviewer_comments = gr_task.getElement('comments_dt').getDisplayValue();
 			lResponseCommentsInfo.directive_rework_comments = gr_task.getElement('rework_comments').getDisplayValue();
 		}
+		lResponseCommentsInfo.directive_work_item_type = gr_task.getElement('work_item_type').getDisplayValue();
 
 		// 2.8.5 | 2023-07-07 | mmcc | STRY0137651 - When to Show Comments on Final Response Tab; added, get returns a string
-		if (gr_task.getElement('work_item_type').getDisplayValue() == 'review_item') {
+		if (lResponseCommentsInfo.directive_work_item_type == 'review_item') {
 			lResponseCommentsInfo.directive_content_comment = lResponseCommentsInfo.directive_reviewer_comments;
 		} else {
 			lResponseCommentsInfo.directive_content_comment = lResponseCommentsInfo.directive_response_comments;
@@ -132,10 +170,14 @@ api_tasker_task.prototype = {
 		// NOTE: warning hours is actually a number of days, not hours
 		// NOTE: calendar duration is Estimated Effort
 		var arrStateFields = 
-			["state"];
+			["state", "u_wait_for_subtasks_to_finish", "tasker_type"];
 		lStateInfo = this.api_dtech.loadObject(gr_task, arrStateFields);
 		// add task id after loaded
 		lStateInfo.taskId = gr_task.getUniqueValue();
+
+		// Check the process flow
+		lStateInfo.flow = this._createProcessFlow(lStateInfo);
+
 		return lStateInfo;
 	},
 
@@ -245,12 +287,40 @@ api_tasker_task.prototype = {
 		return startResponse;
 	},
 
-	_getParentTaskFields: function(gr_task, arrParentTaskFields){
+	// Check the process flow
+	_createProcessFlow: function(stateInformationObject) {
+		// STRY0146507 - Certification Support- Placeholder
+		//Note: GlideRecordSecure is not feasible to use on this widget that is reading values from a table enable by the process flow plugin
+		var gf = new GlideRecord('sys_process_flow'); 
+		gf.addActiveQuery();
+		gf.addQuery('table', api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+		if (!stateInformationObject.u_wait_for_subtasks_to_finish || stateInformationObject.u_wait_for_subtasks_to_finish.value != false)
+			gf.addQuery('label', '!=', 'Wait for subtasks');
+		gf.addQuery('description', 'CONTAINS', stateInformationObject.tasker_type.display_value);
+		gf.orderBy('order');
+		gf.query();
+
+		var items = [];
+		while (gf.next()) {
+			var item = {};
+			item.name = gf.label.toString();
+			item.colour = item.name;
+			items.push(item);
+		}
+		// set the highest number to a success color
+		if(items.length>0){
+			items[items.length-1].colour = 'success';
+		}
+
+		return items;
+	},
+
+	getParentTaskFields: function(gr_task, arrParentTaskFields){
 		var parentTaskId = gr_task.getValue("parent");
 		var gr_parent_task = new GlideRecordSecure(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
 		var lParentTasklInfo;
 		if(gr_parent_task.get(parentTaskId)){
-			lParentTasklInfo = this.api_dtech.loadObject(gr_task, arrParentTaskFields);
+			lParentTasklInfo = this.api_dtech.loadObject(gr_parent_task, arrParentTaskFields);
 		}
 		return lParentTasklInfo;
 	},
@@ -314,8 +384,8 @@ api_tasker_task.prototype = {
 			'5bb706e5dba33b40c448d1c2ca961983', // "name": "Nonconcur & sign" "action_name": "NonconcurSign-SendToReview"
 			'd237f7974fa28300303dc3818110c7c4', // "name": "Reopen Task", "action_name": "Reopen"
 			'baa96f804f181b00303dc3818110c74e', // "name": "Send to Rework" "action_name": "rework"
-			'separator', // add a separator
-			'addRequestAccessGuidhere', // "name": "Request Access for Member(s)"  - no guid today
+			//'separator', // add a separator
+			//'addRequestAccessGuidhere', // "name": "Request Access for Member(s)"  - no guid today
 			'separator', // add a separator
 			'9e53d1f8db02f01087f2892d139619ed' // "name": "Delete", (task) , "action_name" : "delete_tasks"
 		];
@@ -370,7 +440,7 @@ api_tasker_task.prototype = {
 				
 				if (!gr_task.parent.nil()){
 					var arrParentTaskFields = ["sys_id", "active", "number"];
-					var lParentTasklInfo = this._getParentTaskFields(gr_task, arrParentTaskFields);
+					var lParentTasklInfo = this.getParentTaskFields(gr_task, arrParentTaskFields);
 					params.parentInfo = lParentTasklInfo;
 
 					// parent logic - also in Business Rule Tasker - Tasker - onLoad - set max routes
@@ -704,10 +774,16 @@ api_tasker_task.prototype = {
 				params.request_sys_id = requestInfo.request_sys_id;
 				break;
 			case '0187ab004f181b00303dc3818110c764': // "name": "Start Work" "action_name": "workInProgress"
-			case '403b714edbb017003a8d6be3ca961961': // "name": "Assign Task" "action_name": "assigned"
-			case '7703adb74f88d700303dc3818110c784': // "name": "Accept Assignment" "action_name": "AcceptAssignment"
-			case 'addRequestAccessGuidhere': // "name": "Request Access for Member(s)"  - no guid today
+				params.action_name = "workInProgress";
 				break;
+			case '403b714edbb017003a8d6be3ca961961': // "name": "Assign Task" "action_name": "assigned"
+				params.action_name = "assigned";
+				break;
+			case '7703adb74f88d700303dc3818110c784': // "name": "Accept Assignment" "action_name": "AcceptAssignment"
+				params.action_name = "AcceptAssignment";
+				break;
+			//case 'addRequestAccessGuidhere': // "name": "Request Access for Member(s)"  - no guid today
+			//	break;
 			default:
 				var errMsg = "Tasker - function: _get_ui_actions_params - an action was requested that isn't implemented.  UI Action sys_id: " + action_sys_id;
 				gs.addErrorMessage(errMsg);
@@ -843,13 +919,13 @@ api_tasker_task.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-07-11 12:37:05</sys_created_on>
         <sys_id>2915c2101b4471503ed2eb93b24bcbe3</sys_id>
-        <sys_mod_count>188</sys_mod_count>
+        <sys_mod_count>201</sys_mod_count>
         <sys_name>api_tasker_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_2915c2101b4471503ed2eb93b24bcbe3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-12-16 06:03:19</sys_updated_on>
+        <sys_updated_on>2024-02-27 00:32:46</sys_updated_on>
     </sys_script_include>
 </record_update>

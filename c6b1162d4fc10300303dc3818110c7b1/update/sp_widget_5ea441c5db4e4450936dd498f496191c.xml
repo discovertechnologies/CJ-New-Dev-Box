@@ -682,7 +682,6 @@
 }
 //------------------------------------------------------------------------------------------------------------------------
 
-
 /* Bootstrap 3.3.6 default: .dropdown-menu &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; a:focus { */
 .dropdown-menu &gt; li &gt; ul &gt; li &gt; a:hover, .dropdown-menu &gt; li &gt; ul &gt; li &gt; a:focus {
   text-decoration: none;
@@ -1359,7 +1358,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 	var taskTableName = 'x_153465_discovert_route_task_instance';
 	
 		// STRY0141856
-		var api_task = new api_tasker_task();
+		var api_ui_component_data = new api_tasker_ui_component_data();
 
 		// STRY0136617
 		data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
@@ -1412,8 +1411,7 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
         data.getURL = false;
         return;
     }
-// TODO - LOOK AT PUTTING IN A WIDGET
-var api_ui_component_data = new api_tasker_ui_component_data();	
+	
 		if(input && input.getActions==true){
 			getActions(input.taskSysId);
 			return;
@@ -1638,6 +1636,8 @@ var api_ui_component_data = new api_tasker_ui_component_data();
 		data.loadedDurationOjbects = {};
 		// STRY0141856
 		data.loadedAssignementOjbects = {};
+		data.loadedOperationalObjects = {};
+		data.loadedStateOjbects = {};
 
     data.popOverRecord = {};
     while (gr.next()) {
@@ -1668,7 +1668,10 @@ var api_ui_component_data = new api_tasker_ui_component_data();
         if (!data.popOverRecord[sys_id]) {
             switch (data.table) {
                 case 'x_153465_discovert_route_task_instance':
-                    // STRY0101803 set the default hover field for Task if not set, load if set
+// TESTING to validate
+// remove hover field for task b/c we are using operational directive for task
+data.hoverField = "";
+/*                    // STRY0101803 set the default hover field for Task if not set, load if set
                     data.hoverField = (data.hoverField != undefined && data.hoverField != '') ? data.hoverField : 'short_description';
                     data.popOverRecord[sys_id] = {
                         'sys_id': gr.getUniqueValue(),
@@ -1688,6 +1691,7 @@ var api_ui_component_data = new api_tasker_ui_component_data();
                         'reviewer': gr.getDisplayValue('u_reviewer'),
                         'numComments': numComments
                     };
+*/										
                     break;
                 case 'x_153465_discovert_tasker_requests':
                     // DFCT0010550
@@ -1854,10 +1858,14 @@ var api_ui_component_data = new api_tasker_ui_component_data();
 				record.comment_number = gr.getDisplayValue('number'); // aka task Number
 				data.showDTechDuration = true;
 				// STRY0141856
-				data.loadedDurationOjbects[task_id] = api_task.getDurationInformation(task_id);
+				data.loadedDurationOjbects[task_id] = api_ui_component_data.getDurationInformationGR(gr);
 				data.showDTechAssignment = true;
-				data.loadedAssignementOjbects[task_id] = api_task.getAssignmentInformation(task_id);
-
+				data.loadedAssignementOjbects[task_id] = api_ui_component_data.getAssignmentInformationGR(gr);
+				data.showDTechState = true;
+				data.loadedStateOjbects[task_id] = api_ui_component_data.getStateInformationGR(gr);
+				data.showDTechOperation = true;
+				data.loadedOperationalObjects[task_id] = api_ui_component_data.getOperationalInformationGR(gr);
+						
 				// 2.8.1 | 2023-04-19 | mmcc | STRY0135713 - Modal showing all comments when clicking the Response Column;
 				// use var's just for directive in case those columns are added as fields
 				// 2.8.1 | 2023-04-04 | mmcc | STRY0135723 - Homepage Comments column replaced by Task Comments; response is added via fields
@@ -2123,14 +2131,14 @@ var api_ui_component_data = new api_tasker_ui_component_data();
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1441</sys_mod_count>
+        <sys_mod_count>1466</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-12-22 15:51:17</sys_updated_on>
+        <sys_updated_on>2024-01-27 20:57:14</sys_updated_on>
         <template><![CDATA[<div class="panel panel-{{options.color}} b">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
@@ -2269,7 +2277,24 @@ var api_ui_component_data = new api_tasker_ui_component_data();
           <td role="text" aria-label="{{item[field].display_value}}" class="tableContent"
               ng-class="{selected: item.selected}" ng-click="" ng-repeat="field in ::data.fields_array"
               data-field="{{::field}}" data-th="{{::data.column_labels[field]}}">
-            <span ng-if="field == 'state'" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
+            
+            <span ng-if="field == 'state'">
+              <span ng-if="!data.showDTechState" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
+              <span ng-if="data.showDTechState" >
+                <dtech-state dtech-is-dark="false"
+                             dtech-in-data-table="true"
+                             dtech-is-modal="data.isModal"
+                             dtech-show-label="false"
+                             dtech-tool-tip-open="item.toolTipOpen"
+                             dtech-task-title = "getTitle(item);"
+                             dtech-show-all-states="false"
+                             dtech-state-object = "data.loadedStateOjbects[item.sys_id]"
+                             dtech-field="field"
+                             dtech-table="{{data.table}}"
+                             dtech-task-sys-id="{{item.sys_id}}"                                          
+                             ></dtech-state>
+              </span>
+            </span>
             <span id="short" ng-if="field==data.hoverField"
                   ng-mouseenter="item.isTooltipOpened=true; c.closeOtherTooltips(item)"
                   ng-mouseleave="item.isTooltipOpened=false">
@@ -2280,15 +2305,17 @@ var api_ui_component_data = new api_tasker_ui_component_data();
               </span>
             </span>
             <span ng-if="field!=data.hoverField && field!='state' && 
+                         field!='short_description' &&
                          field!='response' && 
                          item[field].isUser!=true &&
                          (!data.showDTechDuration || field!='suspense_date') &&
                          (!data.showDTechAssignment || item[field].isOffice!=true)">{{item[field].display_value}}</span>
             <span ng-if="item[field].isUser==true && item[field].display_value!=''">
-              <div>
+              <div >
                 <!-- STRY0135276 - User Profile Directive -->
                 <dtech-user dtech-task-title = "getTitle(item);"
                             dtech-field="field"
+                            dtech-in-data-table="true"
                             dtech-is-modal="data.isModal"
                             dtech-user-image-size="24"
                             dtech-chat-enabled="data.chatEnabled"
@@ -2301,9 +2328,11 @@ var api_ui_component_data = new api_tasker_ui_component_data();
             </span>
             <div ng-if="item[field].isOffice==true">
               <span ng-if="data.showDTechAssignment">
-                <dtech-assignment   dtech-task-title = "getTitle(item);"
+                <dtech-assignment dtech-task-title = "getTitle(item);"
+                              dtech-tool-tip-open="item.assignmentToolTipOpen"
                               dtech-assignment-object = "data.loadedAssignementOjbects[item.sys_id]"
                               dtech-field="field"
+                              dtech-in-data-table="true"
                               dtech-is-modal="data.isModal"
                               dtech-table="{{data.table}}"
                               dtech-task-sys-id="{{item.sys_id}}"
@@ -2311,10 +2340,28 @@ var api_ui_component_data = new api_tasker_ui_component_data();
               </span>
             </div>
             
+            <span ng-if = "field=='short_description' && field!=data.hoverField">
+              <dtech-operational ng-if="data.showDTechOperation==true"
+                                 dtech-in-data-table="true"
+                                 dtech-popover-placement="right-auto"
+                                 dtech-tool-tip-open="item.operationalToolTipOpen"
+                                 dtech-operational-object = "data.loadedOperationalObjects[item.sys_id]"
+                                 dtech-field="field"
+                                 dtech-is-modal="data.isModal"
+                                 dtech-table="{{data.table}}"
+                                 dtech-task-sys-id="{{item.sys_id}}"                                          
+                                 ></dtech-operational>
+              <span ng-if="data.showDTechOperation!=true">
+                {{item[field].display_value}}
+              </span>
+            </span>
+            
             <!-- STRY0137371 -->
             <div ng-if="field=='suspense_date'">
               <span ng-if="data.showDTechDuration">
-                <dtech-duration dtech-is-modal="data.isModal"
+                <dtech-duration dtech-in-data-table="true"
+                                dtech-is-modal="data.isModal"
+                                dtech-tool-tip-open="item.durationToolTipOpen"
                                 dtech-table="{{data.table}}"
                                 dtech-task-sys-id="{{item.sys_id}}"
                                 dtech-duration-object="data.loadedDurationOjbects[item.sys_id]"
@@ -2326,6 +2373,7 @@ var api_ui_component_data = new api_tasker_ui_component_data();
               <div ng-if="item.isResponseCommentsDirectiveShown==true">
                 <!-- Response Comments Directive -->
                 <dtech-response-comments dtech-is-modal="data.isModal"
+                                         dtech-in-data-table="true"
                                          dtech-reopen-comments="{{item.directive_reopen_comments}}"
                                          dtech-response-comments="{{item.directive_response_comments}}"
                                          dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
@@ -2354,8 +2402,9 @@ var api_ui_component_data = new api_tasker_ui_component_data();
           </td>
           
           <td ng-if="data.table=='x_153465_discovert_route_task_instance'" class="pointer">
-            <div class="flex-row text-nowrap items-center">
+            <div class="flex-row text-nowrap items-center dtech-margin-negative-5px">
               <dtech-add-sub-object dtech-is-dark="false"
+                                    dtech-in-data-table="true"
                                     dtech-tool-tip-open="item.addSubActionToolTipOpen"
                                     dtech-add-sub-object="data.addSubObject"
                                     dtech-is-modal="data.isModal"
@@ -2366,7 +2415,9 @@ var api_ui_component_data = new api_tasker_ui_component_data();
                                     ></dtech-add-sub-object>
 
               <dtech-actions dtech-is-dark="false"
+                             dtech-in-data-table="true"
                              dtech-tool-tip-open="item.actionToolTipOpen"
+                             dtech-in-data-table="true"
                              dtech-actions-object = "data.actions"
                              dtech-is-modal="data.isModal"
                              dtech-table="{{data.table}}"
