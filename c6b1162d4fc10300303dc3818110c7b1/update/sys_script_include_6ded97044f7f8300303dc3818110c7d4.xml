@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.taskerDynamicFilters</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.3 | 2023-07-09 - raj -    DFCT0012050 - Stretch &amp; known issue-Faceted Search shows OUs and Users from Private OUs when the user is searching from an Open OU. (All OUs are available to be selected)&#13;
+        <description>2.8.4 HF | 2024-04-17 - DFCT0012402 - With open matrix setting ~ Run template is not allowing assigned member and reviewer field to be changed&#13;
+2.8.3 | 2023-07-09 - raj -    DFCT0012050 - Stretch &amp; known issue-Faceted Search shows OUs and Users from Private OUs when the user is searching from an Open OU. (All OUs are available to be selected)&#13;
 2.8.3 | 2023-07-02 - raj -    DFCT0012071 - EH, defect: When creating a personal template as a TM, all permissive OU members are available for selection in the "select all" assignment fields (EX: Reviewer&#13;
 2.8.3 | 2023-06-25 - raj -    DFCT0012041 - Permissive OUs not included correctly in list of users that can be tasked&#13;
 2.8.3 | 2023-06-06 - raj -   DFCT0011930 - Global Hierarchy Admins in a Private OU can see and modify all OUs even open OUs. The Private OUs cannot be seen by users in an Open OU (good thing)&#13;
@@ -135,7 +136,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		return this.getOUSubTaskMembersInTemplates();
 	},
 	
-// DFCT0012050 
+	// DFCT0012050 
 	getUserRestrictedGroupEncodedQuery: function(){
 		var userRestrictedGroupFitler = '';
 		var myRestrictedGroups = [];
@@ -203,7 +204,6 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		return restrictedGroupTypeID;
 		
 	},
-
 	
 	// STRY0099013 - change filter for Task Owner
 	getTaskOnwers: function() {
@@ -267,6 +267,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 			// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
 			// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617 - changed to apply privacy settings
 			arrOUs = taskPrivacy.getMyOUTaskManagersPrivacyFiltered(gs.getUserID(), primary_office, recordPrivacy);
+			
 			// STRY0112462
 			// STRY0139614 - STRY0139615 - STRY0139616 - STRY0139617
 			var permissiveOffices = taskPrivacy.getPermissiveOUsPrivacyFiltered();
@@ -384,14 +385,18 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var ouMemArr = [];
 		var arrOUs = [];
 		templateData = this.getTemplateInfo();
+		// DFCT0012402
+		var recordTable = current.getTableName();
+		var userCanRun = UserPermissions.userCanRunTemplateForTemplateId(templateData.templateId);
 
 		// handle my-template first as it is the easiest
 		if (templateData.template_level == 'my_process'){
 			// the rules for my template level are the same as the rules for the user.  return getOUMembers
 			return this.privategetOUMembers(templateData.primary_assignee, templateData.restricted_group);
 		} else if (templateData.template_level == 'ou_process') {
+			// DFCT0012402
 			// handle OU level next it is more complex
-			if (UserPermissions.userHasOUProcessRights(templateData.template_ou)) {
+			if (UserPermissions.userHasOUProcessRights(templateData.template_ou) || (recordTable == 'x_153465_discovert_discover_routing_runtime'  && userCanRun)) {
 				// note if primary assignee is not the restriction, we would get all OUs where the user is a Task Manager
 				// for the template, the selected OU selected for the process also has match the primary assignee for the user to be able to 
 				// select users from the OU.
@@ -414,7 +419,8 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 				}	
 			}
 		} else if (templateData.template_level == 'global_process') {
-			if (UserPermissions.userHasGlobalProcessRights()){
+			// DFCT0012402
+			if (UserPermissions.userHasGlobalProcessRights() || (recordTable == 'x_153465_discovert_discover_routing_runtime'  && userCanRun)){
 				if (templateData.primary_assignee && templateData.primary_assignee != ''){
 					arrOUs.push(templateData.primary_assignee);
 					// member field is limtted to the selected Primary Assignee
@@ -445,20 +451,25 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var ouMemArr = [];
 		var arrOUs = [];
 		templateData = this.getTemplateInfo();
+		// DFCT0012402
+		var recordTable = current.getTableName();
+		var userCanRun = UserPermissions.userCanRunTemplateForTemplateId(templateData.templateId);
 
 		// handle my-template first as it is the easiest
 		if (templateData.template_level == 'my_process'){
 			return this.getSubTaskMembers();
 		} else if (templateData.template_level == 'ou_process') {
+			// DFCT0012402
 			// handle OU level next it is more complex
-			if (UserPermissions.userHasOUProcessRights(templateData.template_ou)) {
+			if (UserPermissions.userHasOUProcessRights(templateData.template_ou) || (recordTable == 'x_153465_discovert_discover_routing_runtime'  && userCanRun)) {
 				// STRY0065247 - If no Primary assignee set, then return all members based on Template and user
 				// DFCT0011892 - OU level templates task as a task manager of the template OU.  So, the people should be restricted to the people in the Template OU.
 				// DFCT0012071					
 				ouMemArr = this._getAllMembersTemplateCanTask(templateData.template_ou, templateData.primary_office, templateData.recordPrivacy);
 			}
 		} else if (templateData.template_level == 'global_process') {
-			if (UserPermissions.userHasGlobalProcessRights()){
+			// DFCT0012402
+			if (UserPermissions.userHasGlobalProcessRights() || (recordTable == 'x_153465_discovert_discover_routing_runtime'  && userCanRun)){
 				if (templateData.restricted_group != '') {
 					ouMemArr = UserPermissions.getAllMembersSysIdsInGroup(templateData.restricted_group);
 					return 'sys_id IN ' + ouMemArr.join(',')  +''+ '^roles=x_153465_discovert.tasker_user^active=true'; 				
@@ -720,6 +731,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 	// STRY0065017 - this information is needed in multiple places in the Template Screens for permissions
 	getTemplateInfo: function() {
 		var templateData = {};
+		var templateId = '';
 		var restrictedGroup = '';
 		var primaryAssignee = '';
 		// DFCT0011930
@@ -733,6 +745,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		var recordTable = current.getTableName();
 
 		if(recordTable == 'x_153465_discovert_discover_routing_template'){
+			templateId = current.getUniqueValue();
 			templateLevel = current.getValue('process_level');
 			if(templateLevel == 'ou_process'){
 				templateOU = current.getValue('process_ou');
@@ -744,6 +757,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		} else if(recordTable == 'x_153465_discovert_route_tasks')  {
 			tempDef = current.getValue('tasker_process_definition');
 			if(grTempDef.get(tempDef)){
+				templateId = grTempDef.getUniqueValue();
 				templateLevel = grTempDef.getValue('process_level');
 				if(templateLevel == 'ou_process'){
 					templateOU = grTempDef.getValue('process_ou');
@@ -756,6 +770,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		} else if(recordTable == 'x_153465_discovert_discover_routing_runtime')  {
 			tempDef = current.getValue('routing_template_ref');
 			if(grTempDef.get(tempDef)){
+				templateId = grTempDef.getUniqueValue();
 				templateLevel = grTempDef.getValue('process_level');
 				if(templateLevel == 'ou_process'){
 					templateOU = grTempDef.getValue('process_ou');
@@ -770,6 +785,7 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		// STRY0079512 3
 		restrictedGroup = restrictedGroup == null ? '': restrictedGroup;
 		
+		templateData.templateId = templateId;
 		templateData.template_level = templateLevel;  
 		templateData.template_ou = templateOU;  
 		templateData.primary_assignee = primaryAssignee;
@@ -777,12 +793,14 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
 		templateData.primary_office = primary_office;
 		// DFCT0012071
 		templateData.recordPrivacy = recordPrivacy;
-		templateData.restricted_group = restrictedGroup; 		
+		templateData.restricted_group = restrictedGroup;  			
+		
 		return templateData;
 		
 	},
 
 	// STRY0065247 - load the list of members a user can task for an OU Template when Primary Assignee not set
+	
 	// DFCT0012071					
 	_getAllMembersTemplateCanTask: function (template_ou, primary_office, recordPrivacy){
 		var taskPrivacy = new task_privacy();
@@ -981,13 +999,13 @@ taskerDynamicFilters.prototype = Object.extendsObject(global.AbstractAjaxProcess
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-01-17 04:32:11</sys_created_on>
         <sys_id>6ded97044f7f8300303dc3818110c7d4</sys_id>
-        <sys_mod_count>419</sys_mod_count>
+        <sys_mod_count>440</sys_mod_count>
         <sys_name>taskerDynamicFilters</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_6ded97044f7f8300303dc3818110c7d4</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-07-09 20:05:32</sys_updated_on>
+        <sys_updated_on>2024-04-17 21:01:05</sys_updated_on>
     </sys_script_include>
 </record_update>
