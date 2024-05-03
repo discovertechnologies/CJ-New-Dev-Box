@@ -1,28 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>2.8 Fix Script to move the Task Administrator list and the Global Hierarchy Administrator list to the Top OU for performance&#13;
-&#13;
-// NOTE:  update in 2.8.4  | 2023-11-06 | STRY0146507 - Certification Failed Test Results - Provided the updates required to keep in product&#13;
+        <description>2.8.4 HF - STRY0147858 - The "Synchronize OU TA &amp; GTA per Org Unit" fix script will be relabeled to "Sync OUHA, TM, TA per OU"&#13;
+When a Tasker App Admin runs the "Sync OUHA, TM, TA per OU" fix script, the Org Hierarchy form will do the following:&#13;
+   (current functionality) move the Task Administrator list to the Top OU for performance &#13;
+   (current functionality) sets the OU Administrator for each OU where a member has the OUHA role&#13;
+   (new functionality) Remove any user that does not exist anymore in the OUHA, TM, and TA list on the Org Hierarchy form for all OUs&#13;
 &#13;
 Release Introduced: 2.8&#13;
-- Only needs to be run a single time&#13;
+- Can be run if user roles for Task Administrator, Task Manager, or OU Hierarchy Administrators are out of sync&#13;
 &#13;
-Purpose:  &#13;
-- This script sets the OU Administrator for each OU to the OU Admin, an Ancestor OU Admin, or the Gobal Hierarchy Administrator&#13;
-- This was done to allow better management of Organizational Units as an Ancestor OU Admin can handle issues without having to go all the way to the GHA&#13;
-- The field did not exist before 2.8.  &#13;
-- All scripts were updated to use this when checking for administrators&#13;
-- All CRUD scripts were updated to set these values when they change&#13;
+Purpose for Task Managers:&#13;
+- This script sets the Task Managers for each ou to the full list of members with this role&#13;
+- This script should be run when member roles are out of sync&#13;
+Purpose for OU Administrators&#13;
+- This script sets the OU Administrators for each out to the full list of members with this role&#13;
+- This script should be run when member roles are out of sync&#13;
+Purpose for Task Administrators&#13;
+- This script sets the Task Administrators for the Top Ou of  each Org Structure to the full list of members with this role&#13;
+- This script should be run when member roles are out of sync&#13;
+- Set the &#13;
 &#13;
 Validation:&#13;
 - Open the Organizational Hierarchy Table - /x_153465_discovert_discover_office_hierarchy_list.do&#13;
-- Add the OU Administator field "OU Hierarchy Administrators" to the list &#13;
-- RESULT: All fields should be populated&#13;
+   - Add the OU Administrator field "OU Hierarchy Administrators" to the list &#13;
+   - Add the Task Managers field "Task Managers" to the list &#13;
+   - Add the Task Administrators field "Task Administrators" to the list &#13;
+- Load the Organizational Members table in a separate window&#13;
+- RESULT:&#13;
+The "OU Hierarchy Administrators" field should contain the list of members with the OU Hierarchy role in the Organizational Members table&#13;
+- RESULT:&#13;
+The "Task Managers" field should contain the list of members with the Task Manager role in the Organizational Members table&#13;
+- RESULT: &#13;
+The Task Administrator fields on Top OUs should be populated with all members of the organizational structure with the role Task Administrator in the Organizational Members table&#13;
 &#13;
 If any values are wrong, report the differences to the DTech Apps support team.&#13;
 </description>
-        <name>Synchronize OU TA &amp; GTA per Org Unit</name>
+        <name>Sync OUHA, TM, TA per OU</name>
         <record_for_rollback>false</record_for_rollback>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
@@ -30,101 +44,202 @@ If any values are wrong, report the differences to the DTech Apps support team.&
 *  Any reproduction of computer software, computer software documentation,
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
-(function execute() {
-	gs.info("Tasker - Fix Script - Executing 'Sync of Org Hierarchy with Org Unit Tables'");
-	var orgHierarchyTableName = "x_153465_discovert_discover_office_hierarchy";
-	var orgUnitTableName = "x_153465_discovert_discover_office_members";
-	
-	try{
-		//get hierarchy table
-		var hierarchyTable = new GlideRecord(orgHierarchyTableName);
-		hierarchyTable.query();
-		//function to get org unit table with office auth based on current OU
-		var getOuUnitTable = function(currentOUHierarchySysId) {
-			var ouUnitTable = new GlideRecord(orgUnitTableName);
-			ouUnitTable.addQuery("discover_office_hierarchy", currentOUHierarchySysId);
-			ouUnitTable.addQuery("office_task_authority", "true");
-			ouUnitTable.query();
-			return ouUnitTable;
-		};
-		//function to get org unit table with global auth based on current OU
-		var getGlobalUnitTable = function(currentGlobalHierarchySysId) {
-			var globalUnitTable = new GlideRecord(orgUnitTableName);
-			globalUnitTable.addQuery("discover_office_hierarchy", currentGlobalHierarchySysId);
-			globalUnitTable.addQuery("is_global_tasking_authority", "true");
-			globalUnitTable.query();
-			return globalUnitTable;
-		};
-		//for each record in hierarchy table
-		var globalHierarchyList = "";
-		while(hierarchyTable.next()) {
-			gs.info("Fix Script - Sync Org Hierarchy - Checking OU: ====" + hierarchyTable.getValue("office_name") + "====");
-			try {
-				// get ou sysid
-				var ouId = hierarchyTable.getValue("sys_id");
-				// find all records in unit table with matching OU
-				var unitTableOU = getOuUnitTable(ouId);
-				// for each of the records in unit table
-				var hierarchyList = "";
-				while(unitTableOU.next()) {
-					try {
-						//add user ref of any record containing true for 
-						//"office_task_authority" to hierarchy table list "tasking_authorities"		
-						var otaUserId = unitTableOU.getValue("office_member");
-						hierarchyList  = (hierarchyList) ? hierarchyList + "," + otaUserId : otaUserId;
-					} catch(ex_uTableOU) {
-						gs.error(ex_uTableOU);
-					}
-					
-				}
-				hierarchyTable.setValue("tasking_authorities", hierarchyList);
-				gs.info("Fix Script - Sync Org Hierarchy - OU_TA Users: " + hierarchyList);
-				// then do the same for global tasking authorities
-				var unitTableGlobal = getGlobalUnitTable(ouId);
-				
-				while(unitTableGlobal.next()) {
-					try {
-						var globalMember = unitTableGlobal.getValue("office_member");
-						if(globalHierarchyList.indexOf(globalMember) == -1) {
-							globalHierarchyList = (globalHierarchyList) ? globalHierarchyList + "," + globalMember : globalMember;
-						}
-					} catch(ex_uTableGl) {
-						gs.warn(ex_uTableGl);
-					}
-				}
-				
-				gs.info("Fix Script - Sync Org Hierarchy - collected Global TA Users: " + globalHierarchyList);
-				// if anything changed, call the update (max once per record)
-				hierarchyTable.update();
-			} catch(ex_htable) {
-				gs.error(ex_htable);
+gs.info("Tasker - Fix Script - Executing 'Sync of Org Hierarchy with Org Unit Tables'");
+var orgHierarchyTableName = "x_153465_discovert_discover_office_hierarchy";
+var orgMemberTableName = "x_153465_discovert_discover_office_members";
+var orgUserTableName = "x_153465_discovert_organization_user";
+
+//function to get a GlideRecord query results matching the members with the given role for an org structure
+function setUsersInGlobalRole(role, orgTableField, arrUsersInGlobalRole) {
+	forEach(function(user_sys_id){
+		var userId = user_sys_id.toString();
+		var grOrgUser = new GlideRecord(orgUserTableName);
+		grOrgUser.addQuery("u_tasker_user", userId);
+		grOrgUser.query();
+		var userFound = false;
+		while(grOrgUser.next()) {
+			userFound=true;
+			if(role != "x_153465_discovert.tasker_user"){
+				grOrgUser.setValue(orgTableField,true);
 			}
 		}
-		hierarchyTable = new GlideRecord(orgHierarchyTableName);
-		hierarchyTable.query();
-		gs.info("Fix Script - Sync Org Hierarchy - Setting ALL Global TA");
-		while(hierarchyTable.next()) {
-			gs.info("Fix Script - Sync Org Hierarchy - Setting Global TA for " + hierarchyTable.getValue("office_name"));
-			hierarchyTable.setValue("u_global_authorities", globalHierarchyList);
-			hierarchyTable.update();
+		if(!userFound){
+			gs.error("User with GUID: " + userId + " has role: " + role + " but is not in any Tasker Organizaitonal Units");
 		}
-		gs.info("Fix Script - Sync Org Hierarchy - COMPLETE");
-	} catch(e) {
-		gs.error(e);
+	});
+}
+
+function removeUsersFromGlobalRoles(orgTableField, arrUsersInGlobalRole){
+		var grOrgUser = new GlideRecord(orgUserTableName);
+		grOrgUser.addQuery(orgTableField, 'true');
+		grOrgUser.query();
+		while(grOrgUser.next()) {
+			roleSetForUser = arrUsersInGlobalRole.filter(function(user_sys_id){
+				var userId = user_sys_id.toString();
+				return userId = grOrgUser.getValue(u_tasker_user) + "";
+			});
+			if(roleSetForUser.length<1){
+				grOrgUser.setValue(orgTableField,false);
+			}
+		}
+}
+
+try{
+	//function to get a GlideRecord query results matching the members with the given role for an OU
+	var getOURoleRecords = function(role, ouSysId) {
+		var grOUroleRecords = new GlideRecord(orgMemberTableName);
+		grOUroleRecords.addQuery("discover_office_hierarchy", ouSysId);
+		grOUroleRecords.addQuery(role, "true");
+		grOUroleRecords.query();
+		return grOUroleRecords;
+	};
+
+	//function to get a GlideRecord query results matching the members with the given role for an org structure
+	var getUsersInGlobalRole = function(role) {
+		var arrUsersInGlobalRole = [];
+		var grUserRoles = new GlideRecord('sys_user_has_role');
+		grUserRoles.addQuery('role.name', role);
+		grUserRoles.query();
+		while(grUserRoles.next()) {
+			arrUsersInGlobalRole.push(grUserRoles.getDisplayValue('user')); 
+		}
+		var au = new global.ArrayUtil();
+		arrUsersInGlobalRole = au.unique(arrUsersInGlobalRole);
+		return arrUsersInGlobalRole;
+	};
+
+	var getAdminstratorsForOrgStructure = function(arrUsersInGlobalRole, top_ou){
+		var arrOrgStructureTA = [];
+		var orgStructureTAList = "";
+		arrUsersInGlobalRole.forEach(function(member){
+			var strMember = member.toString();
+			var usersInOU = new GlideRecord(orgMemberTableName);
+			usersInOU.addQuery("discover_office_hierarchy.u_top_ou", top_ou);
+			usersInOU.addQuery("office_member",strMember);
+			if(usersInOU.next()){
+				arrOrgStructureTA.push(strMember);
+			}
+		});
+		orgStructureTAList = arrOrgStructureTA.join(",");
+		return orgStructureTAList;
+	};
+
+	//for each record in hierarchy table
+	//get hierarchy table
+	var hierarchyTable = new GlideRecord(orgHierarchyTableName);
+	hierarchyTable.query();
+	while(hierarchyTable.next()) {
+		try {
+			// get ou sysid
+			var ouId = hierarchyTable.getUniqueValue();
+			var ouDisplayName = hierarchyTable.getDisplayValue();
+			gs.info("Fix Script - Sync Org Hierarchy - Checking OU: ====" + ouDisplayName + "====");
+			// find all members in ou with Task Manager role
+			var ouTMRecords = getOURoleRecords('office_task_authority', ouId);
+			var taskManagerList = "";
+			while(ouTMRecords.next()) {
+				try {
+					//add user ref of any record containing true for 
+					//"office_task_authority" to hierarchy table list "tasking_authorities"		
+					var taskManagerId = ouTMRecords.getValue("office_member");
+					taskManagerList  = (taskManagerList) ? taskManagerList + "," + taskManagerId : taskManagerId;
+				} catch(ex_uTableOU) {
+					gs.error(ex_uTableOU);
+				}					
+			}
+
+			// find all members in ou with Task Manager role
+			var ouHARecords = getOURoleRecords('is_office_administrator', ouId);
+			var ouHAList = "";
+			while(ouHARecords.next()) {
+				try {
+					//add user ref of any record containing true for 
+					//"office_task_authority" to hierarchy table list "tasking_authorities"		
+					var ouHAId = ouHARecords.getValue("office_member");
+					ouHAList  = (ouHAList) ? ouHAList + "," + ouHAId : ouHAId;
+				} catch(ex_uTableOU) {
+					gs.error(ex_uTableOU);
+				}
+				
+			}
+
+			hierarchyTable.setValue("tasking_authorities", taskManagerList);
+			gs.info("Fix Script - Sync Org Hierarchy - OU: " + ouDisplayName + " - Task Managers: " + taskManagerList);
+
+			hierarchyTable.setValue("u_ou_hierarchy_administrators", ouHAList);
+			gs.info("Fix Script - Sync Org Hierarchy - OU: " + ouDisplayName + " - OU Hierarchy Administrators: " + ouHAList);
+			hierarchyTable.update();
+		} catch(e) {
+			gs.error(e);
+		}
+
 	}
-})();]]></script>
+
+	var arrAllTAAs = getUsersInGlobalRole("x_153465_discovert.tasker_application_admin");
+	setUsersInGlobalRole("x_153465_discovert.tasker_application_admin", "is_tasker_application_administrator", arrAllTAAs);
+	removeUsersFromGlobalRoles("is_tasker_application_administrator", arrAllTAAs);
+
+	var arrAllGHA = getUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin");
+	setUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin", "is_global_hierarchy_administrator", arrAllGHA);
+	removeUsersFromGlobalRoles("is_global_hierarchy_administrator", arrAllGHA);
+
+	var arrAllTemplateAdmins = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin");
+	setUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin", "can_manage_template_permissions", arrAllTemplateAdmins);
+	removeUsersFromGlobalRoles("can_manage_template_permissions", arrAllTemplateAdmins);
+
+	var arrAllGTDs = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_global");
+	setUsersInGlobalRole("x_153465_discovert.tasker_process_template_global", "can_manage_global_template", arrAllGTDs);
+	removeUsersFromGlobalRoles("can_manage_global_template", arrAllGTDs);
+
+	var arrAllTaskerUsers = getUsersInGlobalRole("x_153465_discovert.tasker_user");
+	setUsersInGlobalRole("x_153465_discovert.tasker_user", "TaskerUserRole", arrAllTaskerUsers);
+	removeUsersFromGlobalRoles("TaskerUserRole", arrAllTaskerUsers);
+
+	var arrAllTEs = getUsersInGlobalRole("x_153465_discovert.Task_Executive");
+	setUsersInGlobalRole("x_153465_discovert.Task_Executive", "is_task_executive", arrAllTEs);
+	removeUsersFromGlobalRoles("is_task_executive", arrAllTEs);
+
+	var arrAllTaskAdministrators = getUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+	setUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin", "is_task_administrator", arrAllTaskAdministrators);
+	removeUsersFromGlobalRoles("is_task_administrator", arrAllTaskAdministrators);
+
+	//for each top ou record in hierarchy table
+	var grTopOURecords = new GlideRecord(orgHierarchyTableName);
+	grTopOURecords.addNullQuery('parent').addOrCondition('parent', '');
+	grTopOURecords.query();
+	while(grTopOURecords.next()) {
+
+		try {
+			var topOUDisplayName = grTopOURecords.getDisplayValue();
+			// get topOU sysid
+			var topOU = grTopOURecords.getUniqueValue();
+			var taskAdministratorList = getAdminstratorsForOrgStructure(arrAllTaskAdministrators, topOU);
+			gs.info("Fix Script - Sync Org Hierarchy - collected Task Administrator Users: " + taskAdministratorList);
+			// if anything changed, call the update (max once per record)
+			gs.info("Fix Script - Sync Org Hierarchy - Setting Task Administrators for organizational structure with top OU: " + topOUDisplayName);
+			grTopOURecords.setValue("u_global_authorities", taskAdministratorList);
+			grTopOURecords.update();
+		} catch(ex_htable) {
+			gs.error(ex_htable);
+		}
+	}
+	gs.info("Fix Script - Sync Org Hierarchy - COMPLETE");
+} catch(e) {
+	gs.error(e);
+}
+]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>kbaton</sys_created_by>
         <sys_created_on>2019-02-07 15:23:55</sys_created_on>
         <sys_id>4ba02524db672300c18c59b2ca9619c8</sys_id>
-        <sys_mod_count>32</sys_mod_count>
-        <sys_name>Synchronize OU TA &amp; GTA per Org Unit</sys_name>
+        <sys_mod_count>47</sys_mod_count>
+        <sys_name>Sync OUHA, TM, TA per OU</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_4ba02524db672300c18c59b2ca9619c8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-11-07 03:27:58</sys_updated_on>
+        <sys_updated_on>2024-05-03 18:19:03</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
