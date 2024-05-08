@@ -49,6 +49,9 @@ var orgHierarchyTableName = "x_153465_discovert_discover_office_hierarchy";
 var orgMemberTableName = "x_153465_discovert_discover_office_members";
 var orgUserTableName = "x_153465_discovert_organization_user";
 var fixScriptName = "Fix Script - Sync OUHA, TM, TA per OU";
+
+syncOUHA_TM_TA_roles();
+syncOUMemberTaskUserRole();
 //function to get a GlideRecord query results matching the members with the given role for an org structure
 function setUsersInGlobalRole(role, orgTableField, arrUsersInGlobalRole) {
 	try{
@@ -101,189 +104,241 @@ function removeUsersFromGlobalRoles(orgTableField, arrUsersInGlobalRole){
 	}
 }
 
-try{
-	//function to get a GlideRecord query results matching the members with the given role for an OU
-	var getOURoleRecords = function(role, ouSysId) {
-		var grOUroleRecords = new GlideRecord(orgMemberTableName);
-		try{
-			
-			grOUroleRecords.addQuery("discover_office_hierarchy", ouSysId);
-			grOUroleRecords.addQuery(role, "true");
-			grOUroleRecords.query();
-			return grOUroleRecords;
-		} catch(ex){
-			gs.error(fixScriptName + " - error in setUsersInGlobalRole - error: " + JSON.stringify(ex) + " parameters[role: " + role + " - ouSysId: " + ouSysId + "]");
-			return grOUroleRecords;
-		}
-	};
-
-	//function to get a GlideRecord query results matching the members with the given role for an org structure
-	var getUsersInGlobalRole = function(role) {
-		var arrUsersInGlobalRole = [];
-		try{
-			var grUserRoles = new GlideRecord('sys_user_has_role');
-			grUserRoles.addQuery('role.name', role);
-			grUserRoles.query();
-			while(grUserRoles.next()) {
-				arrUsersInGlobalRole.push(grUserRoles.getValue('user')); 
-			}
-			var au = new global.ArrayUtil();
-			arrUsersInGlobalRole = au.unique(arrUsersInGlobalRole);
-			return arrUsersInGlobalRole;
-		} catch(ex){
-			gs.error(fixScriptName + " - error in getUsersInGlobalRole  - error: " + JSON.stringify(ex) + " parameters[role: " + role + "]");
-			return arrUsersInGlobalRole;
-		}
-
-	};
-
-	var getAdminstratorsForOrgStructure = function(arrUsersInGlobalRole, top_ou){
-		var arrOrgStructureTA = [];
-		var orgStructureTAList = "";
-		try{
-			arrUsersInGlobalRole.forEach(function(member){
-				if(member && member!=undefined && member!="undefined"){
-					var strMember = member.toString();
-					var usersInOU = new GlideRecord(orgMemberTableName);
-					usersInOU.addQuery("discover_office_hierarchy.u_top_ou", top_ou);
-					usersInOU.addQuery("office_member",strMember);
-					usersInOU.query();
-					if(usersInOU.next()){
-						arrOrgStructureTA.push(strMember);
-					}
-				}
-			});
-			orgStructureTAList = arrOrgStructureTA.join(",");
-			return orgStructureTAList;
-		} catch(ex){
-			gs.error(fixScriptName + " - error in getAdminstratorsForOrgStructure - error: " + JSON.stringify(ex) + " parameters[top_ou: " + top_ou + " - arrUsersInGlobalRole: " + arrUsersInGlobalRole + "]");
-			return orgStructureTAList;
-		}
-
-	};
-
-	//for each record in hierarchy table
-	//get hierarchy table
-	var hierarchyTable = new GlideRecord(orgHierarchyTableName);
-	hierarchyTable.query();
-	while(hierarchyTable.next()) {
-		try {
-			// get ou sysid
-			var ouId = hierarchyTable.getUniqueValue();
-			var ouDisplayName = hierarchyTable.getDisplayValue();
-			gs.info(fixScriptName + " - Checking OU: ====" + ouDisplayName + "====");
-			// find all members in ou with Task Manager role
-			var ouTMRecords = getOURoleRecords('office_task_authority', ouId);
-			var taskManagerList = "";
-			while(ouTMRecords.next()) {
-				try {
-					//add user ref of any record containing true for 
-					//"office_task_authority" to hierarchy table list "tasking_authorities"		
-					var taskManagerId = ouTMRecords.getValue("office_member");
-					taskManagerList  = (taskManagerList) ? taskManagerList + "," + taskManagerId : taskManagerId;
-				} catch(ex) {
-					gs.error(fixScriptName + " - error in getting Task Manager list for OU - error: " + JSON.stringify(ex) + " parameters[OU: " + ouDisplayName + " - taskManagerId: " + taskManagerId + "]");
-				}					
-			}
-
-			// find all members in ou with Task Manager role
-			var ouHARecords = getOURoleRecords('is_office_administrator', ouId);
-			var ouHAList = "";
-			while(ouHARecords.next()) {
-				try {
-					//add user ref of any record containing true for 
-					//"office_task_authority" to hierarchy table list "tasking_authorities"		
-					var ouHAId = ouHARecords.getValue("office_member");
-					ouHAList  = (ouHAList) ? ouHAList + "," + ouHAId : ouHAId;
-				} catch(ex) {
-					gs.error(fixScriptName + " - error in getting OUHA list for OU - error: " + JSON.stringify(ex) + " parameters[OU: " + ouDisplayName + " - ouHAId: " + ouHAId + "]");
-				}
+function syncOUHA_TM_TA_roles(){
+	try{
+		//function to get a GlideRecord query results matching the members with the given role for an OU
+		var getOURoleRecords = function(role, ouSysId) {
+			var grOUroleRecords = new GlideRecord(orgMemberTableName);
+			try{
 				
+				grOUroleRecords.addQuery("discover_office_hierarchy", ouSysId);
+				grOUroleRecords.addQuery(role, "true");
+				grOUroleRecords.query();
+				return grOUroleRecords;
+			} catch(ex){
+				gs.error(fixScriptName + " - error in setUsersInGlobalRole - error: " + JSON.stringify(ex) + " parameters[role: " + role + " - ouSysId: " + ouSysId + "]");
+				return grOUroleRecords;
+			}
+		};
+
+		//function to get a GlideRecord query results matching the members with the given role for an org structure
+		var getUsersInGlobalRole = function(role) {
+			var arrUsersInGlobalRole = [];
+			try{
+				var grUserRoles = new GlideRecord('sys_user_has_role');
+				grUserRoles.addQuery('role.name', role);
+				grUserRoles.query();
+				while(grUserRoles.next()) {
+					arrUsersInGlobalRole.push(grUserRoles.getValue('user')); 
+				}
+				var au = new global.ArrayUtil();
+				arrUsersInGlobalRole = au.unique(arrUsersInGlobalRole);
+				return arrUsersInGlobalRole;
+			} catch(ex){
+				gs.error(fixScriptName + " - error in getUsersInGlobalRole  - error: " + JSON.stringify(ex) + " parameters[role: " + role + "]");
+				return arrUsersInGlobalRole;
 			}
 
-			hierarchyTable.setValue("tasking_authorities", taskManagerList);
-			gs.info(fixScriptName + " - OU: " + ouDisplayName + " - Task Managers: " + taskManagerList);
+		};
 
-			hierarchyTable.setValue("u_ou_hierarchy_administrators", ouHAList);
-			gs.info(fixScriptName + " - OU: " + ouDisplayName + " - OU Hierarchy Administrators: " + ouHAList);
-			hierarchyTable.update();
-		} catch(ex){
-			gs.error(fixScriptName + " - error in Hierachy Role Update loop  - error: " + JSON.stringify(ex) + " parameters[ouDisplayName: " + ouDisplayName + "]");
+		var getAdminstratorsForOrgStructure = function(arrUsersInGlobalRole, top_ou){
+			var arrOrgStructureTA = [];
+			var orgStructureTAList = "";
+			try{
+				arrUsersInGlobalRole.forEach(function(member){
+					if(member && member!=undefined && member!="undefined"){
+						var strMember = member.toString();
+						var usersInOU = new GlideRecord(orgMemberTableName);
+						usersInOU.addQuery("discover_office_hierarchy.u_top_ou", top_ou);
+						usersInOU.addQuery("office_member",strMember);
+						usersInOU.query();
+						if(usersInOU.next()){
+							arrOrgStructureTA.push(strMember);
+						}
+					}
+				});
+				orgStructureTAList = arrOrgStructureTA.join(",");
+				return orgStructureTAList;
+			} catch(ex){
+				gs.error(fixScriptName + " - error in getAdminstratorsForOrgStructure - error: " + JSON.stringify(ex) + " parameters[top_ou: " + top_ou + " - arrUsersInGlobalRole: " + arrUsersInGlobalRole + "]");
+				return orgStructureTAList;
+			}
+
+		};
+
+		//for each record in hierarchy table
+		//get hierarchy table
+		var hierarchyTable = new GlideRecord(orgHierarchyTableName);
+		hierarchyTable.query();
+		while(hierarchyTable.next()) {
+			try {
+				// get ou sysid
+				var ouId = hierarchyTable.getUniqueValue();
+				var ouDisplayName = hierarchyTable.getDisplayValue();
+				gs.info(fixScriptName + " - Checking OU: ====" + ouDisplayName + "====");
+				// find all members in ou with Task Manager role
+				var ouTMRecords = getOURoleRecords('office_task_authority', ouId);
+				var taskManagerList = "";
+				while(ouTMRecords.next()) {
+					try {
+						//add user ref of any record containing true for 
+						//"office_task_authority" to hierarchy table list "tasking_authorities"		
+						var taskManagerId = ouTMRecords.getValue("office_member");
+						taskManagerList  = (taskManagerList) ? taskManagerList + "," + taskManagerId : taskManagerId;
+					} catch(ex) {
+						gs.error(fixScriptName + " - error in getting Task Manager list for OU - error: " + JSON.stringify(ex) + " parameters[OU: " + ouDisplayName + " - taskManagerId: " + taskManagerId + "]");
+					}					
+				}
+
+				// find all members in ou with Task Manager role
+				var ouHARecords = getOURoleRecords('is_office_administrator', ouId);
+				var ouHAList = "";
+				while(ouHARecords.next()) {
+					try {
+						//add user ref of any record containing true for 
+						//"office_task_authority" to hierarchy table list "tasking_authorities"		
+						var ouHAId = ouHARecords.getValue("office_member");
+						ouHAList  = (ouHAList) ? ouHAList + "," + ouHAId : ouHAId;
+					} catch(ex) {
+						gs.error(fixScriptName + " - error in getting OUHA list for OU - error: " + JSON.stringify(ex) + " parameters[OU: " + ouDisplayName + " - ouHAId: " + ouHAId + "]");
+					}
+					
+				}
+
+				hierarchyTable.setValue("tasking_authorities", taskManagerList);
+				gs.info(fixScriptName + " - OU: " + ouDisplayName + " - Task Managers: " + taskManagerList);
+
+				hierarchyTable.setValue("u_ou_hierarchy_administrators", ouHAList);
+				gs.info(fixScriptName + " - OU: " + ouDisplayName + " - OU Hierarchy Administrators: " + ouHAList);
+				hierarchyTable.update();
+			} catch(ex){
+				gs.error(fixScriptName + " - error in Hierachy Role Update loop  - error: " + JSON.stringify(ex) + " parameters[ouDisplayName: " + ouDisplayName + "]");
+			}
+
 		}
 
-	}
+		var arrAllTAAs = getUsersInGlobalRole("x_153465_discovert.tasker_application_admin");
+		gs.info(fixScriptName + " - the following user_ids have the Tasker Application Admin Role: " + JSON.stringify(arrAllTAAs));
+		setUsersInGlobalRole("x_153465_discovert.tasker_application_admin", "is_tasker_application_administrator", arrAllTAAs);
+		removeUsersFromGlobalRoles("is_tasker_application_administrator", arrAllTAAs);
 
-	var arrAllTAAs = getUsersInGlobalRole("x_153465_discovert.tasker_application_admin");
-	gs.info(fixScriptName + " - the following user_ids have the Tasker Application Admin Role: " + JSON.stringify(arrAllTAAs));
-	setUsersInGlobalRole("x_153465_discovert.tasker_application_admin", "is_tasker_application_administrator", arrAllTAAs);
-	removeUsersFromGlobalRoles("is_tasker_application_administrator", arrAllTAAs);
+		var arrAllGHA = getUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin");
+		gs.info(fixScriptName + " - the following user_ids have the Global Hierarcy Administrator Role: " + JSON.stringify(arrAllGHA));
+		setUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin", "is_global_hierarchy_administrator", arrAllGHA);
+		removeUsersFromGlobalRoles("is_global_hierarchy_administrator", arrAllGHA);
 
-	var arrAllGHA = getUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin");
-	gs.info(fixScriptName + " - the following user_ids have the Global Hierarcy Administrator Role: " + JSON.stringify(arrAllGHA));
-	setUsersInGlobalRole("x_153465_discovert.tasker_organizational_admin", "is_global_hierarchy_administrator", arrAllGHA);
-	removeUsersFromGlobalRoles("is_global_hierarchy_administrator", arrAllGHA);
+		var arrAllTemplateAdmins = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin");
+		gs.info(fixScriptName + " - the following user_ids have the Template Permisssions Administrator Role: " + JSON.stringify(arrAllTemplateAdmins));
+		setUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin", "can_manage_template_permissions", arrAllTemplateAdmins);
+		removeUsersFromGlobalRoles("can_manage_template_permissions", arrAllTemplateAdmins);
 
-	var arrAllTemplateAdmins = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin");
-	gs.info(fixScriptName + " - the following user_ids have the Template Permisssions Administrator Role: " + JSON.stringify(arrAllTemplateAdmins));
-	setUsersInGlobalRole("x_153465_discovert.tasker_process_template_admin", "can_manage_template_permissions", arrAllTemplateAdmins);
-	removeUsersFromGlobalRoles("can_manage_template_permissions", arrAllTemplateAdmins);
+		var arrAllGTDs = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_global");
+		gs.info(fixScriptName + " - the following user_ids have the Global Template Designer Role: " + JSON.stringify(arrAllGTDs));
+		setUsersInGlobalRole("x_153465_discovert.tasker_process_template_global", "can_manage_global_template", arrAllGTDs);
+		removeUsersFromGlobalRoles("can_manage_global_template", arrAllGTDs);
 
-	var arrAllGTDs = getUsersInGlobalRole("x_153465_discovert.tasker_process_template_global");
-	gs.info(fixScriptName + " - the following user_ids have the Global Template Designer Role: " + JSON.stringify(arrAllGTDs));
-	setUsersInGlobalRole("x_153465_discovert.tasker_process_template_global", "can_manage_global_template", arrAllGTDs);
-	removeUsersFromGlobalRoles("can_manage_global_template", arrAllGTDs);
+		var arrAllTaskerUsers = getUsersInGlobalRole("x_153465_discovert.tasker_user");
+		gs.info(fixScriptName + " - the following user_ids have the Tasker User Role: " + JSON.stringify(arrAllTaskerUsers));
+		setUsersInGlobalRole("x_153465_discovert.tasker_user", "TaskerUserRole", arrAllTaskerUsers);
+		removeUsersFromGlobalRoles("TaskerUserRole", arrAllTaskerUsers);
 
-	var arrAllTaskerUsers = getUsersInGlobalRole("x_153465_discovert.tasker_user");
-	gs.info(fixScriptName + " - the following user_ids have the Tasker User Role: " + JSON.stringify(arrAllTaskerUsers));
-	setUsersInGlobalRole("x_153465_discovert.tasker_user", "TaskerUserRole", arrAllTaskerUsers);
-	removeUsersFromGlobalRoles("TaskerUserRole", arrAllTaskerUsers);
+		var arrAllTEs = getUsersInGlobalRole("x_153465_discovert.Task_Executive");
+		gs.info(fixScriptName + " - the following user_ids have the Task Exectutive Role: " + JSON.stringify(arrAllTEs));
+		setUsersInGlobalRole("x_153465_discovert.Task_Executive", "is_task_executive", arrAllTEs);
+		removeUsersFromGlobalRoles("is_task_executive", arrAllTEs);
 
-	var arrAllTEs = getUsersInGlobalRole("x_153465_discovert.Task_Executive");
-	gs.info(fixScriptName + " - the following user_ids have the Task Exectutive Role: " + JSON.stringify(arrAllTEs));
-	setUsersInGlobalRole("x_153465_discovert.Task_Executive", "is_task_executive", arrAllTEs);
-	removeUsersFromGlobalRoles("is_task_executive", arrAllTEs);
+		var arrAllTaskAdministrators = getUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
+		gs.info(fixScriptName + " - the following user_ids have the Task Administrator Role: " + JSON.stringify(arrAllTaskAdministrators));
+		setUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin", "is_task_administrator", arrAllTaskAdministrators);
+		removeUsersFromGlobalRoles("is_task_administrator", arrAllTaskAdministrators);
 
-	var arrAllTaskAdministrators = getUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin");
-	gs.info(fixScriptName + " - the following user_ids have the Task Administrator Role: " + JSON.stringify(arrAllTaskAdministrators));
-	setUsersInGlobalRole("x_153465_discovert.tasker_global_Tasking_Authority_member_admin", "is_task_administrator", arrAllTaskAdministrators);
-	removeUsersFromGlobalRoles("is_task_administrator", arrAllTaskAdministrators);
-
-	//for each top ou record in hierarchy table
-	var grTopOURecords = new GlideRecord(orgHierarchyTableName);
-	grTopOURecords.addNullQuery('parent').addOrCondition('parent', '');
-	grTopOURecords.query();
-	while(grTopOURecords.next()) {
-		try {
-			var topOUDisplayName = grTopOURecords.getDisplayValue();
-			// get topOU sysid
-			var topOU = grTopOURecords.getUniqueValue();
-			var taskAdministratorList = getAdminstratorsForOrgStructure(arrAllTaskAdministrators, topOU);
-			gs.info(fixScriptName + " - collected Task Administrator Users: [" + taskAdministratorList + "] for Organizational Structure with Top OU: " + topOUDisplayName);
-			// if anything changed, call the update (max once per record)
-			gs.info(fixScriptName + " - Setting Task Administrators for organizational structure with top OU: " + topOUDisplayName);
-			grTopOURecords.setValue("u_global_authorities", taskAdministratorList);
-			grTopOURecords.update();
-		} catch(ex){
-			gs.error(fixScriptName + " - error in Top OU Administrator update loop  - error: " + JSON.stringify(ex) + " parameters[topOUDisplayName: " + topOUDisplayName + "]");
+		//for each top ou record in hierarchy table
+		var grTopOURecords = new GlideRecord(orgHierarchyTableName);
+		grTopOURecords.addNullQuery('parent').addOrCondition('parent', '');
+		grTopOURecords.query();
+		while(grTopOURecords.next()) {
+			try {
+				var topOUDisplayName = grTopOURecords.getDisplayValue();
+				// get topOU sysid
+				var topOU = grTopOURecords.getUniqueValue();
+				var taskAdministratorList = getAdminstratorsForOrgStructure(arrAllTaskAdministrators, topOU);
+				gs.info(fixScriptName + " - collected Task Administrator Users: [" + taskAdministratorList + "] for Organizational Structure with Top OU: " + topOUDisplayName);
+				// if anything changed, call the update (max once per record)
+				gs.info(fixScriptName + " - Setting Task Administrators for organizational structure with top OU: " + topOUDisplayName);
+				grTopOURecords.setValue("u_global_authorities", taskAdministratorList);
+				grTopOURecords.update();
+			} catch(ex){
+				gs.error(fixScriptName + " - error in Top OU Administrator update loop  - error: " + JSON.stringify(ex) + " parameters[topOUDisplayName: " + topOUDisplayName + "]");
+			}
 		}
+		gs.info(fixScriptName + " - COMPLETE");
+	} catch(ex){
+		gs.error(fixScriptName + " - uncaught error in Fix Script main  - error: " + JSON.stringify(ex));
 	}
-	gs.info(fixScriptName + " - COMPLETE");
-} catch(ex){
-	gs.error(fixScriptName + " - uncaught error in Fix Script main  - error: " + JSON.stringify(ex));
 }
-]]></script>
+
+function syncOUMemberTaskUserRole(){
+	var tcs  = new TaskerCommonScriptingMethods();
+	var userTableName = "sys_user";
+	var ouMemberTableName = "x_153465_discovert_discover_office_members";
+
+	//synchronizes all checked fields with the found member records
+	var allUsers = tcs.queryRelated(userTableName, null, function(user) {
+		var ouMemberQuery = [{"office_member": user.sys_id}];
+		var modCount = 0;
+		tcs.queryRelated(ouMemberTableName, ouMemberQuery, function(memberRecord) {
+			memberRecord.sys_mod_count++;
+			memberRecord.update();
+			modCount++;
+			return null;
+		});
+		if(modCount > 0) {
+			tcs.commonMessage(fixScriptName + " - OU Perm Fix", "User: " + user.name + " "+ modCount+ " record(s) updated.", gs.info );
+		}
+		modCount = 0;
+	});
+
+	// STRY0047772 - Validate all users in the Members Table have Tasker User Role
+	var UserPermissions = new UserInfoScripts();
+	var iCountMissingTaskerUsers = 0;
+	var iCountMembersProcessed = 0;
+	var iCountTaskerUsersCorrected = 0;
+	var grMembers = new GlideRecord('x_153465_discovert_discover_office_members');
+	grMembers.query();
+	while(grMembers.next()){
+		var memName;
+		try {
+			// DFCT0012346 - syntax error
+			memName = grMembers.getValue("office_member");
+			var userName = grMembers.office_member.first_name + ' ' + grMembers.office_member.middle_name + ' ' + grMembers.office_member.last_name;
+
+			iCountMembersProcessed += 1;
+			if(!UserPermissions.UserHasRoleScoped('x_153465_discovert.tasker_user', grMembers.office_member)){
+				iCountMissingTaskerUsers += 1;
+				if(UserPermissions.addRole(grMembers.office_member, userName, 'x_153465_discovert.tasker_user')){
+					gs.info(fixScriptName + ' - Synchronize member Script update - Role x_153465_discovert.tasker_user : ' + userName);
+					iCountTaskerUsersCorrected +=1;
+				}
+			}
+		} catch(e){
+			gs.error(fixScriptName + " - error in syncOUMemberTaskUserRole - error: " + JSON.stringify(e) + " - Member Name:" + userName + " - Error in 'Synchronize OU Member Permissions' - exception: " + e);
+		}
+			
+	}
+	gs.info(fixScriptName +  ' - Synchronize member Script reviewed: ' + iCountMembersProcessed + ' users.  A total of: ' + iCountMissingTaskerUsers + ' users were missing the Task User role.  A total of ' + iCountTaskerUsersCorrected + ' were successfully updated');
+}]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>kbaton</sys_created_by>
         <sys_created_on>2019-02-07 15:23:55</sys_created_on>
         <sys_id>4ba02524db672300c18c59b2ca9619c8</sys_id>
-        <sys_mod_count>58</sys_mod_count>
+        <sys_mod_count>59</sys_mod_count>
         <sys_name>Sync OUHA, TM, TA per OU</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_4ba02524db672300c18c59b2ca9619c8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-05-08 19:32:41</sys_updated_on>
+        <sys_updated_on>2024-05-08 19:41:35</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
