@@ -45,6 +45,7 @@ If any values are wrong, report the differences to the DTech Apps support team.&
 *  or portions thereof marked with this legend must also reproduce the markings. */
 // Script Continued Below
 gs.info("Tasker - Fix Script - Executing 'Sync of Org Hierarchy with Org Unit Tables'");
+var userTableName = "sys_user";
 var orgHierarchyTableName = "x_153465_discovert_discover_office_hierarchy";
 var orgMemberTableName = "x_153465_discovert_discover_office_members";
 var orgUserTableName = "x_153465_discovert_organization_user";
@@ -58,6 +59,12 @@ function setUsersInGlobalRole(role, orgTableField, arrUsersInGlobalRole) {
 		arrUsersInGlobalRole.forEach(function(user_sys_id){
 			if(user_sys_id && user_sys_id!=undefined && user_sys_id!="undefined"){
 				var userId = user_sys_id.toString();
+				var userDisplayName = "";
+				var grUser = new GlideRecord(userTableName);
+				if(grUser.get(userId)){
+					userDisplayName = grUser.getDisplayValue();
+				}
+
 				var grOrgUser = new GlideRecord(orgUserTableName);
 				grOrgUser.addQuery("u_tasker_user.sys_id", userId);
 				grOrgUser.query();
@@ -65,15 +72,16 @@ function setUsersInGlobalRole(role, orgTableField, arrUsersInGlobalRole) {
 				while(grOrgUser.next()) {
 					userFound=true;
 					if(role != "x_153465_discovert.tasker_user"){
-						grOrgUser.setValue(orgTableField,true);
+						var hasRole = grOrgUser.getValue(orgTableField);
+						if(hasRole!=true && hasRole!='true'){
+							grOrgUser.setValue(orgTableField,true);
+							grOrgUser.setWorkflow(false);
+							grOrgUser.update();
+							gs.info(fixScriptName + " - User: " + userDisplayName + " with GUID: " + userId + " role: " + role + " was updated to true in Organizational User Table.");
+						}
 					}
 				}
 				if(!userFound){
-					var userDisplayName = "";
-					var grUser = new GlideRecord("sys_user");
-					if(grUser.get(userId)){
-						userDisplayName = grUser.getDisplayValue();
-					}
 					gs.warn("User: " + userDisplayName + " with GUID: " + userId + " has role: " + role + " but is not in any Tasker Organizaitonal Units");
 				}
 			}
@@ -96,7 +104,16 @@ function removeUsersFromGlobalRoles(orgTableField, arrUsersInGlobalRole){
 				}
 			});
 			if(roleSetForUser.length<1){
+				var userId = grOrgUser.getValue("u_tasker_user") + "";
+				var userDisplayName = "";
+				var grUser = new GlideRecord(userTableName);
+				if(grUser.get(userId)){
+					userDisplayName = grUser.getDisplayValue();
+				}
 				grOrgUser.setValue(orgTableField,false);
+				grOrgUser.setWorkflow(false);
+				grOrgUser.update();
+				gs.info(fixScriptName + " - User: " + userDisplayName + " with GUID: " + userId + " role: " + role + " was set to false in Organizational Users Table.");
 			}
 		}
 	} catch(ex){
@@ -110,7 +127,6 @@ function syncOUHA_TM_TA_roles(){
 		var getOURoleRecords = function(role, ouSysId) {
 			var grOUroleRecords = new GlideRecord(orgMemberTableName);
 			try{
-				
 				grOUroleRecords.addQuery("discover_office_hierarchy", ouSysId);
 				grOUroleRecords.addQuery(role, "true");
 				grOUroleRecords.query();
@@ -138,7 +154,6 @@ function syncOUHA_TM_TA_roles(){
 				gs.error(fixScriptName + " - error in getUsersInGlobalRole  - error: " + JSON.stringify(ex) + " parameters[role: " + role + "]");
 				return arrUsersInGlobalRole;
 			}
-
 		};
 
 		var getAdminstratorsForOrgStructure = function(arrUsersInGlobalRole, top_ou){
@@ -163,7 +178,6 @@ function syncOUHA_TM_TA_roles(){
 				gs.error(fixScriptName + " - error in getAdminstratorsForOrgStructure - error: " + JSON.stringify(ex) + " parameters[top_ou: " + top_ou + " - arrUsersInGlobalRole: " + arrUsersInGlobalRole + "]");
 				return orgStructureTAList;
 			}
-
 		};
 
 		//for each record in hierarchy table
@@ -214,7 +228,6 @@ function syncOUHA_TM_TA_roles(){
 			} catch(ex){
 				gs.error(fixScriptName + " - error in Hierachy Role Update loop  - error: " + JSON.stringify(ex) + " parameters[ouDisplayName: " + ouDisplayName + "]");
 			}
-
 		}
 
 		var arrAllTAAs = getUsersInGlobalRole("x_153465_discovert.tasker_application_admin");
@@ -279,14 +292,28 @@ function syncOUHA_TM_TA_roles(){
 
 function syncOUMemberTaskUserRole(){
 	var tcs  = new TaskerCommonScriptingMethods();
-	var userTableName = "sys_user";
-	var ouMemberTableName = "x_153465_discovert_discover_office_members";
 
 	//synchronizes all checked fields with the found member records
-	var allUsers = tcs.queryRelated(userTableName, null, function(user) {
+	var allOrganizationalUsers = tcs.queryRelated(userTableName, null, function(user) {
+		var orgUserQuery = [{"u_tasker_user": user.sys_id}];
+		var modCount = 0;
+		tcs.queryRelated(orgUserTableName, orgUserQuery, function(orgUserRecord) {
+			orgUserRecord.sys_mod_count++;
+			orgUserRecord.update();
+			modCount++;
+			return null;
+		});
+		if(modCount > 0) {
+			tcs.commonMessage(fixScriptName + " - Global Perm Fix", "User: " + user.name + " "+ modCount+ " record(s) updated.", gs.info );
+		}
+		modCount = 0;
+	});
+
+	//synchronizes all checked fields with the found member records
+	var allMemberUsers = tcs.queryRelated(userTableName, null, function(user) {
 		var ouMemberQuery = [{"office_member": user.sys_id}];
 		var modCount = 0;
-		tcs.queryRelated(ouMemberTableName, ouMemberQuery, function(memberRecord) {
+		tcs.queryRelated(orgMemberTableName, ouMemberQuery, function(memberRecord) {
 			memberRecord.sys_mod_count++;
 			memberRecord.update();
 			modCount++;
@@ -298,12 +325,26 @@ function syncOUMemberTaskUserRole(){
 		modCount = 0;
 	});
 
+	//synchronizes all checked fields with the found member records
+	var allMissingOrganizationalUsers = tcs.queryRelated(orgMemberTableName, null, function(member) {
+		var orgUserQuery = [{"u_tasker_user": member.office_member}];
+		var modCount = 0;
+		tcs.queryRelated(orgUserTableName, orgUserQuery, function(memberRecord) {
+			modCount++;
+			return null;
+		});
+		if(modCount == 0) {
+			tcs.commonMessage(fixScriptName + " - User in Hierarchy Member table but missing in Organizational User table", "member: " + member.getDisplayValue(), gs.info );
+		}
+		modCount = 0;
+	});
+
 	// STRY0047772 - Validate all users in the Members Table have Tasker User Role
 	var UserPermissions = new UserInfoScripts();
 	var iCountMissingTaskerUsers = 0;
 	var iCountMembersProcessed = 0;
 	var iCountTaskerUsersCorrected = 0;
-	var grMembers = new GlideRecord('x_153465_discovert_discover_office_members');
+	var grMembers = new GlideRecord(orgMemberTableName);
 	grMembers.query();
 	while(grMembers.next()){
 		var memName;
@@ -331,14 +372,14 @@ function syncOUMemberTaskUserRole(){
         <sys_created_by>kbaton</sys_created_by>
         <sys_created_on>2019-02-07 15:23:55</sys_created_on>
         <sys_id>4ba02524db672300c18c59b2ca9619c8</sys_id>
-        <sys_mod_count>59</sys_mod_count>
+        <sys_mod_count>62</sys_mod_count>
         <sys_name>Sync OUHA, TM, TA per OU</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_4ba02524db672300c18c59b2ca9619c8</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-05-08 19:41:35</sys_updated_on>
+        <sys_updated_on>2024-05-09 15:37:53</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
