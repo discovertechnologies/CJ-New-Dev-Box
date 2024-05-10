@@ -5,7 +5,8 @@
         <api_name>x_153465_discovert.ClientTaskTemplateHelpers</api_name>
         <caller_access/>
         <client_callable>true</client_callable>
-        <description>2.8.x | 2023-05-13 |raj |  DFCT0011850 - With Organizational Privacy turned on &gt; Global Templates &gt; clear the "Primary Assignee &gt; different private OU member are displaying "Reviewer", "Assigned Member&#13;
+        <description>2.8.4 HF | 2024-04-23 | raj | DFCT0012406 - Primary Assignee field updating slowly 30+ seconds when Assigned Member onChange field entered first - performance fix&#13;
+2.8.x | 2023-05-13 |raj |  DFCT0011850 - With Organizational Privacy turned on &gt; Global Templates &gt; clear the "Primary Assignee &gt; different private OU member are displaying "Reviewer", "Assigned Member&#13;
 2.8.1 | 2022-10-17 |raj |  STRY0127550 - Tech Debt - Task Types are used in code with hard coded values, modify to use a new value field in the table&#13;
 &#13;
 2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee&#13;
@@ -37,7 +38,7 @@ ClientTaskTemplateHelpers.prototype = Object.extendsObject(global.AbstractAjaxPr
 		return sActionParameters;
 	}, 
 	
-	// 2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee
+		// 2.7.1 | 2021-11-27 | raj  | STRY0114396 - New function to set default Primary Assignee
 	// NOTE, caller should only provide task id if the form does not have restricted group on it
 	getTemplateDefaultPrimaryAssignee: function (){
 		var arrUtil = new global.ArrayUtil();
@@ -54,72 +55,89 @@ ClientTaskTemplateHelpers.prototype = Object.extendsObject(global.AbstractAjaxPr
 		var template_ou = this.getParameter('sysparm_template_ou');
 		// if assigned_member passed as blank, do nothing
 		if(assigned_member && assigned_member != ''){
-			if((sys_id && sys_id != '-1')){
-				var restricted_group_field_name;
-				var grTempRec = new GlideRecordSecure(table);
-				var tempDef = '';
-
-				// get task record and see if restricted group is set
-				if(grTempRec.get(sys_id)){
-				// if restricted is blank and sys_id is not, then the form didn't have restricted group, look up in task record
-				// NOTE, caller should only provide task id if the form does not have restricted group on it
-					if( (!restricted_group || restricted_group == '')){
-						switch(table){
-							case 'x_153465_discovert_discover_routing_template':
-								restricted_group_field_name = 'u_restricted_group';
-								tempDef = sys_id;
-								break;
-							case 'x_153465_discovert_discover_routing_runtime':
-								restricted_group_field_name = 'u_restricted_group';
-								tempDef = grTempRec.getValue('routing_template_ref');
-								break;
-							case 'x_153465_discovert_route_tasks':
-								restricted_group_field_name = 'assigned_to_group';
-								tempDef = grTempRec.getValue('tasker_process_definition');
-								break;
-						}
-						restricted_group = grTempRec.getValue(restricted_group_field_name)==null ? '' : grTempRec.getValue(restricted_group_field_name) + '';
-					}
-					var grTempDef = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
-					if( (!template_level || template_level == '')){
-						switch(table){
-							case 'x_153465_discovert_discover_routing_template':
-								template_level = grTempRec.getValue('process_level');
-								break;
-							case 'x_153465_discovert_route_tasks':
-							case 'x_153465_discovert_discover_routing_runtime':
-								if(grTempDef.get(tempDef)){
-									template_level = grTempDef.getValue('process_level');
-									template_level = grTempDef.getValue('process_level');
-								}
-								break;
-						}
-					}
-					if( (!template_ou || template_ou == '') && template_level == 'ou_process'){
-						switch(table){
-							case 'x_153465_discovert_discover_routing_template':
-								template_ou = grTempRec.getValue('process_ou');
-								break;
-							case 'x_153465_discovert_route_tasks':
-							case 'x_153465_discovert_discover_routing_runtime':
-								if(grTempDef.get(tempDef)){
-									template_ou = grTempDef.getValue('process_ou');
-								}
-						}
-					}
-				}
-			}
-			// get list of ous the user can task based on and assigned member
-			// DFCT0011850 - need to pass Primary office and recordPriave
-			var aOUs = new taskerDynamicFilters().getTemplateOfficeArray('internal', primary_office, assigned_member, recordPrivacy, restricted_group, template_level, template_ou);
 			// get user's default ou
 			var defaultOU = new OrganizationalScripts().GetUserDefaultOU(assigned_member);
+			// DFCT0012406
 			// if user can task default ou of the assigned member, then return it
-			if(arrUtil.indexOf(aOUs, defaultOU)>= 0){
+			if(defaultOU && defaultOU!=''){
 				default_primary_assignee = defaultOU;
-			} else {
-				aOUs.sort();
+			}
+			// default ou not found for user, look up offices
+			if(default_primary_assignee==''){
+				if((sys_id && sys_id != '-1')){
+					var restricted_group_field_name;
+					var grTempRec = new GlideRecordSecure(table);
+					var tempDef = '';
+
+					// get task record and see if restricted group is set
+					if(grTempRec.get(sys_id)){
+					// if restricted is blank and sys_id is not, then the form didn't have restricted group, look up in task record
+					// NOTE, caller should only provide task id if the form does not have restricted group on it
+						if( (!restricted_group || restricted_group == '')){
+							switch(table){
+								case 'x_153465_discovert_discover_routing_template':
+									restricted_group_field_name = 'u_restricted_group';
+									tempDef = sys_id;
+									break;
+								case 'x_153465_discovert_discover_routing_runtime':
+									restricted_group_field_name = 'u_restricted_group';
+									tempDef = grTempRec.getValue('routing_template_ref');
+									break;
+								case 'x_153465_discovert_route_tasks':
+									restricted_group_field_name = 'assigned_to_group';
+									tempDef = grTempRec.getValue('tasker_process_definition');
+									break;
+							}
+							restricted_group = grTempRec.getValue(restricted_group_field_name)==null ? '' : grTempRec.getValue(restricted_group_field_name) + '';
+						}
+						var grTempDef = new GlideRecordSecure('x_153465_discovert_discover_routing_template');
+						if( (!template_level || template_level == '')){
+							switch(table){
+								case 'x_153465_discovert_discover_routing_template':
+									template_level = grTempRec.getValue('process_level');
+									break;
+								case 'x_153465_discovert_route_tasks':
+								case 'x_153465_discovert_discover_routing_runtime':
+									if(grTempDef.get(tempDef)){
+										template_level = grTempDef.getValue('process_level');
+										template_level = grTempDef.getValue('process_level');
+									}
+									break;
+							}
+						}
+						if( (!template_ou || template_ou == '') && template_level == 'ou_process'){
+							switch(table){
+								case 'x_153465_discovert_discover_routing_template':
+									template_ou = grTempRec.getValue('process_ou');
+									break;
+								case 'x_153465_discovert_route_tasks':
+								case 'x_153465_discovert_discover_routing_runtime':
+									if(grTempDef.get(tempDef)){
+										template_ou = grTempDef.getValue('process_ou');
+									}
+							}
+						}
+						// DFCT0012406 
+						if(!primary_office || primary_office == ''){
+							switch(table){
+								case 'x_153465_discovert_discover_routing_template':
+									primary_office = grTempRec.getValue('u_primary_office');
+									break;
+								case 'x_153465_discovert_route_tasks':
+								case 'x_153465_discovert_discover_routing_runtime':
+									if(grTempDef.get(tempDef)){
+										primary_office = grTempDef.getValue('u_primary_office');
+									}
+							}
+						}						
+					}
+				}
+				// get list of ous the user can task based on and assigned member
+				// DFCT0011850 - need to pass Primary office and recordPriave
+				var aOUs = new taskerDynamicFilters().getTemplateOfficeArray('internal', primary_office, assigned_member, recordPrivacy, restricted_group, template_level, template_ou);
+				// DFCT0012406 
 				if(aOUs.length > 0){
+					aOUs.sort();
 					default_primary_assignee = aOUs[0];
 				}
 			}
@@ -210,13 +228,13 @@ ClientTaskTemplateHelpers.prototype = Object.extendsObject(global.AbstractAjaxPr
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2020-07-25 07:26:37</sys_created_on>
         <sys_id>c38f7958db925890dd3d6165ca9619a3</sys_id>
-        <sys_mod_count>62</sys_mod_count>
+        <sys_mod_count>63</sys_mod_count>
         <sys_name>ClientTaskTemplateHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_c38f7958db925890dd3d6165ca9619a3</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-12-11 19:19:02</sys_updated_on>
+        <sys_updated_on>2024-05-10 17:47:19</sys_updated_on>
     </sys_script_include>
 </record_update>
