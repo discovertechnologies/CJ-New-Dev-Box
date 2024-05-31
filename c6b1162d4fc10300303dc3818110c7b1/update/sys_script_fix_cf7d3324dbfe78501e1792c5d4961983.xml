@@ -1,14 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>DFCT0012327 - 2023-01-18 -  RAJ - User not able to set primary assignee on subtask due to empty "privacy level" after upgrade on older task when upgraded&#13;
-Additonal Note on this fix, had to change query as notNullQuery did not work for the privacy field.&#13;
+        <description>DFCT0012421 - 2024-05-31 -  RAJ - After running fix script- 2.8.401 - Default Privacy fields to open – it does not change the privacy of the template&#13;
+DFCT0012327 - 2023-01-18 -  RAJ - User not able to set primary assignee on subtask due to empty "privacy level" after upgrade on older task when upgraded&#13;
+STRY0148573 - Create a fix script for OU Privacy for existing Task Trees, Tasks, Templates, and Template Tasks &#13;
+NOTE:  update in 2.8.4 Patch  | 2024-04-04 | STRY0148573 - Create a fix script for OU Privacy for existing Task Trees, Tasks, Templates, Template Tasks and Template Instances&#13;
+NOTE: and update was required on this fix, had to change the query as notNullQuery did not work for the privacy field.&#13;
 &#13;
-In 2.8, a privacy field was added to tasks and task trees.  &#13;
-Customers noticed that when this field is empty users have trouble changing the Primary Assignee&#13;
-This script finds all empty privacy fields and sets them to open.&#13;
+Release Introduced: 2.8.3&#13;
+- Only needs to be run a single time&#13;
+- In 2.8, a privacy field was added to tasks and task trees.  &#13;
+- Customers noticed that when this field is empty users have trouble changing the Primary Assignee&#13;
+- This script finds all empty privacy fields and sets them to open.&#13;
 &#13;
-Run this script to set empty Privacy fields on task and task tree records to open</description>
+Purpose:  &#13;
+- This script changes the privacy of the Task Trees, Tasks, Templates, Template Tasks, and Template Instances to match the privacy of the Primary Office's Top OU&#13;
+- Task Trees and Tasks created by running templates were not setting the privacy correctly.&#13;
+- Templates, Template Tasks, and Template Instances were not updated and defaulted to open&#13;
+-  The template run code was corrected to properly set the privacy as tasks are created&#13;
+-  This script corrects the bad data on Task Trees, Tasks, Templates, Template Tasks, and Template Instances created before this release&#13;
+&#13;
+Validation:&#13;
+- Open the Task Tree Task table - /x_153465_discovert_task_tree_list.do&#13;
+- set the filter to "u_privacyNSAMEASprimary_office.u_top_ou.u_organizational_privacy"&#13;
+- Open the Tasker Task table - /x_153465_discovert_route_task_instance_list.do&#13;
+- set the filter to "u_privacyNSAMEASprimary_office.u_top_ou.u_organizational_privacy"&#13;
+&#13;
+- Open the Template table - /x_153465_discovert_discover_routing_template_list.do&#13;
+- set the filter to "u_privacyNSAMEASu_primary_office.u_top_ou.u_organizational_privacy"&#13;
+- Open the Template Task table - /x_153465_discovert_route_tasks_list.do&#13;
+- set the filter to "u_privacyNSAMEASprimary_office.u_top_ou.u_organizational_privacy"&#13;
+- Open the Template Instance table - /x_153465_discovert_discover_routing_runtime_list.do&#13;
+- set the filter to "u_privacyNSAMEASu_primary_office.u_top_ou.u_organizational_privacy"&#13;
+&#13;
+- This will show all of the records that will be changed&#13;
+&#13;
+- Run the script&#13;
+- Refresh the page, all mismatches should be gone from the list</description>
         <name>2.8.401 - Default Privacy fields to open</name>
         <record_for_rollback>false</record_for_rollback>
         <script><![CDATA[// // Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
@@ -25,6 +53,10 @@ function setEmptyPrivacyFieldsToOpen(){
 	
 	updateEmptyPrivacy('x_153465_discovert_task_tree', 'u_privacy', testing);
 	updateEmptyPrivacy('x_153465_discovert_route_task_instance', 'u_privacy', testing);
+	// DFCT0012421
+	updateEmptyPrivacy('x_153465_discovert_discover_routing_template', 'u_privacy', testing);
+	updateEmptyPrivacy('x_153465_discovert_route_tasks', 'u_privacy', testing);
+	updateEmptyPrivacy('x_153465_discovert_discover_routing_runtime', 'u_privacy', testing);
 }
 
 function updateEmptyPrivacy(table, privacy_field, testing){
@@ -47,6 +79,21 @@ function updateEmptyPrivacy(table, privacy_field, testing){
 					rec.primary_office.u_top_ou.u_organizational_privacy){
 					new_privacy = rec.primary_office.u_top_ou.u_organizational_privacy;
 				}
+			} else if(table == 'x_153465_discovert_discover_routing_template'){
+				if(rec.u_primary_office && rec.u_primary_office.u_top_ou && 
+					rec.u_primary_office.u_top_ou.u_organizational_privacy){
+					new_privacy = rec.u_primary_office.u_top_ou.u_organizational_privacy;
+				}
+			} else if(table == 'x_153465_discovert_route_tasks'){
+				if(rec.primary_office && rec.primary_office.u_top_ou && 
+					rec.primary_office.u_top_ou.u_organizational_privacy){
+					new_privacy = rec.primary_office.u_top_ou.u_organizational_privacy;
+				}
+			} else if(table == 'x_153465_discovert_discover_routing_runtime'){
+				if(rec.u_primary_office && rec.u_primary_office.u_top_ou && 
+					rec.u_primary_office.u_top_ou.u_organizational_privacy){
+					new_privacy = rec.u_primary_office.u_top_ou.u_organizational_privacy;
+				}
 			}
 			rec.setValue(privacy_field, new_privacy);
 			rec.work_notes = 'Privacy set by Fix Script';
@@ -56,27 +103,16 @@ function updateEmptyPrivacy(table, privacy_field, testing){
 				numUpdated +=1;
 			}
 		}
-
-		switch(table){
-			case 'x_153465_discovert_task_tree':
-				if(numUpdated == privacyEmptyCount){
-					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- the Privacy for all Task Trees has been set.");
-				} else {
-					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- Some Tasks with empty Privacy field were not updated. " + numUpdated + " of " + privacyEmptyCount + " were set. To see tasks with privacy not set, run this query on the Task table: u_privacy=" );
-				}
-				break;
-			case 'x_153465_discovert_route_task_instance':
-				if(numUpdated == privacyEmptyCount){
-					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- the Privacy for all Tasks has been set.");
-				} else {
-					gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- Some Tasks with empty Privacy field were not updated. " + numUpdated + " of " + privacyEmptyCount + " were set. To see tasks with privacy not set, run this query on the Task table: u_privacy=" );
-				}
-				break;
+		var tableMsg = _getTableMessage(table);
+		if(numUpdated == privacyEmptyCount){
+			gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- the Privacy for all " + tableMsg + " has been set.");
+		} else {
+			gs.info("Fix Script - 2.8.401 - Default Privacy fields to open- Some " + tableMsg + " with empty Privacy field were not updated. " + numUpdated + " of " + privacyEmptyCount + " were set. To see " + tableMsg + " with privacy not set, run this query on the " + table + " table: u_privacy=" );
 		}
 	}
 }
 
-function countItemsToUpdate(table, privacy_field, value, testing){
+function countItemsToUpdate(table){
 	var privacyEmptyCount;
 	// count all empty privacy fields
 	var ga = new GlideAggregate(table);
@@ -86,30 +122,48 @@ function countItemsToUpdate(table, privacy_field, value, testing){
 	if(ga.next()){
 		privacyEmptyCount = ga.getAggregate("COUNT");
 	}
+	var tableMsg = _getTableMessage(table);
+	gs.info('Fix Script - 2.8.401 - Default Privacy fields to open - Your system was analyzed and ' + 
+			privacyEmptyCount + ' in ' + tableMsg + ' do not have privacy set.  Setting the privacy value to the value of the Primary Office for the ' + tableMsg + '.');
+
+	return privacyEmptyCount;
+}
+
+function _getTableMessage(table){
+	var tableMsg = "";
 
 	switch(table){
 		case 'x_153465_discovert_task_tree':
-			gs.info('Fix Script - 2.8.401 - Default Privacy fields to open - Your system was analyzed and ' + 
-					privacyEmptyCount + ' Task Trees do not have privacy set.  Setting the privacy value to the value of the Primary Office for the Task Tree.');
+			tableMsg = "Task Trees";
 			break;
 		case 'x_153465_discovert_route_task_instance':
-			gs.info('Fix Script - 2.8.401 - Default Privacy fields to open - Your system was analyzed and ' + 
-					privacyEmptyCount + ' Tasks do not have privacy set.  Setting the privacy value to the value of the Primary Office for the top task in the tree.');
+			tableMsg = "Tasks";
+			break;
+		case 'x_153465_discovert_discover_routing_template':
+			tableMsg = "Templates";
+			break;
+		case 'x_153465_discovert_route_tasks':
+			tableMsg = "Template Tasks";
+			break;
+		case 'x_153465_discovert_discover_routing_runtime':
+			tableMsg = "Template Instances";
+			break;
 	}
-	return privacyEmptyCount;
-}]]></script>
+	return tableMsg;
+}
+]]></script>
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2021-09-22 00:42:59</sys_created_on>
         <sys_id>cf7d3324dbfe78501e1792c5d4961983</sys_id>
-        <sys_mod_count>21</sys_mod_count>
+        <sys_mod_count>26</sys_mod_count>
         <sys_name>2.8.401 - Default Privacy fields to open</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_fix_cf7d3324dbfe78501e1792c5d4961983</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-04-22 17:44:02</sys_updated_on>
+        <sys_updated_on>2024-05-31 16:37:37</sys_updated_on>
         <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
