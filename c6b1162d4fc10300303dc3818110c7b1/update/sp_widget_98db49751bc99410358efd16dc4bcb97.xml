@@ -3,6 +3,8 @@
         <category>custom</category>
         <client_script><![CDATA[function dtlvCtrl($scope, spModal, $rootScope, spUtil, $timeout) {
     var c = this;
+	  // set value on client load instead of in server
+		c.data.isPrint = false;
 
     // STRY0088168 - DTLV has a scroll bar that does not allow printing to be displayed correctly
     $scope.printReport = function() {
@@ -21,6 +23,12 @@
         c.data.isPrint = !c.data.isPrint;
 			// reload on toggle.  NOTE: currently it is not reloading.  There is a javascript error somewhere on reload.
 			// DFCT0011169
+			
+			if(c.data.isPrint && c.data.subTasksRequestsPrints.length==0){
+				$scope.data.getPrintData = true;
+					spUtil.update($scope);
+			}
+			
 			_loadDynamicDocIntWidgets();			
     };
 
@@ -238,6 +246,7 @@ WIDGET BASE: N/A&#13;
     data.table = $sp.getParameter("table");
     data.view = 'sp';
 	
+	data.getPrintData = input && input.getPrintData==true; 
 	
 		// STRY0113838
 		var oUserPref = new tasker_User_Form_Preferences();
@@ -254,9 +263,6 @@ WIDGET BASE: N/A&#13;
     // mmcc STRY0092273 - Default row size or Admin settable value
     data.defaultRowSize = 20;
     data.rowSize = gs.getProperty('x_153465_discovert.DynamicTreeLevelRowsPerPagePrint');
-
-    // mmcc STRY0092273 - used in HTML to show hide div's
-    data.isPrint = false;
 
 	// STRY0114416 - 4
     // STRY0100645
@@ -289,7 +295,6 @@ WIDGET BASE: N/A&#13;
     data.instructions = gr_DTLV.instructions.getHTMLValue();
 		// DFCT0012044 - set active flag
 		data.isActive = gr_DTLV.active;
-
     //------------------------------------------------------------------------------------------------------------------------
     // Box 10: Task Tree Graph
     //------------------------------------------------------------------------------------------------------------------------
@@ -323,66 +328,70 @@ WIDGET BASE: N/A&#13;
     var filter = 'u_task_tree=' + data.task_tree_sys_id + '^u_all_ancestors_tasksLIKE' + data.sys_id;
     var o = "number";
     var d = "asc";
-
+	data.subTasksPrints = [];
+	if(!data.getPrintData){
 		// STRY0115991
-    var subTasks_Options = {
-        title: 'Subtasks',
-        table: data.table,
-        filter: filter,
+		var subTasks_Options = {
+				title: 'Subtasks',
+				table: data.table,
+				filter: filter,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 				// STRY0115991
-        view: 'DTLV_SubTasks',
+				view: 'DTLV_SubTasks',
 				platform_view: 'pfm_DTLV_Subtasks',
-        // mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
-        //fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision,response', //,comments_and_work_notes',
-        //fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
+				// mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
+				//fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision,response', //,comments_and_work_notes',
+				//fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.defaultRowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.defaultRowSize,
 
-        display_field: 'number',
-        glyph: 'pencil-square-o', //bell-slash-o',
-        open_row_details_in_modal: true,
-        o: o,
-        d: d,
-        color: 'primary'
-    };
+				display_field: 'number',
+				glyph: 'pencil-square-o', //bell-slash-o',
+				open_row_details_in_modal: true,
+				o: o,
+				d: d,
+				color: 'primary'
+		};
 
-    data.subTasks = $sp.getWidget('discovertasker-widget-data-table', subTasks_Options); //widget-data-table //discovertasker-widget-data-table
+		data.subTasks = $sp.getWidget('discovertasker-widget-data-table', subTasks_Options); //widget-data-table //discovertasker-widget-data-table
+	} else {
+		var stp={};
+		// mmcc STRY0092273 - Created Print options for subTasks
+		var subTasksPrint_Options = {
+				title: 'Subtasks',
+				table: data.table,
+				filter: filter,
 
-    // mmcc STRY0092273 - Created Print options for subTasks
-    var subTasksPrint_Options = {
-        title: 'Subtasks',
-        table: data.table,
-        filter: filter,
-
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 				// STRY0115991
-        view: 'DTLV_Print_Subtasks',
+				view: 'DTLV_Print_Subtasks',
 				platform_view: 'pfm_DTLV_Print_Subtasks',			
-        // mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
-        // mmcc STRY0092273 - Reduced which columns are used in printing
-        //fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
-        //fields: 'number,short_description,state,status,suspense_date,primary_assignee,assigned_to',
+				// mmcc STRY0095573 - Removed heading Response Comments by dropping response from fields
+				// mmcc STRY0092273 - Reduced which columns are used in printing
+				//fields: 'parent,taskernumber,number,tasker_type,short_description,calchaschildren,classification,state,status,suspense_date,primary_assignee,assigned_to,provide_response,decision', //response', //,comments_and_work_notes',
+				//fields: 'number,short_description,state,status,suspense_date,primary_assignee,assigned_to',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.rowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.rowSize,
 
-        display_field: 'number',
-        glyph: 'pencil-square-o', //bell-slash-o',
-        open_row_details_in_modal: true,
-        o: o,
-        d: d,
-        color: 'primary'
-    };
+				display_field: 'number',
+				glyph: 'pencil-square-o', //bell-slash-o',
+				open_row_details_in_modal: true,
+				o: o,
+				d: d,
+				color: 'primary'
+		};
 
-    // mmcc STRY0092273 - Created widget using Print options for subTasks
-    data.subTasksPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksPrint_Options);
+		// mmcc STRY0092273 - Created widget using Print options for subTasks
+		stp.widget = $sp.getWidget('discovertasker-widget-data-table', subTasksPrint_Options);
+		data.subTasksPrints.push(stp);
+	}
 
     //------------------------------------------------------------------------------------------------------------------------
     // Box 3.5: Response Log
@@ -393,69 +402,73 @@ WIDGET BASE: N/A&#13;
     var o_responseLog = "u_task_number";
     var d_responseLog = "asc";
 
-    var responseLog_Options = {
-        title: 'Response Log',
-        table: data.table_responseLog,
-        filter: filter_responseLog,
+	data.subResponseLogPrints = [];
+	if(!data.getPrintData){
+		var responseLog_Options = {
+				title: 'Response Log',
+				table: data.table_responseLog,
+				filter: filter_responseLog,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
-        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
-			
-			  // DFCT0010593 "Tasker Number" and "Task Name" fields are were blank on "Excel Export" from DTLV for non-admins.  
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
+				//Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+
+				// DFCT0010593 "Tasker Number" and "Task Name" fields are were blank on "Excel Export" from DTLV for non-admins.  
 				// Changed to use view instead of field list.
 				// STRY0115991
-        view: 'DTLV_Response_Log',
+				view: 'DTLV_Response_Log',
 				platform_view: 'pfm_DTLV_Response_Log',			
 
 				// fields: 'u_task.parent,u_task.taskernumber,u_task_number,u_task.short_description,sys_created_on,u_primary_assignee,u_responded_by,u_role,u_action_taken',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.defaultRowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.defaultRowSize,
 
-        //display_field: 'number',
-        glyph: 'bullhorn',
-        open_row_details_in_modal: true,
-        o: o_responseLog,
-        d: d_responseLog,
-        color: 'primary'
-    };
+				//display_field: 'number',
+				glyph: 'bullhorn',
+				open_row_details_in_modal: true,
+				o: o_responseLog,
+				d: d_responseLog,
+				color: 'primary'
+		};
 
-    data.subResponseLog = $sp.getWidget('discovertasker-widget-data-table', responseLog_Options); //widget-data-table //discovertasker-widget-data-table
+		data.subResponseLog = $sp.getWidget('discovertasker-widget-data-table', responseLog_Options); //widget-data-table //discovertasker-widget-data-table
+	} else {
+		var srlp = {};
+		// mmcc STRY0092273 - Created Print options for Response Log
+		var responseLogPrint_Options = {
+				title: 'Response Log',
+				table: data.table_responseLog,
+				filter: filter_responseLog,
 
-    // mmcc STRY0092273 - Created Print options for Response Log
-    var responseLogPrint_Options = {
-        title: 'Response Log',
-        table: data.table_responseLog,
-        filter: filter_responseLog,
-
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
-        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
+				//Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
 				// STRY0115991
-        view: 'DTLV_Print_Response_Log',
+				view: 'DTLV_Print_Response_Log',
 				platform_view: 'pfm_DTLV_Print_Response_Log',			
 
-        // mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name and response
-        //fields: 'u_task.parent,u_task.taskernumber,u_task_number,u_task.short_description,sys_created_on,u_primary_assignee,u_responded_by,u_role,u_action_taken',
-        //fields: 'u_task.task_name,u_task_number,u_primary_assignee,u_responded_by,u_role,u_action_taken,response',
+				// mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name and response
+				//fields: 'u_task.parent,u_task.taskernumber,u_task_number,u_task.short_description,sys_created_on,u_primary_assignee,u_responded_by,u_role,u_action_taken',
+				//fields: 'u_task.task_name,u_task_number,u_primary_assignee,u_responded_by,u_role,u_action_taken,response',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.rowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.rowSize,
 
-        //display_field: 'number',
-        glyph: 'bullhorn',
-        open_row_details_in_modal: true,
-        o: o_responseLog,
-        d: d_responseLog,
-        color: 'primary'
-    };
-
-    // mmcc STRY0092273 - Created widget using Print options for Response Log
-    data.subResponseLogPrint = $sp.getWidget('discovertasker-widget-data-table', responseLogPrint_Options);
-
+				//display_field: 'number',
+				glyph: 'bullhorn',
+				open_row_details_in_modal: true,
+				o: o_responseLog,
+				d: d_responseLog,
+				color: 'primary'
+		};
+		// mmcc STRY0092273 - Created widget using Print options for Response Log
+		srlp.widget = $sp.getWidget('discovertasker-widget-data-table', responseLogPrint_Options);
+		data.subResponseLogPrints.push(srlp);
+	}
+	
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Request Log
     //------------------------------------------------------------------------------------------------------------------------
@@ -464,69 +477,74 @@ WIDGET BASE: N/A&#13;
 
     var o_request = "parent";
     var d_request = "asc";
+	data.subTasksRequestsPrints=[];
+	
+	if(!data.getPrintData){
+		var subTasksRequests_Options = {
+				title: 'Requests',
+				table: data.table_request,
+				filter: filter_request,
 
-    var subTasksRequests_Options = {
-        title: 'Requests',
-        table: data.table_request,
-        filter: filter_request,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
-
-        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+				//Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
 				// STRY0115991
-        view: 'DTLV_Requests',
+				view: 'DTLV_Requests',
 				platform_view: 'pfm_DTLV_Requests',			
 
-        //fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
+				//fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.defaultRowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.defaultRowSize,
 
-        //display_field: 'number',
-        glyph: 'bullhorn',
-        open_row_details_in_modal: true,
-        o: o_request,
-        d: d_request,
-        color: 'primary'
-    };
+				//display_field: 'number',
+				glyph: 'bullhorn',
+				open_row_details_in_modal: true,
+				o: o_request,
+				d: d_request,
+				color: 'primary'
+		};
 
-    data.subTasksRequests = $sp.getWidget('discovertasker-widget-data-table', subTasksRequests_Options); //widget-data-table //discovertasker-widget-data-table
+		data.subTasksRequests = $sp.getWidget('discovertasker-widget-data-table', subTasksRequests_Options); //widget-data-table //discovertasker-widget-data-table
+	} else {
+		var strp = {};
+		// mmcc STRY0092273 - Created Print options for Requests
+		var subTasksRequestsPrint_Options = {
+				title: 'Requests',
+				table: data.table_request,
+				filter: filter_request,
 
-    // mmcc STRY0092273 - Created Print options for Requests
-    var subTasksRequestsPrint_Options = {
-        title: 'Requests',
-        table: data.table_request,
-        filter: filter_request,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
-
-        //Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
+				//Parent Task,Tasker Number, Number,Task Name, Request Number, Request Type
 				// STRY0115991
-        view: 'DTLV_Print_Requests',
+				view: 'DTLV_Print_Requests',
 				platform_view: 'pfm_DTLV_Print_Requests',			
 
-        // mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name
-        //fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
-        //fields: 'parent.task_name,parent.number,u_request_type,u_requested_by,u_requested,u_status,u_responded_by,u_responded',
+				// mmcc STRY0092273 - Reduced which columns are used in printing but added Task Number & Name
+				//fields: 'parent.taskernumber,parent.number,parent.short_description,number,u_request_type,u_request_comments,u_requested_by,u_requested,u_status,u_response,u_response_comments,u_responded_by,u_responded',
+				//fields: 'parent.task_name,parent.number,u_request_type,u_requested_by,u_requested,u_status,u_responded_by,u_responded',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.rowSize,
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.rowSize,
 
-        //display_field: 'number',
-        glyph: 'bullhorn',
-        open_row_details_in_modal: true,
-        o: o_request,
-        d: d_request,
-        color: 'primary'
-    };
+				//display_field: 'number',
+				glyph: 'bullhorn',
+				open_row_details_in_modal: true,
+				o: o_request,
+				d: d_request,
+				color: 'primary'
+		};
 
-    // mmcc STRY0092273 - Created widget using Print options for Requests
-    data.subTasksRequestsPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksRequestsPrint_Options);
-
+		// mmcc STRY0092273 - Created widget using Print options for Requests
+		strp.widget = $sp.getWidget('discovertasker-widget-data-table', subTasksRequestsPrint_Options);
+		data.subTasksRequestsPrints.push(strp);
+	}
+	
     //------------------------------------------------------------------------------------------------------------------------
     // Box 4: Activity Log
     //------------------------------------------------------------------------------------------------------------------------
@@ -536,69 +554,73 @@ WIDGET BASE: N/A&#13;
 
     var o_audit = "taskid_number";
     var d_audit = "asc";
+	data.subTasksActivityPrints=[];
 
-    var subTasksActivity_Options = {
-        title: 'Activity Log',
+	if(!data.getPrintData){
+		var subTasksActivity_Options = {
+				title: 'Activity Log',
 				// DFCT0010631 - data table needs task id in order to check security and display some of the fields
 				task_id: data.sys_id,
-        table: data.table_audit,
-        filter: filter_audit,
+				table: data.table_audit,
+				filter: filter_audit,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 
-        view: 'dtlv_activity_log',
+				view: 'dtlv_activity_log',
 				platform_view: 'pfm_dtlv_activity_log',			
-			
-        //fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.defaultRowSize,
+				//fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
 
-        //display_field: 'number',
-        glyph: 'comment-o',
-        open_row_details_in_modal: false,
-        o: o_audit,
-        d: d_audit,
-        color: 'primary'
-    };
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.defaultRowSize,
 
-    data.subTasksActivity = $sp.getWidget('discovertasker-widget-data-table', subTasksActivity_Options); //widget-data-table //discovertasker-widget-data-table
+				//display_field: 'number',
+				glyph: 'comment-o',
+				open_row_details_in_modal: false,
+				o: o_audit,
+				d: d_audit,
+				color: 'primary'
+		};
 
-    // mmcc STRY0092273 - Created Print options for Activity Log
-    var subTasksActivityPrint_Options = {
-        title: 'Activity Log',
+		data.subTasksActivity = $sp.getWidget('discovertasker-widget-data-table', subTasksActivity_Options); //widget-data-table //discovertasker-widget-data-table
+	} else {
+		var stap = {};
+		// mmcc STRY0092273 - Created Print options for Activity Log
+		var subTasksActivityPrint_Options = {
+				title: 'Activity Log',
 				// DFCT0010631 - data table needs task id in order to check security and display some of the fields
 				task_id: data.sys_id,
-        table: data.table_audit,
-        filter: filter_audit,
+				table: data.table_audit,
+				filter: filter_audit,
 
-        enable_filter: false,
-        show_keywords: false,
-        show_breadcrumbs: false,
+				enable_filter: false,
+				show_keywords: false,
+				show_breadcrumbs: false,
 
-        view: 'dtlv_print_activity_log',
+				view: 'dtlv_print_activity_log',
 				platform_view: 'pfm_dtlv_print_activity_log',			
-			
-        //fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
 
-        // mmcc STRY0092273 - Default row size or Admin settable value
-        window_size: data.rowSize,
+				//fields: 'taskid_parent,taskid_taskernumber,taskid_number,taskid_short_description,journalid_sys_created_by,journalid_sys_created_on,journalid_element,journalid_value',
 
-        //display_field: 'number',
-        glyph: 'comment-o',
-        open_row_details_in_modal: false,
-        o: o_audit,
-        d: d_audit,
-        color: 'primary'
-    };
+				// mmcc STRY0092273 - Default row size or Admin settable value
+				window_size: data.rowSize,
 
-    // mmcc STRY0092273 - Created widget using Print options for Activity Log
-    data.subTasksActivityPrint = $sp.getWidget('discovertasker-widget-data-table', subTasksActivityPrint_Options);
+				//display_field: 'number',
+				glyph: 'comment-o',
+				open_row_details_in_modal: false,
+				o: o_audit,
+				d: d_audit,
+				color: 'primary'
+		};
 
+		// mmcc STRY0092273 - Created widget using Print options for Activity Log
+		stap.widget = $sp.getWidget('discovertasker-widget-data-table', subTasksActivityPrint_Options);
+		data.subTasksActivityPrints.push(stap);
+	}
 
-    //------------------------------------------------------------------------------------------------------------------------
+		//------------------------------------------------------------------------------------------------------------------------
     // Box 5: Key Data: Reports?
     //------------------------------------------------------------------------------------------------------------------------
     // DFCT0011379 - added showDexc to the properties
@@ -680,21 +702,20 @@ WIDGET BASE: N/A&#13;
     // DFCT0012044 - this should not be hard coded
     // data.isActive = true;
 
-
 })($sp, input, data, options, gs);]]></script>
         <servicenow>false</servicenow>
         <sys_class_name>sp_widget</sys_class_name>
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2020-05-28 16:13:02</sys_created_on>
         <sys_id>98db49751bc99410358efd16dc4bcb97</sys_id>
-        <sys_mod_count>896</sys_mod_count>
+        <sys_mod_count>905</sys_mod_count>
         <sys_name>Dynamic Tree Level Summary</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_98db49751bc99410358efd16dc4bcb97</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-09-23 14:04:14</sys_updated_on>
+        <sys_updated_on>2024-09-24 05:10:42</sys_updated_on>
         <template><![CDATA[<div id='dtlv' ng-show="!data.isPrint">
 
   <nav id="navbar-dtlv" class="navbar navbar-light bg-light hidden-print">
@@ -1027,8 +1048,9 @@ WIDGET BASE: N/A&#13;
         <div class="row"></div>
         <h4 id="SubTasks"></h4>
         <div class="row">
-          <div class="col-md-12 print-better" ng-if="::(data.calchaschildren > 0)">
-            <sp-widget widget="data.subTasksPrint"></sp-widget>
+          <div class="col-md-12 print-better" ng-if="::(data.calchaschildren > 0)"
+               ng-repeat="stp in data.subTasksPrints">
+            <sp-widget widget="stp.widget"></sp-widget>
           </div>
           <!-- 2.7.0 | 2021-06-29 | mmcc | STRY0104015 DTLV - HTML fields are being trimmed -->
           <!-- <div class="col-md-12" ng-if="::(data.calchaschildren == 0)"> -->
@@ -1044,15 +1066,17 @@ WIDGET BASE: N/A&#13;
         </div>
         <h4 id="ResponseLog"></h4>
         <div class="row">
-          <div class="col-md-12 print-better">
-            <sp-widget widget="data.subResponseLogPrint"></sp-widget>
+          <div class="col-md-12 print-better"
+               ng-repeat="srlp in data.subResponseLogPrints">
+            <sp-widget widget="srlp.widget"></sp-widget>
           </div>
         </div>
         <h4 id="TaskRequests"></h4>
         <div class="row">
-          <div class="col-md-12 print-better">
-            <sp-widget widget="data.subTasksRequestsPrint"></sp-widget>
-          </div>
+          <div class="col-md-12 print-better"
+               ng-repeat="strp in data.subTasksRequestsPrints">
+               <sp-widget widget="strp.widget"></sp-widget>
+           </div>
         </div>
         <h4 id="SharedAttachments"></h4>
         <div class="row">
@@ -1079,8 +1103,9 @@ WIDGET BASE: N/A&#13;
 
         <h4 id="ActivityLog"></h4>
         <div class="row">
-          <div class="col-md-12 print-better">
-            <sp-widget widget="data.subTasksActivityPrint"></sp-widget>
+          <div class="col-md-12 print-better"
+               ng-repeat="stap in data.subTasksActivityPrints">
+            <sp-widget widget="stap.widget"></sp-widget>
           </div>
           <!-- 2.7.0 | 2021-06-29 | mmcc | STRY0104015 DTLV - HTML fields are being trimmed -->
           <!-- <div class="col-md-12"> </div> -->
