@@ -1,0 +1,2054 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function ($scope, $rootScope, spAriaFocusManager, $http, amb, $timeout, spUtil, $location, $window, nowAttachmentHandler, $log, spAriaUtil, spModal, $uibModal, spNavStateManager) {
+
+	// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
+	// Script Continued Below
+	//------------------------------------------------------------------------------------------------------------------------
+	var c = this;
+	// STRY0076291
+	//c.allowSubTask = false;
+	// STRY0122687
+	c.currentTab = null;
+
+	$scope.submitting = false;
+	$scope.mandatory = [];
+	$scope.errorMessages = [];
+	$scope.data.show_sql = false;
+	$scope.saveButtonSuffix = spUtil.getAccelerator('s');
+	$scope.isPageReady = false;
+	$scope.adminMenu = {
+		encodedPageUrl: encodeURIComponent($location.url()),
+		getClientScriptCount: function() {
+			var count = 0;
+			if ($scope.data.f.client_script) {
+				count += $scope.data.f.client_script.onChange.length;
+				count += $scope.data.f.client_script.onLoad.length;
+				count += $scope.data.f.client_script.onSubmit.length;
+			}
+			return count;
+		}
+	};
+	
+	// STRY0134743 - Out of Office Message on Task Request Form
+	$scope.openRequestOOO = function(){
+				var modalObject = {
+                modalKey: 'TaskRequestOOO',
+                title: c.data.TaskRequestOOOTitle, 
+                message: '',
+                backdrop: 'static',
+                widget: 'tasker_modal_additional_information',
+                widgetInput: {
+                    table: 'x_153465_discovert_route_task_instance',
+                    sys_id: c.data.f._fields.parent.value,
+                    view: 'Task_Request_Responders', // NOTE, we may need to look up default
+                    hideRelatedLists: true,
+                    omitHeader: 'true',
+                    hideAttachmentBtn: true,
+                    isModal: true
+                },
+                shared: {},
+                size: 'lg',
+                buttons: [{
+                            label: c.data.okButtonText,
+                            cancel: true
+                        }],
+				footerStyle: {'display': 'block'}					
+            };
+		x_153465_discovert.twJS.openFormModal(spModal, modalObject);
+	};
+	$scope.getPanelBodyCss = function() {
+
+		var panelBodyClassNames = '';
+
+		// 2.8 | 2022-09-29 | mmcc | DFCT0011377 - Draft task with Subtasks, Subtask tab is not displaying any rows
+		if (c.data.baseWidget == 'new_tasker_selection' && c.data.isModal == true) {
+			panelBodyClassNames = 'dtech-overflow-auto';
+		} else if (c.data.page_id == undefined && c.data.isModal == true || c.data.bifold ||
+				(c.data.omitHeader == true && c.data.bifold == false && c.data.isModal == false)) {
+			panelBodyClassNames = 'flex-column flex-grow dtech-overflow-hidden dtech-pad-all-0 dtech-pad-bottom-5';
+		} else {
+			panelBodyClassNames = '';
+		}
+
+		return panelBodyClassNames;
+	};
+
+	$scope.getPanelPanelCssByPageId = function() {
+
+		var panelClassNames = '';
+
+		// 2.8 | 2022-09-29 | mmcc | DFCT0011377 - Draft task with Subtasks, Subtask tab is not displaying any rows
+		// 2.8 | 2022-09-28 | mmcc | DFCT0011375 - Add Subtask from New Draft Task fields are cut off; swap to if statement
+		if (c.data.page_id == 'discovertasker_newtask') {
+			if (c.data.isModal == false) {
+				panelClassNames = 'dtech-topstick-posabso-rl-active dtech-w-100vw-40p flex-column flex-grow';
+			} else {
+				panelClassNames = 'dtech-topstick-posabso flex-column flex-grow';
+			}
+		} else if (c.data.baseWidget == 'new_tasker_selection' && c.data.isModal == true) {
+			panelClassNames = 'dtech-topstick-posabso-rl-active dtech-w-100p flex-column flex-grow';
+		} else if (c.data.page_id == undefined && c.data.isModal == true || c.data.bifold) {
+			panelClassNames = 'dtech-topstick-posabso flex-column flex-grow';
+		} else if (c.data.omitHeader == true && c.data.bifold == false && c.data.isModal == false) {
+			panelClassNames = 'dtech-topstick-posabso-l-r-t-10 flex-column flex-grow';
+		} else {
+			panelClassNames = '';
+		}
+
+		return panelClassNames;
+	};
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the tab-content CSS class by Page ID
+	$scope.getTabContentCssByPageId = function() {
+
+		var tabContentClassNames = '';
+
+		// 2.8 | 2022-08-25 | mmcc | DFCT0011206 - DocIntegrator needs to flex when used in the Tasker App; make it work in a modal
+		// DFCT0011232
+		if (c.data.page_id == undefined && c.data.isModal == true || c.data.bifold ||
+				(c.data.omitHeader == true && c.data.bifold == false && c.data.isModal == false)) {
+			tabContentClassNames = 'flex-column flex-grow dtech-overflow-hidden';
+		} else {
+			tabContentClassNames = '';
+		}
+
+		return tabContentClassNames;
+	};
+
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; set the tab-pane CSS class by Page ID
+	$scope.getInfoTabPaneCssByPageId = function(tabName, index) {
+
+		var tabPaneClassNames = '';
+
+		// 2.8 | 2022-08-25 | mmcc | DFCT0011206 - DocIntegrator needs to flex when used in the Tasker App; make it work in a modal
+		// DFCT0011232
+		if (c.data.page_id == undefined && c.data.isModal == true || c.data.bifold || 
+				(c.data.omitHeader == true && c.data.bifold == false && c.data.isModal == false)) {
+			tabPaneClassNames = 'dtech-overflow-auto-pad-right-15-gutter-stable dtech-pad-left-5 dtech-pad-top-15';
+		} else {
+			tabPaneClassNames = 'dtech-pad-top-15';
+		}
+
+		if ($scope.isActiveTab(tabName, index)) {
+			tabPaneClassNames += ' active';
+		}
+
+		return tabPaneClassNames;
+	};
+
+	// 2.8 | 2022-08-25 | mmcc | DFCT0011206 - DocIntegrator needs to flex when used in the Tasker App
+	$scope.getTabPaneCssByBifoldModal = function(tabName, index) {
+
+		var tabPaneClassNames = '';		
+
+		if ($scope.isActiveTab(tabName, index)) {
+			if (c.data.bifold || c.data.isModal) {
+				tabPaneClassNames = ' dtech-force-column-grow active';
+			} else {
+				tabPaneClassNames += ' active';
+			}
+		}
+
+		return tabPaneClassNames;
+	};
+	
+	// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+	var watcher;
+
+	// DFCT0010894, DFCT0010897, DFCT0010896, DFCT0010895, DFCT0010770
+	if(c.data.sys_id && c.data.sys_id != -1){
+		initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);
+	}
+	function initRecordWatcher(table, filter) {
+		if (watcher)
+			watcher.unsubscribe();
+
+		if (table && filter) {
+			// STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
+			var params = {};
+			var watcherChannel = amb.getChannelRW(table, filter);
+			amb.connect();
+			watcher = watcherChannel.subscribe(function(name) {
+				if (name.data.operation == 'delete') {
+					if (c.data.parent_id) {
+						c.data.sys_id = c.data.parent_id;
+					} else {
+						// DFCT0011088
+						if(c.data.table=="x_153465_discovert_discover_routing_template" ||
+							c.data.table=="x_153465_discovert_route_tasks"){
+							$window.location.href = '../' + $scope.portal.url_suffix + 
+								"?id=discovertasker_processtemplatelist&table=x_153465_discovert_discover_routing_template";
+						// DFCT0011431
+						} else if(c.data.table=="x_153465_discovert_discover_office_members"){
+							// no need to respond here, window will close when member is deleted
+							// member is only deleted in modal
+						} else {
+							// STRY0113838
+							$window.location.href = '../' + $scope.portal.url_suffix;
+						}
+					}
+
+				}
+
+				$scope.server.update().then(function(){
+					var parms =  {table: c.data.table, sys_id: c.data.sys_id, view: c.data.view};
+					// DFCT0011036 - not sure why this was being raised here
+					// $rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+					$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
+					// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+					afterLoadFormReturns();
+				});
+			});
+		}
+	}	
+	afterLoadFormReturns();
+
+	$scope.openDurationModal = function(){
+		// call common duration modal
+		var title = c.data.durationTitle + ': ' + c.data.f.title;
+		x_153465_discovert.twJS.openDurationModal(spModal, title, c.data.table, c.data.sys_id);
+	};
+	$scope.openAssignmentModal = function(obj) {
+		var title= c.data.assignmentTitle + ': ' + c.data.f.title;
+		x_153465_discovert.twJS.openAssignmentModal(spModal, title, c.data.table, c.data.sys_id);
+	};
+	$scope.openOperationalModal = function(obj) {
+		var title= c.data.operationalTitle + ': ' + c.data.f.title;
+		x_153465_discovert.twJS.openOperationalModal(spModal, title, c.data.table, c.data.sys_id);
+	};		
+	// STRY0109208 - Add Create Icon
+	$scope.openCreateModal = function() {
+		var title= c.data.createTaskTitle + ': ' + c.data.f.title;
+		var query = 'parent=' + c.data.sys_id;
+		// DFCT0011271
+		x_153465_discovert.twJS.openCreateModal(spModal, title, c.data.table, c.data.view, query, c.data.u_servicenow_form_view);
+	};
+	
+	// DFCT0011353	- Template was opening new task
+	$scope.openCreateSubTemplateTaskModal = function() {
+		var modalObject = {
+                modalKey: 'createTaskTemplateForm',
+                title: c.data.addSubTaskTitle + ': ' + c.data.f.title, 
+                message: '',
+                backdrop: 'static',
+                widget: 'discovertasker-formtab',
+                widgetInput: {
+                    table: 'x_153465_discovert_route_tasks',
+                    query: 'parent=' + c.data.sys_id,
+                    sys_id: -1,
+                    view: 'Default_View', // NOTE, we may need to look up default
+                    hideRelatedLists: true,
+                    omitHeader: 'true',
+                    hideAttachmentBtn: true,
+                    isModal: true
+                },
+                shared: {},
+                size: 'lg',
+                buttons: []
+            };
+		x_153465_discovert.twJS.openFormModal(spModal, modalObject);
+	};
+
+	// 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis 
+	$scope.openOrgFullScreen = function() {
+		var urlRef = c.data.url_Properties.portal_url_ref == undefined ? 'discovertaskerportal' : c.data.url_Properties.portal_url_ref;
+		var redirectUrlNew = urlRef;
+		redirectUrlNew += '?id=' + 'discovertasker_ouhierarchy_full_screeen';
+		// redirectUrlNew += '&view=' + c.data.url_Properties.view;
+		redirectUrlNew += '&table=' + c.data.table;
+		redirectUrlNew += '&sys_id=' + c.data.sys_id;
+
+		window.open(redirectUrlNew, '_blank');
+	};
+
+	// STRY0119580 - toggle between advanced and quick task
+	$scope.toggleFormView = function(view_type) {
+		var activeTab = c.currentTab;
+		// DFCT0011041
+		if(_confirmChanges()){
+			$scope.submitting = true;
+			$scope.data.toggleForm = true;
+			$scope.data.toggle_view_type = view_type;
+			$scope.data.tasker_type = g_form.getValue('tasker_type');
+			$scope.server.update($scope).then(function () {
+				
+				// DFCT0011263 need to reload other client widgets on the switch
+				afterLoadFormReturns();
+				c.currentTab = activeTab;
+				$scope.submitting = false;
+			});
+		}		
+	};
+	
+	// 2.7.2 | 2022-01-12 | mmcc | DFCT0010728 - Modal Scheduled Tasks shows title data with an ellipsis 
+	$scope.openTaskFullScreen = function() {
+		var urlRef = c.data.url_Properties.portal_url_ref == undefined ? 'discovertaskerportal' : c.data.url_Properties.portal_url_ref;
+		var redirectUrlNew = urlRef;
+		redirectUrlNew += '?id=' + c.data.url_Properties.pageId;
+		redirectUrlNew += '&view=' + c.data.url_Properties.view;
+		redirectUrlNew += '&table=' + c.data.table;
+		redirectUrlNew += '&sys_id=' + c.data.sys_id;
+
+		redirectUrlNew += '&p=';
+		if (c.data.p != undefined) {
+			redirectUrlNew += c.data.p;
+		}
+
+		redirectUrlNew += '&filter=';
+		if (c.data.filter != undefined) {
+			redirectUrlNew += c.data.filter;
+		}
+
+		window.open(redirectUrlNew, '_blank');
+	};
+
+	// STRY0122687 - fix active tab not working issue
+	$scope.setActiveTab = function( activeTab ){
+		c.currentTab = activeTab;
+	};
+
+	$scope.getActiveTab = function(){
+		return c.currentTab;
+	};
+
+	$scope.isActiveTab = function( tabName, index ){
+		var activeTab = $scope.getActiveTab();
+		return ( activeTab === tabName || ( activeTab === null && index === 0 ) );
+	};
+	
+	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
+	$scope.$on("sp.DiscoverListItem", function(event, params) {
+		c.data.f._related_lists.forEach(function(relatedList) {
+			if(relatedList.table == params.table && relatedList.filter == params.filter ) {
+				relatedList.count = params.rowCount;
+			}
+		});
+	});
+
+	// FOR THE RELATED LIST TO REFRESH THE URL
+	$scope.$on('data_table.click', function(e, parms) {
+		if(c.data.table == parms.table && c.data.sys_id != parms.sys_id){
+			$rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+			$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
+		}
+
+		onListClick(e, parms);
+	});
+
+	// STRY0119918
+	c.widget.saveAsDraft = function(newFormObjSelected){
+		c.data.saveOnDraftChange = true;
+		$scope.data.view = newFormObjSelected.sn_view;
+		var fieldValues = newFormObjSelected.fieldValues;
+		c._setFieldValues(fieldValues);
+		$scope.submitting = true;
+		
+		//01713ba91b538d90d6062023b24bcba4 is the 'save_as_draft' guid
+		// DFCT0011124 - check submit and if fails, report back failure
+		g_form.submit('01713ba91b538d90d6062023b24bcba4');
+		$scope.submitting = false;
+		// DFCT0011412 - return true on success
+		return true;
+	};
+	
+	// STRY0119918
+	c.widget.updateDraft = function(newFormObjSelected){
+		c.data.saveOnDraftChange = true;
+		$scope.data.view = newFormObjSelected.sn_view;
+		var fieldValues = newFormObjSelected.fieldValues;
+		c._setFieldValues(fieldValues);
+		$scope.submitting = true;
+		// save instead of submitting 
+		// DFCT0011124 - check submit and if fails, report back failure
+		g_form.save();
+		$scope.submitting = false;
+		// DFCT0011412 - return true on success
+		return true;
+	};
+	
+	// STRY0119918
+	c.widget.checkChanges = function(){
+		var fMsg = '';
+		var serializeChanges = g_form.serialize(true);
+		if(serializeChanges.length>0){
+			var valueChanged = false;
+			var changeFieldList = [];
+			for (var field in serializeChanges) {
+				// for Task order, we are rebuilding the value list on the fly
+				// so ignor if value = original value
+				var objField = serializeChanges[field];
+				if(objField.name == "task_order" && 
+					objField.value == objField.originalValue){
+
+				} else {
+					valueChanged = true;
+					changeFieldList.push(serializeChanges[field].label.trim());
+				}
+			}
+			return valueChanged;
+		} else {
+			return false;
+		}
+	};
+	
+	// DFCT0011069
+	c.widget.setFieldValues = function(fieldValues){
+		c._setFieldValues(fieldValues);
+	};
+	
+	// set for form fields
+	c._setFieldValues = function(fieldValues){
+		if(fieldValues && fieldValues.length>0){
+			for (var i = 0; i < fieldValues.length; i++){
+				var field = fieldValues[i];
+				if(c.data.f._fields[field.field]){
+					g_form.setValue(field.field, field.value);
+				}
+			}			
+		}		
+	};
+	
+	$scope.openNewModal = function(table, title, view, query, sys_id) {
+		// if a create contact  button was clicked, then don't check changes b/c no way for a valid save without the new contact
+		if(table=="x_153465_discovert_external_poc_info" || _confirmChanges()){
+				open_New_Modal(table, title, view, query, sys_id);
+		}
+	};
+
+	// DFCT0011041 - confirm changes was moved to function to be used in multiple places
+	function _confirmChanges(){
+		var confirmChanges = false;
+		// If the form is dirty, ask the user if they would like to save the record
+		var fMsg = '';
+		var serializeChanges = g_form.serialize(true);
+		if(serializeChanges.length>0){
+			var changeFieldList = [];
+			for (var field in serializeChanges) {
+				changeFieldList.push(serializeChanges[field].label.trim());
+			}
+			fMsg = changeFieldList.join(', ');
+
+			spModal.confirm("${Tasker - Modal Save Changes Message}  "+ fMsg).then(function(confirmed) {
+				g_form.save();
+				confirmChanges = true;
+			});
+		}else{
+			confirmChanges=true;
+		}
+		// If user was prompted to save and chose to cancel, 
+		//       confirmChanges will sitll be false.
+		// If the form was not dirty or the user saved the changes, 
+		//       confirm changes will be true
+		return confirmChanges;
+	}
+
+	function open_New_Modal(table, title, view, query, sys_id) {
+		var formQuery = query + sys_id;
+		spModal.open({
+			title: title,
+			backdrop:'static',
+			widget: 'discovertasker-formtab',
+			widgetInput: {
+				table: table,
+				sys_id: "-1",
+				view: view,
+				query: formQuery,
+				// DFCT0010635
+				omitHeader: 'true',
+				// STRY0040294 - added isModal - added closing of open modal
+				isModal: true //,
+			},
+			size: 'lg',
+			buttons: [],
+			// 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+			footerStyle: {
+				'display': 'none'
+			}
+		});
+	}
+
+	$scope.$on("spModel.uiActionComplete", function(evt, response) {
+		var sysID = (response && response.isInsert) ? response.sys_id : $scope.data.sys_id;
+		// 2021.04.15 - Fix issue with form submit when to reload the form
+		// *************** Customization Start ***************************
+		// RAJ - Added below to close window when finished
+		// STRY0074663 - STRY0127096
+		if (c.data.isModal && 
+				c.data.baseWidget != "new_tasker_selection" &&
+				c.data.table != "sys_user_group" && 
+				c.data.table != "x_153465_discovert_discover_routing_template" ) {
+			
+			$scope.$parent.$parent.$dismiss();
+			return;
+		}
+		// DFCT0011210 - DFCT0011220
+		if(c.data.isModal){
+			if(c.data.table == "x_153465_discovert_discover_routing_template" ||
+				c.data.table == "sys_user_group"){
+				var shared = c.widget.options.shared;
+				if(shared && shared.fields){
+					shared.fields.sys_id.value = sysID;
+				}
+				$scope.$parent.$parent.buttonClicked($scope.$parent.$parent.options.buttons[0]);			
+				return;
+			}
+		} // 09.10
+
+		// this was added to tell New task form the uiaction has finished
+		var params = {};
+		params.action = c.data.currentAction;
+		params.rec_sys_id = sysID;
+		$rootScope.$broadcast('sp.form.ui_action.uiActionComplete', params);
+
+	
+		// *************** Customization End ***************************
+		// START - RAJ Remove post back on Modals
+		// after reviewing this, there is nothing in here that is required.
+		// If a uiaction needs to redirect or refresh the form, it should be done in the UI Action
+		// The only thing I noticed that needed to be updated upon removing this is the Create Task UI Action.
+		// Every other UI Action opens in a modal and closes then allows the form to refresh using record watchers.
+		// NOTE: All of the new item screens use the new task screen.  The OU, Member and Contact always open in a modal.  So, they do not need to refresh the base form.
+		// DFCT0010657   The Template and the Task screen redirect to a new page and do not open in a modal
+		//               If data.sys_id was -1, then the new item is from thei form.  The Create UI Action for task redirects.  So, the key case should not get here
+		//               If data.sys_id is NOT -1, then the response Insert is NOT for this form.
+		if ($scope.data.sys_id ==-1 && 
+			($scope.data.table == 'x_153465_discovert_route_task_instance' || 
+				$scope.data.table == 'x_153465_discovert_discover_routing_template')){
+			var error;
+			if (response.$$uiNotification[0]) {
+				if (response.$$uiNotification[0].type == "error") {
+					error = true;
+				} else {
+					error = false;
+				}
+			}
+
+			// if this widget is embeded in the new_tasker_selection widget, 
+			// then let that widget handle what happens next
+			if (c.data.baseWidget == "new_tasker_selection") {
+				return;
+			}
+
+			if (response && response.isInsert && (!error)) {
+				// STRY0105791
+				var redirectUrlNew;
+				switch ($scope.data.table) {
+					case 'x_153465_discovert_route_task_instance':
+						// STRY0113838 - DFCT0010657
+						//							redirectUrlNew = "?id=" + c.data.url_Properties.pageId +
+						//							"&view=" + c.data.url_Properties.view +
+						//							"&table=" + $scope.data.table + "&sys_id=" + sysID;
+						//							$location.url(redirectUrlNew);
+
+						// STRY0119918
+						c.data.sys_id=sysID;
+						if(!c.data.saveOnDraftChange){
+							c.data.getURL=true;
+							c.data.view=c.data.url_Properties.view;
+							c.data.isValid = false;
+							c.data.loadingIndicator = true;
+							c.data.emptyStateTemplate = false;
+							$scope.server.update().then(function(data) {
+								redirectUrlNew = data.portal_url_ref + '?id=' +  data.pageId + '&sys_id=' + data.sys_id + '&table=' + data.pageTable + '&view=' + data.view;
+								$location.url(redirectUrlNew);
+							});
+						} else {
+							c.data.saveOnDreaftChange = false; // set back to false after skipping the URL redirect
+						}
+						loadForm(c.data.table, c.data.sys_id).then(function(){
+							$rootScope.$broadcast("sp.form.submitted", {sys_id: c.data.sys_id});
+						});
+						break;
+						// STRY0093947
+					case 'x_153465_discovert_discover_routing_template':
+						redirectUrlNew = "?id=discovertasker_processtemplatedetails&table=" + $scope.data.table + "&sys_id=" + sysID + "&spa=1";
+						$location.url(redirectUrlNew);
+						break;
+				}
+				return;
+			}
+		}
+		// STRY0093904 - "UI Actions" on Task Form are NOT responsive
+		$scope.submitting = false;
+		// 2021.04.15 - Fix issue with form submit when to reload the form			
+		if (response.isActionAborted)
+			return;
+
+		loadForm(c.data.table, c.data.sys_id).then(function(response){
+			if(!response || !response.isInsert){
+				constructResponseHandler(response);
+			}
+		});
+	});
+
+	//------------------------------------------------------------------------------------------------------------------------
+	// END CUSTOM
+	//------------------------------------------------------------------------------------------------------------------------
+
+	$rootScope.$on('$sp.html.editor.progress', function(e, conf) {
+		$scope.submitting = conf.state;
+	});
+
+	$rootScope.$broadcast('sp.update.breadcrumbs', $scope.data.breadcrumbs);
+
+	// STRY0108140 - STRY0115840
+	$scope.getButtonClass = function(action) {
+		// STRY0115840 for Activate OU button, change to different color for emphasis
+		// 2.8 | 2022-05-06 | mmcc | STRY0115297 - New Task Form- Allow users to start Tasks as Draft; use style Success
+		if(action.sys_id == '5fe1a93ddb9cb780c18c59b2ca961945' ||
+			action.sys_id == '01713ba91b538d90d6062023b24bcba4') { // Save as Draft UI Action
+			return "btn btn-success action-btn";
+		}
+		if (action.form_style == "destructive")
+			return "btn-danger";
+
+		if (action.form_style == "primary")
+			return "btn-primary";
+
+		return "btn-default";
+	};
+
+	$scope.getUIActions = function(type) {
+		if ($scope.data.disableUIActions)
+			return [];
+		if (type) {
+			return $scope.data.f._ui_actions.filter(function(action) {
+				// STRY0122589 - don't show Create Task if data.draftOnly is true
+				var showButton = true;
+				if(action.sys_id == '4a0a64badb9d1740bb8ee536ca961956' && c.data.draftOnly){
+					showButton = false;
+				}
+				//We handle the primary action button separately.
+				return showButton && !action.primary && action['is_' + type];
+			});
+		} else {
+			return $scope.data.f._ui_actions;
+		}
+	};
+
+	c.thisPage = $location.search()['id'];
+	$scope.getPrimaryAction = function() {
+		var primaryActions = $scope.data.f._ui_actions.filter(function(action) {
+
+			return action.primary;
+		});
+		return (primaryActions.length) ? primaryActions[0] : null;
+	};
+
+	$scope.getUIActionContextMenu = function(event) {
+		var menu = [];
+		if (event.ctrlKey)
+			return menu;
+
+		var contextActions = $scope.getUIActions('context');
+		contextActions.forEach(function(action) {
+			menu.push([action.name, function() {
+				$scope.triggerUIAction(action);
+			}]);
+		});
+
+		if (contextActions.length > 0)
+			menu.push(null);
+		menu.push([$scope.data.exportPDFMsg, function() {
+			exportPDF("");
+		}]);
+		menu.push([$scope.data.exportPDFLandMsg, function() {
+			exportPDF('true');
+		}]);
+
+		return menu;
+	};
+
+	function exportPDF(landscape) {
+		$window.open("/" + $scope.data.f.table + ".do?PDF&landscape=" + landscape + "&sys_id=" + $scope.data.sys_id + "&sysparm_view=" + $scope.data.f.view);
+	}
+
+	//trigger the primary UI Action on save (if there is one)
+	var deregister = $scope.$on('$sp.save', function() {
+		var primaryAction = $scope.getPrimaryAction();
+		if (primaryAction)
+			$scope.triggerUIAction(primaryAction);
+	});
+	$scope.$on('$destroy', function() {
+		deregister();
+	});
+
+	$scope.triggerUIAction = function(action) {
+		// STRY0119918
+		c.data.currentAction = action;
+		if ($scope.data.disableUIActions && !action.primary) {
+			return;
+		}
+		$rootScope.$broadcast('sp.form.ui_action.triggered', action);
+		if (action.action_name == 'createSchedule') {
+			$('button[gsft_id="9a33e9b6db6e6380bb8ee536ca96190d"]').remove();
+		}
+
+		var activeElement = document.activeElement;
+		if (activeElement) {
+			activeElement.blur();
+		}
+		//-----------------------------
+		$scope.$evalAsync(function() {
+
+			if (g_form) {
+				$scope.submitting = true;
+				if (!g_form.submit(action.action_name || action.sys_id)) {
+					$scope.submitting = false;
+					$rootScope.$broadcast('sp.form.submit.failed', action);
+				}
+
+				// STRY0074663
+				// STRY0127096 - added a few more conditions that require getting ID back to caller
+				// RAJ - a mistake was madde removing a line important for dismiss
+				// DFCT0011316 - added logic for the buttons in Template where we want modal to close.
+				//               This way when opening submodal, the view widget doesn't close
+				if ($scope.submitting == true && c.data.isModal &&
+						c.data.baseWidget != "new_tasker_selection" &&
+						c.data.table != "sys_user_group" && 
+						(c.data.table != "x_153465_discovert_discover_routing_template" ||
+						 (c.data.table == "x_153465_discovert_discover_routing_template" &&
+						 (action.action_name=="sysverb_update" || 
+						  action.action_name=="Activate Process Template" || 
+							action.action_name=="Deactivate Template"
+						 )))) {
+					$scope.$parent.$parent.$dismiss();
+				} // 09.10
+			} 
+		});
+
+	};
+
+	// DFCT0011121 - if modal closed complete, and it was opened from a modal, then close the modal
+	$rootScope.$on('sp.modal.form.complete', function(e, parms) {
+		// an action was submitted by a modal opened from this modal
+		// close this window also.
+		// JS errors were occuring when this triggered on a form probably after closign
+		if(c.data.isModal && $scope.$parent && $scope.$parent.$parent){
+			$scope.$parent.$parent.$dismiss();
+		}
+	});
+	
+	function constructResponseHandler(response) {
+		var showUpdate = true;
+		// JS error occurring when response empty
+		if(response){
+			var notifications = response['$$uiNotification'];
+			// STRY0040294 - added .length > 0.  This was erroring b/c notificatoins was not null, it was an empty array.
+			// I looked in the root form.  It has this same problem.
+			if (notifications && notifications.length > 0 && notifications[0].type == 'error') {
+				showUpdate = false;
+			}					
+
+			return function() {
+				$rootScope.$broadcast("sp.form.submitted", {
+					sys_id: (response.isInsert) ? response.sys_id : $scope.data.sys_id
+				});
+				var message;
+				var eventName = "sp.form.record.updated";
+				if (response.isInsert) {
+					message = $scope.data.recordAddedMsg;
+					var search = $location.search();
+					search.sys_id = response.sys_id;
+					search.spa = 1;
+					$location.search(search).replace();
+				} else if (showUpdate == true) {
+					message = $scope.data.updatedMsg;
+				}
+				$scope.data.hideRelatedLists = hideRelatedLists();
+				$scope.$emit(eventName, $scope.data.f._fields);
+				$rootScope.$broadcast(eventName, $scope.data.f._fields);
+				$scope.status = message;
+				spUtil.addTrivialMessage(message);
+				$timeout(clearStatus, 2000);
+			};
+		}
+	}
+
+	var ctrl = this;
+	// switch forms
+	var unregister = $rootScope.$on('$sp.list.click', onListClick);
+
+	$scope.$on("$destroy", function() {
+		unregister();
+	});
+
+	function _save() {
+		var primaryAction = $scope.getPrimaryAction();
+		if (primaryAction)
+			$scope.triggerUIAction(primaryAction);
+	}
+
+	function onListClick(evt, arg) {
+		// STRY0108629
+		if((arg.table == c.data.table || c.data.table == null) && 
+			c.data.sys_id != arg.sys_id){
+			loadForm(arg.table, arg.sys_id);
+		}
+	}
+
+	function loadForm(table, sys_id) {
+		var f = {};
+		$scope.data.table = f.table = table;
+		$scope.data.sys_id = f.sys_id = sys_id;
+		f.view = $scope.data.view;
+		return $scope.server.update().then(function(){
+			// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+			// DFCT0010894, DFCT0010897, DFCT0010896, DFCT0010895, DFCT0010770
+			if(c.data.sys_id && c.data.sys_id != -1){
+				initRecordWatcher(c.data.table, "sys_id=" + c.data.sys_id);	
+			}
+			afterLoadFormReturns();
+		});
+	}
+
+	$rootScope.$on('$TaskerTaskList.click', function(e, parms) {
+		var p = $scope.data.page_id;
+		if (p == 'discovertasker_taskdetails') {
+			onListClick(e, parms);
+		}
+	});
+
+	$scope.$on('spModel.fields.rendered', function() {
+		if (ctrl.panels)
+			ctrl.panels.removeClass('shift-out').addClass('shift-in');
+	});
+
+	var g_form;
+
+	function initForm(gFormInstance) {
+		if (gFormInstance.getTableName() == $scope.data.f.table) {
+			g_form = gFormInstance;
+			// STRY0128070 - set the parent widget to allow check changes to be called
+			spNavStateManager.register($scope.data.table, _save, g_form);
+			$scope.isPageReady = true;
+			$timeout(function() {
+				$rootScope.$emit('spModel.gForm.rendered', g_form);
+			}, 175);
+		}
+	}
+
+	$scope.$on('spModel.gForm.initialized', function(e, gFormInstance) {
+		initForm(gFormInstance);
+		//STRY0056591: Get parent from the table calling the modal
+		if ($scope.data.parent != undefined)
+			if ($scope.data.parent.length > 0) {
+				g_form.setValue('parent', $scope.data.parent);
+			}
+		// STRY0108170 - NOTE: this should pull all values off o a filter 
+		if ($scope.data.u_ou_parent != undefined)
+			if ($scope.data.u_ou_parent.length > 0) {
+				g_form.setValue('u_ou_parent', $scope.data.u_ou_parent);
+			}
+		//REQUEST TYPE
+		if ($scope.data.u_request_type != undefined && $scope.data.u_request_type.length > 0) {
+			g_form.setValue('u_request_type', $scope.data.u_request_type);
+		}
+	});
+
+	$scope.$on('spModel.gForm.env.created', function(e, gFormInstance) {
+		initForm(gFormInstance);
+	});
+
+	function clearStatus() {
+		$scope.status = "";
+	}
+
+	function afterLoadFormReturns(){
+		// Changed from page.title to data.f.title to remove post back
+		if(c.data.sys_id != '-1'){
+			top.document.title = c.data.f.title;
+			$rootScope.$broadcast('sp.update.breadcrumbs', c.data.breadcrumbs);				
+		}
+	}
+  
+	if ($scope.data.f.title) {
+		$scope.$emit('sp.widget-modal.set-aria-label', $scope.data.f.title);
+	}
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>//------------------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOM    Some CSS selectors will be found in Tasker Overall Style Sheet
+//------------------------------------------------------------------------------------------------------------------------
+
+// DFCT0010657
+#loading-spinner {
+  animation: loading 2s infinite linear;
+}
+
+@keyframes loading {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(359deg);
+  }
+}
+
+/* SECTIONS &amp; FORMS */
+//------------------------------------------------------------------------------------------------------------------------
+.ng-isolate-scope .h4.ng-binding{
+  font-weight: 400 !important;
+  font-family: "SourceSansPro", Helvetica, Arial, sans-serif; //'Lucida Sans Unicode';
+  padding-left: 5px;
+  border-left-style: solid;
+  border-left-color: $primary;
+  border-left-width: 5px;
+  color: $primary;
+  padding-top: 8px;
+  padding-bottom: 5px;
+}
+
+fieldset.ng-scope{
+  margin-top: 5px;
+}
+
+label{
+  //font-weight: 100!important;
+  color: $primary;
+}
+
+
+/* DURATION */
+//------------------------------------------------------------------------------------------------------------------------
+
+#dur-minutes,
+#dur-seconds { 
+  visibility: hidden!important;
+}
+
+#dur-days,
+#dur-hours { 
+  width: 40px!important
+}
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// OOTB FORM WIDGET
+//------------------------------------------------------------------------------------------------------------------------
+
+/* 2.7.1 | 2021-12-15 | mmcc | DFCT0010716 - On Tabs (OU, Task) the icons did not align correctly with text at the top of the page */
+.btn-form-menu {
+  /* vertical-align: inherit;
+  padding: inherit; */
+  background: none;
+  padding: 10px 0;
+}
+
+.panel-title {
+  word-wrap: break-word;
+}
+
+.panel-heading {
+  .dropdown-menu {
+    a {
+      white-space: normal;
+    }
+  }
+}
+
+.comment {
+  font-weight: bold;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.mce-panel, .mce-btn {
+  background-image: none;
+  background-color: #f0f3f4;
+}
+
+.action-btn {
+  margin-right: 5px;
+}
+
+/* 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists
+Have modal fit the viewport height with its own scrollbar start
+*/
+.timeline-container {
+  /* max-height: 50vh; */
+  /* max-height: calc(100vh - 611px); */
+  max-height: 18vh;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.attachment-button {
+  .glyphicon-paperclip {
+    font-size: 18px;
+  }
+}
+
+.dropdown {
+  .glyphicon-menu-hamburger:focus {
+    outline: thin dotted;
+    outline: 5px auto $input-border-focus;
+    outline-offset: -2px; 
+  }
+}
+
+.empty-state-wrapper {
+  align-items: center;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  left: 0;
+  margin-bottom: 0;
+  position: absolute;
+  right: 0;
+  top: 0 ;
+
+  .empty-state {
+    border: 1px solid #e7e9eb;
+    border-radius: 10px;
+    max-width: 700px;
+    padding: 30px 40px 20px;
+    position: relative;
+
+    .empty-state-badge {
+      top: -36px;
+      left: 50%;
+      position: absolute;
+      height: 72px;
+      width: 72px;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
+      align-items: center;
+      border-radius: 100%;
+      color: #ffffff;
+      display: -webkit-flex;
+      display: -ms-flexbox;
+      display: flex;
+      font-size: 40px;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      margin-left: -36px;
+      text-align: center;
+    }
+
+    .empty-state-header {
+      font-size: 30px;
+      text-align: center;
+      color: #343d47;
+    }
+
+    .empty-state-content {
+      ul {
+        list-style: disc outside;
+        margin: 0 0 10px 0;
+        padding: 0 0 0 30px;
+      }
+    }
+  }
+}
+
+.text-success-alt {
+  background-color: $state-success-text;
+}
+
+.text-info-alt {
+  background-color: $state-info-text;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description>Tasker Form - V3 removes Tabs</description>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tasker_form_v3</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+
+}]]></link>
+        <name>Tasker Form - V3</name>
+        <option_schema>[{"name":"disableUIActions","section":"other","label":"Disable UI Actions on Form","type":"boolean"},{"name":"showFormView","section":"other","label":"Display current form view","type":"boolean"},{"name":"omitHeaderOptions","section":"other","label":"Omit header options icon","type":"boolean"},{"hint":"If checked, hide related lists","name":"hiderelatedlists","section":"other","default_value":"false","label":"Hide Related Lists","type":"boolean"},{"hint":"Chose the template to be used when the form has no data","name":"empty_state_template","section":"other","default_value":"tasker-empty-state-list-form.html","label":"Empty State Template","type":"choice","choices":[{"label":"tasker-empty-state-list-form.html","value":"tasker-empty-state-list-form.html"},{"label":"tasker-empty-state-portal-edit.html","value":"tasker-empty-state-portal-edit.html"},{"label":"tasker-empty-state-page-editor.html","value":"tasker-empty-state-page-editor.html"}]},{"hint":"Enter the Table Name","name":"table","section":"Data","label":"Table","type":"string"},{"hint":"Enter the Query to use","name":"query","section":"Data","label":"Query","type":"string"},{"hint":"Check to remove the header icons","name":"omit_icons","section":"other","default_value":"false","label":"Omit Icons","type":"boolean"},{"hint":"Check if the widget is used in a 2 column screen","name":"bifold","section":"other","default_value":"false","label":"Widget is in a bifold view","type":"boolean"}]</option_schema>
+        <public>false</public>
+        <roles>x_153465_discovert.tasker_user</roles>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2023 Discover Technologies LLC
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------
+// COMPANY: DISCOVER TECHNOLOGIES
+// CUSTOMIZED BY: KARINA TORRES
+// WIDGET BASE: FORM
+//------------------------------------------------------------------------------------------------------------
+// 3.0 | 2024-05-08 | raj  | Created for a form with no tabs and all of the form functionality
+// 
+//------------------------------------------------------------------------------------------------------------
+
+// form functionality - URL parameter driven
+(function($sp, input, data, options, gs) {
+	// STRY0141856
+	var api_task = new api_tasker_task();
+	// Directive update for template
+	var api_template = new api_tasker_template();
+	
+	// DFCT0010657
+	var oUserPref = new x_153465_discovert.tasker_User_Form_Preferences();
+	data.allowFormViewToggle = tasking_System_Settings_Scripts.TASK_FORM_PROPERTY_VALUE == tasking_System_Settings_Scripts.CONST_BOTH_QUICK_AND_ADVANCED_TASK_FORMS;
+	var url_Properties = {};
+	if (input && input.getURL==true){
+		// if just getting the URL, then get URL and return
+		url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(input.sys_id,input.view);
+		data.sys_id = input.sys_id;
+		data.pageId = url_Properties.pageId;
+		data.pageTable = url_Properties.pageTable;
+		data.view = url_Properties.view;
+		data.portal_url_ref = url_Properties.portal_url_ref;
+		data.isValid = false;
+		data.loadingIndicator = true;
+		// only call once
+		data.getURL = false;
+		return;
+	}	
+	data.loadingIndicator = false;
+
+	/* "use strict"; -linter issues */
+	// populate the 'data' variable
+	data.recordAddedMsg = gs.getMessage("Record Added");
+	data.updatedMsg = gs.getMessage("updated_uppercase");
+	data.exportPDFMsg = gs.getMessage("Export to PDF");
+	data.exportPDFLandMsg = gs.getMessage("Export to PDF (landscape)");
+
+	// 2.7.0 | 2021-05-25 | mmcc | STRY0090508 When Tasker Users click "UI Policies" or "Client Scripts" on the context menu 
+	//data.isAdmin = gs.hasRole('x_153465_discovert.tasker_user'); //data.isAdmin = gs.hasRightsTo('sp/configure.all/execute', null); //for GLOBAL app
+	data.isAdmin = gs.hasRole('admin');
+	data.hasRoleTaskerUser = gs.hasRole('x_153465_discovert.tasker_user');
+
+	data.emptyStateTemplate = options.empty_state_template;
+	data.disableUIActions = options.disableUIActions === "true";
+	data.hideRelatedLists = options.hideRelatedLists || false;
+	// STRY0135701 - Subtask; Detailed Status; Action Log; and Final Response tabs
+	data.additionalLists = options.additionalLists;
+	
+	// STRY0108629
+	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
+	
+	data.omit_icons=(input || {}).omit_icons || (options || {}).omit_icons || false; 
+	// New Form updates
+	data.omitHeaderOptions = (input || {}).omitHeaderOptions || (options || {}).omitHeaderOptions || false;
+	
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; add final false
+	data.omitHeader = (input || {}).omitHeader || (options || {}).omitHeader || false;
+	
+	// STRY0120159 
+	data.hideTaskFilter = (input || {}).hideTaskFilter || (options || {}).hideTaskFilter;
+	
+	// STRY0119580
+	data.toggleForm = false;
+	data.baseWidget = (input || {}).baseWidget || (options || {}).baseWidget || undefined;
+
+	//------------------------------------------------------------------------------------------------------------
+	// CUSTOM
+	//------------------------------------------------------------------------------------------------------------
+	// 2.8.5 | 2023-11-08 | mmcc | DFCT0012275 - Existing use of Duration Directive failing to function; added
+	data.hideDate = (input || {}).hideDate || (options || {}).hideDate || 
+		$sp.getParameter("hideDate") || true;
+
+	// START - RAJ Remove post back on Modals
+	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis; add || false
+	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+
+	// 2.8 | 2022-08-25 | mmcc | DFCT0011206 - DocIntegrator needs to flex when used in the Tasker App; add isFlexboxUsed
+	data.isFlexboxUsed = (input || {}).isFlexboxUsed || (options || {}).isFlexboxUsed || false;
+
+	// 2.8.5 | 2023-11-08 | mmcc | DFCT0012275 - Existing use of Duration Directive failing to function; added,
+	// in modal we need bottom-right and other pages that keeps popover within widget bounds
+	data.popoverPlacement = (input || {}).popoverPlacement || (options || {}).popoverPlacement || 
+		$sp.getParameter("popoverPlacement") || 'auto bottom-right';
+	
+	// 2.8.5 | 2023-07-24 | mmcc | STRY0135715 - Edit privilege for my comments in the All Responses Modal; added
+	data.responseEditorControl = (input || {}).responseEditorControl || (options || {}).responseEditorControl || 'form';
+
+	// 2.8.5 | 2023-11-08 | mmcc | DFCT0012275 - Existing use of Duration Directive failing; added hideDate, sorted
+	// 2.8 | 2022-08-25 | mmcc | DFCT0011206 - DocIntegrator needs to flex when used in the Tasker App; add isFlexboxUsed
+	// 2.8 | 2022-08-19 | mmcc | DFCT0011084 - Page Tree Bi-Fold needs to match the standard layout for flexing header-body-footer; add isBottomRibbonShown
+	// 2.8 | 2022-08-01 | mmcc | DFCT0011122 - Page Task Requests needs flexing; add omitHeader
+	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
+	// STRY0115843 - added bifold to this (New Form updates)
+	convertToBool(['bifold', 'hideDate', 'isFlexboxUsed', 'isModal', 'omit_icons', 'omitHeader', 'omitHeaderOptions']);
+
+	// STRY0105791
+	data.baseURL = gs.getProperty('glide.servlet.uri');
+	if($sp.getPortalRecord()){
+		data.service_portal_url_suffix = $sp.getPortalRecord().getValue('url_suffix');
+	} else {
+		// TODO: May want to pull default from the form load here
+		data.service_portal_url_suffix = '';
+	}
+
+	data.page_id = $sp.getParameter("id");
+	data.sys_id = $sp.getParameter("sys_id");
+	data.filter = $sp.getParameter("filter") || $sp.getValue('filter');
+	data.isValid = true;
+	data.current_user = gs.getUserID();
+	if (!options.showFormView) {
+		options.showFormView = "false";
+	}
+	//------------------------------------------------------------------------------------------------------------
+
+	if (input) {
+		var myUserObject = gs.getUser();
+		var currentUser = myUserObject.getDisplayName();
+
+		data.table = input.table;
+		data.sys_id = input.sys_id || data.sys_id;
+		data.view = input.view;
+		// STRY0119580 - toggle of quick / advanced clicked, load other view
+		if(input.toggleForm){
+			// DFCT0011036 - load for form view type and task type instead of just for task type
+			data.taskFormView = oUserPref.getDefaultFormViewForTaskTypeAndFormViewType(input.tasker_type, input.toggle_view_type);
+		}
+
+		//STRY0056591
+		if (input.parent)
+			data.parent = input.parent;
+		// STRY0108170 - NOTE: this should pull all values off o a filter 
+		// 								to avoid adding all fields being passed like parent above
+		if (input.u_ou_parent)
+			data.u_ou_parent = input.u_ou_parent;
+
+		//KT REQUEST TYPE
+		data.u_request_type = input.u_request_type;
+
+		var result = {};
+		if (input._fields) {
+			result = $sp.saveRecord(input.table, input.sys_id, input._fields);
+			data.sys_id = result.sys_id;
+		}
+
+		if (input.sys_id == '-1')
+			data.isNewRecord = true;
+	} else {
+		data.table = options.table || $sp.getParameter("t") || $sp.getParameter("table") || $sp.getParameter("sl_table");
+		data.sys_id = options.sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
+		//STRY0065050
+		//data.view = options.view || $sp.getParameter("v") || $sp.getParameter("view") || data.view; // SP default from data.view
+	}
+
+	if (input) {
+		data.query = $sp.getParameter("query") || options.query || input.query;
+	} else {
+		data.query = $sp.getParameter("query") || options.query || "";
+	}
+	// DFCT0010771 - if query is undefined, set it to blank as a query was not passed and was causing errors
+	if(!data.query || data.query == "undefined"){
+		data.query = "";
+	}	
+	data.f = {};
+	if (!data.table) {
+		return;
+	}
+
+	// TODO Multi-language
+	data.OrgFullscreen16 = {"src":'Fullscreen16.svg', "title": gs.getMessage("Open Organizational Hierarchy in full screen view"), "alt": gs.getMessage('Full Screen View')};
+	data.TaskFullscreen16 = {"src":'Fullscreen16.svg', "title": gs.getMessage("Open task in new tab"), "alt": gs.getMessage('Open Task')};	
+	data.AdvancedTask24 = {"src":'AdvancedTask24.svg', "title": gs.getMessage("Tasker - AdvancedTask24.svg"), "alt": gs.getMessage('Tasker - AdvancedTask24.svg')};	
+	data.QuickTask24 = {"src":'QuickTask24.svg', "title": gs.getMessage("Tasker - QuickTask24.svg"), "alt": gs.getMessage('Tasker - QuickTask24.svg')};	
+	// DFCT0011197
+	data.docIntegratorMessage = gs.getMessage("Tasker - Documents are stored in SharePoint via DocIntegrator");
+	if(data.omit_icons!=true){
+		// 2.8 | 2022-04-14 | mmcc | STRY0119578 - Existing Task Form- Remove DTLV icon and Task Tree View icon
+		// data.TreeNodes16 = {"src":'TreeNodes16.svg', "title": gs.getMessage("Open Task Tree View"), "alt": gs.getMessage('Task Tree View')};
+		// 2.8 | 2022-04-14 | mmcc | STRY0119578 - Existing Task Form- Remove DTLV icon and Task Tree View icon
+		// STRY0114212
+		// data.DynamicTreeView16 = {"src":'DynamicTreeView16.svg', "title": gs.getMessage("Go to Dynamic Tree View page"), "alt": gs.getMessage('Dynamic Tree View')};
+		data.Schedule16 = {"src":'Schedule16.svg', "title": gs.getMessage("Open Duration"), "alt": gs.getMessage('Duration')};
+		// DFCT0010649
+		data.Member16 = {"src":'Member16.svg', "title": gs.getMessage("Open Assignment"), "alt": gs.getMessage('Assignment')};
+		// STRY0112002
+		data.Information16 = {"src":'Information16_Black.svg', "title": gs.getMessage("Open Information"), "alt": gs.getMessage('Information')};
+		data.Divider = {"src":'Divider_Black.svg', "title": "", "alt": ""};
+		// DFCT0010654
+		var genericAddTitle = '';
+		var genericAddAlt = '';
+		switch (data.table){
+			case api_dtech_common.CONST_DTECH_TASK_TABLE_NAME: case api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME:
+				genericAddTitle = gs.getMessage('Add a SubTask');
+				genericAddAlt = gs.getMessage('Create a SubTask');
+				break;
+			case "x_153465_discovert_discover_office_hierarchy": 
+				genericAddTitle = gs.getMessage('Add a Sub OU');
+				genericAddAlt = gs.getMessage('Create a Sub OU');
+				break;
+		}
+
+		data.GenericAdd16 = {"src":'GenericAdd16.svg', "title": genericAddTitle, "alt": genericAddAlt};
+
+		// STRY0111888 - DFCT0010602 - DFCT0010603
+		data.LockOpenBadge12 = {"src":'LockOpenBadge12.svg', "title": "Permissive Organizational Unit", "alt": "Organizational Unit is Permissive"};
+		data.RestrictedBadge12 = {"src":'RestrictedBadge12.svg', "title": "OU does not allows Useers to be Tasked by other users", "alt": "OU Prevents Permissive Tasking"};			
+		// STRY0091260
+		data.durationTitle = gs.getMessage('Tasker - Title - Duration Modal');
+		data.assignmentTitle = gs.getMessage('Tasker - Title - Assignment Modal');
+		data.operationalTitle = gs.getMessage('Tasker - Title - Operational Modal');
+		// STRY0109208 - Add Create Icon
+		data.createTaskTitle = gs.getMessage('Create Subtask');
+		// DFCT0011352 - Template was opening new task form instead of template form
+		data.addSubTaskTitle = gs.getMessage('Tasker - Add a Subtask');
+	}
+	
+	// 2.7.0 | 2021-09-07 | mmcc | STRY0105158 - After creation of a new template, redirect is showing the wrong widget on the right column
+	// From new template page, get the Top task for the Template Details Page
+	if (data.page_id == 'discovertasker_processtemplatedetails' &&
+		data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME) {
+		var grTemp = new GlideRecord(api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME);
+		if (grTemp.get(data.sys_id)) {
+			data.sys_id = grTemp.getValue('parent_task_def');
+			data.table = api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME;
+		}
+	}
+
+	// Form widget is not a supported way to view an attachment
+	if (data.table == "sys_attachment") {
+		data.tableUnsupported = true;
+		return;
+	}
+
+	if (gs.tableExists(data.table) == false) //if (!GlideTableDescriptor.isValid(data.table)) //for GLOBAL app
+		return;
+
+	if (!data.sys_id)
+		return;
+
+	// STRY0141856
+	data.assignmentObject = {};
+	data.showDTechAssignment = false;
+	data.durationObject = {};
+	data.showDTechDuration = false;
+	data.operationalObject = {};
+	data.showDTechOperation = false;
+
+	//Possible Disabled for Restricted Tasks
+	var rec = new GlideRecord(data.table);
+
+	//var rec = new GlideRecordSecure(data.table); //var rec = $sp.getRecord(data.table, data.sys_id);  //for GLOBAL app
+	//STRY0071033: 4. GlideRecord's get() function should be enclosed in an if() statement
+	// 2.7.0 | 2021-11-1 | mmcc | DFCT0010601 - Deleting the Top Task logs an error: The Task Tree was not created for Task
+	// rec.get(-1) = true
+	if (rec.get(data.sys_id)) {
+		data.isValid = rec.isValid() || data.sys_id == "-1";
+	} else {
+		data.isValid = data.sys_id == "-1";
+	}
+
+	if (!data.isValid)
+		return;
+	
+	// STRY0114645 - if task table and not a new item, look up the form to use.  If new task, the view will be passed
+	// moved this logic below the record get so the record state could be used in the logic
+	if(data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+		
+		// STRY0119580 - if data.taskFormView was not set by input above, set here
+		if(data.taskFormView){
+			data.view = data.taskFormView.sn_view;
+
+		} else {
+			// set view to blank to load system default by default or the view based on view rule for the task
+			var view = '';
+
+			var taskFormView;	
+
+			// new task or draft task, allow view to change
+			if(data.sys_id == -1 || rec.state == -6){
+				// for new items data.view will be set on the input for a modal, and on the url for a full page new item
+				view = data.view || (input || {}).view || (options || {}).view || $sp.getParameter("view");
+				// DFCT0011092 - Mobile - New Task form does NOT display on the Mobile 
+				// load the default tasker form view
+				taskFormView = oUserPref.getDefaultTaskerFormView(null);
+			} else {
+				// STRY0119580
+				taskFormView = oUserPref.getDefaultTaskerFormView(rec);
+			}
+			// DFCT0011092 - Mobile - New Task form does NOT display on the Mobile 
+			if(taskFormView){
+				data.taskFormView = taskFormView;
+			}			
+
+			url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id, view);
+			data.view = url_Properties.view;
+		}
+		
+	} else {
+		data.view = data.view || $sp.getParameter("view") || "sp"; // SP default
+	}
+	// STRY0113838
+	data.url_Properties = oUserPref.get_URL_Properties_for_Task_Based_on_Prefrences(data.sys_id,data.view);
+	
+	// 2.7.0 | 2021-10-22 | mmcc | DFCT0010600 - Deleting the Top Task from Portal App does not redirect to the Tasker Portal Board
+	// DFCT0010600 old if statement
+	//if (!data.parent_id && rec.parent) {
+	//	data.parent_id = rec.getValue('parent');
+	//}
+	// DFCT0010600 new if statement
+	if (rec.parent) {
+		data.parent_id = rec.getValue('parent');
+	} else {
+		data.parent_id = undefined;
+	}
+
+	// STRY0097476
+	data.emailEnabled = (data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME && new uiConditionCheck().displaySendTaskAsEmailUIAction(rec));
+
+	// STRY0063746 - this function takes different glide record types and returns the documents, attachments and shared values for that object
+	var tDS = new taskerDocumentScripts();
+	var currentAttachDocSettings = tDS.getAttachmentAndDocumentSettings(rec);
+
+	//------------------------------------------------------------------------------------------------------------
+	// CUSTOM: DOC. INT INTEGRATION - INITIALIZING VARIABLES 
+	//------------------------------------------------------------------------------------------------------------
+	//STRY0063746 - this function takes different glide record types and returns the documents, attachments and shared values for that object
+	data.SNAttachmentsON = currentAttachDocSettings.sNOWAttachmentsOn;
+	data.DocIntON = currentAttachDocSettings.docIntDocumentsOn;
+	//STRY0059178 | Shared Documents Folder
+	data.DocIntShareFolderON = currentAttachDocSettings.sharingDocuments;
+	data.AttachmentSharedFolderON = currentAttachDocSettings.sharingAttachments;
+
+	data.table = rec.getRecordClassName();
+	//data.tableHierarchy = GlideDBObjectManager.getTables(data.table).toArray().join(); //for GLOBAL app
+	var table = new GlideTableHierarchy(data.table);
+	data.tableHierarchy = table.getTables();
+	data.canWrite = rec.canWrite();
+	// STRY0050440
+	data.canCreate = rec.canCreate();
+	var hasRecordAccess = data.sys_id == "-1" ? rec.canCreate() : data.canWrite;
+
+	//STRY0014160: If user doesn't have Read access, stop here.
+	data.hasRecordReadAccess = true;
+	// DFCT0011973 - DFCT0012019
+	if (data.sys_id != "-1" && (data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME ||
+			data.table ==  api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME ||
+			data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME ||
+			data.table == 'x_153465_discovert_discover_routing_runtime')) {
+		data.hasRecordReadAccess = rec.canRead();
+		if (!data.hasRecordReadAccess) {
+			// STRY0105791
+			var link = '<a href="../' + data.service_portal_url_suffix + '">Tasker Portal</a>';
+			var message;
+			if(data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+				message = 'You do not have permission to view this Task. ' + link + ' .<br/>';	
+			} else {
+				message = 'You do not have permission to view this Template. ' + link + ' .<br/>';
+			}
+			gs.addErrorMessage(message);
+			return;
+		}
+	}
+
+	// STRY0111888
+	data.permissiveOUTasking = false;
+	if (data.table == "x_153465_discovert_discover_office_hierarchy") {
+		data.permissiveOUTasking = gs.getProperty('x_153465_discovert.PermissiveOUTaskingOptions') != 'Off'; 
+		data.taskingUnlocked = rec.u_ou_is_permissive == true;
+	}
+	//data.canAttach = data.canWrite && gs.hasRole(gs.getProperty('glide.attachment.role')) && !GlideTableDescriptor.get(data.table).getED().getBooleanAttribute("no_attachment"); //for GLOBAL app
+	//var gtd = new GlideTableDescriptor(data.table);
+	//&& !gtd.get(data.table).getED().getBooleanAttribute("no_attachment"); 
+	data.f = $sp.getForm(data.table, data.sys_id, data.query, data.view);
+	// STRY0119580 - toggle of quick / advanced clicked, load other view
+	//             - this sets the value for all old data
+	if(data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME && data.taskFormView){
+		// DFCT0011862 - fixed an issue with form view preferences
+		if(!data.f._fields.u_servicenow_form_view){
+			data.f._fields.u_servicenow_form_view = {};
+		}
+		if(data.f._fields.u_servicenow_form_view.value == ""){
+			data.f._fields.u_servicenow_form_view.value = data.taskFormView.sys_id;
+			data.f._fields.u_servicenow_form_view.displayValue = data.taskFormView.title;
+		}
+	}
+		
+
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value, new location	
+	// if customer takes classification off the form, the customer is not using classification.
+	// when DTech adds a simple form for Templates, we will need to address this with Rec for existing records
+	// STRY0126024 set classification and restricted group for Template
+	if(data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME ||
+		data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME ||
+		data.table == 'x_153465_discovert_discover_routing_runtime'){
+		
+		if(data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME){
+			data.restrictedGroup = data.f._fields.assigned_to_group.displayValue;
+		} else {
+			data.restrictedGroup = data.f._fields.u_restricted_group.displayValue;
+		}
+
+	}
+
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; new location and use of grParentTask
+	if (data.table == 'x_153465_discovert_tasker_requests') {
+		var parentId = data.f._fields.parent.value;
+		if (parentId) {
+			var grParentTask = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+			if (grParentTask.get(parentId)) {
+				if (grParentTask.getDisplayValue("classification") != undefined) {
+					data.classification = grParentTask.getDisplayValue("classification");
+					// Force object to a string
+					data.classificationValue = "" + grParentTask.classification;
+				}
+
+				if (grParentTask.getDisplayValue("assignment_group") != undefined) {
+					data.restrictedGroup = grParentTask.getDisplayValue("assignment_group");
+				}
+			}
+		}
+	}
+
+
+	// STRY0063505 | in debugging the process docs story, we realized data.isActive was only set if the field was on the form.
+	data.isActive = false;
+	if (data.f._fields.active) {
+		data.isActive = data.f._fields.active.value;
+	} else {
+		// STRY0063505 |	NOTE: if the active field exists, use it.  If not, look for u_active, if neither, accept the default setting of false
+		if (rec.isValidField('active')) {
+			data.isActive = rec.active;
+		} else if (rec.isValidField('u_active')) {
+			data.isActive = rec.u_active;
+		} // otherwise will default to false setting above.
+	}
+
+	data.canAttach = data.canWrite && gs.hasRole(gs.getProperty('glide.attachment.role')); //&& (data.isActive == 'true')
+	if (data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME) {
+		var TaskACLs = new TaskerTaskACLs(rec);
+		var canAttach = TaskACLs.canAttach();
+		data.canAttach = canAttach && gs.hasRole(gs.getProperty('glide.attachment.role')); //&& (data.isActive == 'true')
+	}
+
+		// STRY0122589
+	if(data.f.g_scratchpad.parent_sys_id){
+		if(data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+			var gr_Parent = new GlideRecord(data.table);
+			if(gr_Parent.get(data.f.g_scratchpad.parent_sys_id)){
+				if(gr_Parent.state==-6){
+					data.draftOnly = true;
+				}
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------------------
+	// BEGING CUSTON
+	//------------------------------------------------------------------------------------------------------------
+	// STRY0134743 - Out of Office Message on Task Request Form
+	if(data.table == "x_153465_discovert_tasker_requests"){
+		data.TaskRequestOOOTitle = gs.getMessage("Tasker - List of Responders");
+		data.okButtonText = gs.getMessage("Ok");
+	}
+	//------------------------------------------------------------------------------------------------------------
+	// 1. CUSTOM: CLASSIFICATION BAR
+	//------------------------------------------------------------------------------------------------------------
+	// STRY0063505 | Include Attachments since we dropped attachment properties
+	// The fitler needs the "sys_id" of the object for attachments and Shared Attachments
+	// get those sys_ids based on the table, then use it to set the filter
+	// Needed this additional If statement b/c Task instances users task tree object
+	// Process Template is just that rec sys_id
+	// Process Task Template is the Process Template sys_id as the filter
+	var myAttachSys_ID = data.sys_id; // set to the defualt
+	data.sharedAttachSys_ID = data.sys_id + ''; // set to the defualt
+	data.sharedAttachTableName = '';
+
+	if (data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME) {
+		data.sharedAttachSys_ID = rec.u_task_tree.sys_id + '';
+		data.sharedAttachTableName = 'x_153465_discovert_task_tree';
+	}
+	if (data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME) {
+		data.sharedAttachSys_ID = data.sys_id + '';
+		data.sharedAttachTableName = api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME;
+	}
+	if (data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME) {
+		// STRY0063505 | This table points at the Process Template Table instead of the Process Template Task table for the shared attachments
+		data.sharedAttachSys_ID = rec.tasker_process_definition.sys_id + '';
+		data.sharedAttachTableName = api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME;
+	}
+	
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; new version
+	if (data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME) {
+		if (data.sys_id == -1) {
+			if (data.f._fields.parent) {
+				var parentID = data.f._fields.parent.value;
+				var parentRec = new GlideRecord(api_dtech_common.CONST_DTECH_TASK_TABLE_NAME);
+				if (parentRec.get(parentID)) {
+					if (parentRec.getDisplayValue("classification") != undefined) {
+						data.classification = parentRec.getDisplayValue("classification");
+						data.classificationValue = parentRec.getValue("classification");
+						// Force object to a string
+						data.classificationValue2 = "" + parentRec.classification;
+
+					}
+
+					if (parentRec.getDisplayValue("assignment_group") != undefined) {
+						data.restrictedGroup = parentRec.getDisplayValue("assignment_group");
+					}
+				}
+			}
+		} else {
+			if (data.f._fields.number) {
+				data.number = data.f._fields.number.displayValue;
+			}
+
+			// STRY0051139
+			data.task_name = rec.task_name; //data.number + ": " + data.f._fields['short_description']["displayValue"];
+			data.f.task_instance__state = '';
+
+			data.classification = rec.getDisplayValue("classification");
+			data.classificationValue = rec.getValue("classification");
+
+			if (data.f._fields.assignment_group != undefined && data.f._fields.assignment_group.displayValue != undefined) {
+				data.restrictedGroup = data.f._fields.assignment_group.displayValue;
+			} else {
+				data.restrictedGroup = rec.getDisplayValue("assignment_group");
+			}
+		}
+
+		// 2.7.0 | 2021-11-1 | mmcc | DFCT0010601 - Deleting the Top Task logs an error: The Task Tree was not created for Task
+		if (!rec.u_task_tree && rec.number.length > 0) {
+			gs.error('The Task Tree was not created for Task: ' + rec.number + '.  Please contact your Tasker administrator to check on the fix script.');
+		}
+		setBreadcrumbs(data.page_id, data.task_name);
+	}
+	
+	// 2.8.1 | 2023-03-15 | mmcc | STRY0136499 - 2.8.1 Set CSS Style for Classification based on Value; start orig
+	if (data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TABLE_NAME & data.sys_id != -1) {
+		if (data.f._fields.template_name) {
+			data.f.template_name = data.f._fields.template_name.displayValue;
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------------------
+	// 2. CUSTOM: TABS
+	//------------------------------------------------------------------------------------------------------------
+		// DFCT0010482 
+	if(data.table == api_dtech_common.CONST_DTECH_TASK_TABLE_NAME){
+		data.canCreateSubTask = new uiConditionCheck().canCreateSubTask(rec);	
+	// STRY0126518
+	} else if(data.table == api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME) {
+		data.canCreateSubTask = new UserInfoScripts().userHasProcessRights(rec);
+	} else {
+		data.canCreateSubTask = undefined;
+	}
+	// STRY0119587 - load lists to show from options
+	var arrRelatedLists= options.relatedLists_to_include;
+	data.hideActivity = options.hideActivity;
+	data.hideDocuments = options.hideDocuments;
+	
+	// STRY0122687 - count tabs (1 instead of zero b/c Tasker form with tabs always has information)
+	data.tabCount = 1;
+
+	// STRY0120403 - DFCT0011114
+	data.task_id = -1;
+	if(data.table==api_dtech_common.CONST_DTECH_TASK_TABLE_NAME && data.sys_id!=-1){
+		data.task_id = data.sys_id;
+		// DFCT0011271 - pass form view from parent into new subtask window
+		data.u_servicenow_form_view = rec.getValue("u_servicenow_form_view");
+		data.assignmentObject = api_task.getAssignmentInformation(data.task_id);
+		data.showDTechAssignment = true;
+		data.durationObject = api_task.getDurationInformation(data.task_id);
+		data.showDTechDuration = true;
+		data.operationalObject = api_task.getOperationalInformation(data.task_id);
+		data.showDTechOperation = true;
+	} else if(data.table==api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME && data.sys_id!=-1){
+		// Directive update for template
+		data.assignmentObject = api_template.getAssignmentInformation(data.sys_id);
+		data.showDTechAssignment = true;
+		data.durationObject = api_template.getDurationInformation(data.sys_id);
+		data.showDTechDuration = true;
+		data.operationalObject = api_template.getOperationalInformation(data.sys_id);
+		data.showDTechOperation = true;
+		
+	}
+	
+	// STRY0061245 - while looking at adding attachments, this code was repeated in the for loop each time
+	if (options.page) {
+		var page = new GlideRecord('sp_page');
+		if (page.get(options.page))
+			data.page = page.getDisplayValue('id');
+	}
+	if (!data.page) {
+		data.page = "form";
+	}
+
+	//------------------------------------------------------------------------------------------------------------
+	// 6. CUSTOM: SET BREADCRUMNS
+	//------------------------------------------------------------------------------------------------------------
+	function setBreadcrumbs(page_id, task_name) {
+		var title = ""; //"Task Details: ";
+		if (page_id == "discovertasker_taskdetails") {
+			data.breadcrumbs = [{
+				label: title + task_name,
+				url: "#"
+			} //parent
+			]; //this
+		}
+
+		if (page_id == "discovertasker_relatedtasks") {
+			data.breadcrumbs = [{
+				label: title + task_name,
+				url: "?id=discovertasker_taskdetails&table=" + data.table + "&sys_id=" + data.sys_id
+			}, //parent
+								{
+									label: "Related Tasks",
+									url: '#'
+								}
+			]; //this
+		}
+		if (page_id == "discovertasker_newtask") {
+			data.breadcrumbs = [{
+				label: "New Item",
+				url: '#'
+			}]; //this
+		}
+
+	}
+	//----------------------------------test prompt for instance notation
+
+
+	if (input) {
+		if (input.processInstanceName != undefined) {
+			data.processInstanceName = input.processInstanceName;
+			data.test = new RunProcessTemplate().runProcessTemplate(data.sys_id, data.processInstanceName);
+		}
+	}
+	//------------------------------------------------------------------------------------------------------------
+	// END CUSTON
+	//------------------------------------------------------------------------------------------------------------
+
+	// 2.7.1 | 2021-12-10 | mmcc | STRY0115408 - Long text needs to be shortened and have an ellipsis
+	function convertToBool(names) {
+		names.forEach(function(name) {
+			data[name] = data[name] == true || data[name] == 'true';
+		});
+	}
+
+})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2024-05-07 19:01:29</sys_created_on>
+        <sys_id>88c3a1d11b86ce10f96aece66e4bcb4c</sys_id>
+        <sys_mod_count>9</sys_mod_count>
+        <sys_name>Tasker Form - V3</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_88c3a1d11b86ce10f96aece66e4bcb4c</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2024-05-09 13:08:56</sys_updated_on>
+        <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="empty-state-wrapper panel panel-default">
+  <span ng-show="data.loadingIndicator">
+    <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>
+  </span>
+</div>
+<div ng-if="!data.isValid && !data.emptyStateTemplate && !data.loadingIndicator" class="empty-state-wrapper panel panel-default">
+  <div class="panel-body wrapper-lg text-center">
+
+    <span ng-if="!data.tableUnsupported">${Record not found or record not selected}</span> 
+    <!--<span ng-if="!data.tableUnsupported">Please make a selection</span>-->
+    <span ng-if="data.tableUnsupported">${Form view not supported for requested table}</span>
+
+  </div>
+</div>
+
+<div ng-if="!data.loadingIndicator && !data.isValid && data.emptyStateTemplate" class="panel-shift">
+  <div class="empty-state-wrapper panel panel-default" ng-include="data.emptyStateTemplate"></div>
+</div>
+<!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add to if !data.f._view.length -->
+<div ng-if="data.isValid && !data.f._view.length" class="panel-shift">
+  <div class="" ng-if="!data.f._view.length && !data.emptyStateTemplate">
+    <div class="empty-state-wrapper panel panel-default">
+      <div class="panel-heading">
+        <span ng-if="data.page_id != 'discovertasker_officehierarchy' && data.sys_id.length > 2" class="panel-title">{{data.f.title}}<span ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view] </span></span>
+        <span ng-if="data.page_id == 'discovertasker_officehierarchy' && !data.sys_id" class="panel-title">Organizational Unit</span>
+      </div>
+      <div class="panel-body wrapper-lg text-center">
+        <div ng-if="!data.sys_id && data.page_id == 'discovertasker_officehierarchy'" class="col-md-12 text-center placeholder-right-pane ng-scope">
+          <i class="fa fa-gears" aria-hidden="true"></i> 
+          <p class="m-t-lg">Select an item from the left</p>
+        </div>
+        <div ng-if="data.hasRecordReadAccess == false"><br>You do not have permission to view this Task<br></div> 
+        <div ng-if="data.sys_id && data.page_id != 'discovertasker_officehierarchy'">
+          ${No elements to display}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-modal-relative':data.isModal==true}">
+  <div class="panel panel-{{::options.color}}" ng-if="data.f._view.length"
+       ng-class="getPanelPanelCssByPageId()">
+    <!-- 1 row Flexbox START -->
+
+    <div class="panel-heading dtech-panel-heading-min-height-standard dtech-flex-shrink-0" ng-if="data.f.title.length > 0 && data.omitHeader!=true"
+         sp-context-menu="getUIActionContextMenu(event)">
+
+      <div ng-if="data.omitHeader != true">
+
+        <div class="dtech-container-menu-row">
+
+          <!-- Hamburger Menu section -->
+          <span class="dtech-col-1-flex0-middle dropdown m-r-xs" ng-if="(data.isAdmin || getUIActions('context').length > 0) && options.omitHeaderOptions != true">
+            <button aria-label="${Form menu}" class="btn btn-form-menu dropdown-toggle glyphicon glyphicon-menu-hamburger" style="line-height: 1.4em" id="adminMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></button>
+            <ul class="dropdown-menu" aria-labelledby="adminMenu">
+              <li ng-if="::data.hasRoleTaskerUser"><a href="/{{data.f.table}}.do?sys_id={{data.f.sys_id}}&sysparm_view={{data.view}}" target="_blank">${Open in platform}</a></li>
+              <li ng-if="::data.isAdmin" class="dropdown-header">${Configure}</li>
+              <li ng-if="::data.isAdmin"><a href="/slushbucket.do?sysparm_referring_url={{adminMenu.encodedPageUrl}}&sysparm_list={{data.f._sections[0].id}}&sysparm_form=section&sysparm_view={{data.f.view}}" target="_blank">${Form Layout}</a></li>
+              <li ng-if="::data.isAdmin"><a href="/slushbucket.do?sysparm_referring_url={{adminMenu.encodedPageUrl}}&sysparm_list={{data.f.table}}&sysparm_form=related_list&sysparm_view={{data.f.view}}" target="_blank">${Related Lists}</a></li>
+              <li ng-if="::data.isAdmin"><a href="?id=lf&table=sys_ui_policy&filter=table%3D{{data.f.table}}%5EORtableIN{{data.tableHierarchy}}%5Eactive%3Dtrue%5Eui_type%3D1%5EORui_type%3D10" ng-click="openRelatedList($event, {id:'lf', table: 'sys_ui_policy', filter: 'table%3D{{data.f.table}}%5EORtableIN{{data.f.table}},sys_metadata%5Eactive%3Dtrue%5Eui_type%3D1%5EORui_type%3D10'})">${UI Policies} <span class="badge pull-right" ng-if="f.policy.length">{{f.policy.length}}</span></a></li>
+              <li ng-if="::data.isAdmin"><a href="?id=lf&table=sys_script_client&filter=table%3D{{data.f.table}}%5EORtableIN{{data.tableHierarchy}}%5Eactive%3Dtrue%5Eui_type%3D1%5EORui_type%3D10" ng-click="openRelatedList($event, {id: 'lf', table: 'sys_script_client', filter: 'table%3D{{data.f.table}}%5EORtableIN{{data.f.table}},sys_metadata%5Eactive%3Dtrue%5Eui_type%3D1%5EORui_type%3D10'})">${Client Scripts} <span class="badge pull-right" ng-if="adminMenu.getClientScriptCount()">{{adminMenu.getClientScriptCount()}}</span></a></li>
+              <li ng-if="::data.isAdmin || getUIActions('context').length > 0" role="separator" class="divider"></li>
+              <li ng-repeat="action in getUIActions('context')"><a href="" ng-click="triggerUIAction(action)" uib-tooltip="{{action.hint}}">{{action.name}}</a></li>
+              <li ng-if="::data.isAdmin || getUIActions('context').length > 0" role="separator" class="divider"></li>
+              <li><a target="_new" href="/{{data.f.table}}.do?PDF&sys_id={{data.sys_id}}&sysparm_view={{data.f.view}}">${Export to PDF}</a></li>
+              <li><a target="_new" href="/{{data.f.table}}.do?PDF&landscape=true&sys_id={{data.sys_id}}&sysparm_view={{data.f.view}}">${Export to PDF (landscape)}</a></li>
+            </ul>
+          </span>
+
+          <!-- panel title section option 1 -->
+          <span ng-if="data.page_id == 'discovertasker_taskdetails' || data.page_id == 'discovertasker_relatedtasks'"
+                class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
+            <span class="title-ellipsised" uib-tooltip="{{data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
+              {{data.f.title}}
+            </span>
+          </span>  
+
+          <!-- panel title section option 2 -->
+          <span ng-if="data.page_id != 'discovertasker_taskdetails' && data.page_id != 'discovertasker_relatedtasks'" 
+                class="dtech-col-3-flex-row-w45per-ellipsis dtech-col-cell-flex1-middle panel-title" aria-label="{{data.f.title}}">
+            <span class="title-ellipsised dtech-max-width-fit-content"
+                  uib-tooltip="{{data.number.length > 0 ? data.number + ': ' + data.f.title : data.f.title}}" tooltip-placement="auto bottom" tooltip-popup-delay="700">
+              <span ng-if="(data.number.length > 0)">&nbsp;{{data.number}}:&nbsp;
+              </span>
+              {{data.f.title}}
+            </span>
+            <span class="dtech-pad-all-10" ng-if="data.table=='x_153465_discovert_discover_office_hierarchy' && data.omit_icons!=true && data.permissiveOUTasking" >
+              <img src="{{data.LockOpenBadge12.src}}" title="{{data.LockOpenBadge12.title}}" alt="{{data.LockOpenBadge12.alt}}" 
+                   ng-show="data.taskingUnlocked"/>
+            </span>
+          </span>
+
+          <span class="dtech-col-2-flex-row-w40per-ellipsis dtech-col-cell-flex1-middle dtech-align-menu-text-icons" ng-if="options.showFormView == 'true' && data.f.view != ''">[{{data.f.view_title}} view]</span>
+
+          <!-- panel icons section -->
+          <div class="dtech-col-7-flex-row-end dtech-max-width-fit-content" >
+            <!-- Header Icons -->
+            <div ng-switch="data.table">
+              <div ng-switch-when="x_153465_discovert_route_task_instance">
+                <div ng-if="data.omit_icons!=true && data.sys_id!=-1" class="dtech-push-right-flexbox">
+                  <!-- STRY0119580 toggle between advanced and quick task-->
+                  <img ng-if="data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection'"
+                       src="{{data.AdvancedTask24.src}}" title="{{data.AdvancedTask24.title}}"
+                       alt="{{data.AdvancedTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" 
+                       ng-class="{'dtech-disabled': data.taskFormView.view_type=='advanced_view', 'dtech-enabled': data.taskFormView.view_type=='quick_view'}"
+                       ng-click="toggleFormView('advanced_view')"/>
+                  <img ng-if="data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection'"
+                       src="{{data.QuickTask24.src}}" title="{{data.QuickTask24.title}}"
+                       alt="{{data.QuickTask24.alt}}" class="dtech-pad-all-10 dtech-margin-top-4px" 
+                       ng-class="{'dtech-disabled': data.taskFormView.view_type=='quick_view', 'dtech-enabled': data.taskFormView.view_type=='advanced_view'}"
+                       ng-click="toggleFormView('quick_view')"/>
+
+                  <img ng-if="data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown' || (data.baseWidget=='new_tasker_selection' && data.sys_id !=-1)"
+                       src="{{data.TaskFullscreen16.src}}" title="{{data.TaskFullscreen16.title}}"
+                       alt="{{data.TaskFullscreen16.alt}}" class="dtech-enabled dtech-pad-all-10 dtech-margin-top-4px" ng-click="openTaskFullScreen()"/>
+                  <img ng-if="(data.page_id==undefined || data.page_id=='discovertasker_detailsdrilldown' || (data.baseWidget=='new_tasker_selection' && data.sys_id !=-1)) ||
+                              (data.allowFormViewToggle==true && data.baseWidget!='new_tasker_selection') &&
+                              data.omit_icons!=true && data.sys_id!=-1" 
+                       src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+                       alt="{{data.Divider.alt}}" />
+
+                  <dtech-operational ng-if="data.showDTechOperation==true"
+                                     class="dtech-pad-right-header"
+                                     dtech-task-title = "data.operationalTitle + ': ' + data.f.title;"
+                                     dtech-operational-object = "data.operationalObject"
+                                     dtech-is-modal="data.isModal"
+                                     dtech-table="{{data.table}}"
+                                     dtech-task-sys-id="{{data.sys_id}}"                                          
+                                     ></dtech-operational>                  
+                  <dtech-assignment ng-if="data.showDTechAssignment==true"
+                                dtech-task-title = "data.assignmentTitle + ': ' + data.f.title;"
+                                dtech-assignment-object = "data.assignmentObject"
+                                dtech-is-modal="data.isModal"
+                                dtech-table="{{data.table}}"
+                                dtech-task-sys-id="{{data.sys_id}}"                                          
+                                ></dtech-assignment>
+                  <dtech-duration ng-if="data.showDTechDuration==true"
+                                  dtech-is-modal="data.isModal"
+                                  dtech-popover-placement="{{data.popoverPlacement}}"
+                                  dtech-table="{{data.table}}"
+                                  dtech-task-sys-id="{{data.sys_id}}"
+                                  dtech-duration-object="data.durationObject"
+                                  dtech-hide-date="data.hideDate"
+                                  ></dtech-duration>
+                  <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+                       alt="{{data.Divider.alt}}" ng-show="data.canCreateSubTask"/>
+                  <img src="{{data.GenericAdd16.src}}" title="{{data.GenericAdd16.title}}"
+                       alt="{{data.GenericAdd16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openCreateModal()"
+                       ng-show="data.canCreateSubTask"/>
+                </div>
+
+              </div>
+
+              <!-- STRY0126518 -->
+              <div ng-switch-when="x_153465_discovert_route_tasks">
+                <div ng-if="data.omit_icons!=true && data.sys_id!=-1" class="dtech-push-right-flexbox">
+                  <dtech-operational ng-if="data.showDTechOperation==true"
+                                     class="dtech-pad-right-header"
+                                     dtech-task-title = "data.operationalTitle + ': ' + data.f.title;"
+                                     dtech-operational-object = "data.operationalObject"
+                                     dtech-is-modal="data.isModal"
+                                     dtech-table="{{data.table}}"
+                                     dtech-task-sys-id="{{data.sys_id}}"                                          
+                                     ></dtech-operational>                  
+                  <dtech-assignment ng-if="data.showDTechAssignment==true"
+                                dtech-task-title = "data.assignmentTitle + ': ' + data.f.title;"
+                                dtech-assignment-object = "data.assignmentObject"
+                                dtech-field="field"
+                                dtech-is-modal="data.isModal"
+                                dtech-table="{{data.table}}"
+                                dtech-task-sys-id="{{data.sys_id}}"                                          
+                                ></dtech-assignment>
+                  <dtech-duration ng-if="data.showDTechDuration==true"
+                                  dtech-is-modal="data.isModal"
+                                  dtech-popover-placement="{{data.popoverPlacement}}"
+                                  dtech-table="{{data.table}}"
+                                  dtech-task-sys-id="{{data.sys_id}}"
+                                  dtech-duration-object="data.durationObject"
+                                  dtech-hide-date="data.hideDate"
+                                  ></dtech-duration>
+
+                  <img src="{{data.Divider.src}}" title="{{data.Divider.title}}"
+                       alt="{{data.Divider.alt}}" ng-show="data.canCreateSubTask"/>
+                  <img src="{{data.GenericAdd16.src}}" title="{{data.GenericAdd16.title}}"
+                       alt="{{data.GenericAdd16.alt}}" class="dtech-enabled dtech-pad-all-10" ng-click="openCreateSubTemplateTaskModal()"
+                       ng-show="data.canCreateSubTask"/>
+                </div>
+
+              </div>
+              <!-- icon for New tab or exit fullscreen -->
+              <div ng-switch-when="x_153465_discovert_discover_routing_runtime" >
+                <div ng-switch="data.page_id">
+                  <a ng-switch-when="discovertasker_detailsdrilldown" target="_blank"
+                     ng-href="?id=discovertasker_processroutetaskdetails&&table={{data.table}}&sys_id={{data.sys_id}}&p={{data.p}}&filter={{data.filter}}"
+                     class="glyphicon glyphicon-new-window" title="Open task in new tab" role="link"></a>
+                  <a ng-switch-when="discovertasker_processroutetaskdetails"
+                     ng-href="?id=discovertasker_detailsdrilldown&&table={{data.table}}&filter={{data.filter}}&view=ess"
+                     class="glyphicon glyphicon glyphicon-resize-full" title="Exit Full-screen" role="link"></a>
+                </div>
+              </div>
+
+              <!-- Custom Tasker: WAR/SAR -->
+              <div ng-switch-when="x_153465_discovert_war_sar_reporting">
+                <div ng-switch="data.page_id">
+                  <a ng-switch-when="discovertasker_detailsdrilldown" target="_blank"
+                     ng-href="?id=discovertasker_customtasker_details&&table={{data.table}}&sys_id={{data.sys_id}}&filter={{data.filter}}" 
+                     class="glyphicon glyphicon-new-window" title="Open task in new tab" role="link"></a>
+                  <a ng-switch-when="discovertasker_customtasker_details"
+                     ng-href="?id=discovertasker_detailsdrilldown&&table={{data.table}}&filter={{data.filter}}&view=ess" 
+                     class="glyphicon glyphicon glyphicon-resize-full" title="Exit Full-screen" role="link"></a>
+                </div>
+              </div>
+            </div>
+          </div> <!-- end col-7 -->          
+        </div> <!-- end row -->
+      </div> <!-- end omitHeader -->
+
+      <!-- buttons section for panel header -->
+      <!-- STRY0115843 -->
+      <!-- 2.7.2 | 2022-01-26 | mmcc | STRY0110656 - UI- Fixed Header and Button Bars on ALL Modals and lists; add isModal==false -->
+      <!-- 2.8 | 2022-03-13 | raj | STRY0117949 - Org Hierarchy Bifold- Revamp- Tree Widget Header Update-->
+      <div class="dtech-pad-top-5px" ng-if="data.isModal==false && data.bifold!=true">
+        <button ng-if="getPrimaryAction() && data.sys_id.length > 2" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-default action-btn" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">Update<span ng-if="saveButtonSuffix"></span></button>
+        <button ng-click="triggerUIAction(action)" ng-disabled="submitting" ng-repeat="action in getUIActions('button')" class="btn action-btn" ng-class="::getButtonClass(action)" gsft_id="{{::action.sys_id}}" uib-tooltip="{{action.hint}}">{{action.name}}</button>
+        <span>{{status}}</span>
+        <button ng-if="data.table == 'x_153465_discovert_organizational_contacts'" class="btn btn-success action-btn"  ng-click="openNewModal('x_153465_discovert_external_poc_info','New Contact','','', '');">Create Contact</button>
+      </div>
+    </div> <!-- end panel heading -->
+    <!-- 1 row Flexbox END -->
+
+    <!-- Ribbon section start -->
+    <div ng-if="data.f._fields.classification.displayValue == undefined" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
+      <div title="Classification: {{data.classification}}">
+        {{data.classification}}
+      </div>
+    </div>
+    <div ng-if="data.f._fields.classification.displayValue != undefined && data.f._fields.classification.value != ''" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.f._fields.classification.value}}"> 
+      <div title="Classification: {{data.f._fields.classification.displayValue}}">
+        {{data.f._fields.classification.displayValue}}
+      </div>
+    </div>
+    <div ng-if="data.restrictedGroup.length>0">
+      <div class="dtech-restricted-group-banner"> 
+        <div title="Restricted Group: {{data.restrictedGroup}}">
+          {{data.restrictedGroup}}
+        </div>
+      </div>
+    </div>
+    <!-- Ribbon section end -->
+
+    <!-- Panel Body section start -->
+    <div class="panel-body" ng-class="getPanelBodyCss()">
+      <!-- Tab content section start -->
+      <div ng-class="getTabContentCssByPageId()">
+
+        <div id="Information" class="tab-pane"
+             ng-class="getInfoTabPaneCssByPageId('Information', 0)">
+          <div ng-class="{'flex-column flex-grow':data.bifold==true||data.isModal==true}">
+            <sp-model form_model="data.f" mandatory="mandatory"></sp-model>
+          </div>
+        </div>
+      </div>
+      <!-- performance debug -->
+      <div ng-if="data.show_sql">
+        <div class="comment">
+          <span ng-if="data.f._perf.sql_count">${SQL Statements {{data.f._perf.sql_count}}}, </span>
+          <span>${Time {{data.f._perf.time}}}</span>
+        </div>
+        <div ng-repeat="s in data.f._perf.sql" class="{{s.type}}">
+          {{s.statement}}
+        </div>
+      </div>
+
+    </div>
+    <!-- Panel Body section end -->
+
+    <div>
+      <div ng-if="data.isModal==false && data.bifold==false">
+        <div ng-if="data.f._fields.classification.displayValue == undefined" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.classificationValue}}"> 
+          <div title="Classification: {{data.classification}}">
+            {{data.classification}}
+          </div>
+        </div>
+        <div ng-if="data.f._fields.classification.displayValue != undefined && data.f._fields.classification.value != ''" class="taskform-classification-banner taskform-classification-banner-default taskform-classification-banner-{{data.f._fields.classification.value}}"> 
+          <div title="Classification: {{data.f._fields.classification.displayValue}}">
+            {{data.f._fields.classification.displayValue}}
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- STRY0134743 - Out of Office Message on Task Request Form -->
+    <div ng-if="data.f.g_scratchpad.isAnyUserOutOfOffice==true"
+         class="dtech-ooo-message-container"
+         ng-click="openRequestOOO()"
+         ng-bind-html="data.f.g_scratchpad.requestOOOMessageHTML">
+    </div>
+    <div class="panel-footer">
+      <button ng-if="getPrimaryAction() && data.sys_id.length > 2" type="submit" ng-click="triggerUIAction(getPrimaryAction())" ng-disabled="submitting" class="btn btn-default action-btn" gsft_id="{{::getPrimaryAction().sys_id ? getPrimaryAction().sys_id : ''}}">Update<span ng-if="saveButtonSuffix"></span></button>
+
+      <!-- STRY0108140 -Task Form Preferences - Button Update - This is a technical story to account for the time taken to update the buttons -->
+      <button ng-click="triggerUIAction(action)" ng-disabled="submitting" ng-repeat="action in getUIActions('button')" class="btn action-btn" ng-class="::getButtonClass(action)" gsft_id="{{::action.sys_id}}" uib-tooltip="{{action.hint}}">{{action.name}}</button>
+      <span>{{status}}</span>
+      <!-- STRY0074663 - CONTACTS -->
+      <button ng-if="data.table == 'x_153465_discovert_organizational_contacts'" class="btn btn-success action-btn"  ng-click="openNewModal('x_153465_discovert_external_poc_info','New Contact','','', '');">Create Contact</button>
+      <div style="clear: both;"></div>
+      <div ng-if="mandatory.length" class="alert alert-info" style="margin-top: .5em" aria-live="polite" aria-atomic="true">
+        <span ng-if="mandatory.length > 0">${Required information} </span>
+        <span ng-repeat="f in mandatory" class="label dtech-field-error-label" ng-bind="f.label"></span>
+      </div>
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

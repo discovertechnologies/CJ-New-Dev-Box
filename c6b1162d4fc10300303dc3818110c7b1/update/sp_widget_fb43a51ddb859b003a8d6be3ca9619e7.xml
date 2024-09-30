@@ -208,7 +208,10 @@
 			var watcherChannel = amb.getChannelRW(table, filter);
 			amb.connect();
 			watcher = watcherChannel.subscribe(function(name) {
+				// STRY0154672
+				var reloadForm = false;
 				if (name.data.operation == 'delete') {
+					reloadForm = true;
 					if (c.data.parent_id) {
 						c.data.sys_id = c.data.parent_id;
 					} else {
@@ -226,22 +229,57 @@
 							$window.location.href = '../' + $scope.portal.url_suffix;
 						}
 					}
-
+					// STRY0154672
+				} else if (name.data.operation == 'update'){
+					// this fixes recursion issue on a large load of many tasks
+					// but still reloads if a field on the screen changes
+					reloadForm = checkChangedFields(name.data);
+				} else { // insert shouldn't happen, but if it does, reload
+					reloadForm = true;
 				}
-
-				$scope.server.update().then(function(){
-					var parms =  {table: c.data.table, sys_id: c.data.sys_id, view: c.data.view};
-					// DFCT0011036 - not sure why this was being raised here
-					// $rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
-					$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
-					// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
-					afterLoadFormReturns();
-				});
+				// STRY0154672
+				if(reloadForm){
+					$scope.server.update().then(function(){
+						var parms =  {table: c.data.table, sys_id: c.data.sys_id, view: c.data.view};
+						// DFCT0011036 - not sure why this was being raised here
+						// $rootScope.$broadcast('$taskerTabbedForm.drillDownList.click', parms);
+						$location.search('table', parms.table).search('sys_id', parms.sys_id).search('spa', '1');
+						// DFCT0010343 - TUP - Filter was not working for OU Templates in Template LIst screen - issue introduced in 2.6
+						afterLoadFormReturns();
+					});
+				}
 			});
 		}
 	}	
+	
 	afterLoadFormReturns();
 
+	function checkChangedFields(data) {
+		var changes = data.changes;
+		var checkChanges = false;
+		// NOTE: this can be used in the future to stop post back all together 
+		if(c.data.f && c.data.f._fields){
+			var fieldKeys = Object.keys(c.data.f._fields);
+			fieldKeys.filter(function(fieldKey){
+				if(changes.includes(fieldKey)){
+					// NOTE: this didn't work b/c of dependent field sub category
+					// If this works we wouldn't need to post back even when a field
+					// on the page changes.   If fields changing aren't on the page, then
+					// the calling function won't call back, but if they are it will just for the dependent case
+					//if(c.data.f._fields[fieldKey].type=="glide_date_time"){
+					//	c.data.f._fields[fieldKey].displayValue = data.record[fieldKey].display_value;
+					//	c.data.f._fields[fieldKey].value = data.record[fieldKey].value;
+					//	c.data.f._fields[fieldKey].stagedValue = data.record[fieldKey].value;
+					//} else {
+					//	g_form.setValue(fieldKey, data.record[fieldKey].value);
+					//}
+					checkChanges=true;
+				}
+			});
+		}
+		return checkChanges;		
+	}
+	
 	// STRY0069986- RJ - Cert Push - Template DocInt Fix
 	// STRY0119587
 	function loadDocIntWidgets() {
@@ -296,13 +334,13 @@
 			isDocIntFlexboxUsed = c.data.isFlexboxUsed;
 		}
 		
-		
 		if(widget_name == 'docint-list-items') {
 			widget_parameters = {
 				vw: tab.config["docintegrator_view-refValue"],
 				mapRowSysId: c.data.sys_id + "",
 				// deprecated readonly_flag
 				//readonly_flag: !c.data.isActive,
+				read_only: !c.data.isActive,
 				lw_name: tab.id + tab.caption,
 				window_size: 20,
 				config_sys_id: tab.id,
@@ -558,7 +596,10 @@
 	// 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
 	$scope.$on("sp.DiscoverListItem", function(event, params) {
 		c.data.f._related_lists.forEach(function(relatedList) {
-			if(relatedList.table == params.table && relatedList.filter == params.filter ) {
+			// STRY0154672 - counts weren't updating when refresh turned off, this corrects it
+			var parentFilter = relatedList.parent + "=" + c.data.sys_id;
+			if(relatedList.table == params.table && 
+				 (relatedList.filter == params.filter || parentFilter == params.filter)) {
 				relatedList.count = params.rowCount;
 			}
 		});
@@ -1845,6 +1886,8 @@ Have modal fit the viewport height with its own scrollbar start&#13;
 //	 updated convertToBool() to have a sorted list and added hideDate
 //	Changes made in HTML and Server script.
 // 2.8.5 | 2023-11-24 | raj  | Directive Updates to include Template
+// 2.8.5 | 2024-09-29 | raj | STRY0154672 - Performance Improvements
+//                                          Client Script Only, updated recordwatcher handling
 // 
 //------------------------------------------------------------------------------------------------------------
 
@@ -2677,14 +2720,14 @@ Have modal fit the viewport height with its own scrollbar start&#13;
         <sys_created_by>KTorres</sys_created_by>
         <sys_created_on>2018-03-23 19:54:05</sys_created_on>
         <sys_id>fb43a51ddb859b003a8d6be3ca9619e7</sys_id>
-        <sys_mod_count>4735</sys_mod_count>
+        <sys_mod_count>4736</sys_mod_count>
         <sys_name>Tasker Form with Tabs</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_fb43a51ddb859b003a8d6be3ca9619e7</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-12-05 21:19:15</sys_updated_on>
+        <sys_updated_on>2024-09-30 04:08:42</sys_updated_on>
         <template><![CDATA[<div ng-if="!data.isValid && data.loadingIndicator" class="empty-state-wrapper panel panel-default">
   <span ng-show="data.loadingIndicator">
     <i id="loading-spinner" class="fa fa-spinner fa-lg"></i> <span class="h4">Loading...       </span>

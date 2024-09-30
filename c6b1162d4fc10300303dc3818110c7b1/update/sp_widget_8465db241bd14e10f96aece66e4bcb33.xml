@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function($rootScope, $scope, $timeout, $sce, spUtil, $log, $location, i18n) {
+  /* widget controller */
+  var c = this;
+	$scope.dtech_tasker_common = x_153465_discovert.dtech_tasker_common;
+	var shared = {};
+	var tasker_app_base_wp = {
+		// TODO - ADD CORE PARAMETERS HERE
+		// not sure if we need any params
+		shared: shared
+	};
+	c.data.leftPanel = [];
+	c.data.righPanel = [];
+	main();
+	
+	function main(){
+		_setBodyContainerVariables();
+	}
+	
+	// when loading wait for the page to load, then set split based on parent left nav
+	$scope.$watch('$viewContentLoaded', function(){
+		_setSplitPanelWidth($scope.$parent.$parent.leftNavigationWidth);
+	});
+	
+	// may need to process this to determine where coming from and react accodingly
+	$scope.$on('data_table.click', function(e, parms) {
+		if(c.data.home){
+			if(c.data.sys_id != parms.sys_id){
+				c.data.popout = true;
+			} else {
+				// for now toggle popout, later may do mroe
+				c.data.popout = !c.data.popout;
+			}
+			c.data.sys_id = parms.sys_id;
+		}
+	});
+
+	c.widget.changeAppContext=function(context){
+		c.data.appContext=context;
+		_updateConextData();
+		_setBodyContainerVariables();
+		// context changed update the width based on what is open
+		_setSplitPanelWidth($scope.$parent.$parent.leftNavigationWidth);
+	};
+	
+	// this is run when navigation panel is toggled.
+	c.widget.toggleNavigationWidth = function(leftNavWidth){
+		_setSplitPanelWidth(leftNavWidth);
+	}
+
+	$scope.changeScreenSetting= function(setFullScreen){
+		$scope.fullScreen = setFullScreen;
+		_setScreenSetting();
+	};
+	
+	function loadHomePortal(){
+		var tasker_portal_board_with_filter_wp = {
+			bifold:true,
+			show_keywords:true,
+			show_breadcrumbs:true,
+			enable_filter:true,
+			window_size:10,
+			// not sure if we need any params
+			shared: shared
+		};
+		c.data.tasker_portal_board_with_filters = [];
+
+		spUtil.get('tasker_portal_board_with_filter', tasker_portal_board_with_filter_wp).then(function(response){
+			var tasker_portal_board_with_filter_widget = response;
+			c.data.tasker_portal_board_with_filters.push(tasker_portal_board_with_filter_widget);
+		});
+	}
+	
+	function _updateConextData(){
+		switch (c.data.appContext){
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.ORGANIZATION:
+				c.data.table = $scope.dtech_tasker_common.CONSTANTS.TABLES.TABLE_NAME_ORGANIZATIONAL_HIERARCHY;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TASK:
+				c.data.table = $scope.dtech_tasker_common.CONSTANTS.TABLES.TABLE_NAME_TASK;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TEMPLATE:
+				c.data.table = $scope.dtech_tasker_common.CONSTANTS.TABLES.TABLE_NAME_TEMPLATE;
+				break;
+		}
+	}
+	
+	function _setBodyContainerVariables(){
+		c.data.home =
+			(c.data.appContext==$scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.HOME ||
+			c.data.appContext==$scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.HOME_FILTER);
+		
+		// todo, get full screen based on context and user preferences
+		$scope.fullScreen=_getScreenSetting();
+		
+		// reset poput to false
+		c.data.popout=false;
+	
+		// TODO - consider only loading at the start
+		// this should be based on how much load it puts on system to keep loaded
+		if(c.data.home==true){
+			loadHomePortal();
+		} else {
+			_loadLeftPanel();
+			_loadRightPanel();
+		}
+	}
+
+	function _getScreenSetting(){
+		var fullScreen=true;
+		switch (c.data.appContext){
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.ORGANIZATION:
+				fullScreen = c.data.appPreferences.organizationFullScreen;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TASK:
+				fullScreen = c.data.appPreferences.taskFullScreen;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TEMPLATE:
+				fullScreen = c.data.appPreferences.templateFullScreen;
+				break;
+		}
+		return fullScreen;
+	}
+	
+	function _setSplitPanelWidth(leftNavWidth){
+		var numToSubtract = leftNavWidth;
+		if(c.data.popout){
+			var popupPanelDiv = angular.element(document.getElementById('tasker_app_popup_panel'))[0];
+			numToSubtract = numToSubtract + popupPanelDiv.clientWidth;
+		}
+		// calulate the width as 50% of space remaining without left nav and popup
+		var halfNumberToSubtract = numToSubtract / 2 + "px";
+		numToSubtract = numToSubtract + "px";
+		if(c.data.home){
+			var homePanelDiv = angular.element(document.getElementById('tasker_app_home_panel'))[0];
+			homePanelDiv.style.setProperty("width","calc(100vh - " + numToSubtract + ")");
+		} else {
+			// Get left and right panels by id
+			var leftPanelDiv = angular.element(document.getElementById('tasker_app_left_panel'))[0];
+			// use Nav Width and popup hover on to remove left and right spacing
+			if($scope.fullScreen){
+				leftPanelDiv.style.setProperty("width", "calc(100vw - " + numToSubtract + ")");
+			} else { // split screen
+				var rightPanelDiv = angular.element(document.getElementById('tasker_app_right_panel'))[0];
+				leftPanelDiv.style.setProperty("width", "calc(50vw - " + halfNumberToSubtract + ")");
+				rightPanelDiv.style.setProperty("width", "calc(50vw - " + halfNumberToSubtract + ")");
+			}
+		}	
+	}
+	
+// TODO - May want to save newValue / old value
+// this way when we get back to the server we can process just the chnanged values
+	function _setScreenSetting(){
+		switch (c.data.appContext){
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.ORGANIZATION:
+				c.data.appPreferences.organizationFullScreen=$scope.fullScreen;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TASK:
+				c.data.appPreferences.taskFullScreen=$scope.fullScreen;
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TEMPLATE:
+				c.data.appPreferences.templateFullScreen = $scope.fullScreen;
+				break;
+		}		
+// TODO - POST save back to user prefernces back to the 
+	}
+
+	function _loadLeftPanel(){
+		var leftPanel={};
+		switch (c.data.appContext){
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.ORGANIZATION:
+				leftPanel.widgetType = c.data.appPreferences.organizationLeftPanel;
+// force tree for now, build constants later
+				leftPanel.widgetId="discovertasker-officehierarchy";
+				leftPanel.widgetParams = {bifold:true, table: c.data.table, embeddedWidget:true};
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TASK:
+				leftPanel.widgetType = c.data.appPreferences.taskLeftPanel;
+// force tree for now, build constants later
+				leftPanel.widgetId="discovertasker-recursivetasktreegraph";
+// TODO - figure out how to change topstickabsolute off when in this mode and 3 column , hide_accordion:true
+				leftPanel.widgetParams = {bifold:true, table:c.data.table, hide_accordion:true, embeddedWidget:true};
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TEMPLATE:
+// discovertasker-listtabbed
+				
+				leftPanel.widgetType = c.data.appPreferences.templateLeftPanel;
+// force tree for now, build constants later
+				leftPanel.widgetId="discovertasker-listtabbed";
+				leftPanel.widgetParams = {bifold:true, table:c.data.table, embeddedWidget:true};
+				break;
+		}
+		c.data.leftPanel=[]; // clear array
+		_loadWidget(leftPanel.widgetId, c.data.leftPanel, leftPanel.widgetParams, _setLeftPanelCallBack);
+	}
+	
+	function _setLeftPanelCallBack(widget){
+		c.data.leftPanel.push(widget);		
+	}
+
+	// if this is all we are doing, then maybe we could just pass array
+	function _setRightPanelCallBack(widget){
+		c.data.rightPanel.push(widget);		
+	}
+
+	
+	// TODO, think about how this could be done with one function instead of 2
+	function _loadRightPanel(){
+		var rightPanel={};
+		switch (c.data.appContext){
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.ORGANIZATION:
+				rightPanel.widgetType = c.data.appPreferences.templateRightPanel;
+// force tree for now, build constants later
+				rightPanel.widgetId="tasker_form_v3";
+				rightPanel.widgetParams = {bifold:true, embeddedWidget:true, 
+																	 table: c.data.table};
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TASK:
+				rightPanel.widgetId="tasker_form_v3";
+				rightPanel.widgetParams = {bifold:false, embeddedWidget:true, 
+																	 table: c.data.table};
+				break;
+			case $scope.dtech_tasker_common.CONSTANTS.APP_CONTEXTS.TEMPLATE:
+// force tab list at start, build constants later
+				rightPanel.widgetType = c.data.appPreferences.templateRightPanel;
+// force tree for now, build constants later
+				rightPanel.widgetId="discovertasker-processtemplatetreegraph";
+				rightPanel.widgetParams = {bifold:true, embeddedWidget:true, 
+																	 table: $scope.dtech_tasker_common.CONSTANTS.TABLES.TABLE_NAME_TEMPLATE_TASK};
+
+				break;
+		}
+		if(rightPanel.widgetId){
+			c.data.rightPanel=[]; // clear array
+			_loadWidget(rightPanel.widgetId, c.data.rightPanel, rightPanel.widgetParams, _setRightPanelCallBack);
+		}
+	}
+	
+// add widget specific parameter functions
+// tree, list, gantt, card, form
+	function _loadWidget(widgetId, widgetArray, widgetParams, callBack){
+		spUtil.get(widgetId, widgetParams).then(callBack);
+	}
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.va56f59244f481300303dc3818110c7e9, 
+.v10990ff61b854610f96aece66e4bcbab,
+.vd651a9734fd20300303dc3818110c7f5,
+.va86fe00a4fe89700303dc3818110c704,
+.v0b6569774fd20300303dc3818110c794,
+.v5ea441c5db4e4450936dd498f496191c,
+.v88c3a1d11b86ce10f96aece66e4bcb4c{
+  display:flex;
+  flex-direction:column;
+  flex-grow:1;
+}
+
+.v5ea441c5db4e4450936dd498f496191c{
+  margin: 5px;
+  border-radius: 15px 15px 15px 15px;
+}
+
+.dtech-app-body-container{
+  display:flex;
+  flex-direction:column;
+  flex-grow:1;
+}
+
+.dtech-app-body-header{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 5px;
+  box-shadow: 0px 2px 10px 0px rgba(0,0,0,0.15);  
+}
+  
+.dtech-app-body-panel{
+  display:flex;
+  flex-flow:column nowrap;
+  align-items: stretch;
+  flex-grow:1;
+/*  border: solid 2px black; */
+  border-radius: 15px 15px 15px 15px;
+  box-shadow: 0px 2px 20px 0px rgba(0,0,0,0.15);
+}
+
+.dtech-app-body-panel-popout{
+  display:flex;
+  flex-flow: column nowrap;
+  flex-grow:0.3;
+  border: solid 2px black;
+  border-radius: 15px 15px 15px 15px;
+  box-shadow: 0px 2px 20px 0px rgba(0,0,0,0.15);
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tasker_app_body_container</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Tasker App Body Container</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2022 Discover Technologies LLC
+/* Special License Rights
+*  The Government's rights to use, display, or disclose this software are restricted.
+*  Any reproduction of computer software, computer software documentation,
+*  or portions thereof marked with this legend must also reproduce the markings. */
+// Script Continued Below
+//------------------------------------------------------------------------------------------------------------------------
+// WIDGET BASE: Tasker App Body Container
+// COMPANY: Discover Technologies
+(function($sp, input, data, options, gs) {
+  /* populate the 'data' object */
+  /* e.g., data.table = $sp.getValue('table'); */
+	main();
+	
+	function main(){
+		data.appContext = (input || {}).appContext || (options || {}).appContext || "";
+		data.appPreferences = (input || {}).appPreferences || (options || {}).appPreferences || undefined;		
+		data.table = (input || {}).table || (options || {}).table || $sp.getParameter("table") || "";
+		data.sys_id = (input || {}).sys_id || (options || {}).sys_id || $sp.getParameter("sys_id") || $sp.getParameter("sl_sys_id");
+	}
+	
+	
+})($sp, input, data, options, gs);]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2024-03-29 12:35:23</sys_created_on>
+        <sys_id>8465db241bd14e10f96aece66e4bcb33</sys_id>
+        <sys_mod_count>139</sys_mod_count>
+        <sys_name>Tasker App Body Container</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sp_widget_8465db241bd14e10f96aece66e4bcb33</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2024-05-10 03:11:30</sys_updated_on>
+        <template><![CDATA[<div class="flex-column flex-grow">
+  <div ng-show="data.home!=true"
+       class="dtech-app-body-header">
+    <div class="dtech-pad-left-5 dtech-pad-right-5"
+         ng-click="changeScreenSetting(true);">
+      <div class="dtech-btn"
+           ng-class="{'dtech-btn-focus':fullScreen==true}">
+        <img src="x_153465_discovert.Fullscreen24.svg"/>
+      </div>
+      <div class="text-uppercase">
+        ${Fullscreen}
+      </div>
+    </div>
+    <div class="dtech-pad-left-5 dtech-pad-right-5"
+         ng-click="changeScreenSetting(false);">
+      <div class="dtech-btn"
+           ng-class="{'dtech-btn-focus':fullScreen==false}">
+        <img src="x_153465_discovert.Splitscreen24.svg"/>
+      </div>
+      <div class="text-uppercase">
+        ${Split Screen}
+      </div>
+    </div>
+  </div>
+  <div class="flex-row flex-grow">
+    <div id="tasker_app_home_panel"
+         ng-show="data.home==true"
+         class="dtech-app-body-panel">
+      <div class="flex-column flex-grow"
+           ng-show="data.home==true"
+           ng-repeat="tpbwfw in data.tasker_portal_board_with_filters">
+        <sp-widget widget="tpbwfw"></sp-widget>
+      </div>    
+    </div>
+    <div id="tasker_app_left_panel"
+         ng-show="data.home!=true"
+         class="dtech-app-body-panel">
+      <div class="flex-column flex-grow"
+           ng-repeat="tlpw in data.leftPanel">
+        <sp-widget widget="tlpw"></sp-widget>  
+      </div>
+    </div>
+    <div id="tasker_app_right_panel"
+         ng-show="data.home!=true && fullScreen!=true"
+         class="dtech-app-body-panel">
+      <div class="flex-column flex-grow"
+           ng-repeat="trpw in data.rightPanel">
+        <sp-widget widget="trpw"></sp-widget>
+      </div>
+    </div>
+    <div id="tasker_app_popout_panel"
+         ng-show="data.popout==true"
+         class="dtech-app-body-panel-popout">
+    </div>
+  </div>  
+<!-- your widget template -->
+  <!--div class="flex-row flex-grow"
+       ng-show="c.data.useTaskHeader==true"
+       ng-repeat="tthw in data.tasker_task_headers">
+    <sp-widget widget="tthw"></sp-widget>
+  </div-->
+
+</div>]]></template>
+    </sp_widget>
+</record_update>

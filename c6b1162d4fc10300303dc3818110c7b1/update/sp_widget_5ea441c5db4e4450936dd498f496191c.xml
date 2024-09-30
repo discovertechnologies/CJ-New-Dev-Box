@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>standard</category>
-        <client_script><![CDATA[api.controller = function($scope, spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, spNavStateManager, dtechOrganizationalUser) {
+        <client_script><![CDATA[api.controller = function($scope, spModal, $location, spUtil, amb, $http, spAriaUtil, $timeout, $log, spNavStateManager, dtechOrganizationalUser) {
 
     // 2.6.0 | 2021-04-06 | mmcc | STRY0097980 - Hover Over Task Name HTML
     // 2.6.0 | 2021-04-26 | mmcc | STRY0100152 - Tasker Modern Portal - Task Name Hover needs a short delay before showing the popup
@@ -151,12 +151,26 @@
                         // A record was removed
                     case "enter":
                     case "entry":
-                        // A record was added
+                        // STRY0154672 - if multiple record watchers trigger rapidly, prevent post back loop
+						c.data.lastRetryTime = new Date().getTime();
+						$timeout(delayReload,5000, true, c.data.lastRetryTime);
+						break;
                     default:
                         spUtil.update($scope);
                         break;
                 }
             });
+        }
+    }
+    
+    // STRY0154672
+    // wait to reload in case multiple come in short succession
+    // This function receives time set when record watcher triggered
+    // if the global recordWatcher trigger time does not equal this time set
+    // then another event triggerred while waiting, ignore this request
+    function delayReload(callTime){
+        if(c.data.lastRetryTime==callTime){
+            spUtil.update($scope);
         }
     }
 
@@ -516,14 +530,14 @@
     };
 
     // Makes Widget Async
-    $scope.data = $scope.options;
+//    $scope.data = $scope.options;
     // DFCT0010617
     $scope.data.initialLoad = true;
 
     $scope.loadingData = true;
     $scope.server.update().then(function() {
         if ($scope.data.newButtonUnsupported)
-            jslog("Service Portal: New button not supported for sys_attachment list");
+        $log.log("Service Portal: New button not supported for sys_attachment list");
         $scope.loadingData = false;
         // STRY0101803 - moved to load in client so table updates
         loadFilterWidget();
@@ -782,10 +796,26 @@
 
 //KT: 04/05/2020
 .buttonwrapper {
+  white-space: nowrap;
   display: inline-block;
-  position: absolute;
+  position: relative;
   cursor: pointer;
   font-weight: bold;
+}
+
+.table-fixed-header {
+  align-items: flex-start;
+  overflow: auto;
+}
+
+.table-fixed-header thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table-fixed-header th {
+  background:#eee; 
 }
 
 //KT: 04/05/2020
@@ -936,7 +966,7 @@ border-radius: 6px;
   /* padding: 3px 8px; */
   padding: 2px 2px;
   /* color: #fff; */
-  color: #000;
+/*  color: #000; */
   /* text-align: center; */
   text-align: left;
   /* background-color: #000; */
@@ -1350,6 +1380,8 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
 //	In Server script,  get showLongDates from input, options, URL or a default;
 //	 updated _convertToBool() to have a sorted list and added showLongDates
 //	Changes made in HTML and Server script.
+// 2.8.5 | 2024-09-29 | raj | STRY0154672 - Performance Improvements
+//                                          Client Script Only, updated recordwatcher handling
 //
 //------------------------------------------------------------------------------------------------------------
 
@@ -1430,9 +1462,11 @@ See Tasker Theme and CSS include: Restricted Group Banner Style Sheet
     optCopy(['relationship_id', 'apply_to', 'apply_to_sys_id', 'window_size']);
     // STRY0101803
     optCopy(['modal_title_field_separator', 'modal_title_fields', 'include_comments', 'DiscoverControllerURL']);
+		optCopy(['show_keywords', 'show_breadcrumbs', 'enable_filter']);
 
 	// 2.8.1 | 2023-04-04 | mmcc | STRY0135723 - Homepage Comments column replaced by Task Comments; added isModal
 	data.isModal = (input || {}).isModal || (options || {}).isModal || false;
+	data.bifold = (input || {}).bifold || (options || {}).bifold || false;
 	
 	// 2.8.5 | 2023-07-07 | mmcc | STRY0137588 - View Comment on Detailed Status
 	// added, Script Include TaskWidgetData reads Page instance Additonal Lists for this field to pass via options
@@ -2131,15 +2165,16 @@ data.hoverField = "";
         <sys_created_by>aalzyoud</sys_created_by>
         <sys_created_on>2019-12-29 04:37:56</sys_created_on>
         <sys_id>5ea441c5db4e4450936dd498f496191c</sys_id>
-        <sys_mod_count>1466</sys_mod_count>
+        <sys_mod_count>1485</sys_mod_count>
         <sys_name>Tasker Portal Board with Filter</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_5ea441c5db4e4450936dd498f496191c</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-01-27 20:57:14</sys_updated_on>
-        <template><![CDATA[<div class="panel panel-{{options.color}} b">
+        <sys_updated_on>2024-09-30 03:43:58</sys_updated_on>
+        <template><![CDATA[<div class="panel panel-{{options.color}} b"
+            ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-margin-bottom-0':data.bifold==true||data.isModal==true}">
   <!-- Section: panel heading -->
   <div class="panel-heading form-inline" ng-hide="options.hide_header">
     <div class="dtech-box">
@@ -2168,12 +2203,12 @@ data.hoverField = "";
         <i ng-if="options.glyph" class="fa fa-{{options.glyph}} m-r"></i>{{data.title || data.table_plural}}
       </div>
 			<!-- STRY0135722 - All and Top Only Filters -->
-      <div class="flex-row"
+      <div class="flex-row dtech-pad-all-5"
            ng-if="data.showTableFilterButtons">
 
         <div class="dtech-table-filter-container">
-          <button class="dtech-table-filter-btn dtech-btn btn" 
-                  ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='showAll'}" 
+          <button class="dtech-table-filter-btn btn" 
+                  ng-class="{'dtech-table-btn-focus': data.tableFilterButtonSelected=='showAll'}" 
                   ng-click="tableFilterButtonSelected('showAll')"> 
             <div class="flex-row flex-nowrap"> 
               <div class="dtech-table-filter-label ng-binding">
@@ -2186,8 +2221,8 @@ data.hoverField = "";
           </button>
         </div>
         <div class="dtech-table-filter-container">
-          <button class="dtech-table-filter-btn dtech-btn btn" 
-                  ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='topTasks'}" 
+          <button class="dtech-table-filter-btn btn" 
+                  ng-class="{'dtech-table-filter-btn-focus': data.tableFilterButtonSelected=='topTasks'}" 
                   ng-click="tableFilterButtonSelected('topTasks')"> 
             <div class="flex-row flex-nowrap"> 
               <div class="dtech-table-filter-label ng-binding">
@@ -2207,7 +2242,7 @@ data.hoverField = "";
                 aria-label="${Create new record}">${New}</button>
       </div>
       <!-- Section: search -->
-      <div class="dtech-push-right" ng-if="options.show_keywords">
+      <div class="dtech-push-right" ng-if="data.show_keywords">
         <form ng-submit="setSearch(true)">
           <div class="input-group">
             <input type="text" name="datatable-search" ng-model="data.keywords" ng-model-options="{debounce:250}"
@@ -2224,10 +2259,10 @@ data.hoverField = "";
   </div>
 
   <!-- body -->
-  <div class="panel-body">
+ <div class="panel-body" ng-class="{'flex-column flex-grow dtech-overflow-hidden dtech-pad-all-0':data.bifold==true||data.isModal==true}">
     <h2 class="sr-only data-table-title">{{data.title || data.table_plural}} ${table} - ${page} {{data.p}}</h2>
     <!-- STRY0101803 added data.filterBreadcrumbs to if to refresh widget each load -->
-    <div ng-if="data.filterBreadcrumbs && options.show_breadcrumbs && (data.filter || data.enable_filter)"
+    <div ng-if="data.filterBreadcrumbs && data.show_breadcrumbs && (data.filter || data.enable_filter)"
          class="filter-breadcrumbs">
       <sp-widget widget="data.filterBreadcrumbs"></sp-widget>
     </div>
@@ -2238,199 +2273,208 @@ data.hoverField = "";
       <fa name="spinner" spin="true"></fa>
       ${Loading data}...
     </div>
-    <table id="dtech-list-1" class="table table-striped table-responsive" ng-if="data.list.length && !loadingData">
-      <thead>
-        <tr>
-          <th style="width: 60px"></th>
-          <th ng-repeat="field in data.fields_array track by $index" class="text-nowrap" ng-click="setOrderBy(field)"
-              tabindex="1">
-            <div class="flex-row items-center">
-              <div class="th-title" aria-label="${Sort by } {{data.column_labels[field]}}">
-                {{data.column_labels[field]}}</div>
-              <i class="fa" ng-if="field == data.o" ng-class="{'asc': 'fa-chevron-up', 'desc': 'fa-chevron-down'}[data.d]"
-                 aria-label="${Sorted by } {{data.column_labels[field]}} {{data.d == 'asc' ?  '${Ascending}': '${Descending}' }}"></i>
-            </div>
-          </th>
-          <!-- STRY0101803 Comments is an optional field -->
-          <th ng-if="data.include_comments==true" class="text-nowrap th-title">
-            ${Comments}
-          </th>
-          <th ng-if="data.table=='x_153465_discovert_route_task_instance'" class="text-nowrap">
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr ng-repeat="item in data.list track by item.sys_id">
-          <!--Add action buttons to each table row -->
-          <td>
-            <div class="buttonwrapper">
-              <a href='#' ng-click="c.openNewPage(data.table, item.href_id, item)">
-                <span class="glyphicon glyphicon-new-window" aria-hidden="true" title="Open task in new tab"></span>
-              </a>
-
-              <a href='#' ng-click="c.quickView(data.table, item.sys_id, 'discovertasker-formtab', item)">
-                <span class="glyphicon glyphicon-modal-window" aria-hidden="true" title="Open task in modal"></span>
-              </a>
-
-            </div>
-          </td>
-          <td role="text" aria-label="{{item[field].display_value}}" class="tableContent"
-              ng-class="{selected: item.selected}" ng-click="" ng-repeat="field in ::data.fields_array"
-              data-field="{{::field}}" data-th="{{::data.column_labels[field]}}">
-            
-            <span ng-if="field == 'state'">
-              <span ng-if="!data.showDTechState" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
-              <span ng-if="data.showDTechState" >
-                <dtech-state dtech-is-dark="false"
-                             dtech-in-data-table="true"
-                             dtech-is-modal="data.isModal"
-                             dtech-show-label="false"
-                             dtech-tool-tip-open="item.toolTipOpen"
-                             dtech-task-title = "getTitle(item);"
-                             dtech-show-all-states="false"
-                             dtech-state-object = "data.loadedStateOjbects[item.sys_id]"
-                             dtech-field="field"
-                             dtech-table="{{data.table}}"
-                             dtech-task-sys-id="{{item.sys_id}}"                                          
-                             ></dtech-state>
-              </span>
-            </span>
-            <span id="short" ng-if="field==data.hoverField"
-                  ng-mouseenter="item.isTooltipOpened=true; c.closeOtherTooltips(item)"
-                  ng-mouseleave="item.isTooltipOpened=false">
-              <span tooltip-placement="auto right-bottom" tooltip-trigger="mouseenter : outsideClick"
-                    tooltip-class="task-info-tooltip-style" tooltip-is-open="item.isTooltipOpened" tooltip-popup-delay="700"
-                    uib-tooltip-template="data.toolTipTemplate">
-                {{item[field].display_value}}
-              </span>
-            </span>
-            <span ng-if="field!=data.hoverField && field!='state' && 
-                         field!='short_description' &&
-                         field!='response' && 
-                         item[field].isUser!=true &&
-                         (!data.showDTechDuration || field!='suspense_date') &&
-                         (!data.showDTechAssignment || item[field].isOffice!=true)">{{item[field].display_value}}</span>
-            <span ng-if="item[field].isUser==true && item[field].display_value!=''">
-              <div >
-                <!-- STRY0135276 - User Profile Directive -->
-                <dtech-user dtech-task-title = "getTitle(item);"
-                            dtech-field="field"
-                            dtech-in-data-table="true"
-                            dtech-is-modal="data.isModal"
-                            dtech-user-image-size="24"
-                            dtech-chat-enabled="data.chatEnabled"
-                            dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
-                            dtech-param-object="data.userProfiles[item[field].value]"
-                            table="data.table"
-                            parent-sys-id="item.sys_id"
-                            />
+    <div ng-if="data.list.length" class="table-responsive table-fixed-header"
+         ng-class="{'flexbox dtech-margin-bottom-0': data.bifold==true||data.isModal==true}">
+      <table id="dtech-list-1" class="table table-striped table-responsive" ng-if="data.list.length && !loadingData">
+        <thead>
+          <tr>
+            <th style="width: 60px"></th>
+            <th ng-repeat="field in data.fields_array track by $index" class="text-nowrap" ng-click="setOrderBy(field)"
+                tabindex="1">
+              <div class="flex-row items-center">
+                <div class="th-title" aria-label="${Sort by } {{data.column_labels[field]}}">
+                  {{data.column_labels[field]}}</div>
+                <i class="fa" ng-if="field == data.o" ng-class="{'asc': 'fa-chevron-up', 'desc': 'fa-chevron-down'}[data.d]"
+                   aria-label="${Sorted by } {{data.column_labels[field]}} {{data.d == 'asc' ?  '${Ascending}': '${Descending}' }}"></i>
               </div>
-            </span>
-            <div ng-if="item[field].isOffice==true">
-              <span ng-if="data.showDTechAssignment">
-                <dtech-assignment dtech-task-title = "getTitle(item);"
-                              dtech-tool-tip-open="item.assignmentToolTipOpen"
-                              dtech-assignment-object = "data.loadedAssignementOjbects[item.sys_id]"
+            </th>
+            <!-- STRY0101803 Comments is an optional field -->
+            <th ng-if="data.include_comments==true" class="text-nowrap th-title">
+              ${Comments}
+            </th>
+            <th ng-if="data.table=='x_153465_discovert_route_task_instance'" class="text-nowrap">
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr ng-click="go(data.table, item)"
+              ng-repeat="item in data.list track by item.sys_id">
+            <!--Add action buttons to each table row -->
+            <td ng-class="{selected: item.selected}">
+              <div class="buttonwrapper">
+                <a href='#' ng-click="c.openNewPage(data.table, item.href_id, item)">
+                  <span class="glyphicon glyphicon-new-window" aria-hidden="true" title="Open task in new tab"></span>
+                </a>
+
+                <a href='#' ng-click="c.quickView(data.table, item.sys_id, 'discovertasker-formtab', item)">
+                  <span class="glyphicon glyphicon-modal-window" aria-hidden="true" title="Open task in modal"></span>
+                </a>
+
+              </div>
+            </td>
+            <td role="text" aria-label="{{item[field].display_value}}" class="tableContent"
+                ng-class="{selected: item.selected}" ng-click="" ng-repeat="field in ::data.fields_array"
+                data-field="{{::field}}" data-th="{{::data.column_labels[field]}}">
+
+              <span ng-if="field == 'state'">
+                <span ng-if="!data.showDTechState" class="badge {{item[field].display_value}}">{{item[field].display_value}}</span>
+                <span ng-if="data.showDTechState" >
+                  <dtech-state dtech-is-dark="false"
+                               dtech-in-data-table="true"
+                               dtech-is-modal="data.isModal"
+                               dtech-show-label="false"
+                               dtech-tool-tip-open="item.toolTipOpen"
+                               dtech-task-title = "getTitle(item);"
+                               dtech-show-all-states="false"
+                               dtech-state-object = "data.loadedStateOjbects[item.sys_id]"
+                               dtech-field="field"
+                               dtech-table="{{data.table}}"
+                               dtech-task-sys-id="{{item.sys_id}}"                                          
+                               ></dtech-state>
+                </span>
+              </span>
+              <span id="short" ng-if="field==data.hoverField"
+                    ng-mouseenter="item.isTooltipOpened=true; c.closeOtherTooltips(item)"
+                    ng-mouseleave="item.isTooltipOpened=false">
+                <span tooltip-placement="auto right-bottom" tooltip-trigger="mouseenter : outsideClick"
+                      tooltip-class="task-info-tooltip-style" tooltip-is-open="item.isTooltipOpened" tooltip-popup-delay="700"
+                      uib-tooltip-template="data.toolTipTemplate">
+                  {{item[field].display_value}}
+                </span>
+              </span>
+              <span ng-if="field!=data.hoverField && field!='state' && 
+                           field!='short_description' &&
+                           field!='response' && 
+                           item[field].isUser!=true &&
+                           (!data.showDTechDuration || field!='suspense_date') &&
+                           (!data.showDTechAssignment || item[field].isOffice!=true)">{{item[field].display_value}}</span>
+              <span ng-if="item[field].isUser==true && item[field].display_value!=''">
+                <div >
+                  <!-- STRY0135276 - User Profile Directive -->
+                  <dtech-user dtech-task-title = "getTitle(item);"
                               dtech-field="field"
                               dtech-in-data-table="true"
                               dtech-is-modal="data.isModal"
-                              dtech-table="{{data.table}}"
-                              dtech-task-sys-id="{{item.sys_id}}"
-                              ></dtech-assignment>
+                              dtech-user-image-size="24"
+                              dtech-chat-enabled="data.chatEnabled"
+                              dtech-user-photo-info="data.usersPhotoInfo[item[field].value]"
+                              dtech-param-object="data.userProfiles[item[field].value]"
+                              table="data.table"
+                              parent-sys-id="item.sys_id"
+                              />
+                </div>
               </span>
-            </div>
-            
-            <span ng-if = "field=='short_description' && field!=data.hoverField">
-              <dtech-operational ng-if="data.showDTechOperation==true"
-                                 dtech-in-data-table="true"
-                                 dtech-popover-placement="right-auto"
-                                 dtech-tool-tip-open="item.operationalToolTipOpen"
-                                 dtech-operational-object = "data.loadedOperationalObjects[item.sys_id]"
-                                 dtech-field="field"
-                                 dtech-is-modal="data.isModal"
-                                 dtech-table="{{data.table}}"
-                                 dtech-task-sys-id="{{item.sys_id}}"                                          
-                                 ></dtech-operational>
-              <span ng-if="data.showDTechOperation!=true">
-                {{item[field].display_value}}
-              </span>
-            </span>
-            
-            <!-- STRY0137371 -->
-            <div ng-if="field=='suspense_date'">
-              <span ng-if="data.showDTechDuration">
-                <dtech-duration dtech-in-data-table="true"
+              <div ng-if="item[field].isOffice==true">
+                <span ng-if="data.showDTechAssignment">
+                  <dtech-assignment dtech-task-title = "getTitle(item);"
+                                dtech-tool-tip-open="item.assignmentToolTipOpen"
+                                dtech-assignment-object = "data.loadedAssignementOjbects[item.sys_id]"
+                                dtech-field="field"
+                                dtech-in-data-table="true"
                                 dtech-is-modal="data.isModal"
-                                dtech-tool-tip-open="item.durationToolTipOpen"
                                 dtech-table="{{data.table}}"
                                 dtech-task-sys-id="{{item.sys_id}}"
-                                dtech-duration-object="data.loadedDurationOjbects[item.sys_id]"
-                                dtech-show-long-dates="data.showLongDates"
-                                ></dtech-duration>
-              </span>
-            </div>           
-            <span ng-if="field=='response'">
-              <div ng-if="item.isResponseCommentsDirectiveShown==true">
-                <!-- Response Comments Directive -->
-                <dtech-response-comments dtech-is-modal="data.isModal"
-                                         dtech-in-data-table="true"
-                                         dtech-reopen-comments="{{item.directive_reopen_comments}}"
-                                         dtech-response-comments="{{item.directive_response_comments}}"
-                                         dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
-                                         dtech-rework-comments="{{item.directive_rework_comments}}"
-                                         dtech-sys-id="{{item.sys_id}}"
-                                         dtech-table="{{data.table}}"
-                                         dtech-response-column-style="{{data.responseColumnStyle}}"
-                                         dtech-content-comment="{{item.directive_content_comment}}"
-                                         dtech-response-editor-control="{{data.responseEditorControl}}"
-                                         dtech_work_item_type="{{item.directive_work_item_type}}"
-                                         ></dtech-response-comments>
+                                ></dtech-assignment>
+                </span>
               </div>
-            </span>
-          </td>
-          
-          <!-- STRY0101803 Comments is an optional field -->
-          <td ng-if="data.include_comments==true" role="text" class="pointer sp-list-cell">
-            <span ng-if="data.popOverRecord[item.sys_id].numComments > 0">
-              <a class="glyphicon glyphicon glyphicon-comment pointer" aria-label="Left Align" aria-hidden="true"
-                 title="View task comments"
-                 ng-click="c.quickView(data.table, item.sys_id, 'tasker_stream_widget', item)">
-                <span
-                      style="font-family:SourceSansPro, Helvetica, Arial, sans-serif; font-size: 14px;">{{data.popOverRecord[item.sys_id].numComments}}</span>
-              </a>
-            </span>
-          </td>
-          
-          <td ng-if="data.table=='x_153465_discovert_route_task_instance'" class="pointer">
-            <div class="flex-row text-nowrap items-center dtech-margin-negative-5px">
-              <dtech-add-sub-object dtech-is-dark="false"
-                                    dtech-in-data-table="true"
-                                    dtech-tool-tip-open="item.addSubActionToolTipOpen"
-                                    dtech-add-sub-object="data.addSubObject"
-                                    dtech-is-modal="data.isModal"
-                                    dtech-table="{{data.table}}"
-                                    dtech-task-sys-id="{{item.sys_id}}"
-                                    dtech-object-type="task"
-                                    dtech-service-now-form-view="item.u_servicenow_form_view"
-                                    ></dtech-add-sub-object>
 
-              <dtech-actions dtech-is-dark="false"
-                             dtech-in-data-table="true"
-                             dtech-tool-tip-open="item.actionToolTipOpen"
-                             dtech-in-data-table="true"
-                             dtech-actions-object = "data.actions"
-                             dtech-is-modal="data.isModal"
-                             dtech-table="{{data.table}}"
-                             dtech-task-sys-id="{{item.sys_id}}"
-                             load-actions="loadActions"
-                             ></dtech-actions>
-            </div>
-          </td>
-          
-        </tr>
-      </tbody>
-    </table>
-    <div ng-class="{'pruned-msg-filter-pad': (!options.show_breadcrumbs || !data.filter) && !data.list.length}"
+              <span ng-if = "field=='short_description' && field!=data.hoverField">
+                <dtech-operational ng-if="data.showDTechOperation==true"
+                                   dtech-in-data-table="true"
+                                   dtech-popover-placement="right-auto"
+                                   dtech-tool-tip-open="item.operationalToolTipOpen"
+                                   dtech-operational-object = "data.loadedOperationalObjects[item.sys_id]"
+                                   dtech-field="field"
+                                   dtech-is-modal="data.isModal"
+                                   dtech-table="{{data.table}}"
+                                   dtech-task-sys-id="{{item.sys_id}}"                                          
+                                   ></dtech-operational>
+                <span ng-if="data.showDTechOperation!=true">
+                  {{item[field].display_value}}
+                </span>
+              </span>
+
+              <!-- STRY0137371 -->
+              <div ng-if="field=='suspense_date'">
+                <span ng-if="data.showDTechDuration">
+                  <dtech-duration dtech-in-data-table="true"
+                                  dtech-is-modal="data.isModal"
+                                  dtech-tool-tip-open="item.durationToolTipOpen"
+                                  dtech-table="{{data.table}}"
+                                  dtech-task-sys-id="{{item.sys_id}}"
+                                  dtech-duration-object="data.loadedDurationOjbects[item.sys_id]"
+                                  dtech-show-long-dates="data.showLongDates"
+                                  ></dtech-duration>
+                </span>
+              </div>           
+              <span ng-if="field=='response'">
+                <div ng-if="item.isResponseCommentsDirectiveShown==true">
+                  <!-- Response Comments Directive -->
+                  <dtech-response-comments dtech-is-modal="data.isModal"
+                                           dtech-in-data-table="true"
+                                           dtech-reopen-comments="{{item.directive_reopen_comments}}"
+                                           dtech-response-comments="{{item.directive_response_comments}}"
+                                           dtech-reviewer-comments="{{item.directive_reviewer_comments}}"
+                                           dtech-rework-comments="{{item.directive_rework_comments}}"
+                                           dtech-sys-id="{{item.sys_id}}"
+                                           dtech-table="{{data.table}}"
+                                           dtech-response-column-style="{{data.responseColumnStyle}}"
+                                           dtech-content-comment="{{item.directive_content_comment}}"
+                                           dtech-response-editor-control="{{data.responseEditorControl}}"
+                                           dtech_work_item_type="{{item.directive_work_item_type}}"
+                                           ></dtech-response-comments>
+                </div>
+              </span>
+            </td>
+
+            <!-- STRY0101803 Comments is an optional field -->
+            <td ng-class="{selected: item.selected}"
+                ng-if="data.include_comments==true" 
+                role="text" 
+                class="pointer sp-list-cell">
+              <span ng-if="data.popOverRecord[item.sys_id].numComments > 0">
+                <a class="glyphicon glyphicon glyphicon-comment pointer" aria-label="Left Align" aria-hidden="true"
+                   title="View task comments"
+                   ng-click="c.quickView(data.table, item.sys_id, 'tasker_stream_widget', item)">
+                  <span
+                        style="font-family:SourceSansPro, Helvetica, Arial, sans-serif; font-size: 14px;">{{data.popOverRecord[item.sys_id].numComments}}</span>
+                </a>
+              </span>
+            </td>
+
+            <td ng-class="{selected: item.selected}"
+                ng-if="data.table=='x_153465_discovert_route_task_instance'" 
+                class="pointer">
+              <div class="flex-row text-nowrap items-center dtech-margin-negative-5px">
+                <dtech-add-sub-object dtech-is-dark="false"
+                                      dtech-in-data-table="true"
+                                      dtech-tool-tip-open="item.addSubActionToolTipOpen"
+                                      dtech-add-sub-object="data.addSubObject"
+                                      dtech-is-modal="data.isModal"
+                                      dtech-table="{{data.table}}"
+                                      dtech-task-sys-id="{{item.sys_id}}"
+                                      dtech-object-type="task"
+                                      dtech-service-now-form-view="item.u_servicenow_form_view"
+                                      ></dtech-add-sub-object>
+
+                <dtech-actions dtech-is-dark="false"
+                               dtech-in-data-table="true"
+                               dtech-tool-tip-open="item.actionToolTipOpen"
+                               dtech-in-data-table="true"
+                               dtech-actions-object = "data.actions"
+                               dtech-is-modal="data.isModal"
+                               dtech-table="{{data.table}}"
+                               dtech-task-sys-id="{{item.sys_id}}"
+                               load-actions="loadActions"
+                               ></dtech-actions>
+              </div>
+            </td>
+
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div ng-class="{'pruned-msg-filter-pad': (!data.show_breadcrumbs || !data.filter) && !data.list.length}"
          class="pruned-msg" ng-if="rowsWerePruned()">
       <span ng-if="rowsPruned == 1">${{{rowsPruned}} row removed by security constraints}</span>
       <span ng-if="rowsPruned > 1">${{{rowsPruned}} rows removed by security constraints}</span>

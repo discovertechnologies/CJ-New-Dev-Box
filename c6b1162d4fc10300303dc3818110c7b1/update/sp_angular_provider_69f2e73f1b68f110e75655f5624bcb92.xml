@@ -21,6 +21,7 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 		// replace: true,
 		// @: string 1 way, =: object 2 way, <: object 1 way
 		scope: {
+			dtechChatEnabled: "<", // STRY0136617
 			dtechIsModal: "<",
 			dtechPopoverPlacement: '@?',
 			dtechShowLabel: "<?",
@@ -42,7 +43,7 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 	};
 	return dtechDirective;
 
-	function directiveCtrl($scope, $attrs, $animate, dtechTaskService, dtechTemplateService) {
+	function directiveCtrl($scope, $attrs, $animate, dtechOrganizationalUser, dtechTaskService, dtechTemplateService) {
 		var d = this;
 		// have local per directive instead of global - TODO: get from a service
 		var CONST_TEMP_WAIT_DURATION = 600;
@@ -50,15 +51,15 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 		var CONST_POPOVER_DELAY = 1200;
 		var CONST_SPINNER_DELAY = 500;
 
+		d.chatEnabled = _chatEnabled;
+		d.chatInfo = undefined; // this is loaded on hover or on chat click
+
 		var isOverTooltip = false;
 		var isClosing = false;
 
 		// STRY0145237 - Directive - Duration code; 
 		var parentMouseLeaveTimeouts = []; // added an array to collect each time mouse leave fires; need to cancel time-outs on destroy
-
 		$scope.dtechToolTipOpen = false;
-		
-		// directive's functional section
 		d.enterTooltip = _enterTooltip;
 		d.imageOffset=8; // this is default for 24 image size
 		d.init = _init;
@@ -67,6 +68,7 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 		d.initTooltip = _initTooltip;
 		
 		d.leaveTooltip = _leaveTooltip;
+		d.openColabChatConversation = _openColabChatConversation;
 		d.openModal = _openModal;
 		d.openUserProfileModal = _openUserProfileModal;
 		d.membersSpan = {};
@@ -75,10 +77,22 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 		
 		// STRY0139742 - Increase delaying when hover directives open; 
 		d.popoverDelay = CONST_POPOVER_DELAY;  // added to set popover-popup-delay in the Macro HTML
-		
+
+		d.openChat = _openChat;
+		d.openChatAll = _openChatAll;
+
 		d.popoverTemplate = $scope.dtechItemMembersObject.objectType + '-popover-assignment.html';
 
 		d.showItemMembers = _showItemMembers;
+
+		// STRY0136617
+		function _chatEnabled() {
+			return $scope.dtechChatEnabled;
+		}
+		
+		function _openColabChatConversation(){
+			alert("Comming sooon... Sidebar colab chat");
+		}
 
 		// when the user hovers over the tooltip set overtooltip flag
 		function _enterTooltip() {
@@ -156,6 +170,77 @@ function dtechItemMembers(getTemplateUrl, spModal, $timeout, $window) {
 			
 			// STRY0139742 - Increase delaying when hover directives open; set true
 			isClosing = true;
+		}
+		
+		// openChat()
+		// this function is called from Template html
+		// it is called when a user clicks on the link to send an email to a user
+		function _openChat(event,member) {
+			if(d.chatInfo && d.chatInfo.item_sys_id == $scope.dtechTaskSysId){
+				_openChatWithInformation();	
+			} else {
+				// call to load chat info here
+				// load profile
+				var getChatInfoObj = {};
+				getChatInfoObj.user_sys_ids = member.value;
+				getChatInfoObj.item_sys_id = $scope.dtechTaskSysId;
+				getChatInfoObj.table = $scope.dtechTable;
+				dtechOrganizationalUser.getChatInfo(getChatInfoObj).then(function(response){
+						_openChatResponseRecieved(response);
+					});
+			}
+			event.stopPropagation();
+		}
+
+		// openChatAll()
+		// this function is called from Template html
+		// it is called when a user clicks on the link to send an email to a user
+		function _openChatAll(event) {
+			var arrUserIds = [];
+			$scope.dtechItemMembersObject.members.filter(function(member){
+				arrUserIds.push(member.value);
+			});
+			var userIds = arrUserIds.join(",");
+
+			// call to load chat info here
+			// load profile
+			var getChatInfoObj = {};
+			getChatInfoObj.user_sys_ids = userIds;
+			getChatInfoObj.item_sys_id = $scope.dtechTaskSysId;
+			getChatInfoObj.table = $scope.dtechTable;
+			dtechOrganizationalUser.getChatInfo(getChatInfoObj).then(function(response){
+					_openChatResponseRecieved(response);
+				});
+			event.stopPropagation();
+		}
+
+		function _openChatResponseRecieved(response){
+			d.chatInfo = response;
+			_openChatWithInformation();
+		}
+
+		function _openChatWithInformation(){
+			if(d.chatInfo.deepLink){
+				var chatData = d.chatInfo.deepLink;
+				console.log(chatData);
+				$window.open(chatData, '_blank');
+
+			} else { 
+				alert('Unable to load Chat.  Check Chat Configuration.');
+				if(d.chatInfo.errorGettingLInk){
+					console.error("Error Loading Link:" + d.chatInfo.errorGettingLInk);
+					
+				}
+			}
+/*
+			var chatData = 'MSTeams:/l/chat/0/0?users=' + $scope.dtechParamObject.email;
+			
+			//var chatData = 'https://teams.microsoft.com/l/chat/0/0?users=' + $scope.dtechParamObject.email;
+			if ($scope.dtechParamObject && $scope.dtechParamObject.emailSubject && $scope.dtechParamObject.emailSubject.length > 0) {
+				chatData = chatData + '?message=' + $scope.dtechParamObject.chatMessageData;
+			}
+			$window.open(chatData, '_self');
+*/			
 		}
 		
 		// openModal()
@@ -293,14 +378,14 @@ console.log("RJ - testing - scope.dtechItemMembersObject: " + JSON.stringify($sc
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2023-08-16 12:56:45</sys_created_on>
         <sys_id>69f2e73f1b68f110e75655f5624bcb92</sys_id>
-        <sys_mod_count>39</sys_mod_count>
+        <sys_mod_count>49</sys_mod_count>
         <sys_name>dtechItemMembers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy/>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_angular_provider_69f2e73f1b68f110e75655f5624bcb92</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-02-26 15:03:22</sys_updated_on>
+        <sys_updated_on>2024-05-06 15:41:49</sys_updated_on>
         <type>directive</type>
     </sp_angular_provider>
 </record_update>

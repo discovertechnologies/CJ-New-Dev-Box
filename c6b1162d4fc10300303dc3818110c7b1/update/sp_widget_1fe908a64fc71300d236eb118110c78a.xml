@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
-        <client_script><![CDATA[function widgetClientController($scope, $location, spUtil, $rootScope, amb, $http, spAriaUtil, $timeout, spModal, dtechOrganizationalUser) {
+        <client_script><![CDATA[function widgetClientController($scope, $location, spUtil, $rootScope, amb, $http, spAriaUtil, $timeout, $log, spModal, dtechOrganizationalUser) {
     // Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
     // Script Continued Below
 	/*
@@ -451,7 +451,6 @@
 
         if (table && filter) {
             // STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
-            var params = {};
             var watcherChannel = amb.getChannelRW(table, filter);
             amb.connect();
             watcher = watcherChannel.subscribe(function(message) {
@@ -461,35 +460,10 @@
                     case "change":
                         updateRowFromRW(message);
                         break;
-                    case "exit":
-                        // A record was removed
-                        // STRY0093948 - when a row is removed, broadcast event to Tab Form with Tabs to update the count
-                        // pass the table back to the form widget for the related list
-                        params.table = c.data.table;
-                        // pass the filter back to the form widget for the related list in case there are 2 related lists of the same table
-                        params.filter = c.data.filter;
-                        // 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
-                        // $rootScope.$broadcast('sp.DiscoverListItem.Deleted', params);
-                        // spUtil.update($scope);
-                        spUtil.update($scope).then(function() {
-                            params.rowCount = $scope.data.row_count || 0;
-                            $scope.$emit('sp.DiscoverListItem', params);
-                        });
-                        break;
                     case "entry":
-                        // A record was added
-                        // STRY0093948 - when a row is added, broadcast event to Tab Form with Tabs to update the count
-                        // pass the table back to the form widget for the related list
-                        params.table = c.data.table;
-                        // pass the filter back to the form widget for the related list in case there are 2 related lists of the same table
-                        params.filter = c.data.filter;
-                        // 2.7.0 | 2021-05-21 | mmcc | STRY0099596 Record Watcher on Template Count not Updating; emit sends rowCount in params, no need for .Deleted or .Added
-                        // $rootScope.$broadcast('sp.DiscoverListItem.Added', params);
-                        //spUtil.update($scope);
-                        spUtil.update($scope).then(function() {
-                            params.rowCount = $scope.data.row_count || 0;
-                            $scope.$emit('sp.DiscoverListItem', params);
-                        });
+                    case "exit":
+                        c.data.lastRetryTime = new Date().getTime();
+                        $timeout(delayReload,5000, true, c.data.lastRetryTime);
                         break;
                     default:
                         spUtil.update($scope);
@@ -497,6 +471,21 @@
                 }
             });
         }
+    }
+	
+    // wait to reload in case multiple come in short succession
+    // This function receives time set when record watcher triggered
+    // if the global recordWatcher trigger time does not equal this time set
+    // then another event triggerred while waiting, ignore this request
+    function delayReload(callTime){
+            if(c.data.lastRetryTime==callTime){
+                spUtil.update($scope).then(function() {
+                $scope.$emit("discovertasker-widget-data-table-update_count", {
+                    count: c.data.row_count,
+                    title: c.data.title || c.data.table_plural
+                });
+            });
+            }
     }
 
     function updateRowFromRW(message) {
@@ -518,6 +507,20 @@
         }
     }
 
+    // STRY0101803 added this call so the data table is reset on the filter every time
+    function loadFilterWidget() {
+		// STRY0142899 - Tasker Portal Board needs to update directive hover text; do not use because AMB watcherChannel not executing
+        // initRecordWatcher($scope.data.table, $scope.data.filter);
+        c.data.filterBreadcrumbs = null;
+        spUtil.get('widget-filter-breadcrumbs', {
+            table: c.data.table,
+            query: c.data.filter,
+            enable_filter: c.data.enable_filter
+        }).then(function(response) {
+            c.data.filterBreadcrumbs = response;
+        });
+    }
+	
     $scope.$on('$destroy', function() {
         if (watcher)
             watcher.unsubscribe();
@@ -1307,6 +1310,8 @@ tbody tr:last-child {&#13;
 //    dtech-duration-object and dtech-show-long-dates
 //	Changes made in HTML.
 //
+// 2.8.5 | 2024-09-29 | raj | STRY0154672 - Performance Improvements
+//                                          Client Script Only, updated recordwatcher handling
 //----------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
@@ -1552,14 +1557,18 @@ tbody tr:last-child {&#13;
 		data.table_label = data.table;
 		return;
 	}
+		// STRY0154672 - limit filter to Task Tree for all descendants
+		data.task_tree_sys_id = "";
+		var gr_task;
 
 		// DFCT0010631 - the Journal Entry table joined in this database view is a system table and only the admin can see the fields
 		// so, we are checking if the user can read the task Id provided.  
 		// If the user can see the task, the change the gr object to bipass security so non-admin user can see the journal entry fields
 		var userCanSeeTask = false;
 		if(data.table=='x_153465_discovert_activity_view'){
-			var gr_task = new GlideRecordSecure("x_153465_discovert_route_task_instance");
+			gr_task = new GlideRecordSecure("x_153465_discovert_route_task_instance");
 			if(gr_task.get(data.task_id)){
+				data.task_tree_sys_id = gr_task.getValue("u_task_tree");
 				// STRY0146507 - Certification Support- noted not changing, GlideRecord  cloned from OOTB widget
 				gr = new GlideRecord(data.table);
 				userCanSeeTask = true;
@@ -1585,17 +1594,22 @@ tbody tr:last-child {&#13;
 	var showDesc = false;
 	if(data.taskFilter=='TaskAndDescendents'){
 		showDesc = true;
-		filterDesc = 'u_all_ancestors_tasksCONTAINS' + data.task_id;
+		filterDesc = 'u_all_ancestors_tasksLIKE' + data.task_id;
 	}
 
 	// STRY0093948 - when a row is added or removed, trap the event from Tasker Data Table and update related list count	
 	if(filterDesc !='') {
 		if(data.task_id && data.task_id!=-1 &&
 			data.table == 'x_153465_discovert_route_task_instance') {
+				gr_task = new GlideRecordSecure("x_153465_discovert_route_task_instance");
+				if(gr_task.get(data.task_id)){
+					data.task_tree_sys_id = gr_task.getValue("u_task_tree");
+				}
 			// for subtasks on the task table, change the filter used//		
 			data.filter = data.filter +					
 				"^NQ" +
-				data.parentField + '.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksCONTAINS' + data.task_id +					
+				'u_task_tree=' + data.task_tree_sys_id + '^' +
+				'u_all_ancestors_tasksLIKE' + data.task_id +					
 				"^OR" + additionalFilter;
 		} else if(data.table=='x_153465_discovert_activity_view'){
 			if(data.task_id && data.task_id!=-1){
@@ -1604,7 +1618,9 @@ tbody tr:last-child {&#13;
 					// DFCT0011345
 					data.filter = 'taskid_sys_id=' + data.task_id + 
 						additionalFilter +
-						'^NQtaskid_parent.ref_x_153465_discovert_route_task_instance.u_all_ancestors_tasksLIKE' + data.task_id +
+						'^NQ' +
+						'taskid_u_task_tree=' + data.task_tree_sys_id + '^' +
+						'taskid_u_all_ancestors_tasksLIKE' + data.task_id +
 						additionalFilter;
 				} else {
 					data.filter = 'taskid_sys_id=' + data.task_id +
@@ -1613,7 +1629,9 @@ tbody tr:last-child {&#13;
 			}
 		} else {
 			// add the descendants filter to the field
-			data.filter = data.filter + "^OR" + data.parentField + "." + filterDesc; 
+			data.filter = data.filter + "^OR" + 
+			data.parentField + '.u_task_tree=' + data.task_tree_sys_id + '^' +
+			data.parentField + "." + filterDesc; 
 		}
 	}
 
@@ -1991,14 +2009,14 @@ tbody tr:last-child {&#13;
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2018-07-04 20:41:33</sys_created_on>
         <sys_id>1fe908a64fc71300d236eb118110c78a</sys_id>
-        <sys_mod_count>1606</sys_mod_count>
+        <sys_mod_count>1615</sys_mod_count>
         <sys_name>Tasker Data Table</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_1fe908a64fc71300d236eb118110c78a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-01-26 18:17:42</sys_updated_on>
+        <sys_updated_on>2024-09-30 17:43:02</sys_updated_on>
         <template><![CDATA[<div class="flex-column flex-grow dtech-overflow-hidden"
      ng-class="{'dtech-modal-relative':data.isModal==true && data.isTopWidget==true}">
 
@@ -2008,16 +2026,16 @@ tbody tr:last-child {&#13;
     <div class="panel-heading form-inline dtech-panel-heading-min-height-standard dtech-flex-shrink-0"
          ng-hide="options.hide_header">
       <!-- panel search section -->
-        <div class="flex-row justify-end" ng-if="options.show_keywords">
-          <form ng-submit="setSearch(true)">
-            <div class="input-group">
-              <input type="text" name="datatable-search" ng-model="data.keywords" class="form-control" placeholder="${Keyword Search}">
-              <span class="input-group-btn">
-                <button name="search" class="btn btn-default" type="submit" aria-label="${Search}"><span class="glyphicon glyphicon-search"></span></button>
-              </span>
-            </div>
-          </form>
-        </div>
+      <div class="flex-row justify-end" ng-if="options.show_keywords">
+        <form ng-submit="setSearch(true)">
+          <div class="input-group">
+            <input type="text" name="datatable-search" ng-model="data.keywords" class="form-control" placeholder="${Keyword Search}">
+            <span class="input-group-btn">
+              <button name="search" class="btn btn-default" type="submit" aria-label="${Search}"><span class="glyphicon glyphicon-search"></span></button>
+            </span>
+          </div>
+        </form>
+      </div>
       
       <div class="dtech-container-flex-row-space-between">
         
@@ -2042,13 +2060,13 @@ tbody tr:last-child {&#13;
           </span>
         </span>
         <!-- STRY0135710 - filter buttons for All, Open, Completed -->
-        <div class="flex-row"
+        <div class="flex-row dtech-pad-all-5"
              ng-if="data.showTableFilterButtons">
           <div class="dtech-table-filter-container">
-            <button class="dtech-table-filter-btn dtech-btn btn" 
+            <button class="dtech-table-filter-btn btn" 
                     uib-tooltip="${Show results for open and closed tasks}"
                     tooltip-placement="auto top"
-                    ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='showAll'}" 
+                    ng-class="{'dtech-table-filter-btn-focus': data.tableFilterButtonSelected=='showAll'}" 
                     ng-click="tableFilterButtonSelected('showAll')"> 
               <div class="flex-row flex-nowrap"> 
                 <div class="dtech-table-filter-label ng-binding">
@@ -2061,10 +2079,10 @@ tbody tr:last-child {&#13;
             </button>
           </div>
           <div class="dtech-table-filter-container">
-            <button class="dtech-table-filter-btn dtech-btn btn" 
+            <button class="dtech-table-filter-btn btn" 
                     uib-tooltip="${Show results for currently open tasks only}"
                     tooltip-placement="auto top"
-                    ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='openTasks'}" 
+                    ng-class="{'dtech-table-filter-btn-focus': data.tableFilterButtonSelected=='openTasks'}" 
                     ng-click="tableFilterButtonSelected('openTasks')"> 
               <div class="flex-row flex-nowrap"> 
                 <div class="dtech-table-filter-label ng-binding">
@@ -2077,10 +2095,10 @@ tbody tr:last-child {&#13;
             </button>
           </div>
           <div class="dtech-table-filter-container">
-            <button class="dtech-table-filter-btn dtech-btn btn" 
+            <button class="dtech-table-filter-btn btn" 
                     uib-tooltip="${Show results for closed tasks only}"
                     tooltip-placement="auto top"
-                    ng-class="{'dtech-btn-focus': data.tableFilterButtonSelected=='completedTasks'}" 
+                    ng-class="{'dtech-table-filter-btn-focus': data.tableFilterButtonSelected=='completedTasks'}" 
                     ng-click="tableFilterButtonSelected('completedTasks')"> 
               <div class="flex-row flex-nowrap"> 
                 <div class="dtech-table-filter-label ng-binding">
