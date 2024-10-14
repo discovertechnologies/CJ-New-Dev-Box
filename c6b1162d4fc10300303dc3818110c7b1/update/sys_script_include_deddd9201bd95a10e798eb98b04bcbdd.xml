@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_153465_discovert.business_rule_task</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>2.8.5 | 2024-10-14 | RAJ  | STRY0154923 - Workflow Issue - move all updates that require additional processing into an event.  Remove setWorkflow(false) from task object&#13;
+This contains business rules for the task table&#13;
+- The first iteration handles all after update calls to process child, parent and task changes related to an update&#13;
+- The first iteration handles the initial call from after insert update to build an object passed into an after update event&#13;
+- The first iteration also contains the functions called when the event triggers&#13;
+&#13;
+- A future iteration will move the before methods into here so the business rules are managed in a single place </description>
+        <name>business_rule_task</name>
+        <script><![CDATA[var business_rule_task = Class.create();
+business_rule_task.prototype = {
+    initialize: function() {
+		this.taskerHelpers = new TaskerHelpers();
+		this.tcs = new TaskerCommonScriptingMethods();
+		this.taskTableName = "x_153465_discovert_route_task_instance";
+    },
+
+	afterInsertUpdateDelete: function(_current, _previous){
+		var processUpdate = false;
+		var objAfterChanges = {};
+		var hasChildren = _current.calchaschildren > 0;
+		var hasParent = _current.getDisplayValue("parent") != "";
+		var stateChanges = _current.state != _previous.state;
+		objAfterChanges.taskId = _current.getUniqueValue();
+		if(_current.operation == "update"){
+			var hasExtendedSuspenseDate = _current.getDisplayValue("extended_suspense_date") != "" && _current.suspense_change;
+			var taskingAuthorityChange = _current.getDisplayValue("tasking_authority") != "" && _current.tasking_authority != _previous.tasking_authority;
+			var primaryOfficeChange = _current.getDisplayValue("primary_office") != "" && _current.primary_office != _previous.primary_office;
+			var taskOrderChange = _current.task_order != _previous.task_order;
+
+			// was Tasker - onChange Suspense Date
+			objAfterChanges.extended_suspense_changes = hasExtendedSuspenseDate && hasChildren;
+			objAfterChanges.tasking_authority_changes = hasChildren && taskingAuthorityChange;
+			objAfterChanges.primary_office_changes = hasChildren && primaryOfficeChange;
+			objAfterChanges.task_order_changes = hasChildren && taskOrderChange;
+			objAfterChanges.previous_state = _previous.state;
+
+			objAfterChanges.task_owner_changes = _current.u_wait_for_subtasks_to_finish.toString()=='true' && (_current.u_task_requester != _previous.u_task_requester);
+
+			processUpdate = objAfterChanges.extended_suspense_changes || objAfterChanges.tasking_authority_changes || 
+				objAfterChanges.primary_office_changes || objAfterChanges.task_order_changes || objAfterChanges.task_owner_changes;
+		}
+
+		// needs to be in separate as these need to be run on both insert and update
+		if(_current.operation == "update" || _current.operation == "insert") {
+			// check parent counts
+			if(hasParent && stateChanges){
+				// get value of progress progress_of_sub_tasks
+				var stateSubTaskProgress = getSubTaskProgress.getSubTaskProgress(_current.parent);
+				if(_current.parent.state != stateSubTaskProgress){
+					objAfterChanges.parent_stateSubTaskProgress = stateSubTaskProgress;
+				}
+				var parentActiveSubtasks = parseInt(this.taskerHelpers.getCountActiveSubTasks(_current.getValue("parent")));
+				if(parseInt(_current.parent.u_active_subtasks) != parentActiveSubtasks){
+					objAfterChanges.parentActiveSubtasks = parentActiveSubtasks;
+				}
+
+			}
+			var newTaskStatus = new TaskerStatus().getUpdatedTaskerStatus(_current);
+			objAfterChanges.status_changes = newTaskStatus != _current.getValue("status");
+
+			objAfterChanges.assigned_member_changes = _current.assigned_to != _previous.assigned_to;
+			if(objAfterChanges.assigned_member_changes){
+				// only add values if they have a display value
+				if(_current.getDisplayValue("assigned_to")!=""){
+					objAfterChanges.current_assigned_to = _current.getValue("assigned_to");
+				}
+				if(_current.getDisplayValue("u_task_requester")!=""){
+					objAfterChanges.current_u_task_requester = _current.getValue("u_task_requester");
+				}
+				if(_current.getDisplayValue("originator")!=""){
+					objAfterChanges.current_originator = _current.getValue("originator");
+				}
+				if(_previous.getDisplayValue("assigned_to")!=""){
+					objAfterChanges.previous_assigned_to = _previous.getValue("assigned_to");
+				}
+			}
+			processUpdate = processUpdate || objAfterChanges.parent_stateSubTaskProgress != undefined || 
+					objAfterChanges.parentActiveSubtasks != undefined || objAfterChanges.status_changes || objAfterChanges.assigned_member_changes;
+		}
+
+		if(_current.operation == "delete"){
+			objAfterChanges.deleteChildren = true;
+			processUpdate = processUpdate || hasChildren;
+		}
+
+		if(_current.operation == "delete" || _current.operation == "insert"){
+			objAfterChanges.parent_child_count_changes = hasParent;
+			processUpdate = processUpdate || objAfterChanges.parent_child_count_changes;
+		}
+
+		if(processUpdate){
+			var strObjAfterChanges = new global.JSON.encode(objAfterChanges);
+			// raise event here
+			gs.eventQueue("x_153465_discovert.TaskProcessingEvent",_current, strObjAfterChanges, '');
+		}
+	},
+
+	processAfterInserUpdateDelete: function(objAFterChanges){
+		var gr_task = new GlideRecord("x_153465_discovert_route_task_instance");
+		if(gr_task.get("sys_id", objAFterChanges.taskId)){
+			// check for children
+			var hasChildren = gr_task.calchaschildren > 0;
+			var hasParent = gr_task.getDisplayValue("parent") != "";
+			if(hasChildren){
+				this._processChildUpdates(gr_task, objAFterChanges);
+				this._processTaskOrderChange(gr_task, objAFterChanges);
+			}
+			if(hasParent){
+				this._processParentUpdates(gr_task, objAFterChanges);
+			}
+
+			// make any changes to the current task that happen after updates
+			this._processCurrentTaskUpdates(gr_task, objAFterChanges);
+
+		}
+	},
+
+	_processChildUpdates: function(gr_task, objAfterChanges){
+		var gr_child = new GlideRecord('x_153465_discovert_route_task_instance');
+		//Query children tables for all records with current parent.
+		gr_child.addQuery('parent', objAfterChanges.taskId);
+		gr_child.query();
+		if(objAfterChanges.deleteChildren){
+			gr_child.deleteMultiple();
+		} else {
+			while (gr_child.next()){
+				var updateChild = false;
+				if(objAfterChanges.extended_suspense_changes){
+					this._updateChildSupenseDate(gr_task, gr_child);
+					updateChild = true;
+				}
+				if(objAfterChanges.tasking_authority_changes){
+					gr_child.tasking_authority = gr_task.tasking_authority;
+					updateChild = true;
+				}
+				if(objAfterChanges.primary_office_changes){
+					gr_child.primary_office = gr_task.primary_office;
+					updateChild = true;
+				}
+				
+				if(objAfterChanges.assigned_member_changes){
+					if(objAfterChanges.current_assigned_to){
+						if(gr_child.u_wait_for_subtasks_to_finish.toString()=='true'){
+							gr_child.u_task_requester = objAfterChanges.current_u_task_requester;
+						}else{
+							gr_child.u_task_requester = objAfterChanges.current_assigned_to;
+						}
+					} else {
+						// STRY0076596 - when Task has u_wait_for_subtasks_to_finish checked set task owner to parent task owner or originator
+						if(gr_child.u_wait_for_subtasks_to_finish.toString()=='true'){
+							gr_child.u_task_requester = objAfterChanges.current_u_task_requester;
+						}else{
+							// STRY0078378 - if task owner of parent not set, set the owner of the subtask to the originator of the parent
+							if (objAfterChanges.current_u_task_requester){
+								gr_child.u_task_requester = objAfterChanges.current_u_task_requester;
+							} else {
+								gr_child.u_task_requester = objAfterChanges.current_originator;
+							}
+						}
+					}
+					updateChild = true;
+				}
+				
+				if(objAfterChanges.task_owner_changes && gr_child.u_wait_for_subtasks_to_finish.toString()=='true'){
+					gr_child.u_task_requester = gr_task.u_task_requester;
+					updateChild = true;
+				}
+
+				// only update child once after all processing is complete
+				if(updateChild){
+					gr_child.update();
+				}
+			}			
+		}
+	},
+
+	_processCurrentTaskUpdates: function(gr_task, objAfterChanges){
+		var updateCurrentTask = false;
+		if(objAfterChanges.status_changes){
+			var newTaskStatus = new TaskerStatus().getUpdatedTaskerStatus(_current);
+			gr_task.status = newTaskStatus;
+			updateCurrentTask = true;
+		}
+		if(updateCurrentTask){
+			// all updates of original task happen after this in the business rules
+			gr_task.setWorkflow(false);
+			gr_task.update();
+		}
+		// clear any outstanding reassignment requests if assigned member changes
+		if(objAfterChanges.assigned_member_changes && objAfterChanges.previous_assigned_to){
+			this._clearReassignmentRequestsWhenAssignedMemberChanges(gr_task, objAfterChanges);
+		}
+	},
+
+	_clearReassignmentRequestsWhenAssignedMemberChanges: function(gr_task, objAfterChanges){
+		//close any open requests from the previous assigned member
+		this.tcs.queryRelated('x_153465_discovert_tasker_requests',
+						[{"parent":gr_task.getUniqueValue()}, {"u_status": "In progress"}, {"u_requested_by": objAfterChanges.previous_assigned_to}], 
+						function(record){
+							record.u_request_comments = gs.getMessage('Tasker - This task has been reassigned to a different user');
+							record.u_responded = new GlideDateTime();
+							record.u_responded_by=gs.getUserID();
+							record.u_response = gs.getMessage('Tasker - This task has been reassigned to a different user');
+							record.u_status = "Completed";
+							record.setWorkflow(false);
+							record.update();
+							});
+	},
+
+	_processParentUpdates: function(gr_task, objAFterChanges){
+		var upddateParent=false;
+		var msg = "";
+		var gr_parent = new GlideRecord('x_153465_discovert_route_task_instance');
+		if(gr_parent.get("sys_id", gr_task.getValue("parent"))){
+			if(objAFterChanges.stateSubTaskProgress != undefined){
+				gr_parent.progress_of_sub_tasks = objAFterChanges.parent_stateSubTaskProgress;
+				upddateParent = true;
+			}
+			if(objAfterChanges.parentActiveSubtasks != undefined){
+				gr_parent.u_active_subtasks = objAfterChanges.parentActiveSubtasks;
+				msg = 'Tasker: Total number of active subtasks updated' + objAfterChanges.parentActiveSubtasks;
+				upddateParent = true;
+			}
+
+			if(objAfterChanges.parent_child_count_changes==true){
+				// find new child count - this is AFTER insert / delete
+				gr_parent.calchaschildren = this._calculateChildren(gr_parent);
+				
+				// STRY0084582 
+				gr_parent.state = this.taskerHelpers.getUpdatedState(gr_parent);
+				msg = 'Tasker - number of children changed';  // override message above
+				upddateParent = true;
+			}
+			if(upddateParent){
+				gr_parent.update(msg);
+			}
+		}
+	},
+
+	_calculateChildren: function (gr_parent){
+		// find new child count - this is AFTER insert / delete
+		var countChildren =new GlideAggregate('x_153465_discovert_route_task_instance');
+		countChildren.addQuery('parent',gr_parent.getUniqueValue());
+		countChildren.addAggregate('COUNT');
+		countChildren.query();
+		var numChildren = 0;
+		if(countChildren.next()) 
+			numChildren = countChildren.getAggregate('COUNT');
+		return numChildren;
+	},
+
+	_processTaskOrderChange: function(gr_task, objAFterChanges){
+		if(objAFterChanges.task_order_changes){
+			// STRY0076605 - check to see if task is in wait state due to task order
+			gr_task.state = this.taskerHelpers.getUpdatedState(gr_task);
+
+			// if this task is paused by order by, pause all children of the task
+			// DFCT0010884
+			if(gr_task.state == -3 && !TaskerHelper.isTaskOrderOfTaskActive(gr_task)){
+				TaskerHelper.pauseOrder(gr_task);
+			} else if (objAFterChanges.previous_state == -3 && TaskerHelper.isTaskOrderOfTaskActive(gr_task)){
+				TaskerHelper.startOrder(gr_task);
+			}
+		}
+	},
+
+	_updateChildSupenseDate: function(gr_task, gr_child){
+		//Setup GlideDateTime
+		var gDate = new GlideDateTime(gr_child.extended_suspense_date);
+		//Determine the ype of change.
+		if (gr_task.suspense_change_type == "percent") {
+			var changeInPercent = parseFloat(gr_task.suspense_change);
+			gDate.addSeconds(changeInPercent * (gDate.getNumericValue()/1000));
+			gr_child.extended_suspense_date = gDate.getDate();
+		} else if (gr_task.suspense_change_type == "days") {
+			if (gr_task.extended_suspense_date < gr_task.suspense_date) {
+				gDate.addDaysUTC(gr_task.suspense_change * -1);
+				gr_child.extended_suspense_date = gDate.getDate();
+			} else if (gr_task.extended_suspense_date > gr_task.suspense_date) {
+				gDate.addDaysUTC(gr_task.suspense_change);
+				gr_child.extended_suspense_date = gDate.getDate();
+			}
+		}
+	},
+
+    type: 'business_rule_task'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>rjoy</sys_created_by>
+        <sys_created_on>2024-10-14 00:15:55</sys_created_on>
+        <sys_id>deddd9201bd95a10e798eb98b04bcbdd</sys_id>
+        <sys_mod_count>18</sys_mod_count>
+        <sys_name>business_rule_task</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_script_include_deddd9201bd95a10e798eb98b04bcbdd</sys_update_name>
+        <sys_updated_by>rjoy</sys_updated_by>
+        <sys_updated_on>2024-10-14 21:07:32</sys_updated_on>
+    </sys_script_include>
+</record_update>

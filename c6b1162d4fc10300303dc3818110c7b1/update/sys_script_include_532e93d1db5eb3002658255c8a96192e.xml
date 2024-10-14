@@ -5,40 +5,41 @@
         <api_name>x_153465_discovert.TaskerStatus</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description/>
+        <description>2.8.5 | 2024-10-14 | RAJ  | STRY0154923 - Workflow Issue - move all updates that require additional processing into an event.  Remove setWorkflow(false) from task object</description>
         <name>TaskerStatus</name>
         <script><![CDATA[// Copyrights belong to Discover Technologies LLC. © 2021 Discover Technologies LLC
 /* Special License Rights
 *  The Government's rights to use, display, or disclose this software are restricted.
 *  Any reproduction of computer software, computer software documentation,
-*  or portions thereof marked with this legend must also reproduce the markings. 
+*  or portions thereof marked with this legend must also reproduce the markings. */
 // 2.8.1 | 2023-04-07 | raj | STRY0137371 - Icons to Represent Status
-*/
+// 2.8.5 | 2024-10-14 | RAJ  | STRY0154923 - Workflow Issue - move all updates that require additional processing into an event.  Remove setWorkflow(false) from task object
 // Script Continued Below
 var TaskerStatus = Class.create();
 TaskerStatus.prototype = {
 	initialize: function() {
 	},
 	
-	// STRY0137371
-	getStatusAndReason: function(task){
+	getStatusAndReason: function(gr_task){
 		var status_and_reason = {};
-		var daysBeforeSuspenseDateTaskStatusIsWarning = gs.getProperty("x_153465_discovert.#DaysBeforeSuspenseDateTaskStatusIsWarning");
+		var daysBeforeSuspenseDateTaskStatusIsWarning = gs.getProperty("x_153465_discovert.#DaysBeforeSuspenseDateTaskStatusIsWarning");		
 		var now = new GlideDateTime();
 		var dateStatus = "";
 		var dateMsg="";
 		var riskStatus = "";
-		var riskMsg = "";
-		var newTaskStatus = "";
+		var riskMsg = "";		
+		var newTaskStatus = "";   //STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
 		var newReason = "";
-		if(!task.suspense_date.nil()){
+
+		// RAJ 2018-03-13 check supsense date before using
+		if(!gr_task.suspense_date.nil()){
 			// STRY0102134 - NOTE: below warning hours is really warning days.  The field name is hours, but the label is clearly days
 			var warningStartDate = new GlideDate();
-
+			
 			var taskOU = null;
-			if(task.getDisplayValue('primary_office') + '' == ''){
+			if(gr_task.getDisplayValue('primary_office') + '' == ''){
 				taskOU = new GlideRecord('x_153465_discovert_discover_office_hierarchy');
-				if(taskOU.get(task.getValue('primary_office'))){
+				if(taskOU.get(gr_task.getValue('primary_office'))){
 					// use OU below
 				} else {
 					taskOU = null;
@@ -46,26 +47,23 @@ TaskerStatus.prototype = {
 			}
 
 			var tdc = new TaskerDurationCalculator();
-			if(!task.warning_hours.nil()){
+			if(!gr_task.warning_hours.nil()){
 				// count from today the number of warning days
-				warningStartDate = tdc.calculateDateOfAddedBusinessDays(taskOU, task.warning_hours, warningStartDate);
-			}
-			else{
+				warningStartDate = tdc.calculateDateOfAddedBusinessDays(taskOU, gr_task.warning_hours, warningStartDate);
+			} else{
 				warningStartDate = tdc.calculateDateOfAddedBusinessDays(taskOU, daysBeforeSuspenseDateTaskStatusIsWarning, warningStartDate);
 			}
 			var WarningStartTime = warningStartDate.getValue();
 
-			if (now > task.suspense_date){
+			if (now > gr_task.suspense_date){
 				dateStatus = "Overdue";
 				dateMsg = gs.getMessage("Tasker - Task is Overdue");
-			}
-
-			else {
+			} else {
 				// STRY0102134 - above we are adding the number of warning days to today.
 				//               This line of code was changed to compare the suspense date to the warning days instead of now to warning days since we are counting forward instead of backward
-				if (WarningStartTime > task.suspense_date) {
+				if (WarningStartTime > gr_task.suspense_date) {
 					dateStatus = "Warning";
-					dateMsg = gs.getMessage("Tasker - Task is due in under {0} days", [task.warning_hours]);
+					dateMsg = gs.getMessage("Tasker - Task is due in under {0} days", [gr_task.warning_hours]);
 				}else{
 					dateStatus = "Projected on time";
 					dateMsg = "Projected on time";
@@ -75,29 +73,25 @@ TaskerStatus.prototype = {
 			dateStatus = "No Suspense Date";
 		}
 		// Pull Risk Information
-		if(task.risk_flag==2){
+		if(gr_task.risk_flag==2){
 			riskStatus = "High Risk";
 			riskMsg = gs.getMessage("Tasker - Task has been marked High Risk");
-		}
-		else if (task.risk_flag==1) {
+		} else if (gr_task.risk_flag==1) {
 			riskStatus = "Medium Risk";
 			riskMsg = gs.getMessage("Tasker - Task has been marked Medium Risk");
-		}
-		else if (task.risk_flag==0) {
+		} else if (gr_task.risk_flag==0) {
 			riskStatus = "Low Risk";
 		}
-
+	
 		//STRY0071865 | 2.5.13 : Set new task status to variable
 		if ((dateStatus=="Overdue")  || (riskStatus=="High Risk")){
-			newTaskStatus = "Critical";
-
+			newTaskStatus = "Critical";	
 		} else if ((dateStatus=="Warning")  || (riskStatus=="Medium Risk")){
 			newTaskStatus = "Warning";
-		}
-		else {
+		} else {
 			newTaskStatus = "Projected on time";
 		}
-		
+
 		if(dateMsg != ""){
 			newReason = dateMsg;
 		}
@@ -113,19 +107,13 @@ TaskerStatus.prototype = {
 
 		return status_and_reason;
 	},
-	
+
 	updateTaskerStatus : function(strquery){
 		var statusAndReason = {};
 		var newTaskStatus = "";   //STRY0071865 & STRY0074351 | 2.5.13 : Variable to get previous status and to be able to send the notification ONLY when Status changes from "Projected on Time" to "Warning" or from "Warning" to "Critical"
-		
-		//Added Notifications
-		//KB 4/17/2019 - Modified active
-	
 		var gr = new GlideRecord('x_153465_discovert_route_task_instance');
 		if (!strquery) gr.addEncodedQuery('active=true^status!=Critical'); else gr.addEncodedQuery(strquery);
-		gr.query();
-		var count=0;
-		
+		gr.query();			
 		while(gr.next()) {
 			statusAndReason = this.getStatusAndReason(gr);
 			newTaskStatus = statusAndReason.status;
@@ -136,20 +124,20 @@ TaskerStatus.prototype = {
 			}
 		}
 	},
-
+		
 		type: 'TaskerStatus'
 	};]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2019-06-27 00:36:37</sys_created_on>
         <sys_id>532e93d1db5eb3002658255c8a96192e</sys_id>
-        <sys_mod_count>58</sys_mod_count>
+        <sys_mod_count>56</sys_mod_count>
         <sys_name>TaskerStatus</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_532e93d1db5eb3002658255c8a96192e</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2023-04-09 04:24:08</sys_updated_on>
+        <sys_updated_on>2024-10-14 22:06:57</sys_updated_on>
     </sys_script_include>
 </record_update>

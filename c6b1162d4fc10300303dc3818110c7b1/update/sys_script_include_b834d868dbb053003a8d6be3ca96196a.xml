@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>Includes Task related server scripts:&#13;
+2.8.5 | 2024-10-14 | RAJ  | STRY0154923 - Workflow Issue - move all updates that require additional processing into an event.  Remove setWorkflow(false) from task object&#13;
 2.8.4x - Patch | 2024-04-09 | raj | DFCT0012386 - Fix Script "OU Abbreviation Update Tasker Numb" cannot be run from the Background Script in for any customer (allow all scopes)&#13;
 2.8.3 | 2023-05-24 |raj |  STRY0140267 - Task Administrator Email &#13;
 2.8.0 | 2022-09-21| raj  |  STRY0130088 - 2.8 Certifier requested updates - 6. isLoading in OnChange ClientScript&#13;
@@ -881,6 +882,23 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
 			}
 		},
 		
+		getCountActiveSubTasks: function(parent_id){
+			var numberActiveSubtasks = 0;
+			// RJ -Tasker 2.5 P2 - Certification
+			var grTask = new GlideRecord('x_153465_discovert_route_task_instance');
+			if(grTask.get(parent_id)){
+				// find new child count - this is AFTER insert / delete
+				var countSubtasks = new GlideAggregate('x_153465_discovert_route_task_instance');
+				countSubtasks.addQuery('parent',parent_id);
+				// STRY0122878 - added draft to the list of states not to count when counting active 
+				countSubtasks.addQuery('state', "NOT IN", "3,4,7, -6");
+				countSubtasks.addAggregate('COUNT');
+				countSubtasks.query();
+				if(countSubtasks.next())
+					numberActiveSubtasks = countSubtasks.getAggregate('COUNT');
+			}
+			return numberActiveSubtasks;
+		},
 	
 		//---------------------------------------------------------------------------------------------
 		// v2.7 // STRY0105125 STRY0105845
@@ -1152,6 +1170,21 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
 			}
 			return answer;
 		},
+
+		getTaskRecordAncestors: function(gr_task){
+			// if we are at the top record, return the id of this record
+			if (gr_task.parent.nil()) {
+				// top record is just retured
+				return gr_task.getUniqueValue();
+			} else {
+				// if not at the top, get the next parent
+				var gr_parent = new GlideRecord('x_153465_discovert_route_task_instance');
+				if(gr_parent.get(grTask.getValue("parent"))){
+					// put ancestor records before parent record, top record will be added when we hit the top record
+					return this.getAncestors(gr_parent) + "," + gr_parent.getUniqueValue();
+				}
+			}
+		},
 		
 		getSubTaskProgress: function(parentId) {
 			var stateSubTaskProgress = -5;
@@ -1245,13 +1278,13 @@ formData.state = (g_form.isNewRecord()) ? "New" : g_form.getValue('state')+'';
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2018-03-08 22:01:13</sys_created_on>
         <sys_id>b834d868dbb053003a8d6be3ca96196a</sys_id>
-        <sys_mod_count>316</sys_mod_count>
+        <sys_mod_count>319</sys_mod_count>
         <sys_name>TaskerHelpers</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_b834d868dbb053003a8d6be3ca96196a</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-04-09 14:22:32</sys_updated_on>
+        <sys_updated_on>2024-10-14 21:10:59</sys_updated_on>
     </sys_script_include>
 </record_update>
