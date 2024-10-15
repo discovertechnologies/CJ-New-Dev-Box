@@ -22,13 +22,14 @@ business_rule_task.prototype = {
     },
 
 	afterInsertUpdateDelete: function(_current, _previous){
+		var operation = _current.operation();
 		var processUpdate = false;
 		var objAfterChanges = {};
 		var hasChildren = _current.calchaschildren > 0;
 		var hasParent = _current.getDisplayValue("parent") != "";
 		var stateChanges = _current.state != _previous.state;
 		objAfterChanges.taskId = _current.getUniqueValue();
-		if(_current.operation == "update"){
+		if(operation == "update"){
 			var hasExtendedSuspenseDate = _current.getDisplayValue("extended_suspense_date") != "" && _current.suspense_change;
 			var taskingAuthorityChange = _current.getDisplayValue("tasking_authority") != "" && _current.tasking_authority != _previous.tasking_authority;
 			var primaryOfficeChange = _current.getDisplayValue("primary_office") != "" && _current.primary_office != _previous.primary_office;
@@ -48,11 +49,11 @@ business_rule_task.prototype = {
 		}
 
 		// needs to be in separate as these need to be run on both insert and update
-		if(_current.operation == "update" || _current.operation == "insert") {
+		if(operation == "update" || operation == "insert") {
 			// check parent counts
 			if(hasParent && stateChanges){
 				// get value of progress progress_of_sub_tasks
-				var stateSubTaskProgress = getSubTaskProgress.getSubTaskProgress(_current.parent);
+				var stateSubTaskProgress = this.taskerHelpers.getSubTaskProgress(_current.parent);
 				if(_current.parent.state != stateSubTaskProgress){
 					objAfterChanges.parent_stateSubTaskProgress = stateSubTaskProgress;
 				}
@@ -85,20 +86,22 @@ business_rule_task.prototype = {
 					objAfterChanges.parentActiveSubtasks != undefined || objAfterChanges.status_changes || objAfterChanges.assigned_member_changes;
 		}
 
-		if(_current.operation == "delete"){
+		if(operation == "delete"){
 			objAfterChanges.deleteChildren = true;
 			processUpdate = processUpdate || hasChildren;
 		}
 
-		if(_current.operation == "delete" || _current.operation == "insert"){
+		if(operation == "delete" || operation == "insert"){
 			objAfterChanges.parent_child_count_changes = hasParent;
 			processUpdate = processUpdate || objAfterChanges.parent_child_count_changes;
 		}
 
 		if(processUpdate){
-			var strObjAfterChanges = new global.JSON.encode(objAfterChanges);
+			var strObjAfterChanges = new global.JSON().encode(objAfterChanges);
 			// raise event here
 			gs.eventQueue("x_153465_discovert.TaskProcessingEvent",_current, strObjAfterChanges, '');
+			// Use this for Testing
+			//this.processAfterInserUpdateDelete(objAfterChanges);
 		}
 	},
 
@@ -214,31 +217,30 @@ business_rule_task.prototype = {
 							});
 	},
 
-	_processParentUpdates: function(gr_task, objAFterChanges){
-		var upddateParent=false;
+	_processParentUpdates: function(gr_task, objAfterChanges){
+		var updateParent=false;
 		var msg = "";
 		var gr_parent = new GlideRecord('x_153465_discovert_route_task_instance');
 		if(gr_parent.get("sys_id", gr_task.getValue("parent"))){
-			if(objAFterChanges.stateSubTaskProgress != undefined){
-				gr_parent.progress_of_sub_tasks = objAFterChanges.parent_stateSubTaskProgress;
-				upddateParent = true;
+			if(objAfterChanges.stateSubTaskProgress != undefined){
+				gr_parent.progress_of_sub_tasks = objAfterChanges.parent_stateSubTaskProgress;
+				updateParent = true;
 			}
 			if(objAfterChanges.parentActiveSubtasks != undefined){
 				gr_parent.u_active_subtasks = objAfterChanges.parentActiveSubtasks;
 				msg = 'Tasker: Total number of active subtasks updated' + objAfterChanges.parentActiveSubtasks;
-				upddateParent = true;
+				updateParent = true;
 			}
 
 			if(objAfterChanges.parent_child_count_changes==true){
 				// find new child count - this is AFTER insert / delete
 				gr_parent.calchaschildren = this._calculateChildren(gr_parent);
-				
 				// STRY0084582 
 				gr_parent.state = this.taskerHelpers.getUpdatedState(gr_parent);
 				msg = 'Tasker - number of children changed';  // override message above
-				upddateParent = true;
+				updateParent = true;
 			}
-			if(upddateParent){
+			if(updateParent){
 				gr_parent.update(msg);
 			}
 		}
@@ -296,13 +298,13 @@ business_rule_task.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2024-10-14 00:15:55</sys_created_on>
         <sys_id>deddd9201bd95a10e798eb98b04bcbdd</sys_id>
-        <sys_mod_count>18</sys_mod_count>
+        <sys_mod_count>29</sys_mod_count>
         <sys_name>business_rule_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_deddd9201bd95a10e798eb98b04bcbdd</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-10-14 21:07:32</sys_updated_on>
+        <sys_updated_on>2024-10-15 17:14:11</sys_updated_on>
     </sys_script_include>
 </record_update>
