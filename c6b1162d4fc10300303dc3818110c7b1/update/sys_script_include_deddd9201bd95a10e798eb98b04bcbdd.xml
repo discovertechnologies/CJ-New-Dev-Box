@@ -28,7 +28,10 @@ business_rule_task.prototype = {
 		var objAfterChanges = {};
 		var hasChildren = _current.calchaschildren > 0;
 		var hasParent = _current.getDisplayValue("parent") != "";
-		var stateChanges = _current.state != _previous.state;
+		if(hasParent){
+			objAfterChanges.parent_id = _current.getValue("parent");
+		}
+		objAfterChanges.operation = operation;
 		objAfterChanges.taskId = _current.getUniqueValue();
 		if(operation == "update"){
 			var hasExtendedSuspenseDate = _current.getDisplayValue("extended_suspense_date") != "" && _current.suspense_change;
@@ -51,6 +54,7 @@ business_rule_task.prototype = {
 
 		// needs to be in separate as these need to be run on both insert and update
 		if(operation == "update" || operation == "insert") {
+			var stateChanges = _current.state != _previous.state;
 			// check parent counts
 			if(hasParent && stateChanges){
 				// get value of progress progress_of_sub_tasks
@@ -101,29 +105,44 @@ business_rule_task.prototype = {
 		if(processUpdate){
 			var strObjAfterChanges = new global.JSON().encode(objAfterChanges);
 			// raise event here
-			gs.eventQueue("x_153465_discovert.TaskProcessingEvent",_current, strObjAfterChanges, '');
+			gs.eventQueue("x_153465_discovert.TaskProcessingEvent", null, strObjAfterChanges, '');
 			// Use this for Testing
 			//this.processAfterInserUpdateDelete(objAfterChanges);
 		}
 	},
 
-	processAfterInserUpdateDelete: function(objAFterChanges){
-		var gr_task = new GlideRecord("x_153465_discovert_route_task_instance");
-		if(gr_task.get("sys_id", objAFterChanges.taskId)){
-			// check for children
-			var hasChildren = gr_task.calchaschildren > 0;
-			var hasParent = gr_task.getDisplayValue("parent") != "";
-			if(hasChildren){
-				this._processChildUpdates(gr_task, objAFterChanges);
-				this._processTaskOrderChange(gr_task, objAFterChanges);
-			}
+	processAfterInserUpdateDelete: function(objAfterChanges){
+		hasParent = objAfterChanges.parent_id != undefined;
+		if(objAfterChanges.operation=="delete"){
+			this._deleteChildren(objAfterChanges)
 			if(hasParent){
-				this._processParentUpdates(gr_task, objAFterChanges);
+				this._processParentUpdates(objAfterChanges);
 			}
+		} else {
+			var gr_task = new GlideRecord("x_153465_discovert_route_task_instance");
+			if(gr_task.get("sys_id", objAfterChanges.taskId)){
+				// check for children
+				var hasChildren = gr_task.calchaschildren > 0;
+				if(hasChildren){
+					this._processChildUpdates(gr_task, objAfterChanges);
+					this._processTaskOrderChange(gr_task, objAfterChanges);
+				}
+				if(hasParent){
+					this._processParentUpdates(objAfterChanges);
+				}
+				// make any changes to the current task that happen after updates
+				this._processCurrentTaskUpdates(gr_task, objAfterChanges);
+			}
+		}
+	},
 
-			// make any changes to the current task that happen after updates
-			this._processCurrentTaskUpdates(gr_task, objAFterChanges);
-
+	_deleteChildren: function(objAfterChanges){
+		var gr_child = new GlideRecord('x_153465_discovert_route_task_instance');
+		//Query children tables for all records with current parent.
+		gr_child.addQuery('parent', objAfterChanges.taskId);
+		gr_child.query();
+		if(objAfterChanges.deleteChildren){
+			gr_child.deleteMultiple();
 		}
 	},
 
@@ -149,7 +168,6 @@ business_rule_task.prototype = {
 					gr_child.primary_office = gr_task.primary_office;
 					updateChild = true;
 				}
-				
 				if(objAfterChanges.assigned_member_changes){
 					if(objAfterChanges.current_assigned_to){
 						if(gr_child.u_wait_for_subtasks_to_finish.toString()=='true'){
@@ -172,12 +190,10 @@ business_rule_task.prototype = {
 					}
 					updateChild = true;
 				}
-				
 				if(objAfterChanges.task_owner_changes && gr_child.u_wait_for_subtasks_to_finish.toString()=='true'){
 					gr_child.u_task_requester = gr_task.u_task_requester;
 					updateChild = true;
 				}
-
 				// only update child once after all processing is complete
 				if(updateChild){
 					gr_child.update();
@@ -219,11 +235,11 @@ business_rule_task.prototype = {
 							});
 	},
 
-	_processParentUpdates: function(gr_task, objAfterChanges){
+	_processParentUpdates: function(objAfterChanges){
 		var updateParent=false;
 		var msg = "";
 		var gr_parent = new GlideRecord('x_153465_discovert_route_task_instance');
-		if(gr_parent.get("sys_id", gr_task.getValue("parent"))){
+		if(gr_parent.get("sys_id", objAfterChanges.parent_id)){
 			if(objAfterChanges.stateSubTaskProgress != undefined){
 				gr_parent.progress_of_sub_tasks = objAfterChanges.parent_stateSubTaskProgress;
 				updateParent = true;
@@ -233,7 +249,6 @@ business_rule_task.prototype = {
 				msg = 'Tasker: Total number of active subtasks updated' + objAfterChanges.parentActiveSubtasks;
 				updateParent = true;
 			}
-
 			if(objAfterChanges.parent_child_count_changes==true){
 				// find new child count - this is AFTER insert / delete
 				gr_parent.calchaschildren = this.taskerHelpers.calculateChildren(gr_parent);
@@ -248,8 +263,8 @@ business_rule_task.prototype = {
 		}
 	},
 
-	_processTaskOrderChange: function(gr_task, objAFterChanges){
-		if(objAFterChanges.task_order_changes){
+	_processTaskOrderChange: function(gr_task, objAfterChanges){
+		if(objAfterChanges.task_order_changes){
 			// STRY0076605 - check to see if task is in wait state due to task order
 			gr_task.state = this.taskerHelpers.getUpdatedState(gr_task);
 
@@ -257,7 +272,7 @@ business_rule_task.prototype = {
 			// DFCT0010884
 			if(gr_task.state == -3 && !TaskerHelper.isTaskOrderOfTaskActive(gr_task)){
 				TaskerHelper.pauseOrder(gr_task);
-			} else if (objAFterChanges.previous_state == -3 && TaskerHelper.isTaskOrderOfTaskActive(gr_task)){
+			} else if (objAfterChanges.previous_state == -3 && TaskerHelper.isTaskOrderOfTaskActive(gr_task)){
 				TaskerHelper.startOrder(gr_task);
 			}
 		}
@@ -288,13 +303,13 @@ business_rule_task.prototype = {
         <sys_created_by>rjoy</sys_created_by>
         <sys_created_on>2024-10-14 00:15:55</sys_created_on>
         <sys_id>deddd9201bd95a10e798eb98b04bcbdd</sys_id>
-        <sys_mod_count>46</sys_mod_count>
+        <sys_mod_count>50</sys_mod_count>
         <sys_name>business_rule_task</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sys_script_include_deddd9201bd95a10e798eb98b04bcbdd</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-10-22 21:15:53</sys_updated_on>
+        <sys_updated_on>2024-10-23 06:27:35</sys_updated_on>
     </sys_script_include>
 </record_update>
