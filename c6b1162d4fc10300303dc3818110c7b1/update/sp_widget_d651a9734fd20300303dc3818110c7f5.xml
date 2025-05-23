@@ -22,10 +22,12 @@
 
     var c = this;
     var twjs = x_153465_discovert.twJS;
-		// STRY0142161
-		var drag_drop = x_153465_discovert.DTech_gojs_drag_drop;
+	// STRY0156597 - set scope for allowing submit to be set on modal open and close
+	twjs.setScope($scope);
+	// STRY0142161
+	var drag_drop = x_153465_discovert.DTech_gojs_drag_drop;
 
-		var TREE_CONST;
+	var TREE_CONST;
     var modalObjects;
     var $go; // for conciseness in defining templates
     //  UI/UX - STRY0065140 - 2.5 Template List - FIX
@@ -41,7 +43,7 @@
     var watcher;
     // TREE FOOTER TOOLBAR
     var viewPortHeight = 0;
-		var selectionAdornment;
+	var selectionAdornment;
 	
     // DFCT0011119
     init();
@@ -49,7 +51,7 @@
     // DFCT0011119 - check to see if the tree is loaded, if not run a late check on URL 
     //               the Template Tab List widget does a set of the sys_id in the URL while loading
     function init() {
-			_initializeObjects();
+		_initializeObjects();
         if (c.data.table == "x_153465_discovert_discover_routing_template") {
             var search = $location.search();
             if (c.data.topParentTask_id != search.sys_id) {
@@ -67,6 +69,8 @@
     }
 
     function main() {
+				// STRY0156597 - set submitting to disable buttons
+				c.data.submitting=true;
         TREE_CONST = _loadTreeConstants();
 			
         $go = go.GraphObject.make; // for conciseness in defining templates
@@ -101,7 +105,9 @@
             }
             resetDiagram();
         }
-    }
+		// STRY0156597 - set submitting to disable buttons
+		c.data.submitting=false;
+}
 
 		function _initializeObjects(){
 			c.data.iconsInitialized = true;
@@ -140,10 +146,13 @@
     // STRY0117600
     function _loadTreeConstants() {
         var oTREE_CONST = {
+            // DFCT0011227
+            tree_name_max_length: 43,
+            tree_details_max_length: 43,
             // STRY0096157 - TUP - Template Tree Min Size to avoid cutting off tool tip
             fontStyle: "14px Segoe UI",
-            fontStyleTaskerNumber: "12px Segoe UI",
-            fontStyleNodeDetails: "10px Segoe UI",
+            fontStyleTaskerNumber: "10px Segoe UI",
+            fontStyleNodeDetails: "12px Segoe UI",
 						// tree color change
 						// textStrokeColor: "white",
             textStrokeColor: "#000000",
@@ -317,7 +326,7 @@
             var watcherChannel = amb.getChannelRW(table, filter);
             amb.connect();
             watcher = watcherChannel.subscribe(function(name) {
-								var requiresRedraw = false;
+				var requiresRedraw = false;
                 var changes = name.data.changes;
                 var sys_id = name.data.sys_id;
                 switch (name.data.operation) {
@@ -327,7 +336,6 @@
                             var nodeDataChanged = false;
                             for (var change in changes) {
                                 if (c.data.fieldsInModel[changes[change]]) {
-                                    nodeDataChanged = true;
                                     // DFCT0010800
                                     // can't break, need to loop through all changes to check if active top changed
                                     //                                    break;
@@ -343,12 +351,17 @@
                                         // DFCT0012419 
 										$scope.data.selectedId = c.data.templateId;
 										scope.data.table = "x_153465_discovert_discover_routing_template";
+										// STRY0156597 - set submitting to disable buttons
+										c.data.submitting=true;
                                         spUtil.update($scope).then(main);
 										break;
+                                    } else {
+										// STRY0156597 - only relaod nodes if not completely reloading from server
+										nodeDataChanged = true;
                                     }
                                     if (changes[change] == 'route_order') {
-																			requiresRedraw = true;
-																		}
+										requiresRedraw = true;
+									}
 																	
                                 }
                             }
@@ -377,12 +390,12 @@
                             diagram.model.removeNodeData(nodeDeletedFound);
                         }
                 }
-							_clearDirectiveHovers();
-							if(requiresRedraw){
-								//	drawTree();	
-								diagram.layoutDiagram(true);
-							}
-						});
+				_clearDirectiveHovers();
+				if(requiresRedraw){
+					//	drawTree();	
+					diagram.layoutDiagram(true);
+				}
+			});
         }
     }
 	
@@ -623,6 +636,12 @@
 	
     function getTaskTitleNode(nodeData) {
         var nodeTitle = nodeData.short_description;
+        if (nodeData.route_order != null && nodeData.route_order != 0)
+            nodeTitle = nodeData.route_order + ". " + nodeTitle;
+        // DFCT0011078 - STRY0127737 - updated name and details and separated number
+        if (nodeTitle.length > TREE_CONST.tree_name_max_length) {
+            nodeTitle = nodeTitle.substring(0, TREE_CONST.tree_name_max_length) + "...";
+        }
         return nodeTitle;
     }
 
@@ -630,13 +649,17 @@
     function getTaskNodeDetails(nodeData) {
         // DFCT0011078
         var nodeDetails = "";
-				// DFCT0012212	
-				if(nodeData.primary_assignee_DisplayValue == undefined ||
-					nodeData.primary_assignee_DisplayValue == 'undefined'){
-					nodeDetails = '(' + ')';
-				} else {
-					nodeDetails = '(' + nodeData.primary_assignee_DisplayValue + ')';
-				}
+		// DFCT0012212	
+		if(nodeData.primary_assignee_DisplayValue == undefined ||
+			nodeData.primary_assignee_DisplayValue == 'undefined'){
+			nodeDetails = '(' + ')';
+		} else {
+			nodeDetails = '(' + nodeData.primary_assignee_DisplayValue + ')';
+		}
+		// DFCT0011227
+		if (nodeDetails.length > TREE_CONST.tree_details_max_length) {
+			nodeDetails = nodeDetails.substring(0, TREE_CONST.tree_details_max_length) + "...";
+		}
         return nodeDetails;
     }
 
@@ -756,6 +779,8 @@
     // END EVENTS MONITORED
     // -----------------------------------------------------------------------------------------------------------------
 		function _changeTemplate(objTemplate){
+			// STRY0156597 - set submitting to disable buttons
+			c.data.submitting=true;
 			// TREE FOOTER TOOLBAR
 			// STRY0117600 - does not like diagram posted back to server
 			c.data.widgetTreeFooterToolbars[0].diagram = null;
@@ -781,6 +806,8 @@
 				resetDiagram();
 				// STRY0123864 - changing the selected template updates the URL
 				$location.search('table', $scope.data.table).search('sys_id', objTemplate.sys_id).search('spa', 1);
+				// STRY0156597 - set submitting to disable buttons
+				c.data.submitting=false;
 			});	
 		}
     // -----------------------------------------------------------------------------------------------------------------
@@ -793,6 +820,8 @@
     };
 
 		function _cloneTemplate(templateInfo){
+			// STRY0156597 - set submitting to disable buttons
+			c.data.submitting=true;
 			// set the new template owner for the cloned template
 			templateInfo.new_template_owner = $scope.data.currentUserId;
 			dtechTemplateService.cloneTemplate(templateInfo).then(
@@ -821,6 +850,8 @@
 								// TODO Multilingual
 								spModal.alert("Clone did not return proper redirect information.  There may have been a problem cloning the template");
 							}
+							// STRY0156597 - set submitting to disable buttons
+							c.data.submitting=false;
 					});
 		}
 
@@ -838,6 +869,8 @@
 			}
 			spModal.prompt(cloneNamePrompt, name).then(
 				function(nameEntered){
+					// STRY0156597 - set submitting to disable buttons
+					c.data.submitting=true;
 					templateInfo.new_template_name = nameEntered;
 					dtechTemplateService.isTemplateNameUnique(templateInfo).then(
 						function(response){
@@ -849,6 +882,8 @@
 									_promptForTemplateNameAndClone(nameEntered, false);
 								}
 							}
+							// STRY0156597 - set submitting to disable buttons
+							c.data.submitting=false;
 					});
 				});
 		}
@@ -1722,8 +1757,7 @@ a.span {
         <demo_data/>
         <description>2.7 Added Angular Provider htmlToStringService;&#13;
 Server script updated to use TaskWidgetData instead of TemplateWidgetData;&#13;
-Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-06-25;&#13;
-</description>
+Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-06-25;</description>
         <docs/>
         <field_list/>
         <has_preview>true</has_preview>
@@ -1838,15 +1872,16 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 //										Changes in Client Controller
 //
 // 2.8.3 | 2023-10-05 | raj | DFCT0012419 - After deactivating a template, user is still able to run the deactivated template 
+// 2.8.6 | 2025-05-23 | raj  | STRY0156597 - Defect- After deactivating template, users are still able to run deactivated template
 //------------------------------------------------------------------------------------------------------------------------
 
 (function($sp, input, data, options, gs) {
-		var api_ui_component_data = new api_tasker_ui_component_data();
+	var api_ui_component_data = new api_tasker_ui_component_data();
 
     main();
 
     function main() {
-				data.embeddedWidget = (input || {}).embeddedWidget || (options || {}).embeddedWidget || false;
+		data.embeddedWidget = (input || {}).embeddedWidget || (options || {}).embeddedWidget || false;
         var taskWidgetIconsAndMessage = new TaskerWidgetIconsAndMessages('discovertasker-processtemplatetreegraph');
         var given_sys_id = '';
         // INPUT GOES HERE
@@ -1854,7 +1889,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         data.messages = taskWidgetIconsAndMessage.loadMessages();
         data.icons = taskWidgetIconsAndMessage.loadIcons();
 
-				data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
+		data.chatEnabled = new tasking_System_Settings_Scripts().isChatEnabledForUser();
 
         //----------------------------------------------------------------------------------------------------
         // Initializing Variables
@@ -1868,10 +1903,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         data.templateId = "return none until set";
         // check for input
         if (input) {
-						if(input.getActions==true){
-							getActions(input.taskSysId);
-							return;
-						}					
+            if(input.getActions==true){
+                getActions(input.taskSysId);
+                return;
+            }					
             data.table = input.table;
             given_sys_id = input.selectedId;
         } else {
@@ -1886,10 +1921,10 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         _loadToolBars();
     }
 
-		function getActions(taskSysId){
-			data.actions = api_ui_component_data.getContextMenuInformation(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME, taskSysId);
-			data.actions.objectType = "templateTask";
-		}
+    function getActions(taskSysId){
+        data.actions = api_ui_component_data.getContextMenuInformation(api_dtech_common.CONST_DTECH_TEMPLATE_TASK_TABLE_NAME, taskSysId);
+        data.actions.objectType = "templateTask";
+    }
 
     function _loadToolBars() {
         // TREE HEADER TOOLBAR
@@ -2022,14 +2057,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2017-11-14 21:17:38</sys_created_on>
         <sys_id>d651a9734fd20300303dc3818110c7f5</sys_id>
-        <sys_mod_count>2994</sys_mod_count>
+        <sys_mod_count>2996</sys_mod_count>
         <sys_name>Tasker Graph - Template Tree</sys_name>
         <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
         <sys_policy>protected</sys_policy>
         <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
         <sys_update_name>sp_widget_d651a9734fd20300303dc3818110c7f5</sys_update_name>
         <sys_updated_by>rjoy</sys_updated_by>
-        <sys_updated_on>2024-10-02 13:51:39</sys_updated_on>
+        <sys_updated_on>2025-05-23 18:10:45</sys_updated_on>
         <template><![CDATA[<div id="main_body" class="flex-column flex-grow panel panel-default"
      ng-class="{'dtech-topstick-posabso':data.embeddedWidget!=true,
                 'dtech-topstick-pos-relative':data.embeddedWidget==true}">
@@ -2038,10 +2073,12 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
 -->
     <div ng-if="data.selectedId" class="pull-right">
       <a href="javascript:void(0)"  ng-show="data.canRunTemplate"
+         ng-class="{'dtech-disabled': data.submitting, 'dtech-enabled': !data.submitting}"
          ng-click="runModalProcessTemplate()" class="btn btn-primary" title="${Tasker - Run Template}" role="link">${Tasker - Run}</a>
 
       <a ng-if="data.topParentTask_id" href="javascript:void(0)" 
          ng-click="openModalProcessTemplate(data.selectedId)" 
+         ng-class="{'dtech-disabled': data.submitting, 'dtech-enabled': !data.submitting}"
          class="btn btn-primary" title="${Tasker - View Template}" role="link">${Tasker - View}</a>
 
       <a ng-if="data.canEditTemplate && data.topParentTask_id && 
@@ -2049,6 +2086,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                 || data.settings.page_id == 'scheduled_task_graphic')" 
          href="?id={{data.settings.pageTemplateDetails}}&&table={{data.table_detail}}&sys_id={{data.topParentTask_id}}" 
          ng-click="clearDiagramTree()" 
+         ng-class="{'dtech-disabled': data.submitting, 'dtech-enabled': !data.submitting}"
          class="btn btn-primary" title="${Tasker - Edit Template in new tab}" role="link" target="_blank">${Tasker - Edit}</a>
       <a ng-if="data.canEditTemplate && data.topParentTask_id" 
          href="javascript:void(0)" 
@@ -2102,14 +2140,14 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                            dtech-operational-object = "data.operationalObject"
                            dtech-show-label="false"
                            dtech-is-modal="false"
-                           dtech-table="{{data.table}}"
+                           dtech-table="{{data.table_detail}}"
                            dtech-task-sys-id="{{data.item_id}}"                                          
                            ></dtech-operational>
         <dtech-assignment dtech-is-dark="true"
                           dtech-exclude-warning="true"
                           dtech-tool-tip-open="data.assignmentToolTipOpen"
                           dtech-assignment-object = "data.assignmentObject"
-                          dtech-table="{{data.table}}"
+                          dtech-table="{{data.table_detail}}"
                           dtech-task-sys-id="{{data.item_id}}"
                           ></dtech-assignment>
 
@@ -2118,7 +2156,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                         dtech-tool-tip-open="data.durationToolTipOpen"
                         dtech-show-label="false"
                         dtech-hide-date="true"
-                        dtech-table="{{data.table}}"
+                        dtech-table="{{data.table_detail}}"
                         dtech-task-sys-id="{{data.item_id}}"
                         dtech-duration-object="data.durationObject"
                         ></dtech-duration>
@@ -2132,7 +2170,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                               dtech-tool-tip-open="data.addSubActionToolTipOpen"
                               dtech-add-sub-object="data.addSubObject"
                               dtech-is-modal="data.isModal"
-                              dtech-table="{{data.table}}"
+                              dtech-table="{{data.table_detail}}"
                               dtech-task-sys-id="{{data.item_id}}"
                               ></dtech-add-sub-object>
         
@@ -2140,7 +2178,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                        dtech-tool-tip-open="data.actionToolTipOpen"
                        dtech-actions-object = "data.actions"
                        dtech-is-modal="data.isModal"
-                       dtech-table="{{data.table}}"
+                       dtech-table="{{data.table_detail}}"
                        dtech-task-sys-id="{{data.item_id}}"
                        load-actions="loadActions"
                        ></dtech-actions>
@@ -2154,7 +2192,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
            ng-mouseleave="c.data.overWarningIcon=false; c.data.showWarning=false;"
            >
         <dtech-warning dtech-tool-tip-open="data.warningToolTipOpen"
-                        dtech-table="{{data.table}}"
+                        dtech-table="{{data.table_detail}}"
                         dtech-task-sys-id="{{data.item_id}}"
                         dtech-warning-object="data.warningObject"
                        >
@@ -2168,7 +2206,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
            >
 <!-- class="dtech-warning-panel" -->        
         <dtech-order dtech-tool-tip-open="data.orderToolTipOpen"
-                        dtech-table="{{data.table}}"
+                        dtech-table="{{data.table_detail}}"
                         dtech-task-sys-id="{{data.item_id}}"
                         dtech-order-object="data.orderObject"
                        >
@@ -2188,7 +2226,7 @@ Client controller, deleted _convertHtmlToSimpleString() which was added on 2021-
                             dtech-is-modal="data.isModal"
                             dtech-user-image-size="24"
                             dtech-max-rows-to-display="3"
-                            dtech-table="{{data.table}}"
+                            dtech-table="{{data.table_detail}}"
                             dtech-task-sys-id="{{data.item_id}}"                                          
                             ></dtech-item-members>
         
