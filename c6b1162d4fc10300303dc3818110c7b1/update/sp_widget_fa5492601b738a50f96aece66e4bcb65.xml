@@ -113,7 +113,7 @@
    </div>
    <div id="slider">
      <label>Spacing:</label>
-     <input id="widthSlider" type="range" min="8" max="24" value="12" oninput="rescale()"/>
+     <input id="widthSlider" type="range" min="8" max="24" value="12" oninput="rescale()"/> <button id="showInProgressBtn">Show In-Progress Tasks</button>
    </div>
    <p>This sample demonstrates a simple Gantt chart.</p>
    <p>The current model in JSON format, automatically updated as the diagram is modified:</p>
@@ -824,6 +824,101 @@ myModel.addChangedListener(function(e) {
   }
 });
 
+function showInProgressTasks() {
+  console.log("Show In-Progress Tasks button clicked!");
+
+  // Access the GoJS diagram model.
+  // Based on the existing code, 'myGantt' is the main Gantt Diagram object,
+  // and 'myModel' is also used and assigned to myGantt.model.
+  // Let's use myGantt.model for clarity.
+  var model = myGantt.model;
+  if (!model || !model.modelData) {
+    console.error("GoJS model or modelData is not available.");
+    return;
+  }
+
+  var originTimestamp = model.modelData.origin;
+  if (typeof originTimestamp === 'undefined') {
+    console.error("Origin timestamp is not defined in modelData.");
+    return;
+  }
+  // console.log("Origin Timestamp for calculation: " + originTimestamp);
+
+  var originDate = new Date(originTimestamp);
+  var hypotheticalJsDate = new Date(originTimestamp); // Start with origin
+  hypotheticalJsDate.setDate(originDate.getDate() + 20); // Add 20 days
+
+  // MsPerDay is globally available from the existing script
+  var hypotheticalTodayInProjectDays = Math.floor((hypotheticalJsDate.getTime() - originDate.getTime()) / MsPerDay);
+
+  console.log("Initial Origin Date: " + originDate.toISOString());
+  console.log("Hypothetical JS Date (Origin + 20 days): " + hypotheticalJsDate.toISOString());
+  console.log("Calculated Hypothetical Today in Project Days (0-indexed): " + hypotheticalTodayInProjectDays);
+
+
+  if (!model.nodeDataArray || model.nodeDataArray.length === 0) {
+    console.error("Node data array is not available or empty.");
+    return;
+  }
+
+  // Start a transaction for model changes
+  model.commit(function(m) {
+    var foundInProgress = false;
+    m.nodeDataArray.forEach(function(taskData) {
+      var taskStart = taskData.start;
+      var taskDuration = taskData.duration;
+
+      if (typeof taskStart === 'number' && typeof taskDuration === 'number') {
+        var taskEnd = taskStart + taskDuration;
+        if (hypotheticalTodayInProjectDays >= taskStart && hypotheticalTodayInProjectDays < taskEnd) {
+          // This task is in-progress, change its color
+          m.setDataProperty(taskData, "color", "purple"); // Use model (m) passed to commit function
+          console.log("Highlighting task:", taskData.text, "Key:", taskData.key, "as purple.");
+          foundInProgress = true;
+        }
+      }
+    });
+
+    if (!foundInProgress) {
+      console.log("No tasks were found in progress on calculated day " + hypotheticalTodayInProjectDays + " to highlight.");
+    } else {
+      console.log("Tasks highlighted for day " + hypotheticalTodayInProjectDays + ". Diagram will refresh.");
+    }
+  }, "highlight in-progress tasks");
+
+  // The GoJS diagram should automatically update if the 'color' property
+  // is bound to the node's fill or stroke in the nodeTemplate.
+  // Looking at the existing myGantt.nodeTemplate:
+  // $(go.Shape, ..., new go.Binding("fill", "color")),
+  // This binding exists, so changing the 'color' property in the model
+  // and committing the transaction should update the visual.
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var btn = document.getElementById('showInProgressBtn');
+  if (btn) {
+    btn.addEventListener('click', showInProgressTasks);
+  } else {
+    // This might run too late if the button is dynamically added by GoJS or another script.
+    // However, our button is static in the template.
+    console.error('Button with ID showInProgressBtn not found on DOMContentLoaded.');
+    // Attempt to attach directly if DOMContentLoaded is too late for some reason (e.g. widget lifecycle)
+    // This is belt-and-suspenders
+    var btnRetry = document.getElementById('showInProgressBtn');
+    if (btnRetry) {
+        btnRetry.addEventListener('click', showInProgressTasks);
+    } else {
+        console.error('Button with ID showInProgressBtn still not found directly after DOMContentLoaded.');
+    }
+  }
+});
+
+// Also try attaching directly in case DOMContentLoaded doesn't fire as expected in widget environment
+// or if the script executes at a point where the button is already available.
+var directBtn = document.getElementById('showInProgressBtn');
+if (directBtn) {
+    directBtn.addEventListener('click', showInProgressTasks);
+}
 
 </script>
 </div>
