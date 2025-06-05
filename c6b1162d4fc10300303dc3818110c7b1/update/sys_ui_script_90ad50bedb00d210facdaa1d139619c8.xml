@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Gantt UI</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.GanttChartUIScript</name>
+        <script><![CDATA[// Name: GanttChartUIScript
+
+// Custom Layout for myGantt Diagram
+function GanttLayout() {
+  go.Layout.call(this);
+  this.cellHeight = GridCellHeight;
+}
+go.Diagram.inherit(GanttLayout, go.Layout);
+
+GanttLayout.prototype.doLayout = function(coll) {
+  coll = this.collectParts(coll);
+  var diagram = this.diagram;
+  diagram.startTransaction("Gantt Layout");
+  var bars = [];
+  this.assignTimes(diagram, bars);
+  this.arrangementOrigin = this.initialOrigin(this.arrangementOrigin);
+  var y = this.arrangementOrigin.y;
+  bars.forEach(function(node) {
+    var tasknode = myTasks.findNodeForData(node.data);
+    node.visible = tasknode.isVisible();
+    node.move(new go.Point(convertStartToX(node.data.start), y));
+    if (node.visible) y += this.cellHeight;
+  }, this);
+  diagram.commitTransaction("Gantt Layout");
+};
+
+GanttLayout.prototype.assignTimes = function(diagram, bars) {
+  var roots = diagram.findTreeRoots();
+  roots.each(function(root) {
+    this.walkTree(root, 0, bars);
+  }, this);
+};
+
+GanttLayout.prototype.walkTree = function(node, start, bars) {
+  bars.push(node);
+  var model = node.diagram.model;
+  if (node.isTreeLeaf) {
+    var dur = node.data.duration;
+    if (dur === undefined || isNaN(dur)) {
+      dur = convertDaysToUnits(1);
+      model.setDataProperty(node.data, "duration", dur);
+    }
+    var st = node.data.start;
+    if (st === undefined || isNaN(st)) {
+      st = start;
+      model.setDataProperty(node.data, "start", st);
+    }
+    return st + dur;
+  } else {
+    node.findTreeChildrenNodes().each(function(n) {
+      start = this.walkTree(n, start, bars);
+    }, this);
+    var min = Infinity;
+    var max = -Infinity;
+    var colors = new go.Set();
+    node.findTreeChildrenNodes().each(function(n) {
+      min = Math.min(min, n.data.start);
+      max = Math.max(max, n.data.start + n.data.duration);
+      if (n.data.color) colors.add(n.data.color);
+    });
+    model.setDataProperty(node.data, "start", min);
+    model.setDataProperty(node.data, "duration", max - min);
+    return max;
+  }
+};
+
+var GridCellHeight = 20;
+var GridCellWidth = 12;
+var TimelineHeight = 24;
+var MsPerDay = 24 * 60 * 60 * 1000;
+
+function convertDaysToUnits(n) {
+  return n;
+}
+
+function convertUnitsToDays(n) {
+  return n;
+}
+
+function convertStartToX(start) {
+  return convertUnitsToDays(start) * GridCellWidth;
+}
+
+function convertXToStart(x, node) {
+  return convertDaysToUnits(x / GridCellWidth);
+}
+
+function convertDurationToW(duration) {
+  return convertUnitsToDays(duration) * GridCellWidth;
+}
+
+function convertWToDuration(w) {
+  return convertDaysToUnits(w / GridCellWidth);
+}
+
+function convertStartToPosition(start, node) {
+  return new go.Point(convertStartToX(start), node.position.y || 0);
+}
+
+function convertPositionToStart(pos) {
+  return convertXToStart(pos.x);
+}
+
+var StartDate = new Date();
+
+function valueToText(n) {
+  var startDate = StartDate;
+  var startDateMs = startDate.getTime() + startDate.getTimezoneOffset() * 60000;
+  var date = new Date(startDateMs + (n / GridCellWidth) * MsPerDay);
+  return date.toLocaleDateString();
+}
+
+function dateToValue(d) {
+  var startDate = StartDate;
+  var startDateMs = startDate.getTime() + startDate.getTimezoneOffset() * 60000;
+  var dateInMs = d.getTime() + d.getTimezoneOffset() * 60000;
+  var msSinceStart = dateInMs - startDateMs;
+  return (msSinceStart / MsPerDay) * GridCellWidth;
+}
+
+go.Shape.defineFigureGenerator("RangeBar", function(shape, w, h) {
+  var b = Math.min(5, w);
+  var d = Math.min(5, h);
+  return new go.Geometry()
+    .add(new go.PathFigure(0, 0, true)
+      .add(new go.PathSegment(go.PathSegment.Line, w, 0))
+      .add(new go.PathSegment(go.PathSegment.Line, w, h))
+      .add(new go.PathSegment(go.PathSegment.Line, w-b, h-d))
+      .add(new go.PathSegment(go.PathSegment.Line, b, h-d))
+      .add(new go.PathSegment(go.PathSegment.Line, 0, h).close()));
+});
+
+var $ = go.GraphObject.make;
+
+function standardContextMenus() {
+  return {
+      contextMenu: $("ContextMenu",
+        $("ContextMenuButton",
+          $(go.TextBlock, "Details..."),
+          {
+            click: function(e, button) {
+              var task = button.part.adornedPart;
+              console.log("show HTML panel with details about the task " + task.data.text);
+            }
+          }
+        ),
+        $("ContextMenuButton",
+          $(go.TextBlock, "New Task"),
+          {
+            click: function(e, button) {
+              var task = button.part.adornedPart;
+              e.diagram.model.startTransaction("new task");
+              var newdata = { key: undefined, text: "New Task", color: task.data.color, duration: convertDaysToUnits(5) };
+              e.diagram.model.addNodeData(newdata);
+              e.diagram.model.addLinkData({ from: task.data.key, to: newdata.key });
+              e.diagram.select(e.diagram.findNodeForData(newdata));
+              e.diagram.model.commitTransaction("new task");
+            }
+          }
+        )
+      )
+  };
+}
+
+function initializeGanttChart() {
+  var myTasks =
+    $(go.Diagram, "myTasksDiv",
+      {
+        initialContentAlignment: go.Spot.Right,
+        padding: new go.Margin(TimelineHeight+4, 0, GridCellHeight, 0),
+        hasVerticalScrollbar: false,
+        allowMove: false,
+        allowCopy: false,
+        "commandHandler.deletesTree": true,
+        layout:
+          $(go.TreeLayout,
+            {
+              alignment: go.TreeLayout.AlignmentStart,
+              compaction: go.TreeLayout.CompactionNone,
+              layerSpacing: 16,
+              layerSpacingParentOverlap: 1,
+              nodeIndentPastParent: 1,
+              nodeSpacing: 0,
+              portSpot: go.Spot.Bottom,
+              childPortSpot: go.Spot.Left,
+              arrangementSpacing: new go.Size(0, 0),
+              commitNodes: function() {
+                go.TreeLayout.prototype.commitNodes.call(this);
+                updateNodeWidths(400);
+              }
+            }),
+        mouseLeave: function(e, node) { myHighlightTask.visible = false; },
+        "animationManager.isInitial": false,
+        "TreeCollapsed": function(e) { myGantt.layoutDiagram(true); },
+        "TreeExpanded": function(e) { myGantt.layoutDiagram(true); },
+        "ChangedSelection": function(e) {
+          myGantt.clearHighlighteds();
+          e.diagram.selection.each(function(n) {
+            myHighlightTask.visible = true;
+            myGantt.highlight(n.data.key);
+          });
+        }
+      });
+
+  myTasks.nodeTemplate =
+    $(go.Node, "Auto",
+      { deletable: false },
+      new go.Binding("background", "isSelected", function(s) { return (s ? "#e6f5fc" : null); }).ofObject(),
+      $(go.Shape, "Rectangle", { fill: "white" }),
+      $(go.Panel, "Horizontal",
+        $(go.Shape, { width: 12, height: 12 },
+          new go.Binding("fill", "color")),
+        $(go.TextBlock, { margin: new go.Margin(2, 0, 0, 2) },
+          new go.Binding("text", "text")),
+        $("TreeExpanderButton")
+      )
+    );
+
+  myTasks.model = $(go.TreeModel,
+    {
+      nodeParentKeyProperty: "parent",
+      nodeDataArray: [
+        { key: 1, text: "Project Alpha", color: "blue" },
+        { key: 2, text: "Phase 1", parent: 1 },
+        { key: 3, text: "Phase 2", parent: 1 },
+        { key: 4, text: "Phase 3", parent: 1 },
+        { key: 5, text: "Task 1", parent: 2, duration: convertDaysToUnits(2), color: "red" },
+        { key: 6, text: "Task 2", parent: 2, duration: convertDaysToUnits(4), color: "blue" },
+        { key: 7, text: "Task 3", parent: 3, duration: convertDaysToUnits(1), color: "green" },
+        { key: 8, text: "Task 4", parent: 3, duration: convertDaysToUnits(2), color: "orange" }
+      ]
+    });
+
+  var myHighlightTask =
+    $(go.Part,
+      $(go.Shape, "Rectangle",
+        {
+          fill: null,
+          stroke: "#00bfff",
+          strokeWidth: 2
+        }),
+      { selectable: false, pickable: false, isInDocumentBounds: false });
+  myTasks.add(myHighlightTask);
+  myTasks.positionComputation = function(part, pt) {
+    return pt.copy().subtract(new go.Point(0, part.actualBounds.height / 2));
+  };
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  initializeGanttChart();
+});
+]]></script>
+        <script_name>GanttChartUIScript</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>cmorton</sys_created_by>
+        <sys_created_on>2024-08-19 15:53:18</sys_created_on>
+        <sys_id>90ad50bedb00d210facdaa1d139619c8</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>x_153465_discovert.GanttChartUIScript</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_90ad50bedb00d210facdaa1d139619c8</sys_update_name>
+        <sys_updated_by>cmorton</sys_updated_by>
+        <sys_updated_on>2024-08-19 15:53:29</sys_updated_on>
+        <ui_type>10</ui_type>
+        <use_scoped_format>false</use_scoped_format>
+    </sys_ui_script>
+</record_update>
