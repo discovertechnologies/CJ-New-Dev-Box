@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>ValidateGanttData UI Script</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.ValidateGanttData</name>
+        <script><![CDATA[
+function validateGanttData(model) {
+  console.log("Validating model:", model);
+
+  if (!model) {
+    console.error("Validation Error: Model is null or undefined.");
+    return false;
+  }
+
+  if (!model.nodeDataArray || !Array.isArray(model.nodeDataArray)) {
+    console.error("Validation Error: model.nodeDataArray is missing or not an array.");
+    return false;
+  }
+
+  if (model.nodeDataArray.length === 0) {
+    console.error("Validation Error: model.nodeDataArray is empty.");
+    return false;
+  }
+
+  var nodeKeys = new Set();
+  for (var i = 0; i < model.nodeDataArray.length; i++) {
+    var node = model.nodeDataArray[i];
+    if (!node) {
+      console.error("Validation Error: Node at index " + i + " is null or undefined.");
+      return false;
+    }
+    var requiredProps = ["key", "text", "start", "duration"];
+    for (var j = 0; j < requiredProps.length; j++) {
+      var prop = requiredProps[j];
+      if (typeof node[prop] === 'undefined') {
+        console.error("Validation Error: Node " + (node.key || "at index " + i) + " is missing property: " + prop);
+        return false;
+      }
+    }
+    if (node.key === null || typeof node.key === 'undefined') {
+         console.error("Validation Error: Node " + (node.text || "at index " + i) + " has invalid key.");
+         return false;
+    }
+    nodeKeys.add(node.key);
+  }
+
+  if (model.linkDataArray && Array.isArray(model.linkDataArray)) {
+    for (var k = 0; k < model.linkDataArray.length; k++) {
+      var link = model.linkDataArray[k];
+      if (!link) {
+        console.error("Validation Error: Link at index " + k + " is null or undefined.");
+        return false;
+      }
+      if (typeof link.from === 'undefined' || typeof link.to === 'undefined') {
+        console.error("Validation Error: Link at index " + k + " is missing 'from' or 'to' property.");
+        return false;
+      }
+      if (!nodeKeys.has(link.from)) {
+        console.error("Validation Error: Link at index " + k + " has 'from' value (" + link.from + ") that does not correspond to an existing node key.");
+        return false;
+      }
+      if (!nodeKeys.has(link.to)) {
+        console.error("Validation Error: Link at index " + k + " has 'to' value (" + link.to + ") that does not correspond to an existing node key.");
+        return false;
+      }
+    }
+  }
+  console.log("Model validation successful.");
+  return true;
+}
+
+
+function runGanttDataValidationTests() {
+  console.log("--- Running Gantt Data Validation Tests ---");
+  var testResults = { passed: 0, failed: 0 };
+
+  function runTest(testName, model, expectedResult) {
+    console.log("\n--- Test: " + testName + " ---");
+    var result = validateGanttData(model);
+    if (result === expectedResult) {
+      console.log("Status: PASSED");
+      testResults.passed++;
+    } else {
+      console.log("Status: FAILED");
+      console.error("Expected: " + expectedResult + ", Got: " + result);
+      testResults.failed++;
+    }
+  }
+
+  var validModel = {
+    nodeDataArray: [
+      { key: 1, text: "Task 1", start: 0, duration: 5 },
+      { key: 2, text: "Task 2", start: 1, duration: 3 }
+    ],
+    linkDataArray: [
+      { from: 1, to: 2 }
+    ]
+  };
+  runTest("Valid Model", validModel, true);
+
+  var brokenLinkModel = {
+    nodeDataArray: [ { key: 1, text: "Task 1", start: 0, duration: 5 } ],
+    linkDataArray: [ { from: 1, to: 99 } ]
+  };
+  runTest("Broken Link (to key non-existent)", brokenLinkModel, false);
+
+  var brokenLinkModelFrom = {
+    nodeDataArray: [ { key: 1, text: "Task 1", start: 0, duration: 5 } ],
+    linkDataArray: [ { from: 99, to: 1 } ]
+  };
+  runTest("Broken Link (from key non-existent)", brokenLinkModelFrom, false);
+
+  var missingPropsModel = {
+    nodeDataArray: [
+      { key: 1, text: "Task 1", start: 0 }, // Missing duration
+      { key: 2, text: "Task 2", start: 1, duration: 3 }
+    ],
+    linkDataArray: []
+  };
+  runTest("Node with Missing Property (duration)", missingPropsModel, false);
+
+  var missingPropsModelKey = {
+    nodeDataArray: [
+      { text: "Task 1", start: 0, duration: 5 }, // Missing key
+      { key: 2, text: "Task 2", start: 1, duration: 3 }
+    ],
+    linkDataArray: []
+  };
+  runTest("Node with Missing Property (key)", missingPropsModelKey, false);
+
+  var emptyNodeArrayModel = { nodeDataArray: [], linkDataArray: [] };
+  runTest("Empty nodeDataArray", emptyNodeArrayModel, false);
+
+  runTest("Null Model Input", null, false);
+  runTest("Undefined Model Input", undefined, false);
+
+  var modelWithoutNodeDataArray = { linkDataArray: [] };
+  runTest("Model without nodeDataArray property", modelWithoutNodeDataArray, false);
+
+  console.log("\n--- Test Summary ---");
+  console.log("Passed: " + testResults.passed);
+  console.log("Failed: " + testResults.failed);
+  console.log("--- End of Gantt Data Validation Tests ---");
+  return testResults;
+}
+
+]]></script>
+        <script_name>ValidateGanttData</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>cmorton</sys_created_by>
+        <sys_created_on>2025-06-05 19:50:02</sys_created_on>
+        <sys_id>1c31b688c3c62210aa8930ec0501311e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_153465_discovert.ValidateGanttData</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_1c31b688c3c62210aa8930ec0501311e</sys_update_name>
+        <sys_updated_by>cmorton</sys_updated_by>
+        <sys_updated_on>2025-06-05 19:50:02</sys_updated_on>
+        <ui_type>0</ui_type>
+        <use_scoped_format>false</use_scoped_format>
+    </sys_ui_script>
+</record_update>
