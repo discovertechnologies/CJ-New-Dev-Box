@@ -119,6 +119,7 @@
      <label for="selectTestScript">Select Test Suite:</label>
      <select id="selectTestScript" style="margin-right: 10px;">
        <option value="runGanttDataValidationTests">Gantt Data Validation Tests</option>
+       <option value="runHighlightDependencyTest">Critical Dependency Highlighting</option>
      </select>
      <button id="runSelectedTestBtn">Run Selected Test</button>
    </div>
@@ -670,10 +671,19 @@ myGantt.nodeTemplate =
     new go.Binding("resizable", "isTreeLeaf").ofObject(),
     new go.Binding("isTreeExpanded").makeTwoWay(),
     $(go.Shape,
-      { name: "SHAPE", height: 18, margin: new go.Margin(1, 0), strokeWidth: 0, fill: "gray" },
-      new go.Binding("fill", "color"),
-      new go.Binding("width", "duration", convertDurationToW).makeTwoWay(convertWToDuration),
-      new go.Binding("figure", "isTreeLeaf", function(leaf) { return leaf ? "Rectangle" : "RangeBar"; }).ofObject()
+      {
+        name: "SHAPE",
+        height: 18,
+        margin: new go.Margin(1, 0),
+        // strokeWidth: 0, // Default strokeWidth handled by binding now
+        fill: "gray" // Default fill if no color property in data
+      },
+      new go.Binding("fill", "color"), // Existing binding
+      new go.Binding("width", "duration", convertDurationToW).makeTwoWay(convertWToDuration), // Existing binding
+      new go.Binding("figure", "isTreeLeaf", function(leaf) { return leaf ? "Rectangle" : "RangeBar"; }).ofObject(), // Existing binding
+      // New bindings for dependency highlighting:
+      new go.Binding("stroke", "isDependency", function(isDep) { return isDep ? "red" : null; }), // null means use default or no stroke
+      new go.Binding("strokeWidth", "isDependency", function(isDep) { return isDep ? 2 : 0; }) // 0 for non-dependency, 2 for dependency
     ),
     $(go.TextBlock,
       { font: "8pt sans-serif", alignment: go.Spot.TopLeft, alignmentFocus: new go.Spot(0, 0, 0, -2) },
@@ -943,6 +953,17 @@ function handleRunSelectedTest() {
       }
     } else {
       console.error("Error: Test function '" + selectedTestFunction + "' not found. Ensure the ValidateGanttData UI Script is active, loaded, and the function is globally accessible if not scoped.");
+      alert("Error: Test function '" + selectedTestFunction + "' not found. Check console for details.");
+    }
+  } else if (selectedTestFunction === "runHighlightDependencyTest") {
+    if (typeof highlightDependencyTasks === 'function') {
+      try {
+        highlightDependencyTasks();
+      } catch (e) {
+        console.error("Error during execution of " + selectedTestFunction + ": ", e);
+      }
+    } else {
+      console.error("Error: Test function '" + selectedTestFunction + "' not found. Ensure the UI Script is active and loaded.");
       alert("Error: Test function '" + selectedTestFunction + "' not found. Check console for details.");
     }
   } else if (selectedTestFunction) {

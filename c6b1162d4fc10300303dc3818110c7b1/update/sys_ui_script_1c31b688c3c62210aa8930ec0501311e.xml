@@ -147,6 +147,67 @@ function runGanttDataValidationTests() {
 }
 
 window.runGanttDataValidationTests = runGanttDataValidationTests;
+
+function highlightDependencyTasks() {
+  console.log("--- Running Critical Dependency Highlighting ---");
+  if (typeof myGantt === 'undefined' || !myGantt || !myGantt.model) {
+    console.error("Error: myGantt diagram or model is not available.");
+    alert("Error: myGantt diagram or model not found. Cannot highlight dependencies.");
+    return;
+  }
+
+  var model = myGantt.model;
+  var dependencyNodeKeys = new Set();
+  var dependencyLinksFound = [];
+
+  if (!model.linkDataArray || model.linkDataArray.length === 0) {
+    console.log("No links found in the model. No dependencies to highlight.");
+    return;
+  }
+
+  // First, reset any existing isDependency flags to ensure a clean run
+  model.commit(function(m) {
+    m.nodeDataArray.forEach(function(nodeData) {
+      if (nodeData.isDependency) {
+        m.setDataProperty(nodeData, "isDependency", undefined); // Or false, depending on how template handles it
+      }
+    });
+  }, "reset isDependency flags");
+
+
+  model.linkDataArray.forEach(function(link) {
+    if (link.category === 'Dep') {
+      dependencyLinksFound.push({ from: link.from, to: link.to });
+      if (typeof link.from !== 'undefined') dependencyNodeKeys.add(link.from);
+      if (typeof link.to !== 'undefined') dependencyNodeKeys.add(link.to);
+    }
+  });
+
+  if (dependencyNodeKeys.size === 0) {
+    console.log("No dependency links with category 'Dep' found. No nodes to highlight.");
+    return;
+  }
+
+  console.log("Dependency links found:", dependencyLinksFound);
+  console.log("Node keys involved in dependencies:", Array.from(dependencyNodeKeys));
+
+  model.commit(function(m) {
+    var highlightedCount = 0;
+    dependencyNodeKeys.forEach(function(key) {
+      var nodeData = m.findNodeDataForKey(key); // Use model's findNodeDataForKey
+      if (nodeData) {
+        m.setDataProperty(nodeData, "isDependency", true);
+        highlightedCount++;
+      } else {
+        console.warn("Node data not found for key: " + key + " (involved in a 'Dep' link).");
+      }
+    });
+    console.log(highlightedCount + " nodes were marked with 'isDependency: true'.");
+  }, "set isDependency flags");
+
+  console.log("--- Critical Dependency Highlighting Complete ---");
+}
+window.highlightDependencyTasks = highlightDependencyTasks;
 ]]></script>
         <script_name>ValidateGanttData</script_name>
         <sys_class_name>sys_ui_script</sys_class_name>
