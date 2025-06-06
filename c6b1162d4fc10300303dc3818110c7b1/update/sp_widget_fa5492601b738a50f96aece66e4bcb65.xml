@@ -682,8 +682,8 @@ myGantt.nodeTemplate =
       new go.Binding("width", "duration", convertDurationToW).makeTwoWay(convertWToDuration), // Existing binding
       new go.Binding("figure", "isTreeLeaf", function(leaf) { return leaf ? "Rectangle" : "RangeBar"; }).ofObject(), // Existing binding
       // New bindings for dependency highlighting:
-      new go.Binding("stroke", "isDependency", function(isDep) { return isDep ? "red" : null; }), // null means use default or no stroke
-      new go.Binding("strokeWidth", "isDependency", function(isDep) { return isDep ? 2 : 0; }) // 0 for non-dependency, 2 for dependency
+      new go.Binding("stroke", "isDependencyHighlight", function(isDep) { return isDep ? "red" : null; }), // null means use default or no stroke
+      new go.Binding("strokeWidth", "isDependencyHighlight", function(isDep) { return isDep ? 2 : 0; }) // 0 for non-dependency, 2 for dependency
     ),
     $(go.TextBlock,
       { font: "8pt sans-serif", alignment: go.Spot.TopLeft, alignmentFocus: new go.Spot(0, 0, 0, -2) },
@@ -935,6 +935,46 @@ document.addEventListener('DOMContentLoaded', function() {
 var directBtn = document.getElementById('showInProgressBtn');
 if (directBtn) {
     directBtn.addEventListener('click', showInProgressTasks);
+}
+
+function highlightDependencyTasks() {
+  console.log("highlightDependencyTasks started.");
+
+  if (typeof myModel === 'undefined' || !myModel) {
+    console.error("highlightDependencyTasks: myModel is not available.");
+    return;
+  }
+  if (!myModel.linkDataArray) {
+    console.error("highlightDependencyTasks: myModel.linkDataArray is not available.");
+    return;
+  }
+  if (!myModel.nodeDataArray) {
+    console.error("highlightDependencyTasks: myModel.nodeDataArray is not available.");
+    return;
+  }
+
+  const dependencyNodeKeys = new Set();
+  myModel.linkDataArray.forEach(function(link) {
+    if (link.category === "Dep") {
+      dependencyNodeKeys.add(link.from);
+      dependencyNodeKeys.add(link.to);
+    }
+  });
+
+  myModel.commit(function(m) {
+    let highlightedCount = 0;
+    m.nodeDataArray.forEach(function(nodeData) {
+      if (dependencyNodeKeys.has(nodeData.key)) {
+        m.set(nodeData, "isDependencyHighlight", true);
+        highlightedCount++;
+      } else {
+        m.set(nodeData, "isDependencyHighlight", false);
+      }
+    });
+    console.log("highlightDependencyTasks: Marked " + highlightedCount + " nodes for highlighting.");
+  }, "highlight dependencies");
+
+  console.log("highlightDependencyTasks completed.");
 }
 
 // Logic for "Run Selected Test" button
