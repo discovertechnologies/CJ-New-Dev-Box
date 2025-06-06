@@ -120,6 +120,7 @@
      <select id="selectTestScript" style="margin-right: 10px;">
        <option value="runGanttDataValidationTests">Gantt Data Validation Tests</option>
        <option value="runHighlightDependencyTest">Critical Dependency Highlighting</option>
+       <option value="runIntegratedDataValidationTest">Test Case 2: Data Validation (New)</option>
      </select>
      <button id="runSelectedTestBtn">Run Selected Test</button>
    </div>
@@ -781,14 +782,27 @@ myModel.linkDataArray = [
 ];
 
 // Convert the origin timestamp to a Date object
-var StartDate = new Date(myModel.modelData.origin);
+var StartDate = new Date(myModel.modelData.origin); // This line should remain before validation if validateGanttData doesn't need it, or moved if it does. (It doesn't)
 
-// Share the model between diagrams
-myTasks.model = myModel;
-myGantt.model = myModel;
+// Validate the model before assigning it to the diagrams
+if (typeof validateGanttData === "function" && validateGanttData(myModel)) {
+  console.log("Model validation successful. Loading model into diagrams.");
+  // Share the model between diagrams
+  myTasks.model = myModel;
+  myGantt.model = myModel;
 
-// Enable the undo manager
-myModel.undoManager.isEnabled = true;
+  // Enable the undo manager (only if model is valid and loaded)
+  myModel.undoManager.isEnabled = true;
+} else {
+  console.error("Model validation failed. The model will not be loaded into the Gantt diagrams.");
+  // Optionally, display an alert to the user
+  alert("Error: Gantt chart data is invalid and cannot be loaded. Please check console for details.");
+  // Do not proceed to load the model or enable undo manager for an invalid model.
+  // If there's any default empty model or safe state to set, that could be done here.
+  // For now, we just prevent loading the bad model.
+}
+
+// The line "myModel.undoManager.isEnabled = true;" should only be executed if the model is valid.
 
 // Sync viewports
 var changingView = false;  // for preventing recursive updates
@@ -937,6 +951,92 @@ if (directBtn) {
     directBtn.addEventListener('click', showInProgressTasks);
 }
 
+function runIntegratedDataValidationTest() {
+  console.log("--- Running Test Case 2: Integrated Data Validation Test ---");
+
+  // Function to attempt loading a model and see if validation passes/fails
+  function attemptModelLoad(modelDescription, modelToLoad) {
+    console.log("\n--- Attempting to load: " + modelDescription + " ---");
+    // Simulate the core part of model assignment from initial load
+    // IMPORTANT: This assumes myModel is the global/diagram model object being worked on.
+    // We are essentially re-populating myModel and then letting the existing logic try to use it.
+    myModel.nodeDataArray = modelToLoad.nodeDataArray;
+    myModel.linkDataArray = modelToLoad.linkDataArray;
+    if (modelToLoad.modelData) { // Ensure modelData is also updated if present
+      myModel.modelData = modelToLoad.modelData;
+    } else {
+      // Ensure a default origin if not provided by the test model,
+      // similar to how myModel is initialized.
+      myModel.modelData = { origin: 1531540800000 };
+    }
+
+    // Re-initialize StartDate based on potentially new modelData.origin
+    // This mirrors the existing logic: `var StartDate = new Date(myModel.modelData.origin);`
+    // However, StartDate is globally scoped in the widget script, so simply re-assigning.
+    // If validateGanttData or subsequent GoJS logic relies on StartDate being perfectly in sync
+    // with the *exact* model object passed to it, this detail is important.
+    // The current validateGanttData does not use StartDate.
+    window.StartDate = new Date(myModel.modelData.origin);
+
+
+    console.log("Validating and attempting to load '" + modelDescription + "' into diagrams...");
+    if (typeof validateGanttData === "function" && validateGanttData(myModel)) {
+      console.log("Validation PASSED for '" + modelDescription + "'. Model assigned to diagrams.");
+      myTasks.model = myModel;
+      myGantt.model = myModel;
+      myModel.undoManager.isEnabled = true; // As per existing validated load logic
+
+      // Trigger a refresh or layout if needed, GoJS might do this automatically
+      // myGantt.layoutDiagram(true); // if explicit refresh is desired
+      document.getElementById("mySavedModel").textContent = myGantt.model.toJson(); // Update textarea
+      alert("'" + modelDescription + "' loaded successfully (valid data).");
+    } else {
+      console.error("Validation FAILED for '" + modelDescription + "'. Model not loaded.");
+      // Alert is already handled by the integrated validation logic, but we can add a specific one for the test.
+      // alert("'" + modelDescription + "' failed validation and was not loaded. Check console.");
+      // Note: The global alert from the integration point will also fire.
+    }
+  }
+
+  // Test Case 1: Valid Model
+  var validModel = {
+    modelData: { origin: 1531540800000 },
+    nodeDataArray: [
+      { key: 1, text: "Node 1", start: 0, duration: 5 },
+      { key: 2, text: "Node 2", start: 6, duration: 4 }
+    ],
+    linkDataArray: [
+      { from: 1, to: 2 }
+    ]
+  };
+  attemptModelLoad("Sample Valid Model", validModel);
+
+  // Test Case 2: Invalid Model (e.g., missing 'duration' in a node)
+  var invalidModel_missingDuration = {
+    modelData: { origin: 1531540800000 },
+    nodeDataArray: [
+      { key: 10, text: "Valid Node", start: 0, duration: 5 },
+      { key: 20, text: "Node Missing Duration", start: 6 } // No duration
+    ],
+    linkDataArray: []
+  };
+  attemptModelLoad("Sample Invalid Model (Missing Duration)", invalidModel_missingDuration);
+
+  // Test Case 3: Invalid Model (link to non-existent node)
+  var invalidModel_badLink = {
+    modelData: { origin: 1531540800000 },
+    nodeDataArray: [
+      { key: 30, text: "Node A", start: 0, duration: 5 }
+    ],
+    linkDataArray: [
+      { from: 30, to: 999 } // Link to non-existent key 999
+    ]
+  };
+  attemptModelLoad("Sample Invalid Model (Bad Link)", invalidModel_badLink);
+
+  console.log("--- Integrated Data Validation Test Complete ---");
+}
+
 // Logic for "Run Selected Test" button
 function handleRunSelectedTest() {
   var selectElement = document.getElementById('selectTestScript');
@@ -965,6 +1065,18 @@ function handleRunSelectedTest() {
     } else {
       console.error("Error: Test function '" + selectedTestFunction + "' not found. Ensure the UI Script is active and loaded.");
       alert("Error: Test function '" + selectedTestFunction + "' not found. Check console for details.");
+    }
+  } else if (selectedTestFunction === "runIntegratedDataValidationTest") { // ADD THIS BLOCK
+    if (typeof runIntegratedDataValidationTest === 'function') {
+      try {
+        runIntegratedDataValidationTest();
+      } catch (e) {
+        console.error("Error during execution of runIntegratedDataValidationTest: ", e);
+        alert("Error running 'Test Case 2: Data Validation (New)'. Check console.");
+      }
+    } else {
+      console.error("Error: Test function 'runIntegratedDataValidationTest' not found.");
+      alert("Error: Test function 'runIntegratedDataValidationTest' not found. Check console.");
     }
   } else if (selectedTestFunction) {
     console.warn("No implementation for selected test: " + selectedTestFunction);
