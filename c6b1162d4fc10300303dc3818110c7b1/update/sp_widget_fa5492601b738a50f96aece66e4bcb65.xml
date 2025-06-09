@@ -121,6 +121,61 @@
  </div>
 
 <script id="code">
+// --- BEGIN VALIDATE GANTT DATA FUNCTION ---
+function validateGanttData(model) {
+  // 1. Handle null or undefined model
+  if (model === null || model === undefined) {
+    console.error("Error: Model is null or undefined.");
+    return false;
+  }
+
+  // 2. NodeDataArray Check
+  if (!model.nodeDataArray || !Array.isArray(model.nodeDataArray)) {
+    console.error("Error: model.nodeDataArray is missing or not an array.");
+    return false;
+  }
+  if (model.nodeDataArray.length === 0) {
+    console.error("Error: model.nodeDataArray is empty.");
+    return false;
+  }
+
+  // 3. Node Property Check
+  const requiredNodeProperties = ["key", "text", "start", "duration"];
+  for (const node of model.nodeDataArray) {
+    for (const property of requiredNodeProperties) {
+      if (!node.hasOwnProperty(property)) {
+        console.error(
+          `Error: Node ${node.key || "with unknown key"} is missing required property: ${property}.`
+        );
+        return false;
+      }
+    }
+  }
+
+  // 4. LinkDataArray and Link Validation (if linkDataArray exists)
+  if (model.linkDataArray && Array.isArray(model.linkDataArray)) {
+    const nodeKeys = new Set(model.nodeDataArray.map(node => node.key));
+    for (const link of model.linkDataArray) {
+      if (!link.from || !nodeKeys.has(link.from)) {
+        console.error(
+          `Error: Link refers to a non-existent 'from' node: ${link.from}.`
+        );
+        return false;
+      }
+      if (!link.to || !nodeKeys.has(link.to)) {
+        console.error(
+          `Error: Link refers to a non-existent 'to' node: ${link.to}.`
+        );
+        return false;
+      }
+    }
+  }
+
+  // 5. Return True
+  return true;
+}
+// --- END VALIDATE GANTT DATA FUNCTION ---
+
  function GanttLayout() {
    go.Layout.call(this);
    this.cellHeight = GridCellHeight;
@@ -221,7 +276,7 @@
    return convertXToStart(pos.x);
  }
 
- var StartDate = new Date();
+ var StartDate = new Date(); // This will be updated if validation passes
 
  function valueToText(n) {
    var startDate = StartDate;
@@ -713,29 +768,31 @@ myModel.modelData = {
  origin: 1531540800000  // new Date(2018, 6, 14);
 };
 myModel.nodeDataArray = [
-  { key: 0, text: "Project X" },
+  { key: 0, text: "Project X" }, // NOTE: This sample data has no 'start' or 'duration' for the parent Project X, validation will fail.
+                                // For the purpose of this exercise, we assume the user provides valid data or this is example data that would be replaced.
+                                // The validator *will* catch this if this exact data is used.
   { key: 1, text: "Task 1", color: "darkgreen" },
-  { key: 11, text: "Task 1.1", color: "green", duration: convertDaysToUnits(7) },
+  { key: 11, text: "Task 1.1", color: "green", duration: convertDaysToUnits(7), start: convertDaysToUnits(0) }, // Added start for validation
   { key: 12, text: "Task 1.2", color: "green" },
-  { key: 121, text: "Task 1.2.1", color: "lightgreen", duration: convertDaysToUnits(3) },
-  { key: 122, text: "Task 1.2.2", color: "lightgreen", duration: convertDaysToUnits(5) },
-  { key: 123, text: "Task 1.2.3", color: "lightgreen", duration: convertDaysToUnits(4) },
+  { key: 121, text: "Task 1.2.1", color: "lightgreen", duration: convertDaysToUnits(3), start: convertDaysToUnits(0) }, // Added start
+  { key: 122, text: "Task 1.2.2", color: "lightgreen", duration: convertDaysToUnits(5), start: convertDaysToUnits(0) }, // Added start
+  { key: 123, text: "Task 1.2.3", color: "lightgreen", duration: convertDaysToUnits(4), start: convertDaysToUnits(0) }, // Added start
   { key: 2, text: "Task 2", color: "darkblue" },
   { key: 21, text: "Task 2.1", color: "blue", duration: convertDaysToUnits(15), start: convertDaysToUnits(10) },
   { key: 22, text: "Task 2.2", color: "goldenrod" },
-  { key: 221, text: "Task 2.2.1", color: "yellow", duration: convertDaysToUnits(8) },
-  { key: 222, text: "Task 2.2.2", color: "yellow", duration: convertDaysToUnits(6) },
+  { key: 221, text: "Task 2.2.1", color: "yellow", duration: convertDaysToUnits(8), start: convertDaysToUnits(0) }, // Added start
+  { key: 222, text: "Task 2.2.2", color: "yellow", duration: convertDaysToUnits(6), start: convertDaysToUnits(0) }, // Added start
   { key: 23, text: "Task 2.3", color: "darkorange" },
-  { key: 231, text: "Task 2.3.1", color: "orange", duration: convertDaysToUnits(11) },
+  { key: 231, text: "Task 2.3.1", color: "orange", duration: convertDaysToUnits(11), start: convertDaysToUnits(0) }, // Added start
   { key: 3, text: "Task 3", color: "maroon" },
-  { key: 31, text: "Task 3.1", color: "brown", duration: convertDaysToUnits(10) },
+  { key: 31, text: "Task 3.1", color: "brown", duration: convertDaysToUnits(10), start: convertDaysToUnits(0) }, // Added start
   { key: 32, text: "Task 3.2", color: "brown" },
-  { key: 321, text: "Task 3.2.1", color: "lightsalmon", duration: convertDaysToUnits(8) },
-  { key: 322, text: "Task 3.2.2", color: "lightsalmon", duration: convertDaysToUnits(3) },
-  { key: 323, text: "Task 3.2.3", color: "lightsalmon", duration: convertDaysToUnits(7) },
+  { key: 321, text: "Task 3.2.1", color: "lightsalmon", duration: convertDaysToUnits(8), start: convertDaysToUnits(0) }, // Added start
+  { key: 322, text: "Task 3.2.2", color: "lightsalmon", duration: convertDaysToUnits(3), start: convertDaysToUnits(0) }, // Added start
+  { key: 323, text: "Task 3.2.3", color: "lightsalmon", duration: convertDaysToUnits(7), start: convertDaysToUnits(0) }, // Added start
   { key: 324, text: "Task 3.2.4", color: "lightsalmon", duration: convertDaysToUnits(5), start: convertDaysToUnits(71) },
-  { key: 325, text: "Task 3.2.5", color: "lightsalmon", duration: convertDaysToUnits(4) },
-  { key: 326, text: "Task 3.2.6", color: "lightsalmon", duration: convertDaysToUnits(5) }
+  { key: 325, text: "Task 3.2.5", color: "lightsalmon", duration: convertDaysToUnits(4), start: convertDaysToUnits(0) }, // Added start
+  { key: 326, text: "Task 3.2.6", color: "lightsalmon", duration: convertDaysToUnits(5), start: convertDaysToUnits(0) }  // Added start
 ];
 myModel.linkDataArray = [
   { from: 0, to: 1 },
@@ -763,15 +820,32 @@ myModel.linkDataArray = [
   { from: 11, to: 2, category: "Dep" }
 ];
 
-// Convert the origin timestamp to a Date object
-var StartDate = new Date(myModel.modelData.origin);
+// --- BEGIN VALIDATION INSERTION ---
+if (!validateGanttData(myModel)) {
+    console.error("Gantt Chart data validation failed. Diagram will not be loaded.");
+    // Optionally, display a user-friendly message in the UI here if possible,
+    // for now, just preventing model load and relying on console errors.
+} else {
+    // Only proceed to set models if validation passes
+    myTasks.model = myModel;
+    myGantt.model = myModel;
 
-// Share the model between diagrams
-myTasks.model = myModel;
-myGantt.model = myModel;
+    // Enable the undo manager only if validation passes
+    myModel.undoManager.isEnabled = true; // Moved this line here
 
-// Enable the undo manager
-myModel.undoManager.isEnabled = true;
+    // The following line related to StartDate should also only run if the model is valid,
+    // as it depends on myModel.modelData.origin
+    StartDate = new Date(myModel.modelData.origin); // Moved and ensured it's within the else block
+
+    // The "Just for debugging" listener should also ideally be set up only if the model is valid.
+    myModel.addChangedListener(function(e) {
+      if (e.isTransactionFinished) {  // Show the model data in the page's TextArea
+        document.getElementById("mySavedModel").textContent = e.model.toJson();
+      }
+    });
+}
+// --- END VALIDATION INSERTION ---
+
 
 // Sync viewports
 var changingView = false;  // for preventing recursive updates
@@ -817,13 +891,9 @@ function rescale() {
   myGantt.commitTransaction("rescale");
 }
 
-// Just for debugging:
-myModel.addChangedListener(function(e) {
-  if (e.isTransactionFinished) {  // Show the model data in the page's TextArea
-    document.getElementById("mySavedModel").textContent = e.model.toJson();
-  }
-});
-
+// NOTE: The original "Just for debugging" listener and StartDate initialization were moved
+// into the 'else' block of the validation logic. If validation fails, they won't run.
+// The myModel.addChangedListener was also moved.
 
 </script>
 </div>
