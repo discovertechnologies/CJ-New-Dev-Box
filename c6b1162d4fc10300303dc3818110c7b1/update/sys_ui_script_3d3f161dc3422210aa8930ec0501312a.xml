@@ -1,0 +1,884 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description/>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_153465_discovert.ganttChartLogic</name>
+        <script><![CDATA[// modelData is assumed to be available from gantt-data.js
+// when this script is loaded in an HTML page.
+
+function GanttLayout() {
+  go.Layout.call(this);
+  this.cellHeight = GridCellHeight;
+}
+go.Diagram.inherit(GanttLayout, go.Layout);
+
+GanttLayout.prototype.doLayout = function(coll) {
+  coll = this.collectParts(coll);
+  var diagram = this.diagram;
+  diagram.startTransaction("Gantt Layout");
+  var bars = [];
+  this.assignTimes(diagram, bars);
+  this.arrangementOrigin = this.initialOrigin(this.arrangementOrigin);
+  var y = this.arrangementOrigin.y;
+  for (var i = 0; i < bars.length; i++) {
+    var node = bars[i];
+    var tasknode = myTasks.findNodeForData(node.data);
+    node.visible = tasknode.isVisible();
+    node.moveTo(convertStartToX(node.data.start), y);
+    if (node.visible) y += this.cellHeight;
+  }
+  diagram.commitTransaction("Gantt Layout");
+};
+
+GanttLayout.prototype.assignTimes = function(diagram, bars) {
+  var roots = diagram.findTreeRoots();
+  var it = roots.iterator;
+  while (it.next()) {
+    this.walkTree(it.value, 0, bars);
+  }
+};
+
+GanttLayout.prototype.walkTree = function(node, start, bars) {
+  bars.push(node);
+  var model = node.diagram.model;
+  if (node.isTreeLeaf) {
+    var dur = node.data.duration;
+    if (dur === undefined || isNaN(dur)) {
+      dur = convertDaysToUnits(1);
+      model.setDataProperty(node.data, "duration", dur);
+    }
+    var st = node.data.start;
+    if (st === undefined || isNaN(st)) {
+      st = start;
+      model.setDataProperty(node.data, "start", st);
+    }
+    return st + dur;
+  } else {
+    var min = Number.POSITIVE_INFINITY;
+    var max = Number.NEGATIVE_INFINITY;
+    var self = this;
+    node.findTreeChildrenNodes().each(function(n) {
+      start = self.walkTree(n, start, bars);
+      min = Math.min(min, n.data.start);
+      max = Math.max(max, n.data.start + n.data.duration);
+    });
+    model.setDataProperty(node.data, "start", min);
+    model.setDataProperty(node.data, "duration", max - min);
+    return max;
+  }
+};
+
+
+var GridCellHeight = 20;
+var GridCellWidth = 12;
+var TimelineHeight = 24;
+var MsPerDay = 24 * 60 * 60 * 1000;
+
+function convertDaysToUnits(n) {
+  return n;
+}
+
+function convertUnitsToDays(n) {
+  return n;
+}
+
+function convertStartToX(start) {
+  return convertUnitsToDays(start) * GridCellWidth;
+}
+
+function convertXToStart(x, node) {
+  return convertDaysToUnits(x / GridCellWidth);
+}
+
+function convertDurationToW(duration) {
+  return convertUnitsToDays(duration) * GridCellWidth;
+}
+
+function convertWToDuration(w) {
+  return convertDaysToUnits(w / GridCellWidth);
+}
+
+function convertStartToPosition(start, node) {
+  return new go.Point(convertStartToX(start), node.position.y || 0);
+}
+
+function convertPositionToStart(pos) {
+  return convertXToStart(pos.x);
+}
+
+var StartDate = new Date(); // This will be updated after myModel.modelData is set
+
+function valueToText(n) {
+  var startDate = StartDate;
+  var startDateMs = startDate.getTime() + startDate.getTimezoneOffset() * 60000;
+  var date = new Date(startDateMs + (n / GridCellWidth) * MsPerDay);
+  return date.toLocaleDateString();
+}
+
+function dateToValue(d) {
+  var startDate = StartDate;
+  var startDateMs = startDate.getTime() + startDate.getTimezoneOffset() * 60000;
+  var dateInMs = d.getTime() + d.getTimezoneOffset() * 60000;
+  var msSinceStart = dateInMs - startDateMs;
+  return (msSinceStart / MsPerDay) * GridCellWidth;
+}
+
+go.Shape.defineFigureGenerator("RangeBar", function(shape, w, h) {
+  var b = Math.min(5, w);
+  var d = Math.min(5, h);
+  return new go.Geometry()
+    .add(new go.PathFigure(0, 0, true)
+      .add(new go.PathSegment(go.PathSegment.Line, w, 0))
+      .add(new go.PathSegment(go.PathSegment.Line, w, h))
+      .add(new go.PathSegment(go.PathSegment.Line, w-b, h-d))
+      .add(new go.PathSegment(go.PathSegment.Line, b, h-d))
+      .add(new go.PathSegment(go.PathSegment.Line, 0, h).close()));
+});
+
+var $ = go.GraphObject.make;
+
+function standardContextMenus() {
+  return {
+      contextMenu: $(go.Adornment, "Vertical", // Using "Vertical" instead of go.ContextMenu
+          $(go.TextBlock, "Details..."), // Separate context menu buttons
+          {
+              click: function(e, button) {
+                  var task = button.part.adornedPart;
+                  console.log("show HTML panel with details about the task " + task.data.text);
+              }
+          },
+          $(go.TextBlock, "New Task"),
+          {
+              click: function(e, button) {
+                  var task = button.part.adornedPart;
+                  e.diagram.model.commit(function(m) {
+                      var newData = {
+                          key: undefined,
+                          text: "New Task",
+                          color: task.data.color,
+                          duration: convertDaysToUnits(5)
+                      };
+                      m.addNodeData(newData);
+                      m.addLinkData({
+                          from: task.data.key,
+                          to: newData.key
+                      });
+                      e.diagram.select(e.diagram.findNodeForData(newData));
+                  }, "add new task and link");
+              }
+          }
+      )
+  };
+}
+
+// Initialize the diagrams
+var myTasks = new go.Diagram("myTasksDiv");
+var myGantt = $(go.Diagram, "myGanttDiv", {
+  initialContentAlignment: go.Spot.Center,
+  padding: new go.Margin(0, 0, 0, 0),
+  hasHorizontalScrollbar: false,
+  allowMove: false,
+  allowCopy: false,
+  allowDrop: false,
+  allowZoom: false,
+  layout: new GanttLayout(),
+  "animationManager.isInitial": false,
+  "ChangedSelection": function(e) {
+    if (myChangingSelection) return;
+    myChangingSelection = true;
+    var tasks = [];
+    e.diagram.selection.each(function(part) {
+      if (part instanceof go.Node) tasks.push(myTasks.findNodeForData(part.data));
+    });
+    myTasks.selectCollection(tasks);
+    myChangingSelection = false;
+  }
+});
+
+var myChangingSelection = false;
+
+myTasks.initialContentAlignment = go.Spot.Right;
+myTasks.padding = new go.Margin(TimelineHeight + 4, 0, GridCellHeight, 0);
+myTasks.hasVerticalScrollbar = false;
+myTasks.allowMove = false;
+myTasks.allowCopy = false;
+myTasks.commandHandler.deletesTree = true;
+myTasks.animationManager.isInitial = false;
+
+myTasks.layout = $(go.TreeLayout,
+  {
+    alignment: go.TreeLayout.AlignmentStart,
+    compaction: go.TreeLayout.CompactionNone,
+    layerSpacing: 16,
+    layerSpacingParentOverlap: 1,
+    nodeIndentPastParent: 1,
+    nodeSpacing: 0,
+    portSpot: go.Spot.Bottom,
+    childPortSpot: go.Spot.Left,
+    arrangementSpacing: new go.Size(0, 0),
+    commitNodes: function() {
+      go.TreeLayout.prototype.commitNodes.call(this);
+      updateNodeWidths(400);  // Ensure updateNodeWidths function is defined
+    }
+  });
+
+myTasks.addDiagramListener("ViewportBoundsChanged", function(e) {
+  if (myHighlightTask) {
+    myHighlightTask.visible = false;
+  }
+});
+
+myTasks.addDiagramListener("TreeCollapsed", function(e) {
+  if (myGantt) {
+    myGantt.layoutDiagram(true);
+  }
+});
+
+myTasks.addDiagramListener("TreeExpanded", function(e) {
+  if (myGantt) {
+    myGantt.layoutDiagram(true);
+  }
+});
+
+myTasks.addDiagramListener("ChangedSelection", function(e) {
+  if (typeof myChangingSelection === "undefined" || !myChangingSelection) {
+    myChangingSelection = true;
+    var tasks = [];
+    e.diagram.selection.each(function(part) {
+      if (part instanceof go.Node) {
+        var correspondingNode = myGantt.findNodeForData(part.data);
+        if (correspondingNode) {
+          tasks.push(correspondingNode);
+        }
+      }
+    });
+    if (myGantt) {
+      myGantt.selectCollection(tasks);
+    }
+    myChangingSelection = false;
+  }
+});
+
+myTasks.nodeTemplate =
+  $(go.Node, "Table",
+    {
+      columnSizing: go.RowColumnDefinition.None,
+      selectionAdorned: false,
+      height: GridCellHeight,
+      mouseEnter: function(e, node) {
+        node.background = "rgba(0,0,255,0.2)";
+        myHighlightTask.position = new go.Point(myGrid.actualBounds.x, node.actualBounds.y);
+        myHighlightTask.width = myGrid.actualBounds.width;
+        myHighlightTask.visible = true;
+      },
+      mouseLeave: function(e, node) {
+        node.background = node.isSelected ? "dodgerblue" : "transparent";
+        myHighlightTask.visible = false;
+      },
+      doubleClick: function(e, node) {  // scroll myGantt so the corresponding bar is visible
+        var bar = myGantt.findNodeForData(node.data);
+        if (bar) myGantt.commandHandler.scrollToPart(bar);
+      }
+    },
+    new go.Binding("background", "isSelected", function(s) { return s ? "dodgerblue" : "transparent"; }).ofObject(),
+    new go.Binding("isTreeExpanded").makeTwoWay(),
+    $(go.RowColumnDefinition, { column: 0, width: 14 }),
+    $("TreeExpanderButton", { column: 0, portId: "", scale: 0.85 }),
+    $(go.RowColumnDefinition, { column: 1, alignment: go.Spot.Left }),
+    $(go.TextBlock, { column: 1, editable: true },
+      new go.Binding("text").makeTwoWay()),
+    // additional columns
+    $(go.RowColumnDefinition, { column: 2, width: 40, alignment: go.Spot.Right, separatorPadding: new go.Margin(0, 4), separatorStroke: "gray" }),
+    $(go.TextBlock, { column: 2 },
+      new go.Binding("text", "start", function(s) { return s.toFixed(2); })),
+    $(go.RowColumnDefinition, { column: 3, width: 40, alignment: go.Spot.Right, separatorPadding: new go.Margin(0, 4), separatorStroke: "gray" }),
+    $(go.TextBlock, { column: 3 },
+      new go.Binding("text", "duration", function(d) { return d.toFixed(2); })),
+
+    standardContextMenus()
+  );
+
+  var TREEWIDTH = 160;  // document units, may be modified, used by updateNodeWidths
+
+  function updateNodeWidths(width) {
+  var minx = Infinity;
+
+  myTasks.nodes.each(function(n) {
+  if (n instanceof go.Node) {
+      minx = Math.min(minx, n.actualBounds.x);
+  }
+  });
+
+  if (minx === Infinity) return;
+
+  var right = minx + width;
+
+  myTasks.nodes.each(function(n) {
+  if (n instanceof go.Node) {
+      n.width = Math.max(0, right - n.actualBounds.x);
+      n.getColumnDefinition(1).width = TREEWIDTH - n.actualBounds.x;
+  }
+  });
+
+  myTasksHeader.getColumnDefinition(1).width = TREEWIDTH - myTasksHeader.actualBounds.x;
+  }
+
+
+  var myTasksHeader = // the timeline at the top of the myTasks viewport
+$(go.Part, "Table",
+  {
+    layerName: "Adornment",
+    pickable: false,
+    position: new go.Point(-26, 0),  // position will be set in "ViewportBoundsChanged" listener
+    columnSizing: go.RowColumnDefinition.None,
+    selectionAdorned: false,
+    height: GridCellHeight,
+    background: "lightgray"
+  },
+  $(go.RowColumnDefinition, { column: 0, width: 14 }),
+  $(go.RowColumnDefinition, { column: 1 }),
+  $(go.TextBlock, "Name", { column: 1 }),
+  // additional columns
+  $(go.RowColumnDefinition, { column: 2, width: 40, alignment: go.Spot.Right, separatorPadding: new go.Margin(0, 4), separatorStroke: "gray" }),
+  $(go.TextBlock, "Start", { column: 2 }),
+  $(go.RowColumnDefinition, { column: 3, width: 40, alignment: go.Spot.Right, separatorPadding: new go.Margin(0, 4), separatorStroke: "gray" }),
+  $(go.TextBlock, "Dur.", { column: 3 })
+);
+
+  myTasks.add(myTasksHeader);
+
+  myTasks.linkTemplate =
+$(go.Link,
+  {
+    selectable: false,
+    routing: go.Link.Orthogonal,
+    fromEndSegmentLength: 1,
+    toEndSegmentLength: 1
+  },
+  $(go.Shape)
+);
+
+myTasks.linkTemplateMap.add("Dep",
+$(go.Link,  // ignore these links in the Tasks diagram
+  {
+    selectable: false,
+    visible: false,
+    isTreeLink: false
+  }
+)
+);
+
+// Create the Diagram with just the div ID
+var myGantt = go.Diagram.fromDiv("myGanttDiv");
+
+// Apply properties afterward
+myGantt.initialPosition = new go.Point(-10, -100);  // show labels
+myGantt.padding = new go.Margin(TimelineHeight + 4, GridCellWidth * 7, GridCellHeight, 0);  // needs to be the same vertically as for myTasks
+//myGantt.scrollMargin = new go.Margin(0, GridCellWidth * 7, 0, 0);  // allow scrolling to a week beyond that
+myGantt.allowCopy = false;
+//myGantt.commandHandler.deletesTree = true;
+//myGantt.draggingTool.isGridSnapEnabled = true;
+//myGantt.draggingTool.gridSnapCellSize = new go.Size(GridCellWidth, GridCellHeight);
+//myGantt.draggingTool.dragsTree = true;
+//myGantt.resizingTool.isGridSnapEnabled = true;
+//myGantt.resizingTool.cellSize = new go.Size(GridCellWidth, GridCellHeight);
+//myGantt.resizingTool.minSize = new go.Size(GridCellWidth, GridCellHeight);
+myGantt.layout = $(GanttLayout);
+myGantt.mouseOver = function(e) {
+  if (!myGrid || !myHighlightDay) return;
+  var lp = myGrid.getLocalPoint(e.documentPoint);
+  var day = Math.floor(convertXToStart(lp.x));  // floor gets start of day
+  myHighlightDay.position = new go.Point(convertStartToX(day), myGrid.position.y);
+  myHighlightDay.width = GridCellWidth;  // 1 day
+  myHighlightDay.height = myGrid.actualBounds.height;
+  myHighlightDay.visible = true;
+};
+myGantt.mouseLeave = function(e) {
+  myHighlightDay.visible = false;
+};
+//myGantt.animationManager.isInitial = false;
+myGantt.addDiagramListener("SelectionMoved", function(e) {
+  e.diagram.layoutDiagram(true);
+});
+myGantt.addDiagramListener("DocumentBoundsChanged", function(e) {
+  var b = e.diagram.documentBounds;
+  myGrid.desiredSize = new go.Size(b.width + GridCellWidth * 7, b.bottom);
+  myTimeline.graduatedMax = Math.ceil(b.width / (GridCellWidth * 7)) * (GridCellWidth * 7);
+  myTimeline.findObject("MAIN").width = myTimeline.graduatedMax;
+  myTimeline.findObject("TICKS").height = Math.max(e.diagram.documentBounds.height, e.diagram.viewportBounds.height);
+});
+myGantt.addDiagramListener("ChangedSelection", function(e) {
+  if (myChangingSelection) return;
+  myChangingSelection = true;
+  var bars = [];
+  e.diagram.selection.each(function(part) {
+      if (part instanceof go.Node) bars.push(myTasks.findNodeForData(part.data));
+  });
+  myTasks.selectCollection(bars);
+  myChangingSelection = false;
+});
+
+
+var myTimeline =  // the timeline at the top of the myGantt viewport
+$(go.Part, "Graduated",
+  {
+    layerName: "Adornment",
+    pickable: false,
+    position: new go.Point(-26, 0),  // position will be set in "ViewportBoundsChanged" listener
+    graduatedTickUnit: GridCellWidth  // each tick is one day
+    // assume graduatedMax == length of line
+  },
+  $(go.Shape, "LineH",
+    {
+      name: "MAIN",
+      strokeWidth: 0,  // don't draw the actual line
+      height: TimelineHeight,  // width will be set in "DocumentBoundsChanged" listener
+      background: "lightgray"
+    }),
+  $(go.Shape, "LineV",
+    {
+      name: "TICKS",
+      interval: 7,  // once per week
+      alignmentFocus: new go.Spot(0.5, 0, 0, -TimelineHeight / 2),  // tick marks cross over the timeline itself
+      stroke: "lightgray", strokeWidth: 0.5
+    }),
+    $(go.TextBlock,
+ {
+   alignmentFocus: go.Spot.Left,
+   interval: 7  // once per week
+ },
+ new go.Binding("text", "", function(value) {
+   return valueToText(value);  // manually apply the function for text conversion
+ })
+)
+
+);
+
+myGantt.add(myTimeline);
+
+var myGrid =  // the grid of horizontal lines
+$(go.Part, "Grid",
+  {
+    layerName: "Grid",
+    pickable: false,
+    position: new go.Point(0, 0),
+    gridCellSize: new go.Size(3000, GridCellHeight)
+  },
+  $(go.Shape, "LineH", { strokeWidth: 0.5 })
+);
+
+myGantt.add(myGrid);
+
+var myHighlightDay =  // the vertical highlighter covering the day where the mouse is
+$(go.Part,
+  {
+    layerName: "Grid",
+    visible: false,
+    pickable: false,
+    background: "rgba(255,0,0,0.2)",
+    position: new go.Point(0, 0),
+    width: GridCellWidth,
+    height: GridCellHeight
+  }
+);
+
+myGantt.add(myHighlightDay);
+
+var myHighlightTask =  // the horizontal highlighter covering the current task
+$(go.Part,
+  {
+    layerName: "Grid",
+    visible: false,
+    pickable: false,
+    background: "rgba(0,0,255,0.2)",
+    position: new go.Point(0, 0),
+    width: GridCellWidth,
+    height: GridCellHeight
+  }
+);
+
+myGantt.add(myHighlightTask);
+
+myGantt.nodeTemplate =
+ $(go.Node, "Spot",
+   {
+     selectionAdorned: false,
+     selectionChanged: function(node) {
+       node.diagram.startTransaction();
+       node.findObject("SHAPE").fill = node.isSelected ? "dodgerblue" : (node.data && node.data.color) || "gray";
+       node.diagram.commitTransaction("selectionChanged");
+     },
+     minLocation: new go.Point(0, NaN),
+     maxLocation: new go.Point(Infinity, NaN),
+     toolTip:
+       $(go.Adornment, "Auto",
+         $(go.Shape, { fill: "lightyellow" }),
+         $(go.Panel, "Table",
+           { defaultAlignment: go.Spot.Left },
+           $(go.RowColumnDefinition, { column: 1, separatorPadding: 3 }),
+           $(go.TextBlock, { row: 0, column: 0, columnSpan: 9, font: "bold 12pt sans-serif" },
+             new go.Binding("text", "text")),
+           $(go.TextBlock, { row: 1, column: 0 }, "start:"),
+           $(go.TextBlock, { row: 1, column: 1 },
+             new go.Binding("text", "start", function(d) { return "day " + convertUnitsToDays(d).toFixed(0); })),
+           $(go.TextBlock, { row: 2, column: 0 }, "length:"),
+           $(go.TextBlock, { row: 2, column: 1 },
+             new go.Binding("text", "duration", function(d) { return convertUnitsToDays(d).toFixed(0) + " days"; }))
+         )
+       ),
+     resizable: true,
+     resizeObjectName: "SHAPE",
+     resizeAdornmentTemplate:
+       $(go.Adornment, "Spot",
+         $(go.Placeholder),
+         $(go.Shape, "Diamond",
+           {
+             alignment: go.Spot.Right,
+             width: 8, height: 8,
+             strokeWidth: 0,
+             fill: "fuchsia",
+             cursor: 'e-resize'
+           }
+         )
+       ),
+     mouseOver: function(e, node) { myGantt.mouseOver(e); }
+   },
+   standardContextMenus(),
+   new go.Binding("position", "start", convertStartToPosition).makeTwoWay(convertPositionToStart),
+   new go.Binding("resizable", "isTreeLeaf").ofObject(),
+   new go.Binding("isTreeExpanded").makeTwoWay(),
+   $(go.Shape,
+     {
+       name: "SHAPE",
+       height: 18,
+       margin: new go.Margin(1, 0),
+       // strokeWidth: 0, // Default strokeWidth handled by binding now
+       fill: "gray" // Default fill if no color property in data
+     },
+     new go.Binding("fill", "color"), // Existing binding
+     new go.Binding("width", "duration", convertDurationToW).makeTwoWay(convertWToDuration), // Existing binding
+     new go.Binding("figure", "isTreeLeaf", function(leaf) { return leaf ? "Rectangle" : "RangeBar"; }).ofObject(), // Existing binding
+     // New bindings for dependency highlighting:
+     new go.Binding("stroke", "isDependencyHighlight", function(isDep) { return isDep ? "red" : null; }), // null means use default or no stroke
+     new go.Binding("strokeWidth", "isDependencyHighlight", function(isDep) { return isDep ? 2 : 0; }) // 0 for non-dependency, 2 for dependency
+   ),
+   $(go.TextBlock,
+     { font: "8pt sans-serif", alignment: go.Spot.TopLeft, alignmentFocus: new go.Spot(0, 0, 0, -2) },
+     new go.Binding("text", "text"),
+     new go.Binding("stroke", "color", function(c) { return go.Brush.isDark(c) ? "#DDDDDD" : "#333333"; })
+   )
+ );
+
+
+myGantt.linkTemplate =
+$(go.Link,
+  {
+    visible: false
+  }
+);
+
+myGantt.linkTemplateMap.add("Dep",
+$(go.Link,
+  {
+    routing: go.Link.Orthogonal,
+    isTreeLink: false,
+    isLayoutPositioned: false,
+    fromSpot: new go.Spot(0.999999, 1),
+    toSpot: new go.Spot(0.000001, 0)
+  },
+  $(go.Shape,
+    {
+      stroke: "brown",
+      strokeWidth: 3
+    }
+  ),
+  $(go.Shape,
+    {
+      toArrow: "Standard",
+      fill: "brown",
+      strokeWidth: 0,
+      scale: 0.75
+    }
+  )
+));
+
+var myModel = new go.GraphLinksModel();
+
+// Utilize modelData from gantt-data.js
+if (typeof modelData !== 'undefined') {
+  myModel.modelData = modelData.modelData;
+  myModel.nodeDataArray = modelData.nodeDataArray;
+  myModel.linkDataArray = modelData.linkDataArray;
+} else {
+  console.error("gantt-data.js did not load or modelData is not defined.");
+  // Fallback or error handling
+  myModel.modelData = { origin: new Date().getTime() }; // Default origin if no data
+  myModel.nodeDataArray = [];
+  myModel.linkDataArray = [];
+}
+
+// Convert the origin timestamp to a Date object
+// This line MUST be AFTER myModel.modelData is populated.
+StartDate = new Date(myModel.modelData.origin);
+
+
+// Share the model between diagrams
+myTasks.model = myModel;
+myGantt.model = myModel;
+
+// Enable the undo manager
+myModel.undoManager.isEnabled = true;
+
+// Sync viewports
+var changingView = false;  // for preventing recursive updates
+
+// Listener for myTasks
+myTasks.addDiagramListener("ViewportBoundsChanged", function(e) {
+  if (changingView) return;
+  changingView = true;
+  myTasksHeader.position = new go.Point(myTasksHeader.position.x, myTasks.viewportBounds.position.y);
+  myGantt.scale = myTasks.scale;
+  myGantt.position = new go.Point(myGantt.position.x, myTasks.position.y);
+  myTimeline.position = new go.Point(myTimeline.position.x, myGantt.viewportBounds.position.y);
+  changingView = false;
+});
+
+// Listener for myGantt
+myGantt.addDiagramListener("ViewportBoundsChanged", function(e) {
+  if (changingView) return;
+  changingView = true;
+  myTasks.scale = myGantt.scale;
+  myTasks.position = new go.Point(myTasks.position.x, myGantt.position.y);
+  myTasksHeader.position = new go.Point(myTasksHeader.position.x, myGantt.viewportBounds.position.y);
+  myGantt.position = new go.Point(myGantt.position.x, myTasks.position.y);  // don't scroll more if myTasks can't scroll more
+  myTimeline.position = new go.Point(myTimeline.position.x, myGantt.viewportBounds.position.y);
+  changingView = false;
+});
+
+// Change horizontal scale
+function rescale() {
+  var val = parseFloat(document.getElementById("widthSlider").value);
+  GridCellWidth = val;
+  myGantt.startTransaction("rescale");
+  myGantt.scrollMargin = new go.Margin(0, GridCellWidth * 7, 0, 0);
+  myGantt.toolManager.draggingTool.gridSnapCellSize = new go.Size(GridCellWidth, GridCellHeight);
+  myGantt.toolManager.resizingTool.cellSize = new go.Size(GridCellWidth, GridCellHeight);
+  myGantt.toolManager.resizingTool.minSize = new go.Size(GridCellWidth, GridCellHeight);
+  myGantt.updateAllTargetBindings();
+  myGantt.layout.cellHeight = GridCellHeight;
+  myGantt.layoutDiagram(true);
+  myTimeline.graduatedTickUnit = GridCellWidth;
+  myGantt.padding = new go.Margin(TimelineHeight + 4, GridCellWidth * 7, GridCellHeight, 0);
+  myTasks.padding = new go.Margin(TimelineHeight + 4, 0, GridCellHeight, 0);
+  myGantt.commitTransaction("rescale");
+}
+
+// Just for debugging:
+myModel.addChangedListener(function(e) {
+  if (e.isTransactionFinished) {  // Show the model data in the page's TextArea
+    document.getElementById("mySavedModel").textContent = e.model.toJson();
+  }
+});
+
+function showInProgressTasks() {
+  console.log("Show In-Progress Tasks button clicked!");
+
+  var model = myGantt.model;
+  if (!model || !model.modelData) {
+    console.error("GoJS model or modelData is not available.");
+    return;
+  }
+
+  var originTimestamp = model.modelData.origin;
+  if (typeof originTimestamp === 'undefined') {
+    console.error("Origin timestamp is not defined in modelData.");
+    return;
+  }
+
+  var originDate = new Date(originTimestamp);
+  var hypotheticalJsDate = new Date(originTimestamp);
+  hypotheticalJsDate.setDate(originDate.getDate() + 20);
+
+  var hypotheticalTodayInProjectDays = Math.floor((hypotheticalJsDate.getTime() - originDate.getTime()) / MsPerDay);
+
+  console.log("Initial Origin Date: " + originDate.toISOString());
+  console.log("Hypothetical JS Date (Origin + 20 days): " + hypotheticalJsDate.toISOString());
+  console.log("Calculated Hypothetical Today in Project Days (0-indexed): " + hypotheticalTodayInProjectDays);
+
+  if (!model.nodeDataArray || model.nodeDataArray.length === 0) {
+    console.error("Node data array is not available or empty.");
+    return;
+  }
+
+  model.commit(function(m) {
+    var foundInProgress = false;
+    m.nodeDataArray.forEach(function(taskData) {
+      var taskStart = taskData.start;
+      var taskDuration = taskData.duration;
+
+      if (typeof taskStart === 'number' && typeof taskDuration === 'number') {
+        var taskEnd = taskStart + taskDuration;
+        if (hypotheticalTodayInProjectDays >= taskStart && hypotheticalTodayInProjectDays < taskEnd) {
+          m.setDataProperty(taskData, "color", "purple");
+          console.log("Highlighting task:", taskData.text, "Key:", taskData.key, "as purple.");
+          foundInProgress = true;
+        }
+      }
+    });
+
+    if (!foundInProgress) {
+      console.log("No tasks were found in progress on calculated day " + hypotheticalTodayInProjectDays + " to highlight.");
+    } else {
+      console.log("Tasks highlighted for day " + hypotheticalTodayInProjectDays + ". Diagram will refresh.");
+    }
+  }, "highlight in-progress tasks");
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var btn = document.getElementById('showInProgressBtn');
+  if (btn) {
+    btn.addEventListener('click', showInProgressTasks);
+  } else {
+    console.error('Button with ID showInProgressBtn not found on DOMContentLoaded.');
+    var btnRetry = document.getElementById('showInProgressBtn');
+    if (btnRetry) {
+        btnRetry.addEventListener('click', showInProgressTasks);
+    } else {
+        console.error('Button with ID showInProgressBtn still not found directly after DOMContentLoaded.');
+    }
+  }
+});
+
+var directBtn = document.getElementById('showInProgressBtn');
+if (directBtn) {
+    directBtn.addEventListener('click', showInProgressTasks);
+}
+
+function highlightDependencyTasks() {
+  console.log("highlightDependencyTasks started.");
+
+  if (typeof myModel === 'undefined' || !myModel) {
+    console.error("highlightDependencyTasks: myModel is not available.");
+    return;
+  }
+  if (!myModel.linkDataArray) {
+    console.error("highlightDependencyTasks: myModel.linkDataArray is not available.");
+    return;
+  }
+  if (!myModel.nodeDataArray) {
+    console.error("highlightDependencyTasks: myModel.nodeDataArray is not available.");
+    return;
+  }
+
+  const dependencyNodeKeys = new Set();
+  myModel.linkDataArray.forEach(function(link) {
+    if (link.category === "Dep") {
+      dependencyNodeKeys.add(link.from);
+      dependencyNodeKeys.add(link.to);
+    }
+  });
+
+  myModel.commit(function(m) {
+    let highlightedCount = 0;
+    m.nodeDataArray.forEach(function(nodeData) {
+      if (dependencyNodeKeys.has(nodeData.key)) {
+        m.set(nodeData, "isDependencyHighlight", true);
+        highlightedCount++;
+      } else {
+        m.set(nodeData, "isDependencyHighlight", false);
+      }
+    });
+    console.log("highlightDependencyTasks: Marked " + highlightedCount + " nodes for highlighting.");
+  }, "highlight dependencies");
+
+  console.log("highlightDependencyTasks completed.");
+}
+
+function handleRunSelectedTest() {
+  var selectElement = document.getElementById('selectTestScript');
+  var selectedTestFunction = selectElement.value;
+
+  console.log("Attempting to run selected test: " + selectedTestFunction);
+
+  if (selectedTestFunction === "runGanttDataValidationTests") {
+    if (typeof runGanttDataValidationTests === 'function') {
+      try {
+        runGanttDataValidationTests();
+      } catch (e) {
+        console.error("Error during execution of " + selectedTestFunction + ": ", e);
+      }
+    } else {
+      console.error("Error: Test function '" + selectedTestFunction + "' not found. Ensure the ValidateGanttData UI Script is active, loaded, and the function is globally accessible if not scoped.");
+      alert("Error: Test function '" + selectedTestFunction + "' not found. Check console for details.");
+    }
+  } else if (selectedTestFunction === "runHighlightDependencyTest") {
+    if (typeof highlightDependencyTasks === 'function') {
+      try {
+        highlightDependencyTasks();
+      } catch (e) {
+        console.error("Error during execution of " + selectedTestFunction + ": ", e);
+      }
+    } else {
+      console.error("Error: Test function '" + selectedTestFunction + "' not found. Ensure the UI Script is active and loaded.");
+      alert("Error: Test function '" + selectedTestFunction + "' not found. Check console for details.");
+    }
+  } else if (selectedTestFunction === "runNewFeatureTest") {
+    if (typeof runNewFeature === 'function') {
+      try {
+        runNewFeature();
+      } catch (e) {
+        console.error("Error during execution of runNewFeatureTest: ", e);
+        alert("Error running New Feature Test. Check console.");
+      }
+    } else {
+      console.error("Error: Test function 'runNewFeature' not found.");
+      alert("Error: Test function 'runNewFeature' not found. Check console.");
+    }
+  } else if (selectedTestFunction) {
+    console.warn("No implementation for selected test: " + selectedTestFunction);
+    alert("No implementation for selected test: " + selectedTestFunction);
+  } else {
+    console.warn("No test selected.");
+    alert("No test selected.");
+  }
+}
+
+var runTestBtn = document.getElementById('runSelectedTestBtn');
+if (runTestBtn) {
+  runTestBtn.addEventListener('click', handleRunSelectedTest);
+} else {
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('runSelectedTestBtn');
+    if (btn) {
+      btn.addEventListener('click', handleRunSelectedTest);
+    } else {
+      console.error("Button with ID runSelectedTestBtn not found even after DOMContentLoaded.");
+    }
+  });
+}
+
+// New feature function
+function runNewFeature() {
+  console.log("New Feature Executed!");
+  alert("New Feature Executed!");
+  // Future implementation of the new feature would go here.
+}]]></script>
+        <script_name>ganttChartLogic</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>cmorton</sys_created_by>
+        <sys_created_on>2025-06-09 15:43:49</sys_created_on>
+        <sys_id>3d3f161dc3422210aa8930ec0501312a</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>x_153465_discovert.ganttChartLogic</sys_name>
+        <sys_package display_value="Tasker" source="x_153465_discovert">c6b1162d4fc10300303dc3818110c7b1</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Tasker">c6b1162d4fc10300303dc3818110c7b1</sys_scope>
+        <sys_update_name>sys_ui_script_3d3f161dc3422210aa8930ec0501312a</sys_update_name>
+        <sys_updated_by>cmorton</sys_updated_by>
+        <sys_updated_on>2025-06-09 15:44:06</sys_updated_on>
+        <ui_type>0</ui_type>
+        <use_scoped_format>false</use_scoped_format>
+    </sys_ui_script>
+</record_update>
